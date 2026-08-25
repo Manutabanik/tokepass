@@ -51,14 +51,71 @@ export function InventorySummaryTable() {
   const tickets = useWatch({ control, name: "tickets" }) ?? []
   const extras = useWatch({ control, name: "extras" }) ?? []
   const sectors = useWatch({ control, name: "seatingMap.sectors" }) ?? []
+  const seatingMaps = useWatch({ control, name: "seatingMaps" }) ?? []
   const schedule = useWatch({ control, name: "schedule" }) ?? []
   const slotOptions = listDraftScheduleSlots(schedule)
   const showSlots = hasMultipleDraftSlots(schedule)
-  const rows = buildInventorySummaryRows({ tickets, extras, sectors })
+  const rows = buildInventorySummaryRows({
+    tickets,
+    extras,
+    sectors,
+    seatingMaps,
+  })
   const totals = inventorySummaryTotals(rows)
 
   function writePrice(row: InventorySummaryRow, next: number) {
     const price = Math.max(0, next)
+    if (row.source.field === "seatingMaps") {
+      const maps = [...(getValues("seatingMaps") ?? [])]
+      const instance = maps[row.source.mapIndex]
+      if (!instance || typeof instance !== "object") return
+      const mapConfig =
+        instance.mapConfig &&
+        typeof instance.mapConfig === "object" &&
+        !Array.isArray(instance.mapConfig)
+          ? { ...(instance.mapConfig as Record<string, unknown>) }
+          : {}
+      const currentSectors = Array.isArray(mapConfig.sectors)
+        ? [...mapConfig.sectors]
+        : []
+      const current = currentSectors[row.source.sectorIndex]
+      if (!current || typeof current !== "object" || Array.isArray(current)) {
+        return
+      }
+      const sector: Record<string, unknown> = {
+        ...(current as Record<string, unknown>),
+        price,
+      }
+      currentSectors[row.source.sectorIndex] = sector
+      const pricing =
+        instance.pricing &&
+        typeof instance.pricing === "object" &&
+        !Array.isArray(instance.pricing)
+          ? { ...(instance.pricing as Record<string, unknown>) }
+          : {}
+      const sectorPrices =
+        pricing.sectorPrices &&
+        typeof pricing.sectorPrices === "object" &&
+        !Array.isArray(pricing.sectorPrices)
+          ? { ...(pricing.sectorPrices as Record<string, unknown>) }
+          : {}
+      const sectorId =
+        typeof sector.id === "string" ? sector.id.trim() : ""
+      if (sectorId) sectorPrices[sectorId] = price
+      maps[row.source.mapIndex] = {
+        ...instance,
+        mapConfig: { ...mapConfig, sectors: currentSectors },
+        pricing: { ...pricing, sectorPrices },
+      }
+      setValue("seatingMaps", maps, { shouldDirty: true, shouldTouch: true })
+      if (row.source.ticketIndex != null) {
+        setValue(`tickets.${row.source.ticketIndex}.price`, price, {
+          shouldDirty: true,
+          shouldTouch: true,
+        })
+      }
+      return
+    }
     if (row.source.field === "seatingMap.sectors") {
       const seatingMap = getValues("seatingMap")
       const currentSectors = Array.isArray(seatingMap.sectors)
@@ -89,7 +146,13 @@ export function InventorySummaryTable() {
   }
 
   function writeStock(row: InventorySummaryRow, next: number) {
-    if (row.stockReadOnly || row.source.field === "seatingMap.sectors") return
+    if (
+      row.stockReadOnly ||
+      row.source.field === "seatingMap.sectors" ||
+      row.source.field === "seatingMaps"
+    ) {
+      return
+    }
     setValue(
       `${row.source.field}.${row.source.index}.stock`,
       Math.max(0, next),
@@ -114,8 +177,8 @@ export function InventorySummaryTable() {
   }
 
   return (
-    <DraftCard className="md:col-span-6">
-      <div className="mb-4 flex items-center gap-2">
+    <DraftCard className="min-w-0 lg:col-span-8">
+      <div className="mb-3 flex items-center gap-2">
         <LayoutList className="size-4 text-emerald-400" aria-hidden />
         <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
           Resumen general
@@ -212,8 +275,8 @@ export function InventorySummaryTable() {
             </li>
           </ul>
 
-          <div className="mt-5 hidden overflow-x-auto sm:block">
-            <table className="w-full min-w-[36rem] text-left text-sm">
+          <div className="mt-5 hidden overflow-x-auto px-1 pb-2 sm:block">
+            <table className="w-full min-w-[36rem] table-auto text-left text-sm">
               <thead>
                 <tr className="text-[11px] font-semibold tracking-wide text-gray-500 uppercase">
                   <th className="pb-2 pr-3 font-semibold">Nombre</th>

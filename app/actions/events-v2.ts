@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
 import { hardReplacePublishedEventArtists } from "@/lib/events/hard-replace-event-artists-v2"
+import { hardReplacePublishedSeatingMaps } from "@/lib/events/hard-replace-seating-maps-v2"
 import { eventArtistRowsToDraftLineup } from "@/lib/events/publish-event-v2-lineup"
 import {
   isEventDraftStateEmpty,
@@ -740,6 +741,10 @@ async function unpackPublishEventV2Sequential(input: {
   )
   await unpackPublishedSchedule(input.eventId, input.payload)
   await bindPublishedTicketDays(input.eventId, ticketDays)
+  await hardReplacePublishedSeatingMaps({
+    eventId: input.eventId,
+    maps: input.payload.seating_maps,
+  })
   await hardReplacePublishedEventArtists({
     eventId: input.eventId,
     lineup: input.lineup,
@@ -921,6 +926,10 @@ export async function publishEventV2(
         await unlinkPublishedTicketDays(id)
         await unpackPublishedSchedule(id, payload)
         await bindPublishedTicketDays(id, payload.tickets)
+        await hardReplacePublishedSeatingMaps({
+          eventId: id,
+          maps: payload.seating_maps,
+        })
         await hardReplacePublishedEventArtists({ eventId: id, lineup })
         await unpackPublishedExperience(id, payload)
       } catch (error) {

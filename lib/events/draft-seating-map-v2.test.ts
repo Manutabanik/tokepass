@@ -3,9 +3,12 @@ import { describe, it } from "node:test"
 
 import {
   isMapDraftTicket,
+  mergeDraftTicketsWithDayMap,
   mergeDraftTicketsWithMap,
+  parseDraftSeatingMaps,
   ticketsFromVenueMap,
   toDraftSeatingMap,
+  upsertDraftSeatingMapInstance,
 } from "@/lib/events/draft-seating-map-v2"
 import { emptyEventDraftV2LineItem } from "@/lib/validations/event-draft-v2"
 import { emptyVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
@@ -107,5 +110,53 @@ describe("draft seating map isolation", () => {
       merged.map((ticket) => ticket.id),
       ["vip-1"],
     )
+  })
+
+  it("keeps map tickets of other days when saving a day instance", () => {
+    const dayA = "day-a"
+    const dayB = "day-b"
+    const vip = {
+      ...emptyEventDraftV2LineItem("vip-1"),
+      name: "VIP",
+      source: "general",
+    }
+    const dayATicket = {
+      ...emptyEventDraftV2LineItem("map:day-a:old"),
+      name: "Platea A",
+      source: "map",
+      sectorId: "old-a",
+      validDayIds: [dayA],
+    }
+    const merged = mergeDraftTicketsWithDayMap(
+      [vip, dayATicket],
+      plateaMap(),
+      dayB,
+    )
+    assert.equal(merged.some((ticket) => ticket.id === "vip-1"), true)
+    assert.equal(merged.some((ticket) => ticket.id === "map:day-a:old"), true)
+    const dayBTicket = merged.find((ticket) =>
+      ticket.id.startsWith("map:day-b:"),
+    )
+    assert.equal(dayBTicket?.validDayIds?.[0], dayB)
+    assert.equal(dayBTicket?.sectorId, "sector-platea")
+  })
+
+  it("migrates a legacy global seatingMap into seatingMaps", () => {
+    const maps = parseDraftSeatingMaps(
+      [],
+      { url: "https://cdn.example/map.png", sectors: [{ id: "a" }] },
+      "day-1",
+    )
+    assert.equal(maps.length, 1)
+    assert.equal(maps[0]?.dateId, "day-1")
+    assert.equal(maps[0]?.mapConfig.sectors.length, 1)
+  })
+
+  it("upserts a day instance without dropping the other day", () => {
+    const first = upsertDraftSeatingMapInstance([], "day-a", plateaMap())
+    const next = upsertDraftSeatingMapInstance(first, "day-b", emptyVenueMap())
+    assert.equal(next.length, 2)
+    assert.equal(next[0]?.dateId, "day-a")
+    assert.equal(next[1]?.dateId, "day-b")
   })
 })

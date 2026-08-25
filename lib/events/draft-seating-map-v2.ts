@@ -147,6 +147,237 @@ type DraftMapTicketLike = {
   source?: string
   sectorId?: string
   layoutType?: string
+  validDayIds?: string[]
+}
+
+export type DraftMapPricing = {
+  sectorPrices: Record<string, number>
+  blockedSeatIds: string[]
+}
+
+export type DraftSeatingMapInstance = {
+  dateId: string
+  mapConfig: ReturnType<typeof toDraftSeatingMap>
+  pricing: DraftMapPricing
+}
+
+export function emptyDraftMapPricing(): DraftMapPricing {
+  return { sectorPrices: {}, blockedSeatIds: [] }
+}
+
+export function extractDraftMapPricing(
+  map: InteractiveVenueMap,
+): DraftMapPricing {
+  const sectorPrices: Record<string, number> = {}
+  for (const group of listVenuePriceGroups(map)) {
+    const sectorId = priceGroupSectorId(group)
+    if (!sectorId) continue
+    sectorPrices[sectorId] = Math.max(0, Number(group.price) || 0)
+  }
+  const blockedSeatIds: string[] = []
+  for (const sector of map.sectors ?? []) {
+    for (const seat of sector.seats ?? []) {
+      if (seat.status === "blocked" && seat.id) {
+        blockedSeatIds.push(seat.id)
+      }
+    }
+  }
+  return { sectorPrices, blockedSeatIds }
+}
+
+export function parseDraftMapPricing(raw: unknown): DraftMapPricing {
+  const record = seatingRecord(raw)
+  const sectorPrices: Record<string, number> = {}
+  const pricesRaw = record.sectorPrices
+  if (pricesRaw && typeof pricesRaw === "object" && !Array.isArray(pricesRaw)) {
+    for (const [key, value] of Object.entries(pricesRaw)) {
+      const id = key.trim()
+      const price = Number(value)
+      if (!id || !Number.isFinite(price)) continue
+      sectorPrices[id] = Math.max(0, price)
+    }
+  }
+  const blockedSeatIds = Array.isArray(record.blockedSeatIds)
+    ? record.blockedSeatIds
+        .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+        .map((id) => id.trim())
+    : []
+  return { sectorPrices, blockedSeatIds }
+}
+
+export function applyDraftMapPricing(
+  rawConfig: unknown,
+  pricing: unknown,
+): InteractiveVenueMap {
+  const map = draftSeatingMapToVenueMap(rawConfig)
+  const next = parseDraftMapPricing(pricing)
+  const hasPrices = Object.keys(next.sectorPrices).length > 0
+  const blocked = new Set(next.blockedSeatIds)
+  if (!hasPrices && blocked.size === 0) return map
+  return {
+    ...map,
+    sectors: map.sectors.map((sector) => ({
+      ...sector,
+      price: hasPrices
+        ? (next.sectorPrices[sector.id] ?? sector.price)
+        : sector.price,
+      seats: sector.seats.map((seat) => ({
+        ...seat,
+        status: blocked.size === 0
+          ? seat.status
+          : blocked.has(seat.id)
+            ? "blocked"
+            : seat.status === "blocked"
+              ? "available"
+              : seat.status,
+      })),
+    })),
+  }
+}
+
+export function seatingInstanceToVenueMap(
+  instance: { mapConfig?: unknown; pricing?: unknown } | null | undefined,
+): InteractiveVenueMap {
+  if (!instance) return draftSeatingMapToVenueMap(emptyVenueMap())
+  return applyDraftMapPricing(instance.mapConfig, instance.pricing)
+}
+
+function hasDraftMapContent(raw: unknown): boolean {
+  const map = draftSeatingMapToVenueMap(raw)
+  return hasInteractiveVenueMap(map) || venueMapHasInventory(map)
+}
+
+export function parseDraftSeatingMaps(
+  rawMaps: unknown,
+  legacyMap: unknown,
+  firstDateId = "",
+): DraftSeatingMapInstance[] {
+  const instances: DraftSeatingMapInstance[] = []
+  if (Array.isArray(rawMaps)) {
+    for (const item of rawMaps) {
+      const record = seatingRecord(item)
+      const dateId =
+        typeof record.dateId === "string" ? record.dateId.trim() : ""
+      const mapConfig = toDraftSeatingMap(record.mapConfig ?? record)
+      instances.push({
+        dateId,
+        mapConfig,
+        pricing: parseDraftMapPricing(record.pricing),
+      })
+    }
+  }
+  if (instances.length > 0) return instances
+  if (!hasDraftMapContent(legacyMap)) return []
+  const mapConfig = toDraftSeatingMap(legacyMap)
+  return [
+    {
+      dateId: firstDateId,
+      mapConfig,
+      pricing: extractDraftMapPricing(draftSeatingMapToVenueMap(mapConfig)),
+    },
+  ]
+}
+
+export function upsertDraftSeatingMapInstance(
+  current: DraftSeatingMapInstance[],
+  dateId: string,
+  map: InteractiveVenueMap,
+): DraftSeatingMapInstance[] {
+  const instance: DraftSeatingMapInstance = {
+    dateId,
+    mapConfig: toDraftSeatingMap(map),
+    pricing: extractDraftMapPricing(map),
+  }
+  const index = current.findIndex((item) => item.dateId === dateId)
+  if (index < 0) return [...current, instance]
+  return current.map((item, itemIndex) =>
+    itemIndex === index ? instance : item,
+  )
+}
+
+export function primaryDraftSeatingMap(
+  maps: DraftSeatingMapInstance[],
+  legacy?: unknown,
+) {
+  const first = maps.find((item) => hasDraftMapContent(item.mapConfig))
+  if (first) return seatingInstanceToVenueMap(first)
+  return draftSeatingMapToVenueMap(legacy)
+}
+
+/** Draft JSON for the editor. Keeps stub sectors that parseVenueMap would drop. */
+export function primaryDraftSeatingMapRaw(
+  maps: DraftSeatingMapInstance[],
+  legacy?: unknown,
+) {
+  const first =
+    maps.find((item) => hasDraftMapContent(item.mapConfig)) ?? maps[0]
+  if (first) return first.mapConfig
+  return legacy
+}
+
+function mapTicketHasDayBinding(ticket: DraftMapTicketLike): boolean {
+  if ((ticket.validDayIds ?? []).some((id) => String(id).trim())) return true
+  const id = String(ticket.id ?? "")
+  return /^map:[0-9a-f-]+:/i.test(id)
+}
+
+function mapTicketBelongsToDay(
+  ticket: DraftMapTicketLike,
+  dateId: string,
+): boolean {
+  if (!dateId) return true
+  if ((ticket.validDayIds ?? []).includes(dateId)) return true
+  if (String(ticket.id ?? "").startsWith(`map:${dateId}:`)) return true
+  return !mapTicketHasDayBinding(ticket)
+}
+
+export function mergeDraftTicketsWithDayMap<T extends DraftMapTicketLike>(
+  current: T[],
+  map: InteractiveVenueMap,
+  dateId: string,
+): T[] {
+  const generals = current.filter((ticket) => !isMapDraftTicket(ticket))
+  const otherDays = dateId
+    ? current.filter(
+        (ticket) =>
+          isMapDraftTicket(ticket) && !mapTicketBelongsToDay(ticket, dateId),
+      )
+    : []
+  if (!venueMapHasInventory(map)) return [...generals, ...otherDays]
+
+  const existingBySector = new Map<string, T>()
+  for (const ticket of current) {
+    if (!isMapDraftTicket(ticket)) continue
+    if (dateId && !mapTicketBelongsToDay(ticket, dateId)) continue
+    const sectorId = String(ticket.sectorId ?? "").trim()
+    if (sectorId) existingBySector.set(sectorId, ticket)
+  }
+
+  const fromMap = ticketsFromVenueMap(map).map((ticket) => {
+    const previous = existingBySector.get(ticket.sectorId)
+    const liveId = previous?.id?.trim()
+    const keepLive = Boolean(liveId && !liveId.startsWith("map:"))
+    return {
+      ...ticket,
+      ...(previous ?? {}),
+      ...ticket,
+      id: keepLive
+        ? liveId
+        : dateId
+          ? `map:${dateId}:${ticket.sectorId}`
+          : ticket.id,
+      minOrder: previous?.minOrder ?? ticket.minOrder,
+      maxOrder: previous?.maxOrder ?? ticket.maxOrder,
+      startDate: previous?.startDate ?? "",
+      endDate: previous?.endDate ?? "",
+      validDayIds: dateId ? [dateId] : (previous?.validDayIds ?? []),
+      description: previous?.description?.trim()
+        ? previous.description
+        : ticket.description,
+    } as T
+  })
+
+  return [...generals, ...otherDays, ...fromMap]
 }
 
 function seatingRecord(raw: unknown): Record<string, unknown> {

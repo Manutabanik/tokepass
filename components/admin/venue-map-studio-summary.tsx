@@ -14,11 +14,13 @@ export function VenueMapStudioSummary({
   onOpen,
   disabled = false,
   disabledReason,
+  openLabel = "DISEÑAR MAPA EN PANTALLA COMPLETA",
 }: {
   map: InteractiveVenueMap
   onOpen: () => void
   disabled?: boolean
   disabledReason?: string
+  openLabel?: string
 }) {
   const inventory = summarizeVenueInventory(map)
   const segments = inventory.sectors.filter((row) => row.share > 0)
@@ -136,7 +138,7 @@ export function VenueMapStudioSummary({
           )}
         >
           <Map className="size-4" aria-hidden="true" />
-          DISEÑAR MAPA EN PANTALLA COMPLETA
+          {openLabel}
         </Button>
         {disabled && disabledReason ? (
           <p className="mt-2 text-center text-xs text-red-600 dark:text-red-400">

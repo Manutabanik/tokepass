@@ -352,6 +352,138 @@ describe("publish helpers", () => {
     assert.equal(Number.isNaN(Date.parse(iso)), false)
   })
 
+  it("publishes one seating_maps row per day instance", () => {
+    const draft = publishableDraft()
+    const dayA = "550e8400-e29b-41d4-a716-446655440001"
+    const dayB = "550e8400-e29b-41d4-a716-446655440002"
+    draft.schedule = [
+      {
+        id: dayA,
+        name: "Día 1",
+        date: "2026-09-01",
+        startDate: "2026-09-01T22:00",
+        endDate: "2026-09-02T04:00",
+        slots: [],
+      },
+      {
+        id: dayB,
+        name: "Día 2",
+        date: "2026-09-02",
+        startDate: "2026-09-02T22:00",
+        endDate: "2026-09-03T04:00",
+        slots: [],
+      },
+    ]
+    draft.seatingMaps = [
+      {
+        dateId: dayA,
+        mapConfig: {
+          version: 1,
+          url: "",
+          sectors: [
+            {
+              id: "sector-platea",
+              name: "Platea",
+              color: "#f97316",
+              price: 18000,
+              x: 0,
+              y: 0,
+              rows: 1,
+              seatsPerRow: 2,
+              curvature: 0,
+              aisle: false,
+              seats: [
+                { id: "s1", row: "1", number: 1, x: 0, y: 0, status: "available" },
+              ],
+            },
+          ],
+        },
+        pricing: { sectorPrices: { "sector-platea": 18000 }, blockedSeatIds: [] },
+      },
+      {
+        dateId: dayB,
+        mapConfig: {
+          version: 1,
+          url: "",
+          sectors: [
+            {
+              id: "sector-vip",
+              name: "VIP",
+              color: "#22c55e",
+              price: 24000,
+              x: 0,
+              y: 0,
+              rows: 1,
+              seatsPerRow: 1,
+              curvature: 0,
+              aisle: false,
+              seats: [
+                { id: "v1", row: "1", number: 1, x: 0, y: 0, status: "available" },
+              ],
+            },
+          ],
+        },
+        pricing: { sectorPrices: { "sector-vip": 24000 }, blockedSeatIds: [] },
+      },
+    ]
+    const payload = buildPublishEventV2Payload(draft)
+    assert.equal(payload.has_seating_plan, true)
+    assert.equal(payload.seating_maps.length, 2)
+    assert.equal(payload.seating_maps[0]?.event_date_id, dayA)
+    assert.equal(payload.seating_maps[1]?.event_date_id, dayB)
+  })
+
+  it("expands a day map onto each published slot occurrence", () => {
+    const draft = publishableDraft()
+    const dayId = "550e8400-e29b-41d4-a716-446655440010"
+    const slotA = "550e8400-e29b-41d4-a716-446655440011"
+    const slotB = "550e8400-e29b-41d4-a716-446655440012"
+    draft.schedule = [
+      {
+        id: dayId,
+        name: "Día 1",
+        date: "2026-09-01",
+        startDate: "2026-09-01T18:00",
+        endDate: "2026-09-01T23:00",
+        slots: [
+          { id: slotA, startTime: "18:00", endTime: "20:00" },
+          { id: slotB, startTime: "21:00", endTime: "23:00" },
+        ],
+      },
+    ]
+    draft.seatingMaps = [
+      {
+        dateId: dayId,
+        mapConfig: {
+          version: 1,
+          url: "",
+          sectors: [
+            {
+              id: "sector-platea",
+              name: "Platea",
+              color: "#f97316",
+              price: 18000,
+              x: 0,
+              y: 0,
+              rows: 1,
+              seatsPerRow: 1,
+              curvature: 0,
+              aisle: false,
+              seats: [
+                { id: "s1", row: "1", number: 1, x: 0, y: 0, status: "available" },
+              ],
+            },
+          ],
+        },
+        pricing: { sectorPrices: { "sector-platea": 18000 }, blockedSeatIds: [] },
+      },
+    ]
+    const payload = buildPublishEventV2Payload(draft)
+    assert.equal(payload.seating_maps.length, 2)
+    assert.equal(payload.seating_maps[0]?.event_date_id, slotA)
+    assert.equal(payload.seating_maps[1]?.event_date_id, slotB)
+  })
+
   it("does not count paid tickets as free capacity", () => {
     const payload = buildPublishEventV2Payload(publishableDraft())
     assert.equal(freePublishCapacity(payload), 0)

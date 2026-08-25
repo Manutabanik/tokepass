@@ -8,6 +8,12 @@ export type InventorySummarySource =
   | { field: "tickets"; index: number }
   | { field: "extras"; index: number }
   | { field: "seatingMap.sectors"; index: number; ticketIndex: number | null }
+  | {
+      field: "seatingMaps"
+      mapIndex: number
+      sectorIndex: number
+      ticketIndex: number | null
+    }
 
 export type InventorySummaryRow = {
   key: string
@@ -76,14 +82,37 @@ export function sectorIdOf(sector: unknown): string {
   return id
 }
 
+function sectorsFromSeatingMaps(
+  seatingMaps: Array<{ mapConfig?: unknown; pricing?: unknown }> | null | undefined,
+): Array<{ sector: unknown; mapIndex: number; sectorIndex: number }> {
+  if (!Array.isArray(seatingMaps) || seatingMaps.length === 0) return []
+  const next: Array<{ sector: unknown; mapIndex: number; sectorIndex: number }> =
+    []
+  for (const [mapIndex, instance] of seatingMaps.entries()) {
+    const record = asRecord(instance?.mapConfig) ?? asRecord(instance)
+    const sectors = Array.isArray(record?.sectors) ? record.sectors : []
+    sectors.forEach((sector, sectorIndex) => {
+      next.push({ sector, mapIndex, sectorIndex })
+    })
+  }
+  return next
+}
+
 export function buildInventorySummaryRows(input: {
   tickets?: DraftSummaryItem[] | null
   extras?: DraftSummaryItem[] | null
   sectors?: unknown
+  seatingMaps?: Array<{ mapConfig?: unknown; pricing?: unknown }> | null
 }): InventorySummaryRow[] {
   const tickets = input.tickets ?? []
   const extras = input.extras ?? []
-  const sectors = Array.isArray(input.sectors) ? input.sectors : []
+  const mapSectors = sectorsFromSeatingMaps(input.seatingMaps)
+  const sectors =
+    mapSectors.length > 0
+      ? mapSectors
+      : (Array.isArray(input.sectors) ? input.sectors : []).map(
+          (sector, sectorIndex) => ({ sector, mapIndex: -1, sectorIndex }),
+        )
   const rows: InventorySummaryRow[] = []
   const coveredSectorIds = new Set<string>()
 
@@ -101,7 +130,7 @@ export function buildInventorySummaryRows(input: {
     })
   })
 
-  sectors.forEach((sector, index) => {
+  sectors.forEach(({ sector, mapIndex, sectorIndex }) => {
     const record = asRecord(sector)
     if (!record) return
     const sectorId = sectorIdOf(sector)
@@ -112,18 +141,31 @@ export function buildInventorySummaryRows(input: {
         )
       : -1
     rows.push({
-      key: sectorId ? `sector:${sectorId}` : `sector:${index}`,
+      key:
+        mapIndex >= 0
+          ? `seatingMaps:${mapIndex}:${sectorId || sectorIndex}`
+          : sectorId
+            ? `sector:${sectorId}`
+            : `sector:${sectorIndex}`,
       type: "mapa",
-      name: itemName(record.name, `Sector ${index + 1}`),
+      name: itemName(record.name, `Sector ${sectorIndex + 1}`),
       price: draftNumberValue(record.price),
       stock: sectorCapacity(sector),
       stockReadOnly: true,
       hasPresale: ticketIndex >= 0 ? hasDraftPresale(tickets[ticketIndex]) : false,
-      source: {
-        field: "seatingMap.sectors",
-        index,
-        ticketIndex: ticketIndex >= 0 ? ticketIndex : null,
-      },
+      source:
+        mapIndex >= 0
+          ? {
+              field: "seatingMaps",
+              mapIndex,
+              sectorIndex,
+              ticketIndex: ticketIndex >= 0 ? ticketIndex : null,
+            }
+          : {
+              field: "seatingMap.sectors",
+              index: sectorIndex,
+              ticketIndex: ticketIndex >= 0 ? ticketIndex : null,
+            },
     })
   })
 

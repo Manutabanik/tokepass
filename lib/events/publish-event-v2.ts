@@ -85,6 +85,14 @@ export type PublishEventV2Payload = {
   restrictions: string | null
   what_to_bring: string | null
   tickets: PublishEventV2TierPayload[]
+  seating_maps: PublishEventV2SeatingMap[]
+}
+
+export type PublishEventV2SeatingMap = {
+  /** Jornada (`event_schedules.id`). El draft lo llama dateId / event_date_id. */
+  event_date_id: string | null
+  map_config: Json
+  pricing: Json
 }
 
 export function formatEventPublishIssues(
@@ -322,7 +330,7 @@ export function buildPublishEventV2Payload(
     .map((item) => ({ ...item, day_id: null }))
   const flyer = parsed.flyerUrl?.trim() || null
   const banner = parsed.bannerUrl?.trim() || null
-  const publishedMap = publishVenueMapFromDraft(parsed.seatingMap)
+  const publishedMaps = publishSeatingMapsFromDraft(parsed, occurrences)
   const firstDay = occurrences[0]
   if (!firstDay) {
     throw new Error("La fecha de inicio es obligatoria")
@@ -396,10 +404,84 @@ export function buildPublishEventV2Payload(
           : null,
     },
     delivery_mode: isOnline ? "ONLINE" : "PRESENCIAL",
-    has_seating_plan: publishedMap.has_seating_plan,
-    ...(publishedMap.venue_map ? { venue_map: publishedMap.venue_map } : {}),
+    has_seating_plan: publishedMaps.has_seating_plan,
+    ...(publishedMaps.venue_map ? { venue_map: publishedMaps.venue_map } : {}),
+    seating_maps: publishedMaps.seating_maps,
     tickets: [...tickets, ...extras],
   }
+}
+
+function publishSeatingMapsFromDraft(
+  draft: {
+    seatingMaps?: Array<{
+      dateId?: string
+      mapConfig?: unknown
+      pricing?: unknown
+    }>
+    seatingMap?: unknown
+  },
+  occurrences: DraftScheduleOccurrence[] = [],
+): {
+  seating_maps: PublishEventV2SeatingMap[]
+  venue_map?: Json
+  has_seating_plan: boolean
+} {
+  const instances = Array.isArray(draft.seatingMaps) ? draft.seatingMaps : []
+  const seating_maps = instances.flatMap((item) => {
+    const published = publishVenueMapFromDraft(item.mapConfig)
+    if (!published.venue_map) return []
+    const pricing = (item.pricing ?? {}) as Json
+    return resolvePublishedMapDayIds(item.dateId, occurrences).map(
+      (event_date_id) => ({
+        event_date_id,
+        map_config: published.venue_map as Json,
+        pricing,
+      }),
+    )
+  })
+  if (seating_maps.length === 0) {
+    const published = publishVenueMapFromDraft(draft.seatingMap)
+    return {
+      seating_maps: published.venue_map
+        ? [
+            {
+              event_date_id: null,
+              map_config: published.venue_map,
+              pricing: {} as Json,
+            },
+          ]
+        : [],
+      venue_map: published.venue_map,
+      has_seating_plan: published.has_seating_plan,
+    }
+  }
+  return {
+    seating_maps,
+    venue_map: seating_maps[0]?.map_config,
+    has_seating_plan: true,
+  }
+}
+
+/** Draft `dateId` is the jornada. Slots become extra `event_schedules` rows. */
+function resolvePublishedMapDayIds(
+  dateId: string | undefined,
+  occurrences: DraftScheduleOccurrence[],
+): Array<string | null> {
+  const id = dateId?.trim() ?? ""
+  const matching = id
+    ? occurrences.filter(
+        (occurrence) => occurrence.dayId === id || occurrence.id === id,
+      )
+    : []
+  const published = [
+    ...new Set(
+      (matching.length > 0
+        ? matching.map((occurrence) => asPublishUuid(occurrence.id))
+        : [asPublishUuid(id)]
+      ).filter((value): value is string => Boolean(value)),
+    ),
+  ]
+  return published.length > 0 ? published : [null]
 }
 
 export function freePublishCapacity(payload: PublishEventV2Payload): number {

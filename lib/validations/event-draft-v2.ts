@@ -8,6 +8,8 @@ import {
 import {
   emptyDraftSeatingMap,
   isMapDraftTicket,
+  parseDraftSeatingMaps,
+  primaryDraftSeatingMapRaw,
   toDraftSeatingMap,
 } from "@/lib/events/draft-seating-map-v2"
 import {
@@ -145,6 +147,12 @@ const draftSeatingMapSchema = z
   .passthrough()
   .default({ url: "", sectors: [] })
 
+const draftSeatingMapInstanceSchema = z.object({
+  dateId: z.string(),
+  mapConfig: z.unknown().optional().default({}),
+  pricing: z.unknown().optional().default({}),
+})
+
 const eventDraftFieldsSchema = z.object({
   archetype: z.enum(EVENT_DRAFT_ARCHETYPES).optional().default("show"),
   isVirtual: z.boolean().optional().default(false),
@@ -163,6 +171,7 @@ const eventDraftFieldsSchema = z.object({
   tickets: z.array(draftLineItemSchema).default([]),
   extras: z.array(draftLineItemSchema).default([]),
   seatingMap: draftSeatingMapSchema,
+  seatingMaps: z.array(draftSeatingMapInstanceSchema).default([]),
   settings: draftSettingsSchema,
 })
 
@@ -237,6 +246,7 @@ export const eventPublishSchema = z
       })
       .passthrough()
       .optional(),
+    seatingMaps: z.array(draftSeatingMapInstanceSchema).optional().default([]),
     settings: z
       .object({
         isPublic: z.boolean().optional(),
@@ -336,6 +346,9 @@ export type EventDraftV2Location = {
   lng?: number
 }
 export type EventDraftV2 = z.infer<typeof eventDraftFieldsSchema>
+export type EventDraftV2SeatingMapInstance = z.infer<
+  typeof draftSeatingMapInstanceSchema
+>
 
 export function emptyEventDraftV2LineItem(
   id = "item-0",
@@ -387,6 +400,7 @@ export function emptyEventDraftV2(): EventDraftV2 {
     tickets: [],
     extras: [],
     seatingMap: emptyDraftSeatingMap(),
+    seatingMaps: [],
     settings: {
       isPublic: false,
       absorbFees: false,
@@ -700,6 +714,11 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
     schedule: record.schedule,
     basicInfo: { startDate, endDate },
   })
+  const seatingMaps = parseDraftSeatingMaps(
+    record.seatingMaps,
+    seatingRaw,
+    schedule[0]?.id || "",
+  )
   const primary = schedule[0]
   const archetype = resolveDraftArchetype(record.archetype)
   const isVirtual =
@@ -742,7 +761,13 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
       withResolvedTicketValidDays(ticket, schedule),
     ),
     extras: parseDraftLineItems(record.extras),
-    seatingMap: toDraftSeatingMap(seatingRaw),
+    seatingMap: toDraftSeatingMap(
+      primaryDraftSeatingMapRaw(seatingMaps, seatingRaw),
+    ),
+    seatingMaps: seatingMaps.map((item) => ({
+      ...item,
+      dateId: item.dateId || schedule[0]?.id || "",
+    })),
     settings: {
       isPublic: settingsRaw.isPublic === true,
       absorbFees: settingsRaw.absorbFees === true,

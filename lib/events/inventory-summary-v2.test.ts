@@ -69,6 +69,37 @@ describe("buildInventorySummaryRows", () => {
     assert.equal(rows[2]?.name, "Cerveza")
   })
 
+  it("reads sectors from seatingMaps instances instead of the legacy map", () => {
+    const rows = buildInventorySummaryRows({
+      tickets: [],
+      extras: [],
+      sectors: [{ id: "legacy", name: "Viejo", price: 1, seats: [] }],
+      seatingMaps: [
+        {
+          dateId: "day-1",
+          mapConfig: {
+            sectors: [
+              {
+                id: "sector-platea",
+                name: "Platea",
+                price: 18000,
+                seats: [{ status: "available" }, { status: "available" }],
+              },
+            ],
+          },
+        },
+      ],
+    })
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0]?.name, "Platea")
+    assert.equal(rows[0]?.stock, 2)
+    assert.equal(rows[0]?.source.field, "seatingMaps")
+    if (rows[0]?.source.field === "seatingMaps") {
+      assert.equal(rows[0].source.mapIndex, 0)
+      assert.equal(rows[0].source.sectorIndex, 0)
+    }
+  })
+
   it("keeps map tickets that are not backed by a sector", () => {
     const rows = buildInventorySummaryRows({
       tickets: [

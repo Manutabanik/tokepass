@@ -55,6 +55,7 @@ describe("eventDraftSchema", () => {
     assert.deepEqual(parsed.extras, [])
     assert.equal(parsed.flyerUrl, "")
     assert.deepEqual(parsed.seatingMap.sectors, [])
+    assert.deepEqual(parsed.seatingMaps, [])
     assert.equal(parsed.location.venueName, "")
     assert.equal(parsed.location.address, "")
     assert.equal(parsed.settings.deliveryMode, "PRESENCIAL")
@@ -332,6 +333,18 @@ describe("parseEventDraftV2", () => {
     assert.equal(parsed.seatingMap.url, "https://cdn.example/map.png")
     assert.equal(parsed.seatingMap.backgroundImage, "https://cdn.example/map.png")
     assert.equal(parsed.seatingMap.sectors.length, 1)
+    assert.equal(parsed.seatingMaps.length, 1)
+    assert.ok(parsed.seatingMaps[0]?.dateId)
+    assert.equal(
+      (parsed.seatingMaps[0]?.mapConfig as { url?: string }).url,
+      "https://cdn.example/map.png",
+    )
+    assert.equal(
+      (
+        parsed.seatingMaps[0]?.mapConfig as { sectors?: unknown[] }
+      ).sectors?.length,
+      1,
+    )
     assert.equal(parsed.tickets[0]?.stock, 80)
     assert.equal(parsed.tickets[0]?.source, "")
     assert.equal(parsed.tickets[0]?.sectorId, "")

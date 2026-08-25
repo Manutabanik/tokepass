@@ -401,6 +401,17 @@ export type EventSchedule = {
   end_time: string
 }
 
+/** Instancia de mapa V2 por jornada. event_date_id = event_schedules.id. */
+export type SeatingMap = {
+  id: string
+  event_id: string
+  event_date_id: string | null
+  map_config: Json
+  pricing: Json
+  created_at: string
+  updated_at: string
+}
+
 export type EventCategory = {
   id: string
   name: string
@@ -1965,6 +1976,41 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seating_maps: {
+        Row: SeatingMap
+        Insert: {
+          id?: string
+          event_id: string
+          event_date_id?: string | null
+          map_config?: Json
+          pricing?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          event_id: string
+          event_date_id: string | null
+          map_config: Json
+          pricing: Json
+          updated_at: string
+        }>
+        Relationships: [
+          {
+            foreignKeyName: "seating_maps_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seating_maps_event_date_id_fkey"
+            columns: ["event_date_id"]
+            isOneToOne: false
+            referencedRelation: "event_schedules"
             referencedColumns: ["id"]
           },
         ]
