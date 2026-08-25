@@ -8,6 +8,7 @@ import {
   draftDateToIso,
   formatEventPublishIssues,
   freePublishCapacity,
+  isPublishScheduleForeignKeyError,
 } from "@/lib/events/publish-event-v2"
 import { emptyEventDraftV2, eventPublishSchema } from "@/lib/validations/event-draft-v2"
 
@@ -262,6 +263,31 @@ describe("buildPublishEventV2Payload", () => {
 })
 
 describe("publish helpers", () => {
+  it("detects the event_schedules foreign-key block as a recoverable RPC error", () => {
+    assert.equal(
+      isPublishScheduleForeignKeyError({
+        code: "23503",
+        message: "No se puede eliminar una jornada con tickets asociados: Día 1, Día 2.",
+      }),
+      true,
+    )
+    assert.equal(
+      isPublishScheduleForeignKeyError({
+        code: "23503",
+        message: "insert or update on table ticket_tiers violates foreign key",
+        details: "ticket_tiers_day_id_fkey",
+      }),
+      true,
+    )
+    assert.equal(
+      isPublishScheduleForeignKeyError({
+        code: "23503",
+        message: "insert or update on table venues violates foreign key",
+      }),
+      false,
+    )
+  })
+
   it("accepts only real UUIDs as ticket ids", () => {
     assert.equal(asPublishUuid("t1"), null)
     assert.equal(asPublishUuid("550e8400-e29b-41d4-a716-446655440000"), "550e8400-e29b-41d4-a716-446655440000")

@@ -12,6 +12,7 @@ import {
   buildPublishEventV2Payload,
   formatEventPublishIssues,
   freePublishCapacity,
+  isPublishScheduleForeignKeyError,
   type PublishEventV2Issue,
   type PublishEventV2Payload,
   type PublishEventV2TierPayload,
@@ -383,7 +384,11 @@ function shouldFallbackPublishRpc(error: {
   details?: string
   hint?: string
 } | null) {
-  return isMissingPublishRpc(error) || isPublishEnumMismatch(error)
+  return (
+    isMissingPublishRpc(error) ||
+    isPublishEnumMismatch(error) ||
+    isPublishScheduleForeignKeyError(error)
+  )
 }
 
 async function upsertPublishedVenue(input: {
@@ -478,7 +483,7 @@ function relationalTierRow(
     tier_type: ticket.tier_type as TicketTier["tier_type"],
     layout_type: ticket.layout_type as TicketTier["layout_type"],
     seating_sector_id: ticket.seating_sector_id,
-    day_id: ticket.day_id,
+    day_id: null,
     visibility: "public" as const,
     capacity_per_unit: 1,
     admit_count: 1,
@@ -487,10 +492,19 @@ function relationalTierRow(
   }
 }
 
+async function unlinkPublishedTicketDays(eventId: string) {
+  const admin = createAdminClient()
+  const written = await admin
+    .from("ticket_tiers")
+    .update({ day_id: null } as never)
+    .eq("event_id", eventId)
+  if (written.error) throw new Error(formatSupabaseError(written.error))
+}
+
 async function syncPublishedTickets(
   eventId: string,
   tickets: PublishEventV2TierPayload[],
-) {
+): Promise<Array<{ id: string; day_id: string | null }>> {
   const admin = createAdminClient()
   const existing = await admin
     .from("ticket_tiers")
@@ -500,6 +514,7 @@ async function syncPublishedTickets(
 
   const byId = new Map((existing.data ?? []).map((row) => [row.id, row]))
   const seen = new Set<string>()
+  const binds: Array<{ id: string; day_id: string | null }> = []
 
   for (const ticket of tickets) {
     const current = ticket.id ? byId.get(ticket.id) : undefined
@@ -526,6 +541,7 @@ async function syncPublishedTickets(
         throw new Error(`ticket_tiers.update no devolvió fila (${ticket.name})`)
       }
       seen.add(written.data.id)
+      binds.push({ id: written.data.id, day_id: ticket.day_id })
       continue
     }
 
@@ -539,6 +555,7 @@ async function syncPublishedTickets(
       throw new Error(`ticket_tiers.insert no devolvió fila (${ticket.name})`)
     }
     seen.add(inserted.data.id)
+    binds.push({ id: inserted.data.id, day_id: ticket.day_id })
   }
 
   const leftovers = (existing.data ?? []).filter(
@@ -561,11 +578,12 @@ async function syncPublishedTickets(
       .in("id", removable)
     if (removed.error) throw new Error(formatSupabaseError(removed.error))
   }
+  return binds
 }
 
-async function unpackPublishedTicketDays(
+async function bindPublishedTicketDays(
   eventId: string,
-  tickets: PublishEventV2Payload["tickets"],
+  tickets: Array<{ id: string | null; day_id: string | null }>,
 ) {
   const admin = createAdminClient()
   for (const ticket of tickets) {
@@ -610,8 +628,13 @@ async function unpackPublishEventV2Sequential(input: {
     venue: input.payload.venue,
     venueMap: input.payload.venue_map,
   })
+  await unlinkPublishedTicketDays(input.eventId)
+  const ticketDays = await syncPublishedTickets(
+    input.eventId,
+    input.payload.tickets,
+  )
   await unpackPublishedSchedule(input.eventId, input.payload)
-  await syncPublishedTickets(input.eventId, input.payload.tickets)
+  await bindPublishedTicketDays(input.eventId, ticketDays)
 
   const admin = createAdminClient()
   const written = await admin
@@ -621,7 +644,6 @@ async function unpackPublishEventV2Sequential(input: {
       description: input.payload.description,
       date: input.payload.date,
       ends_at: input.payload.ends_at,
-      schedule_days: input.payload.schedule_days as unknown as Json,
       location: input.payload.location,
       province: input.payload.venue.province,
       department: input.payload.venue.city,
@@ -758,8 +780,9 @@ export async function publishEventV2(
     }
   } else {
     try {
+      await unlinkPublishedTicketDays(id)
       await unpackPublishedSchedule(id, payload)
-      await unpackPublishedTicketDays(id, payload.tickets)
+      await bindPublishedTicketDays(id, payload.tickets)
     } catch (error) {
       return {
         success: false,

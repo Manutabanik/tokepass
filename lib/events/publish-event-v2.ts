@@ -93,6 +93,25 @@ export function asPublishUuid(value: unknown): string | null {
   return UUID_RE.test(id) ? id : null
 }
 
+export function isPublishScheduleForeignKeyError(error: {
+  code?: string
+  message?: string
+  details?: string
+  hint?: string
+} | null): boolean {
+  if (!error) return false
+  const code = String(error.code ?? "")
+  const text =
+    `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase()
+  return (
+    code === "23503" &&
+    (text.includes("jornada") ||
+      text.includes("event_schedules") ||
+      text.includes("ticket_tiers_day_id") ||
+      text.includes("day_id"))
+  )
+}
+
 export function draftDateToIso(value: string): string {
   const trimmed = value.trim()
   if (!trimmed) {
@@ -230,24 +249,10 @@ export function buildPublishEventV2Payload(
   const occurrences = flattenDraftScheduleOccurrences(
     resolveDraftSchedule(parsed),
   ).filter((item) => item.startDateTime.trim())
-  const validSlotIds = new Set(occurrences.map((item) => item.id))
-  const tickets = parsed.tickets
-    .map((item) => mapLineItemToTier(item, "ticket", fee, absorbFees))
-    .filter((item): item is PublishEventV2TierPayload => item != null)
-    .map((item) => ({
-      ...item,
-      day_id:
-        item.day_id && validSlotIds.has(item.day_id) ? item.day_id : null,
-    }))
   const extras = (parsed.extras ?? [])
     .map((item) => mapLineItemToTier(item, "extra", fee, absorbFees))
     .filter((item): item is PublishEventV2TierPayload => item != null)
     .map((item) => ({ ...item, day_id: null }))
-
-  if (tickets.length < 1) {
-    throw new Error("Agregá al menos una entrada")
-  }
-
   const flyer = parsed.flyerUrl?.trim() || null
   const banner = parsed.bannerUrl?.trim() || null
   const publishedMap = publishVenueMapFromDraft(parsed.seatingMap)
@@ -266,6 +271,23 @@ export function buildPublishEventV2Payload(
           end_time: draftDateToIso(item.endDateTime || item.startDateTime),
         }))
       : []
+  const publishedDayIds = new Set(
+    scheduleDays
+      .map((day) => day.id)
+      .filter((id): id is string => Boolean(id)),
+  )
+  const tickets = parsed.tickets
+    .map((item) => mapLineItemToTier(item, "ticket", fee, absorbFees))
+    .filter((item): item is PublishEventV2TierPayload => item != null)
+    .map((item) => ({
+      ...item,
+      day_id:
+        item.day_id && publishedDayIds.has(item.day_id) ? item.day_id : null,
+    }))
+
+  if (tickets.length < 1) {
+    throw new Error("Agregá al menos una entrada")
+  }
 
   return {
     title,
