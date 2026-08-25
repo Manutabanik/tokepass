@@ -89,7 +89,7 @@ export function EventEditorV2LaunchStep({
         <CatalogPreviewCard preview={preview} />
 
         <DraftCard>
-          <div className="mb-4 flex items-start justify-between gap-4">
+          <div className="mb-4 flex flex-col items-start justify-between gap-3 sm:flex-row sm:gap-4">
             <div className="min-w-0">
               <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
                 Estrategia de Venta
@@ -141,7 +141,7 @@ export function EventEditorV2LaunchStep({
                   </>
                 )}
               </p>
-              <dl className="grid grid-cols-2 gap-3 text-sm">
+              <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <BreakdownStat
                   label="El cliente paga"
                   value={formatCurrency(sale.customerPays)}
@@ -200,7 +200,7 @@ export function EventEditorV2LaunchStep({
 
       <EventEditorV2SettingsStep />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="hidden gap-3 md:flex md:items-center md:justify-between">
         <p className="text-sm text-muted-foreground">
           {launchReady
             ? isPublished
@@ -212,7 +212,7 @@ export function EventEditorV2LaunchStep({
           type="button"
           disabled={!launchReady || publishing}
           className={cn(
-            "min-w-60 transition-all duration-200",
+            "h-12 min-h-12 min-w-60 transition-all duration-200",
             launchReady
               ? isPublished
                 ? "bg-sky-600 text-white hover:bg-sky-500"

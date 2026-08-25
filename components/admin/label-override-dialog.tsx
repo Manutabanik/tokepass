@@ -27,7 +27,7 @@ export function LabelOverrideDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-border bg-card text-foreground sm:max-w-sm">
+      <DialogContent className="w-[95vw] max-w-lg border-border bg-card text-foreground sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Etiqueta de este elemento</DialogTitle>
           <DialogDescription>

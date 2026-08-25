@@ -289,7 +289,7 @@ export function EventEditorV2LocationFields() {
 
   return (
     <DraftCard>
-      <div className="mb-5 flex items-start justify-between gap-3">
+      <div className="mb-5 flex flex-col items-start justify-between gap-3 sm:flex-row">
         <div className="flex items-center gap-2">
           <MapPinned className="size-4 text-emerald-400" aria-hidden />
           <div>
@@ -307,7 +307,7 @@ export function EventEditorV2LocationFields() {
           size="sm"
           disabled={!hasLocation}
           onClick={clearLocation}
-          className="h-8 shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+          className="h-11 min-h-11 shrink-0 gap-1 px-3 text-xs text-muted-foreground hover:text-foreground"
         >
           <X className="size-3.5" aria-hidden />
           Limpiar ubicación

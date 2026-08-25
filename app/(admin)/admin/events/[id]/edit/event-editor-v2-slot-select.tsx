@@ -26,7 +26,7 @@ export function EventEditorV2SlotSelect({
       onChange={(event) => onChange(event.target.value)}
       className={cn(
         DRAFT_FIELD_CLASS,
-        compact && "h-9 rounded-lg px-2 py-1 text-xs",
+        compact && "h-11 min-h-11 rounded-lg px-2 py-1 text-sm",
       )}
     >
       <option value={ANY_DRAFT_SLOT_VALUE}>Válidas para cualquier turno</option>

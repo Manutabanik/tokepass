@@ -91,7 +91,7 @@ export function DraftInventoryAccordionCard({
           aria-expanded={isExpanded}
           aria-controls={panelId}
           onClick={() => setIsExpanded((open) => !open)}
-          className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-100/80 dark:hover:bg-gray-800/50"
+          className="flex min-h-12 min-w-0 flex-1 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-100/80 dark:hover:bg-gray-800/50"
         >
           <span className="flex min-w-0 items-center gap-2">
             <ChevronDown
@@ -113,7 +113,7 @@ export function DraftInventoryAccordionCard({
           type="button"
           variant="ghost"
           size="icon"
-          className="mr-2 shrink-0 text-muted-foreground hover:text-red-500"
+          className="mr-2 size-11 shrink-0 text-muted-foreground hover:text-red-500"
           aria-label={`Eliminar ${displayName}`}
           onClick={onRemove}
         >
@@ -241,7 +241,7 @@ export function DraftInventoryAccordionCard({
               aria-expanded={showAdvanced}
               aria-controls={advancedId}
               onClick={() => setShowAdvanced((open) => !open)}
-              className="h-9 w-full justify-start gap-2 px-2 text-sm font-medium text-gray-500 hover:text-emerald-500"
+              className="h-11 min-h-11 w-full justify-start gap-2 px-2 text-sm font-medium text-gray-500 hover:text-emerald-500"
             >
               <Settings2 className="size-4" aria-hidden />
               Opciones de preventa y límites

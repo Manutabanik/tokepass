@@ -57,6 +57,7 @@ export function EventEditorV2MediaField({
             type="button"
             variant="ghost"
             size="icon"
+            className="size-11"
             aria-label={`Quitar ${label.toLowerCase()}`}
             disabled={busy}
             onClick={() => {

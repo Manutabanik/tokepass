@@ -83,7 +83,7 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
       <EventEditorV2LineupFields />
 
       {supportsVirtual ? (
-        <DraftCard className="flex items-center justify-between gap-4">
+        <DraftCard className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <MonitorPlay className="size-4 text-emerald-400" aria-hidden />

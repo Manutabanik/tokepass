@@ -5688,7 +5688,7 @@ export function InteractiveVenueMapEditor({
       ) : null}
 
       <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
-        <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
+        <DialogContent className="w-[95vw] max-w-lg border-border bg-card text-foreground sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Guardar como Mi Plantilla</DialogTitle>
             <DialogDescription>

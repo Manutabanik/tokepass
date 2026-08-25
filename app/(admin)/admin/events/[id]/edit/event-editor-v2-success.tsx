@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { DRAFT_DIALOG_CLASS } from "./event-editor-v2-ui"
 import { salesDashboardPath } from "@/lib/events/editor-v2-ux"
 
 const CONFETTI_COLORS = [
@@ -85,7 +86,7 @@ export function EventEditorV2SuccessDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="overflow-hidden border-border bg-card text-foreground sm:max-w-lg">
+      <DialogContent className={`${DRAFT_DIALOG_CLASS} overflow-hidden border-border bg-card text-foreground sm:max-w-lg`}>
         <SuccessConfetti />
         <DialogHeader className="relative items-center text-center sm:items-center">
           <div className="mx-auto mb-2 grid size-14 place-items-center rounded-full bg-emerald-500/15 text-emerald-500">
@@ -106,17 +107,17 @@ export function EventEditorV2SuccessDialog({
             <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
               URL pública
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Input
                 readOnly
                 value={publicUrl}
                 aria-label="URL pública del evento"
-                className="h-10 font-mono text-xs"
+                className="h-12 min-h-12 font-mono text-xs"
               />
               <Button
                 type="button"
                 variant="outline"
-                className="shrink-0"
+                className="h-12 min-h-12 shrink-0"
                 onClick={() => void copyLink()}
                 disabled={copying || !publicUrl}
               >
@@ -126,11 +127,12 @@ export function EventEditorV2SuccessDialog({
             </div>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Button
               type="button"
               variant="outline"
               size="lg"
+              className="h-12 min-h-12"
               render={
                 <a
                   href={publicUrl}
@@ -145,7 +147,7 @@ export function EventEditorV2SuccessDialog({
             <Button
               type="button"
               size="lg"
-              className="bg-emerald-500 text-black hover:bg-emerald-400"
+              className="h-12 min-h-12 bg-emerald-500 text-black hover:bg-emerald-400"
               render={<Link href={salesHref} />}
             >
               <LayoutDashboard className="size-4" aria-hidden />

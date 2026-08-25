@@ -123,98 +123,171 @@ export function InventorySummaryTable() {
           resumir.
         </p>
       ) : (
-        <div className="mt-5 overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="text-[11px] font-semibold tracking-wide text-gray-500 uppercase">
-                <th className="pb-2 pr-3 font-semibold">Nombre</th>
-                {showSlots ? (
-                  <th className="pb-2 pr-3 font-semibold">Turno</th>
-                ) : null}
-                <th className="pb-2 pr-3 font-semibold">Precio</th>
-                <th className="pb-2 pr-3 font-semibold">Stock</th>
-                <th className="pb-2 text-right font-semibold">Recaudación</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const badge = KIND_BADGE[row.type]
-                return (
-                  <tr
-                    key={row.key}
-                    className="border-b border-slate-200/80 last:border-b-0 dark:border-gray-800"
-                  >
-                    <td className="py-2.5 pr-3">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span
-                          className={cn(
-                            "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase",
-                            badge.className,
-                          )}
-                        >
-                          {badge.label}
-                        </span>
-                        <span className="truncate font-medium text-slate-800 dark:text-zinc-100">
-                          {row.name}
-                        </span>
-                        {row.hasPresale ? <PresaleClock /> : null}
-                      </div>
-                    </td>
-                    {showSlots ? (
-                      <td className="py-2.5 pr-3">
-                        {row.source.field === "tickets" ? (
-                          <EventEditorV2SlotSelect
-                            compact
-                            value={String(tickets[row.source.index]?.slotId ?? "")}
-                            options={slotOptions}
-                            ariaLabel={`Turno de ${row.name}`}
-                            onChange={(slotId) => writeSlotId(row, slotId)}
-                          />
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </td>
-                    ) : null}
-                    <td className="py-2.5 pr-3">
+        <>
+          <ul className="mt-5 space-y-3 sm:hidden">
+            {rows.map((row) => {
+              const badge = KIND_BADGE[row.type]
+              return (
+                <li
+                  key={row.key}
+                  className="flex flex-col gap-3 rounded-xl border border-slate-200/80 bg-white/80 p-3 dark:border-gray-800 dark:bg-gray-950/40"
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase",
+                        badge.className,
+                      )}
+                    >
+                      {badge.label}
+                    </span>
+                    <span className="truncate font-medium text-slate-800 dark:text-zinc-100">
+                      {row.name}
+                    </span>
+                    {row.hasPresale ? <PresaleClock /> : null}
+                  </div>
+                  {showSlots && row.source.field === "tickets" ? (
+                    <EventEditorV2SlotSelect
+                      value={String(tickets[row.source.index]?.slotId ?? "")}
+                      options={slotOptions}
+                      ariaLabel={`Turno de ${row.name}`}
+                      onChange={(slotId) => writeSlotId(row, slotId)}
+                    />
+                  ) : null}
+                  <div className="grid grid-cols-1 gap-3">
+                    <label className="grid gap-1.5">
+                      <span className="text-[11px] font-bold text-slate-700 dark:text-zinc-300">
+                        Precio
+                      </span>
                       <LedgerNumberInput
+                        stacked
                         value={row.price}
                         ariaLabel={`Precio de ${row.name}`}
                         onChange={(value) => writePrice(row, value)}
                       />
-                    </td>
-                    <td className="py-2.5 pr-3">
+                    </label>
+                    <label className="grid gap-1.5">
+                      <span className="text-[11px] font-bold text-slate-700 dark:text-zinc-300">
+                        Stock
+                      </span>
                       <LedgerNumberInput
+                        stacked
                         value={row.stock}
                         disabled={row.stockReadOnly}
                         ariaLabel={`Stock de ${row.name}`}
                         onChange={(value) => writeStock(row, value)}
                       />
-                    </td>
-                    <td className="py-2.5 text-right tabular-nums text-slate-700 dark:text-zinc-200">
-                      {formatCurrency(row.price * row.stock)}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="border-t border-slate-300 text-sm font-semibold dark:border-gray-700">
-                <td
-                  className="pt-3 pr-3 text-xs uppercase tracking-wide text-gray-500"
-                  colSpan={showSlots ? 3 : 2}
-                >
-                  Total proyectado
-                </td>
-                <td className="pt-3 pr-3 tabular-nums text-slate-800 dark:text-zinc-100">
-                  {formatNumber(totals.stock)}
-                </td>
-                <td className="pt-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
-                  {formatCurrency(totals.revenue)}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+                    </label>
+                  </div>
+                  <p className="text-right text-sm tabular-nums text-slate-700 dark:text-zinc-200">
+                    Recaudación {formatCurrency(row.price * row.stock)}
+                  </p>
+                </li>
+              )
+            })}
+            <li className="flex items-center justify-between rounded-xl border border-slate-300 px-3 py-3 text-sm font-semibold dark:border-gray-700">
+              <span className="text-xs tracking-wide text-gray-500 uppercase">
+                Total · {formatNumber(totals.stock)}
+              </span>
+              <span className="tabular-nums text-emerald-600 dark:text-emerald-400">
+                {formatCurrency(totals.revenue)}
+              </span>
+            </li>
+          </ul>
+
+          <div className="mt-5 hidden overflow-x-auto sm:block">
+            <table className="w-full min-w-[36rem] text-left text-sm">
+              <thead>
+                <tr className="text-[11px] font-semibold tracking-wide text-gray-500 uppercase">
+                  <th className="pb-2 pr-3 font-semibold">Nombre</th>
+                  {showSlots ? (
+                    <th className="pb-2 pr-3 font-semibold">Turno</th>
+                  ) : null}
+                  <th className="pb-2 pr-3 font-semibold">Precio</th>
+                  <th className="pb-2 pr-3 font-semibold">Stock</th>
+                  <th className="pb-2 text-right font-semibold">Recaudación</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const badge = KIND_BADGE[row.type]
+                  return (
+                    <tr
+                      key={row.key}
+                      className="border-b border-slate-200/80 last:border-b-0 dark:border-gray-800"
+                    >
+                      <td className="py-2.5 pr-3">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span
+                            className={cn(
+                              "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase",
+                              badge.className,
+                            )}
+                          >
+                            {badge.label}
+                          </span>
+                          <span className="truncate font-medium text-slate-800 dark:text-zinc-100">
+                            {row.name}
+                          </span>
+                          {row.hasPresale ? <PresaleClock /> : null}
+                        </div>
+                      </td>
+                      {showSlots ? (
+                        <td className="py-2.5 pr-3">
+                          {row.source.field === "tickets" ? (
+                            <EventEditorV2SlotSelect
+                              compact
+                              value={String(tickets[row.source.index]?.slotId ?? "")}
+                              options={slotOptions}
+                              ariaLabel={`Turno de ${row.name}`}
+                              onChange={(slotId) => writeSlotId(row, slotId)}
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      ) : null}
+                      <td className="py-2.5 pr-3">
+                        <LedgerNumberInput
+                          value={row.price}
+                          ariaLabel={`Precio de ${row.name}`}
+                          onChange={(value) => writePrice(row, value)}
+                        />
+                      </td>
+                      <td className="py-2.5 pr-3">
+                        <LedgerNumberInput
+                          value={row.stock}
+                          disabled={row.stockReadOnly}
+                          ariaLabel={`Stock de ${row.name}`}
+                          onChange={(value) => writeStock(row, value)}
+                        />
+                      </td>
+                      <td className="py-2.5 text-right tabular-nums text-slate-700 dark:text-zinc-200">
+                        {formatCurrency(row.price * row.stock)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-slate-300 text-sm font-semibold dark:border-gray-700">
+                  <td
+                    className="pt-3 pr-3 text-xs uppercase tracking-wide text-gray-500"
+                    colSpan={showSlots ? 3 : 2}
+                  >
+                    Total proyectado
+                  </td>
+                  <td className="pt-3 pr-3 tabular-nums text-slate-800 dark:text-zinc-100">
+                    {formatNumber(totals.stock)}
+                  </td>
+                  <td className="pt-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                    {formatCurrency(totals.revenue)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </>
       )}
     </DraftCard>
   )
@@ -240,16 +313,23 @@ function PresaleClock() {
 function LedgerNumberInput({
   value,
   disabled = false,
+  stacked = false,
   ariaLabel,
   onChange,
 }: {
   value: number
   disabled?: boolean
+  stacked?: boolean
   ariaLabel: string
   onChange: (value: number) => void
 }) {
   return (
-    <span className="group relative inline-flex min-w-[5.5rem] items-center">
+    <span
+      className={cn(
+        "group relative inline-flex items-center",
+        stacked ? "w-full" : "min-w-[5.5rem]",
+      )}
+    >
       <input
         type="number"
         min={0}
@@ -260,8 +340,10 @@ function LedgerNumberInput({
         value={Number.isFinite(value) ? value : 0}
         onChange={(event) => onChange(draftNumberValue(event.target.value))}
         className={cn(
-          "w-full bg-transparent px-0 py-1 text-sm tabular-nums outline-none",
-          "border-0 border-b border-dashed border-gray-600",
+          "w-full tabular-nums outline-none",
+          stacked
+            ? "h-12 min-h-12 rounded-xl border border-slate-200 bg-white px-3 text-base dark:border-gray-700 dark:bg-gray-900/80"
+            : "border-0 border-b border-dashed border-gray-600 bg-transparent px-0 py-1 text-sm",
           "focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/50",
           disabled &&
             "cursor-not-allowed border-transparent text-muted-foreground",

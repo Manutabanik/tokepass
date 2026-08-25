@@ -22,7 +22,6 @@ import {
   duplicateDraftSlotsToOtherDays,
   syncDraftScheduleBounds,
 } from "@/lib/events/draft-schedule-slots-v2"
-import { cn } from "@/lib/utils"
 import type { EventDraftV2 } from "@/lib/validations/event-draft-v2"
 
 export function EventEditorV2ScheduleFields() {
@@ -93,7 +92,7 @@ export function EventEditorV2ScheduleFields() {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="absolute top-3 right-3 text-muted-foreground hover:text-red-500"
+                  className="absolute top-3 right-3 size-11 text-muted-foreground hover:text-red-500"
                   aria-label={`Eliminar ${label}`}
                   onClick={() => remove(index)}
                 >
@@ -146,7 +145,7 @@ export function EventEditorV2ScheduleFields() {
                       <button
                         type="button"
                         onClick={() => duplicateSlots(index)}
-                        className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 transition hover:text-emerald-500 dark:text-emerald-400"
+                        className="inline-flex min-h-11 items-center gap-1.5 text-xs font-medium text-emerald-600 transition hover:text-emerald-500 dark:text-emerald-400"
                       >
                         <Copy className="size-3.5" aria-hidden />
                         Duplicar turnos a otros días
@@ -257,7 +256,7 @@ function DaySlotList({
                 <Input
                   id={`event-v2-slot-${dayIndex}-${slotIndex}-start`}
                   type="time"
-                  className={cn(DRAFT_FIELD_CLASS, "h-10")}
+                  className={DRAFT_FIELD_CLASS}
                   {...register(`schedule.${dayIndex}.slots.${slotIndex}.startTime`, {
                     onChange,
                   })}
@@ -273,7 +272,7 @@ function DaySlotList({
                 <Input
                   id={`event-v2-slot-${dayIndex}-${slotIndex}-end`}
                   type="time"
-                  className={cn(DRAFT_FIELD_CLASS, "h-10")}
+                  className={DRAFT_FIELD_CLASS}
                   {...register(`schedule.${dayIndex}.slots.${slotIndex}.endTime`, {
                     onChange,
                   })}
@@ -293,7 +292,7 @@ function DaySlotList({
                   step={1}
                   inputMode="numeric"
                   placeholder="—"
-                  className={cn(DRAFT_FIELD_CLASS, "h-10")}
+                  className={DRAFT_FIELD_CLASS}
                   {...register(`schedule.${dayIndex}.slots.${slotIndex}.capacity`)}
                 />
               </div>
@@ -301,7 +300,7 @@ function DaySlotList({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="text-muted-foreground hover:text-red-500"
+                className="size-11 text-muted-foreground hover:text-red-500"
                 aria-label={`Eliminar turno ${slotIndex + 1}`}
                 onClick={() => {
                   remove(slotIndex)
@@ -317,7 +316,7 @@ function DaySlotList({
       <button
         type="button"
         onClick={addSlot}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 transition hover:text-emerald-500 dark:text-emerald-400"
+        className="inline-flex min-h-11 items-center gap-1.5 text-xs font-medium text-emerald-600 transition hover:text-emerald-500 dark:text-emerald-400"
       >
         <Plus className="size-3.5" aria-hidden />
         Agregar turno / franja horaria

@@ -236,7 +236,7 @@ export function EventEditorV2LineupFields() {
                       }),
                     )
                   }
-                  className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-slate-100 dark:hover:bg-gray-800/70"
+                  className="flex min-h-11 w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-slate-100 dark:hover:bg-gray-800/70"
                 >
                   <ArtistAvatar
                     name={item.name}
@@ -258,7 +258,7 @@ export function EventEditorV2LineupFields() {
               <button
                 type="button"
                 onClick={addCustom}
-                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-emerald-600 transition-colors hover:bg-emerald-500/10 dark:text-emerald-400"
+                className="flex min-h-11 w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-emerald-600 transition-colors hover:bg-emerald-500/10 dark:text-emerald-400"
               >
                 <Plus className="size-4" aria-hidden />
                 Crear “{query.trim()}” manualmente
@@ -276,7 +276,7 @@ export function EventEditorV2LineupFields() {
             return (
               <li
                 key={field._rowId}
-                className="relative flex gap-3 rounded-xl border border-slate-200 bg-white/80 p-4 pr-10 dark:border-gray-700/50 dark:bg-gray-800/50"
+                className="relative flex gap-3 rounded-xl border border-slate-200 bg-white/80 p-4 pr-14 dark:border-gray-700/50 dark:bg-gray-800/50"
               >
                 <input type="hidden" {...register(`lineup.${index}.id`)} />
                 <input type="hidden" {...register(`lineup.${index}.source`)} />
@@ -292,7 +292,7 @@ export function EventEditorV2LineupFields() {
                     {displayName}
                   </p>
                   <input
-                    className="h-8 w-full border-0 bg-transparent px-0 text-sm text-gray-500 outline-none placeholder:text-gray-400 focus-visible:ring-0"
+                    className="h-11 min-h-11 w-full border-0 bg-transparent px-0 text-sm text-gray-500 outline-none placeholder:text-gray-400 focus-visible:ring-0"
                     placeholder="Ej: Orador principal, Cierre..."
                     aria-label={`Rol de ${displayName}`}
                     {...register(`lineup.${index}.role`)}
@@ -311,7 +311,7 @@ export function EventEditorV2LineupFields() {
                             onClick={() => toggleDay(index, dayId)}
                             aria-pressed={selected}
                             className={cn(
-                              "rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                              "min-h-11 rounded-full px-3 py-2 text-[11px] font-semibold transition-colors",
                               selected
                                 ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
                                 : "bg-slate-100 text-gray-500 hover:bg-slate-200 dark:bg-gray-900 dark:text-gray-400",
@@ -328,7 +328,7 @@ export function EventEditorV2LineupFields() {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="absolute top-2 right-2 size-8 text-muted-foreground hover:text-red-500"
+                  className="absolute top-2 right-2 size-11 text-muted-foreground hover:text-red-500"
                   aria-label={`Quitar a ${displayName}`}
                   onClick={() => remove(index)}
                 >

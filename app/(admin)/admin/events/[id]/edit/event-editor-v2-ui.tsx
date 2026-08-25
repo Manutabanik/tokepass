@@ -4,7 +4,9 @@ import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 
 export const DRAFT_FIELD_CLASS =
-  "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-900 transition-all duration-200 focus-visible:border-emerald-500 focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-gray-700 dark:bg-gray-900/80 dark:text-white"
+  "h-12 min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-base text-slate-900 transition-all duration-200 focus-visible:border-emerald-500 focus-visible:ring-2 focus-visible:ring-emerald-500 md:text-sm dark:border-gray-700 dark:bg-gray-900/80 dark:text-white"
+
+export const DRAFT_DIALOG_CLASS = "w-[95vw] max-w-lg"
 
 export const DRAFT_TEXTAREA_CLASS =
   "min-h-24 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-900 transition-all duration-200 focus-visible:border-emerald-500 focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-gray-700 dark:bg-gray-900/80 dark:text-white"
@@ -22,7 +24,7 @@ export function DraftCard({
   return (
     <section
       className={cn(
-        "rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-sm transition-all duration-200 dark:border-gray-800 dark:bg-gray-950/70",
+        "rounded-2xl border border-slate-200/80 bg-white/70 p-4 shadow-sm transition-all duration-200 sm:p-5 dark:border-gray-800 dark:bg-gray-950/70",
         className,
       )}
     >
@@ -46,7 +48,7 @@ export function DraftAddButton({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-transparent px-4 py-3 text-sm font-medium text-gray-400 transition-all duration-200 hover:border-emerald-500/50 hover:text-emerald-400 dark:border-gray-700"
+      className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-transparent px-4 py-3 text-sm font-medium text-gray-400 transition-all duration-200 hover:border-emerald-500/50 hover:text-emerald-400 dark:border-gray-700"
     >
       {children}
     </button>

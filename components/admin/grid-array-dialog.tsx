@@ -58,7 +58,7 @@ export function GridArrayDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
+      <DialogContent className="w-[95vw] max-w-lg border-border bg-card text-foreground sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <LayoutGrid className="size-4 text-primary" aria-hidden="true" />
