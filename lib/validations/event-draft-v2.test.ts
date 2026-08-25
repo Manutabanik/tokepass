@@ -8,8 +8,10 @@ import {
   eventPublishDisabledReason,
   eventPublishSchema,
   isEventDraftPublishable,
+  parseDraftLineup,
   parseEventDraftV2,
   toEventDraftV2Payload,
+  toggleDraftLineupDay,
 } from "@/lib/validations/event-draft-v2"
 
 function publishableDraft() {
@@ -57,6 +59,7 @@ describe("eventDraftSchema", () => {
     assert.equal(parsed.location.address, "")
     assert.equal(parsed.settings.deliveryMode, "PRESENCIAL")
     assert.equal(parsed.schedule.length, 0)
+    assert.deepEqual(parsed.lineup, [])
   })
 
   it("emptyEventDraftV2 starts with a single default day", () => {
@@ -65,6 +68,7 @@ describe("eventDraftSchema", () => {
     assert.equal(draft.schedule[0]?.name, "Día 1")
     assert.equal(draft.schedule[0]?.startDate, "")
     assert.ok(draft.schedule[0]?.id)
+    assert.deepEqual(draft.lineup, [])
   })
 
   it("still accepts over-capacity stock without failing", () => {
@@ -334,6 +338,40 @@ describe("parseEventDraftV2", () => {
     assert.equal(parsed.location.province, "CABA")
     assert.equal(parsed.location.lat, -34.6)
     assert.equal(parsed.basicInfo.locationName, "Niceto")
+  })
+
+  it("hydrates a universal lineup and infers source from spotify ids", () => {
+    const parsed = parseEventDraftV2({
+      lineup: [
+        {
+          id: "0oSGxfWSnnOXhD2fKuz2Gy",
+          name: "David Bowie",
+          imageUrl: "https://cdn.example/bowie.jpg",
+          role: "Headliner",
+          source: "spotify",
+          dayIds: ["day-1"],
+        },
+        {
+          name: "Invitado local",
+          artistId: "artist-9",
+          role: "Orador",
+        },
+      ],
+    })
+    assert.equal(parsed.lineup.length, 2)
+    assert.equal(parsed.lineup[0]?.source, "spotify")
+    assert.equal(parsed.lineup[0]?.avatarUrl, "https://cdn.example/bowie.jpg")
+    assert.equal(parsed.lineup[0]?.dayIds[0], "day-1")
+    assert.equal(parsed.lineup[1]?.source, "local")
+    assert.equal(parsed.lineup[1]?.name, "Invitado local")
+    assert.deepEqual(parseDraftLineup(null), [])
+  })
+})
+
+describe("toggleDraftLineupDay", () => {
+  it("adds and removes a schedule day id", () => {
+    assert.deepEqual(toggleDraftLineupDay([], "day-2"), ["day-2"])
+    assert.deepEqual(toggleDraftLineupDay(["day-2"], "day-2"), [])
   })
 })
 

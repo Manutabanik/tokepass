@@ -33,6 +33,27 @@ const draftScheduleDaySchema = z.object({
   endDate: z.string().optional().default(""),
 })
 
+export const EVENT_DRAFT_LINEUP_SOURCES = ["spotify", "custom", "local"] as const
+export type EventDraftLineupSource = (typeof EVENT_DRAFT_LINEUP_SOURCES)[number]
+
+export type EventDraftV2LineupItem = {
+  id: string
+  name: string
+  avatarUrl: string
+  role: string
+  source: EventDraftLineupSource
+  dayIds: string[]
+}
+
+const draftLineupItemSchema = z.object({
+  id: z.string().optional().default(""),
+  name: z.string().optional().default(""),
+  avatarUrl: z.string().optional().default(""),
+  role: z.string().optional().default(""),
+  source: z.enum(EVENT_DRAFT_LINEUP_SOURCES).optional().default("custom"),
+  dayIds: z.array(z.string()).default([]),
+})
+
 const draftLineItemSchema = z.object({
   id: z.string().optional().default(""),
   name: z.string().optional().default(""),
@@ -115,6 +136,7 @@ const eventDraftFieldsSchema = z.object({
   bannerUrl: z.string().optional().default(""),
   venueCapacity: z.coerce.number().optional().default(0),
   schedule: z.array(draftScheduleDaySchema).default([]),
+  lineup: z.array(draftLineupItemSchema).default([]),
   tickets: z.array(draftLineItemSchema).default([]),
   extras: z.array(draftLineItemSchema).default([]),
   seatingMap: draftSeatingMapSchema,
@@ -173,6 +195,7 @@ export const eventPublishSchema = z
       .array(publishLineItemSchema)
       .min(1, "Agregá al menos una entrada"),
     extras: z.array(draftLineItemSchema).optional(),
+    lineup: z.array(draftLineupItemSchema).optional(),
     seatingMap: z
       .object({
         url: z.string().optional(),
@@ -315,6 +338,7 @@ export function emptyEventDraftV2(): EventDraftV2 {
     bannerUrl: "",
     venueCapacity: 0,
     schedule: [firstDay],
+    lineup: [],
     tickets: [],
     extras: [],
     seatingMap: emptyDraftSeatingMap(),
@@ -336,6 +360,38 @@ export function isEventDraftOnline(values: unknown): boolean {
 
 export function createDraftLineItem(): EventDraftV2LineItem {
   return emptyEventDraftV2LineItem(crypto.randomUUID())
+}
+
+export function createDraftLineupItem(
+  input: Partial<EventDraftV2LineupItem> = {},
+): EventDraftV2LineupItem {
+  const source = EVENT_DRAFT_LINEUP_SOURCES.includes(
+    input.source as EventDraftLineupSource,
+  )
+    ? (input.source as EventDraftLineupSource)
+    : "custom"
+  return {
+    id: input.id?.trim() || crypto.randomUUID(),
+    name: input.name?.trim() || "",
+    avatarUrl: input.avatarUrl?.trim() || "",
+    role: input.role ?? "",
+    source,
+    dayIds: Array.isArray(input.dayIds)
+      ? input.dayIds.filter((id) => typeof id === "string" && id.trim())
+      : [],
+  }
+}
+
+export function toggleDraftLineupDay(
+  dayIds: readonly string[] | null | undefined,
+  dayId: string,
+): string[] {
+  const id = dayId.trim()
+  const current = (dayIds ?? []).filter((item) => item.trim())
+  if (!id) return current
+  return current.includes(id)
+    ? current.filter((item) => item !== id)
+    : [...current, id]
 }
 
 export function draftNumberValue(value: unknown, fallback = 0): number {
@@ -409,6 +465,61 @@ export function resolveDraftSchedule(values: {
     )
   }
   return raw
+}
+
+function parseDraftLineupSource(value: unknown): EventDraftLineupSource {
+  if (value === "spotify" || value === "custom" || value === "local") return value
+  return "custom"
+}
+
+export function parseDraftLineup(raw: unknown): EventDraftV2LineupItem[] {
+  const source = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === "object" && !Array.isArray(raw)
+      ? Array.isArray((raw as { artists?: unknown }).artists)
+        ? (raw as { artists: unknown[] }).artists
+        : []
+      : []
+  return source.flatMap((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return []
+    const record = item as Record<string, unknown>
+    const name = asOptionalString(record.name) || asOptionalString(record.artist)
+    if (!name) return []
+    const spotifyId = asOptionalString(record.spotifyId ?? record.spotify_id)
+    const inferredSource = parseDraftLineupSource(record.source)
+    const sourceKind =
+      inferredSource !== "custom"
+        ? inferredSource
+        : spotifyId
+          ? "spotify"
+          : asOptionalString(record.artistId)
+            ? "local"
+            : "custom"
+    const dayIds = Array.isArray(record.dayIds)
+      ? record.dayIds.filter((id): id is string => typeof id === "string" && Boolean(id.trim()))
+      : (() => {
+          const dayId = asOptionalString(
+            record.dayId ?? record.day_id ?? record.dateId,
+          )
+          return dayId ? [dayId] : []
+        })()
+    return [
+      createDraftLineupItem({
+        id:
+          asOptionalString(record.id) ||
+          spotifyId ||
+          asOptionalString(record.artistId) ||
+          `lineup-${index}`,
+        name,
+        avatarUrl: asOptionalString(
+          record.avatarUrl ?? record.imageUrl ?? record.image_url,
+        ),
+        role: asOptionalString(record.role),
+        source: sourceKind,
+        dayIds,
+      }),
+    ]
+  })
 }
 
 function parseDraftLineItems(raw: unknown): EventDraftV2LineItem[] {
@@ -549,6 +660,7 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
     flyerUrl: asOptionalString(record.flyerUrl),
     bannerUrl: asOptionalString(record.bannerUrl),
     venueCapacity: asFiniteNumber(record.venueCapacity),
+    lineup: parseDraftLineup(record.lineup),
     tickets: parseDraftLineItems(record.tickets),
     extras: parseDraftLineItems(record.extras),
     seatingMap: toDraftSeatingMap(seatingRaw),

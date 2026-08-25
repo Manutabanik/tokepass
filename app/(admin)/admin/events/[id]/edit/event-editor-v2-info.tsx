@@ -5,6 +5,7 @@ import { Controller, useFormContext, useWatch } from "react-hook-form"
 
 import { EventEditorV2LocationFields } from "./event-editor-v2-location"
 import { EventEditorV2MediaField } from "./event-editor-v2-media"
+import { EventEditorV2LineupFields } from "./event-editor-v2-lineup"
 import { EventEditorV2ScheduleFields } from "./event-editor-v2-schedule"
 import {
   DRAFT_FIELD_CLASS,
@@ -56,6 +57,8 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
       </DraftCard>
 
       <EventEditorV2ScheduleFields />
+
+      <EventEditorV2LineupFields />
 
       <DraftCard className="flex items-center justify-between gap-4">
         <div className="min-w-0">
