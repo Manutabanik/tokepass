@@ -4,13 +4,16 @@ import { describe, it } from "node:test"
 import {
   createDraftScheduleDay,
   createDraftScheduleSlot,
+  draftScheduleDayChipLabel,
   duplicateDraftSlotsToOtherDays,
   explicitDraftSlotCount,
   flattenDraftScheduleOccurrences,
+  formatDraftTicketValidDaysBadge,
   hasMultipleDraftSlots,
   joinDraftDateAndTime,
   listDraftScheduleSlots,
   normalizeDraftScheduleDay,
+  resolveScheduleDayId,
   slotEndDateTime,
 } from "./draft-schedule-slots-v2"
 
@@ -96,5 +99,31 @@ describe("duplicateDraftSlotsToOtherDays", () => {
     assert.equal(next[1]?.slots[0]?.capacity, 12)
     assert.notEqual(next[1]?.slots[0]?.id, "slot-a")
     assert.equal(next[1]?.startDate, "2026-09-06T10:00")
+  })
+})
+
+describe("draft ticket valid days", () => {
+  it("labels generic days with the weekday and named days with their title", () => {
+    const friday = createDraftScheduleDay({
+      id: "day-1",
+      name: "Día 1",
+      date: "2026-09-04",
+    })
+    const after = createDraftScheduleDay({
+      id: "day-2",
+      name: "After",
+      date: "2026-09-05",
+    })
+    assert.equal(draftScheduleDayChipLabel(friday, 0), "Viernes")
+    assert.equal(draftScheduleDayChipLabel(after, 1), "After")
+    assert.equal(
+      formatDraftTicketValidDaysBadge([friday, after], ["day-1"]),
+      "Solo Viernes",
+    )
+    assert.equal(
+      formatDraftTicketValidDaysBadge([friday, after], ["day-1", "day-2"]),
+      "Viernes · After",
+    )
+    assert.equal(resolveScheduleDayId([friday], "day-1"), "day-1")
   })
 })

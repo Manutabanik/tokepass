@@ -15,6 +15,7 @@ import {
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
+  formatDraftTicketValidDaysBadge,
   hasMultipleDraftSlots,
   listDraftScheduleSlots,
 } from "@/lib/events/draft-schedule-slots-v2"
@@ -96,6 +97,14 @@ export function InventorySummaryTable() {
     )
   }
 
+  function ticketValidDaysBadge(row: InventorySummaryRow): string {
+    if (schedule.length <= 1 || row.source.field !== "tickets") return ""
+    return formatDraftTicketValidDaysBadge(
+      schedule,
+      tickets[row.source.index]?.validDayIds,
+    )
+  }
+
   function writeSlotId(row: InventorySummaryRow, slotId: string) {
     if (row.source.field !== "tickets") return
     setValue(`tickets.${row.source.index}.slotId`, slotId, {
@@ -127,24 +136,32 @@ export function InventorySummaryTable() {
           <ul className="mt-5 space-y-3 sm:hidden">
             {rows.map((row) => {
               const badge = KIND_BADGE[row.type]
+              const dayBadge = ticketValidDaysBadge(row)
               return (
                 <li
                   key={row.key}
                   className="flex flex-col gap-3 rounded-xl border border-slate-200/80 bg-white/80 p-3 dark:border-gray-800 dark:bg-gray-950/40"
                 >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span
-                      className={cn(
-                        "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase",
-                        badge.className,
-                      )}
-                    >
-                      {badge.label}
-                    </span>
-                    <span className="truncate font-medium text-slate-800 dark:text-zinc-100">
-                      {row.name}
-                    </span>
-                    {row.hasPresale ? <PresaleClock /> : null}
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        className={cn(
+                          "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase",
+                          badge.className,
+                        )}
+                      >
+                        {badge.label}
+                      </span>
+                      <span className="truncate font-medium text-slate-800 dark:text-zinc-100">
+                        {row.name}
+                      </span>
+                      {row.hasPresale ? <PresaleClock /> : null}
+                    </div>
+                    {dayBadge ? (
+                      <span className="w-fit rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-gray-800 dark:text-gray-300">
+                        {dayBadge}
+                      </span>
+                    ) : null}
                   </div>
                   {showSlots && row.source.field === "tickets" ? (
                     <EventEditorV2SlotSelect
@@ -211,25 +228,33 @@ export function InventorySummaryTable() {
               <tbody>
                 {rows.map((row) => {
                   const badge = KIND_BADGE[row.type]
+                  const dayBadge = ticketValidDaysBadge(row)
                   return (
                     <tr
                       key={row.key}
                       className="border-b border-slate-200/80 last:border-b-0 dark:border-gray-800"
                     >
                       <td className="py-2.5 pr-3">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span
-                            className={cn(
-                              "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase",
-                              badge.className,
-                            )}
-                          >
-                            {badge.label}
-                          </span>
-                          <span className="truncate font-medium text-slate-800 dark:text-zinc-100">
-                            {row.name}
-                          </span>
-                          {row.hasPresale ? <PresaleClock /> : null}
+                        <div className="flex min-w-0 flex-col gap-1">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span
+                              className={cn(
+                                "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase",
+                                badge.className,
+                              )}
+                            >
+                              {badge.label}
+                            </span>
+                            <span className="truncate font-medium text-slate-800 dark:text-zinc-100">
+                              {row.name}
+                            </span>
+                            {row.hasPresale ? <PresaleClock /> : null}
+                          </div>
+                          {dayBadge ? (
+                            <span className="w-fit rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-gray-800 dark:text-gray-300">
+                              {dayBadge}
+                            </span>
+                          ) : null}
                         </div>
                       </td>
                       {showSlots ? (

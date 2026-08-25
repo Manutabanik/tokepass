@@ -13,6 +13,7 @@ import {
 import {
   createDraftScheduleDay,
   resolveNormalizedDraftSchedule,
+  resolveScheduleDayId,
   type EventDraftV2ScheduleDay,
 } from "@/lib/events/draft-schedule-slots-v2"
 
@@ -81,6 +82,7 @@ const draftLineItemSchema = z.object({
   sectorId: z.string().optional().default(""),
   layoutType: z.string().optional().default("general"),
   slotId: z.string().optional().default(""),
+  validDayIds: z.array(z.string()).default([]),
 })
 
 export const EVENT_DRAFT_DELIVERY_MODES = ["PRESENCIAL", "ONLINE"] as const
@@ -176,6 +178,7 @@ const publishLineItemSchema = z.object({
   sectorId: z.string().optional(),
   layoutType: z.string().optional(),
   slotId: z.string().optional(),
+  validDayIds: z.array(z.string()).optional().default([]),
 })
 
 export const eventPublishSchema = z
@@ -343,6 +346,7 @@ export function emptyEventDraftV2LineItem(
     sectorId: "",
     layoutType: "general",
     slotId: "",
+    validDayIds: [],
   }
 }
 
@@ -539,8 +543,40 @@ function parseDraftLineItems(raw: unknown): EventDraftV2LineItem[] {
       sectorId: asOptionalString(record.sectorId ?? record.seatingSectorId),
       layoutType: asOptionalString(record.layoutType) || "general",
       slotId: asOptionalString(record.slotId ?? record.dayId ?? record.day_id),
+      validDayIds: parseDraftValidDayIds(record.validDayIds),
     }
   })
+}
+
+function parseDraftValidDayIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return [
+    ...new Set(
+      raw.filter((id): id is string => typeof id === "string" && Boolean(id.trim())),
+    ),
+  ]
+}
+
+function withResolvedTicketValidDays(
+  ticket: EventDraftV2LineItem,
+  schedule: EventDraftV2ScheduleDay[],
+): EventDraftV2LineItem {
+  const source =
+    ticket.validDayIds.length > 0
+      ? ticket.validDayIds
+      : ticket.slotId.trim()
+        ? [ticket.slotId]
+        : []
+  return {
+    ...ticket,
+    validDayIds: [
+      ...new Set(
+        source
+          .map((id) => resolveScheduleDayId(schedule, id) || id.trim())
+          .filter((id) => id.length > 0),
+      ),
+    ],
+  }
 }
 
 export function toEventDraftV2Payload(values: EventDraftV2) {
@@ -669,7 +705,9 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
     bannerUrl: asOptionalString(record.bannerUrl),
     venueCapacity: asFiniteNumber(record.venueCapacity),
     lineup: parseDraftLineup(record.lineup),
-    tickets: parseDraftLineItems(record.tickets),
+    tickets: parseDraftLineItems(record.tickets).map((ticket) =>
+      withResolvedTicketValidDays(ticket, schedule),
+    ),
     extras: parseDraftLineItems(record.extras),
     seatingMap: toDraftSeatingMap(seatingRaw),
     settings: {

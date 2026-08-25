@@ -5,7 +5,10 @@ import {
   sumFreeTicketCapacity,
   type EventFeeConfig,
 } from "@/lib/pricing/event-fees"
-import { flattenDraftScheduleOccurrences } from "@/lib/events/draft-schedule-slots-v2"
+import {
+  flattenDraftScheduleOccurrences,
+  type DraftScheduleOccurrence,
+} from "@/lib/events/draft-schedule-slots-v2"
 import {
   eventPublishSchema,
   isEventDraftOnline,
@@ -168,6 +171,7 @@ function mapLineItemToTier(
     sectorId?: string
     layoutType?: string
     slotId?: string
+    validDayIds?: string[]
   },
   kind: "ticket" | "extra",
   fee: EventFeeConfig,
@@ -207,6 +211,31 @@ function mapLineItemToTier(
     seating_sector_id: isMap && sectorId ? sectorId : null,
     day_id: asPublishUuid((item as { slotId?: string }).slotId),
   }
+}
+
+function resolvePublishedTicketDayId(
+  item: { slotId?: string; validDayIds?: string[] },
+  publishedDayIds: Set<string>,
+  occurrences: DraftScheduleOccurrence[],
+): string | null {
+  const slotId = asPublishUuid(item.slotId)
+  if (slotId && publishedDayIds.has(slotId)) return slotId
+
+  const valid = (item.validDayIds ?? [])
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0)
+  if (valid.length !== 1) return null
+
+  const only = asPublishUuid(valid[0])
+  if (only && publishedDayIds.has(only)) return only
+
+  const matching = occurrences.filter(
+    (occurrence) =>
+      occurrence.dayId === valid[0] || occurrence.id === valid[0],
+  )
+  if (matching.length !== 1) return null
+  const occurrenceId = asPublishUuid(matching[0]?.id)
+  return occurrenceId && publishedDayIds.has(occurrenceId) ? occurrenceId : null
 }
 
 export function composePublishDescription(input: {
@@ -277,13 +306,19 @@ export function buildPublishEventV2Payload(
       .filter((id): id is string => Boolean(id)),
   )
   const tickets = parsed.tickets
-    .map((item) => mapLineItemToTier(item, "ticket", fee, absorbFees))
+    .map((item) => {
+      const mapped = mapLineItemToTier(item, "ticket", fee, absorbFees)
+      if (!mapped) return null
+      return {
+        ...mapped,
+        day_id: resolvePublishedTicketDayId(
+          item,
+          publishedDayIds,
+          occurrences,
+        ),
+      }
+    })
     .filter((item): item is PublishEventV2TierPayload => item != null)
-    .map((item) => ({
-      ...item,
-      day_id:
-        item.day_id && publishedDayIds.has(item.day_id) ? item.day_id : null,
-    }))
 
   if (tickets.length < 1) {
     throw new Error("Agregá al menos una entrada")

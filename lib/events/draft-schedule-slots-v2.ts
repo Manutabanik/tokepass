@@ -308,6 +308,66 @@ export function hasMultipleDraftSlots(days: EventDraftV2ScheduleDay[]): boolean 
   return explicitDraftSlotCount(days) > 1
 }
 
+export function resolveScheduleDayId(
+  days: EventDraftV2ScheduleDay[],
+  slotOrDayId: string | null | undefined,
+): string {
+  const needle = slotOrDayId?.trim() ?? ""
+  if (!needle) return ""
+  for (const day of days) {
+    const dayId = day.id?.trim() ?? ""
+    if (dayId && dayId === needle) return dayId
+    if ((day.slots ?? []).some((slot) => slot.id?.trim() === needle)) {
+      return dayId
+    }
+  }
+  return ""
+}
+
+function weekdayFromDraftDay(
+  day: Pick<EventDraftV2ScheduleDay, "date" | "startDate">,
+): string {
+  const raw = day.date.trim() || datePartFromDateTime(day.startDate)
+  if (!DATE_ONLY_RE.test(raw)) return ""
+  const [year, month, dateNum] = raw.split("-").map(Number)
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(dateNum)) {
+    return ""
+  }
+  const weekday = new Date(year, month - 1, dateNum).toLocaleDateString("es-AR", {
+    weekday: "long",
+  })
+  if (!weekday) return ""
+  return weekday.charAt(0).toUpperCase() + weekday.slice(1)
+}
+
+export function draftScheduleDayChipLabel(
+  day: Pick<EventDraftV2ScheduleDay, "name" | "date" | "startDate">,
+  index: number,
+): string {
+  const weekday = weekdayFromDraftDay(day)
+  const name = day.name.trim()
+  if (weekday && (!name || /^día\s+\d+$/i.test(name))) return weekday
+  return name || weekday || `Día ${index + 1}`
+}
+
+export function formatDraftTicketValidDaysBadge(
+  days: EventDraftV2ScheduleDay[],
+  validDayIds: readonly string[] | null | undefined,
+): string {
+  const selected = new Set(
+    (validDayIds ?? []).map((id) => id.trim()).filter((id) => id.length > 0),
+  )
+  if (selected.size === 0) return ""
+  const labels = days.flatMap((day, index) => {
+    const dayId = day.id?.trim() ?? ""
+    if (!dayId || !selected.has(dayId)) return []
+    return [draftScheduleDayChipLabel(day, index)]
+  })
+  if (labels.length === 0) return ""
+  if (labels.length === 1) return `Solo ${labels[0]}`
+  return labels.join(" · ")
+}
+
 export function duplicateDraftSlotsToOtherDays(
   days: EventDraftV2ScheduleDay[],
   fromIndex: number,

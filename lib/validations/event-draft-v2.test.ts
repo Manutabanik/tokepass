@@ -410,6 +410,37 @@ describe("toggleDraftLineupDay", () => {
   })
 })
 
+describe("ticket validDayIds", () => {
+  it("keeps assigned days and hydrates a legacy slotId into the parent day", () => {
+    const parsed = parseEventDraftV2({
+      schedule: [
+        {
+          id: "day-1",
+          name: "Día 1",
+          date: "2026-09-04",
+          slots: [{ id: "slot-1", startTime: "22:00", endTime: "04:00" }],
+        },
+        { id: "day-2", name: "Día 2", date: "2026-09-05" },
+      ],
+      tickets: [
+        {
+          id: "t1",
+          name: "Pase viernes",
+          validDayIds: ["day-1"],
+        },
+        {
+          id: "t2",
+          name: "Turno noche",
+          slotId: "slot-1",
+        },
+      ],
+    })
+    assert.deepEqual(parsed.tickets[0]?.validDayIds, ["day-1"])
+    assert.deepEqual(parsed.tickets[1]?.validDayIds, ["day-1"])
+    assert.equal(eventDraftSchema.parse({ tickets: [{}] }).tickets[0]?.validDayIds.length, 0)
+  })
+})
+
 describe("toEventDraftV2Payload", () => {
   it("mirrors basicInfo.name into title for older readers", () => {
     const payload = toEventDraftV2Payload({

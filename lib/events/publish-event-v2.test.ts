@@ -182,6 +182,51 @@ describe("buildPublishEventV2Payload", () => {
     assert.match(payload.date, /^2026-09-05T/)
   })
 
+  it("binds a daily pass from validDayIds and leaves abonos unbound", () => {
+    const draft = publishableDraft()
+    draft.schedule = [
+      {
+        id: "550e8400-e29b-41d4-a716-446655440001",
+        name: "Día 1",
+        date: "2026-09-04",
+        startDate: "2026-09-04T18:00",
+        endDate: "2026-09-04T23:00",
+        slots: [],
+      },
+      {
+        id: "550e8400-e29b-41d4-a716-446655440002",
+        name: "Día 2",
+        date: "2026-09-05",
+        startDate: "2026-09-05T18:00",
+        endDate: "2026-09-05T23:00",
+        slots: [],
+      },
+    ]
+    draft.tickets = [
+      {
+        ...draft.tickets[0]!,
+        id: "t-daily",
+        name: "Pase viernes",
+        validDayIds: ["550e8400-e29b-41d4-a716-446655440001"],
+      },
+      {
+        ...draft.tickets[0]!,
+        id: "t-pass",
+        name: "Abono",
+        validDayIds: [
+          "550e8400-e29b-41d4-a716-446655440001",
+          "550e8400-e29b-41d4-a716-446655440002",
+        ],
+      },
+    ]
+    const payload = buildPublishEventV2Payload(draft)
+    assert.equal(
+      payload.tickets[0]?.day_id,
+      "550e8400-e29b-41d4-a716-446655440001",
+    )
+    assert.equal(payload.tickets[1]?.day_id, null)
+  })
+
   it("keeps general tickets off the seating map and skips nameless extras", () => {
     const draft = publishableDraft()
     draft.seatingMap = {

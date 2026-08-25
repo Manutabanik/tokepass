@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { EventEditorV2SlotSelect } from "./event-editor-v2-slot-select"
 import { hasDraftPresale } from "@/lib/events/inventory-summary-v2"
 import {
+  draftScheduleDayChipLabel,
   hasMultipleDraftSlots,
   listDraftScheduleSlots,
 } from "@/lib/events/draft-schedule-slots-v2"
@@ -24,6 +25,7 @@ import { formatCurrency, formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
   draftNumberValue,
+  toggleDraftLineupDay,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
 
@@ -52,6 +54,9 @@ export function DraftInventoryAccordionCard({
   } = useFormContext<EventDraftV2>()
   const schedule = useWatch({ control, name: "schedule" }) ?? []
   const slotId = useWatch({ control, name: `${name}.${index}.slotId` })
+  const validDayIds =
+    useWatch({ control, name: `${name}.${index}.validDayIds` }) ?? []
+  const multiDay = name === "tickets" && schedule.length > 1
   const slotOptions = listDraftScheduleSlots(schedule)
   const showSlots = name === "tickets" && hasMultipleDraftSlots(schedule)
   const itemName = useWatch({ control, name: `${name}.${index}.name` })
@@ -76,6 +81,14 @@ export function DraftInventoryAccordionCard({
   const panelId = `event-v2-${name}-${index}-panel`
   const advancedId = `${panelId}-advanced`
   const scheduled = hasDraftPresale({ startDate, endDate })
+
+  function toggleValidDay(dayId: string) {
+    setValue(
+      `${name}.${index}.validDayIds`,
+      toggleDraftLineupDay(validDayIds, dayId),
+      { shouldDirty: true, shouldTouch: true },
+    )
+  }
 
   return (
     <li className="w-full overflow-hidden rounded-xl border border-slate-200 bg-white/80 transition-all duration-200 dark:border-gray-700/50 dark:bg-gray-800/50">
@@ -211,6 +224,40 @@ export function DraftInventoryAccordionCard({
               <DraftHint>Una línea alcanza. El comprador lo ve en el checkout.</DraftHint>
               <DraftFieldError message={itemErrors?.description?.message} />
             </div>
+
+            {multiDay ? (
+              <div className="grid gap-1.5">
+                <DraftFieldLabel optional>
+                  ¿Para qué días es válida esta entrada?
+                </DraftFieldLabel>
+                <div className="flex flex-wrap gap-1.5">
+                  {schedule.map((day, dayIndex) => {
+                    const dayId = day.id?.trim()
+                    if (!dayId) return null
+                    const selected = validDayIds.includes(dayId)
+                    return (
+                      <button
+                        key={dayId}
+                        type="button"
+                        onClick={() => toggleValidDay(dayId)}
+                        aria-pressed={selected}
+                        className={cn(
+                          "min-h-11 rounded-full px-3 py-2 text-[11px] font-semibold transition-colors",
+                          selected
+                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                            : "bg-slate-100 text-gray-500 hover:bg-slate-200 dark:bg-gray-900 dark:text-gray-400",
+                        )}
+                      >
+                        {draftScheduleDayChipLabel(day, dayIndex)}
+                      </button>
+                    )
+                  })}
+                </div>
+                <DraftHint>
+                  Un día = pase diario. Varios días = abono.
+                </DraftHint>
+              </div>
+            ) : null}
 
             {showSlots ? (
               <div className="grid gap-1.5">
