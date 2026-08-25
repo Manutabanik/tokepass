@@ -3,6 +3,7 @@
 import { Package, Plus, Ticket, Trash2, Users } from "lucide-react"
 import { useFieldArray, useFormContext, useWatch } from "react-hook-form"
 
+import { InventorySummaryTable } from "./event-editor-v2-inventory-table"
 import { EventEditorV2SeatingMap } from "./event-editor-v2-seating-map"
 import {
   DRAFT_FIELD_CLASS,
@@ -73,6 +74,8 @@ export function EventEditorV2InventoryStep({ eventId }: { eventId: string }) {
           <CapacityBar meter={meter} />
         </div>
       </DraftCard>
+
+      <InventorySummaryTable />
 
       <EventEditorV2SeatingMap eventId={eventId} />
 
