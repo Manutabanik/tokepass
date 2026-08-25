@@ -18,6 +18,10 @@ import { Input } from "@/components/ui/input"
 import { formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
+  explicitDraftSlotCount,
+  hasMultipleDraftSlots,
+} from "@/lib/events/draft-schedule-slots-v2"
+import {
   createDraftLineItem,
   draftCapacityThermometer,
   draftNumberValue,
@@ -30,7 +34,14 @@ export function EventEditorV2InventoryStep({ eventId }: { eventId: string }) {
   const { labels } = useDraftArchetype()
   const tickets = useWatch({ name: "tickets" }) ?? []
   const venueCapacity = useWatch({ name: "venueCapacity" })
-  const meter = draftCapacityThermometer({ tickets, venueCapacity })
+  const schedule = useWatch({ name: "schedule" }) ?? []
+  const slotCount = explicitDraftSlotCount(schedule)
+  const meter = draftCapacityThermometer({
+    tickets,
+    venueCapacity,
+    schedule,
+    slotCount: hasMultipleDraftSlots(schedule) ? slotCount : 1,
+  })
   const ticketsLabel = labels.tickets
 
   return (
@@ -72,7 +83,11 @@ export function EventEditorV2InventoryStep({ eventId }: { eventId: string }) {
               {labels.capacity.toLowerCase()}
             </p>
           ) : null}
-          <CapacityBar meter={meter} capacityLabel={labels.capacity} ticketsLabel={ticketsLabel} />
+          <CapacityBar
+            meter={meter}
+            capacityLabel={labels.capacity}
+            ticketsLabel={ticketsLabel}
+          />
         </div>
       </DraftCard>
 
@@ -118,7 +133,12 @@ function CapacityBar({
   return (
     <section className="space-y-1.5">
       <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
-        <span>Ocupación de {capacityLabel.toLowerCase()}</span>
+        <span>
+          Ocupación de {capacityLabel.toLowerCase()}
+          {meter.slotCount > 1
+            ? ` · ${meter.perSession || 0} × ${meter.slotCount} turnos`
+            : ""}
+        </span>
         <span className="font-medium tabular-nums text-foreground">
           {formatNumber(meter.used)} / {totalLabel}
         </span>
@@ -246,6 +266,7 @@ function DraftLineItemList({
                   <input type="hidden" {...register(`${name}.${index}.layoutType`)} />
                   <input type="hidden" {...register(`${name}.${index}.startDate`)} />
                   <input type="hidden" {...register(`${name}.${index}.endDate`)} />
+                  <input type="hidden" {...register(`${name}.${index}.slotId`)} />
                 </li>
               )
             }

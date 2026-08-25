@@ -1,3 +1,4 @@
+import { groupLiveDaysIntoDraftSchedule } from "@/lib/events/draft-schedule-slots-v2"
 import {
   newScheduleDayId,
   scheduleDaysFromEvent,
@@ -27,6 +28,7 @@ export type LiveEventTicketSnapshotV2 = {
   category: string | null
   layout_type: string | null
   seating_sector_id: string | null
+  day_id?: string | null
 }
 
 export type LiveEventVenueSnapshotV2 = {
@@ -133,18 +135,22 @@ export function rehydrateEventDraftV2(
   })
   const schedule =
     liveDays.length > 0
-      ? liveDays.map((day, index) => ({
-          id: day.id,
-          name: day.title || `Día ${index + 1}`,
-          startDate: toDatetimeLocalInput(day.start_time),
-          endDate: toDatetimeLocalInput(day.end_time),
-        }))
+      ? groupLiveDaysIntoDraftSchedule(
+          liveDays.map((day) => ({
+            id: day.id,
+            title: day.title,
+            startLocal: toDatetimeLocalInput(day.start_time),
+            endLocal: toDatetimeLocalInput(day.end_time),
+          })),
+        )
       : [
           {
             id: newScheduleDayId(),
             name: "Día 1",
+            date: "",
             startDate: event.date ? toDatetimeLocalInput(event.date) : "",
             endDate: event.ends_at ? toDatetimeLocalInput(event.ends_at) : "",
+            slots: [],
           },
         ]
   const primary = schedule[0]
@@ -220,6 +226,7 @@ function liveTierToDraftItem(
     source: isMap ? "map" : "general",
     sectorId: isMap ? sectorId : "",
     layoutType,
+    slotId: (tier.day_id ?? "").trim(),
   }
 }
 

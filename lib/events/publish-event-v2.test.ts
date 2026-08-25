@@ -145,6 +145,42 @@ describe("buildPublishEventV2Payload", () => {
     assert.match(payload.schedule_days[1]?.end_time ?? "", /^2026-09-0[23]T/)
   })
 
+  it("expands date slots into schedule_days and binds the ticket day_id", () => {
+    const draft = publishableDraft()
+    draft.archetype = "experience"
+    draft.schedule = [
+      {
+        id: "550e8400-e29b-41d4-a716-446655440001",
+        name: "Sábado de Cabalgata",
+        date: "2026-09-05",
+        startDate: "",
+        endDate: "",
+        slots: [
+          {
+            id: "550e8400-e29b-41d4-a716-446655440011",
+            startTime: "10:00",
+            endTime: "12:00",
+          },
+          {
+            id: "550e8400-e29b-41d4-a716-446655440012",
+            startTime: "14:00",
+            endTime: "16:00",
+          },
+        ],
+      },
+    ]
+    draft.tickets[0]!.slotId = "550e8400-e29b-41d4-a716-446655440011"
+    const payload = buildPublishEventV2Payload(draft)
+    assert.equal(payload.schedule_days.length, 2)
+    assert.equal(
+      payload.schedule_days[0]?.id,
+      "550e8400-e29b-41d4-a716-446655440011",
+    )
+    assert.equal(payload.schedule_days[0]?.title, "Sábado de Cabalgata")
+    assert.equal(payload.tickets[0]?.day_id, "550e8400-e29b-41d4-a716-446655440011")
+    assert.match(payload.date, /^2026-09-05T/)
+  })
+
   it("keeps general tickets off the seating map and skips nameless extras", () => {
     const draft = publishableDraft()
     draft.seatingMap = {

@@ -6,6 +6,7 @@ import {
   type EventFeeConfig,
 } from "@/lib/pricing/event-fees"
 import { parseEventRefundPolicy } from "@/lib/validations/event-form"
+import { flattenDraftScheduleOccurrences } from "@/lib/events/draft-schedule-slots-v2"
 import {
   eventPublishSchema,
   isEventDraftOnline,
@@ -42,6 +43,7 @@ export type PublishEventV2TierPayload = {
   category: "standard" | "special"
   layout_type: "general" | "numbered_seat" | "table_combo"
   seating_sector_id: string | null
+  day_id: string | null
 }
 
 export type PublishEventV2ScheduleDay = {
@@ -148,6 +150,7 @@ function mapLineItemToTier(
     source?: string
     sectorId?: string
     layoutType?: string
+    slotId?: string
   },
   kind: "ticket" | "extra",
   fee: EventFeeConfig,
@@ -185,6 +188,7 @@ function mapLineItemToTier(
     category: isExtra ? "special" : "standard",
     layout_type: isExtra ? "general" : publishLayoutType(item, isMap),
     seating_sector_id: isMap && sectorId ? sectorId : null,
+    day_id: asPublishUuid((item as { slotId?: string }).slotId),
   }
 }
 
@@ -225,12 +229,22 @@ export function buildPublishEventV2Payload(
     ? STREAMING_VENUE_LOCATION
     : place.display || venueName
   const absorbFees = parsed.settings?.absorbFees === true
+  const occurrences = flattenDraftScheduleOccurrences(
+    resolveDraftSchedule(parsed),
+  ).filter((item) => item.startDateTime.trim())
+  const validSlotIds = new Set(occurrences.map((item) => item.id))
   const tickets = parsed.tickets
     .map((item) => mapLineItemToTier(item, "ticket", fee, absorbFees))
     .filter((item): item is PublishEventV2TierPayload => item != null)
+    .map((item) => ({
+      ...item,
+      day_id:
+        item.day_id && validSlotIds.has(item.day_id) ? item.day_id : null,
+    }))
   const extras = (parsed.extras ?? [])
     .map((item) => mapLineItemToTier(item, "extra", fee, absorbFees))
     .filter((item): item is PublishEventV2TierPayload => item != null)
+    .map((item) => ({ ...item, day_id: null }))
 
   if (tickets.length < 1) {
     throw new Error("Agregá al menos una entrada")
@@ -239,28 +253,25 @@ export function buildPublishEventV2Payload(
   const flyer = parsed.flyerUrl?.trim() || null
   const banner = parsed.bannerUrl?.trim() || null
   const publishedMap = publishVenueMapFromDraft(parsed.seatingMap)
-  const schedule = resolveDraftSchedule(parsed).filter((day) =>
-    day.startDate.trim(),
-  )
-  const firstDay = schedule[0]
+  const firstDay = occurrences[0]
   if (!firstDay) {
     throw new Error("La fecha de inicio es obligatoria")
   }
-  const lastDay = schedule[schedule.length - 1] ?? firstDay
-  const lastEnd = lastDay.endDate.trim() || firstDay.endDate.trim()
+  const lastDay = occurrences[occurrences.length - 1] ?? firstDay
+  const lastEnd = lastDay.endDateTime.trim() || firstDay.endDateTime.trim()
   const scheduleDays =
-    schedule.length >= 2
-      ? schedule.map((day, index) => ({
-          id: asPublishUuid(day.id),
-          title: day.name.trim() || `Día ${index + 1}`,
-          start_time: draftDateToIso(day.startDate),
-          end_time: draftDateToIso(day.endDate),
+    occurrences.length >= 2
+      ? occurrences.map((item, index) => ({
+          id: asPublishUuid(item.id),
+          title: item.title.trim() || `Turno ${index + 1}`,
+          start_time: draftDateToIso(item.startDateTime),
+          end_time: draftDateToIso(item.endDateTime || item.startDateTime),
         }))
       : []
 
   return {
     title,
-    date: draftDateToIso(firstDay.startDate),
+    date: draftDateToIso(firstDay.startDateTime),
     ends_at: lastEnd ? draftDateToIso(lastEnd) : null,
     schedule_days: scheduleDays,
     location,

@@ -97,3 +97,8 @@ export function archetypeSupportsVirtual(value: unknown): boolean {
   const id = resolveDraftArchetype(value)
   return id === "show" || id === "course"
 }
+
+export function archetypeUsesTimeSlots(value: unknown): boolean {
+  const id = resolveDraftArchetype(value)
+  return id === "experience" || id === "course" || id === "sport"
+}

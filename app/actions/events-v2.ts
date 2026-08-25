@@ -171,7 +171,7 @@ async function persistRehydratedPublishedDraft(input: {
   const ticketsQuery = await input.supabase
     .from("ticket_tiers")
     .select(
-      "id, name, description, price, capacity, min_purchase_limit, max_purchase_limit, tier_type, category, layout_type, seating_sector_id",
+      "id, name, description, price, capacity, min_purchase_limit, max_purchase_limit, tier_type, category, layout_type, seating_sector_id, day_id",
     )
     .eq("event_id", input.event.id)
     .order("created_at", { ascending: true })
@@ -464,6 +464,7 @@ function relationalTierRow(
     tier_type: ticket.tier_type as TicketTier["tier_type"],
     layout_type: ticket.layout_type as TicketTier["layout_type"],
     seating_sector_id: ticket.seating_sector_id,
+    day_id: ticket.day_id,
     visibility: "public" as const,
     capacity_per_unit: 1,
     admit_count: 1,
@@ -548,6 +549,22 @@ async function syncPublishedTickets(
   }
 }
 
+async function unpackPublishedTicketDays(
+  eventId: string,
+  tickets: PublishEventV2Payload["tickets"],
+) {
+  const admin = createAdminClient()
+  for (const ticket of tickets) {
+    if (!ticket.id) continue
+    const written = await admin
+      .from("ticket_tiers")
+      .update({ day_id: ticket.day_id } as never)
+      .eq("id", ticket.id)
+      .eq("event_id", eventId)
+    if (written.error) throw new Error(formatSupabaseError(written.error))
+  }
+}
+
 async function unpackPublishedSchedule(
   eventId: string,
   payload: PublishEventV2Payload,
@@ -579,6 +596,7 @@ async function unpackPublishEventV2Sequential(input: {
     venue: input.payload.venue,
     venueMap: input.payload.venue_map,
   })
+  await unpackPublishedSchedule(input.eventId, input.payload)
   await syncPublishedTickets(input.eventId, input.payload.tickets)
 
   const admin = createAdminClient()
@@ -728,6 +746,7 @@ export async function publishEventV2(
   } else {
     try {
       await unpackPublishedSchedule(id, payload)
+      await unpackPublishedTicketDays(id, payload.tickets)
     } catch (error) {
       return {
         success: false,

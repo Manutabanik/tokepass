@@ -10,6 +10,11 @@ import {
   isMapDraftTicket,
   toDraftSeatingMap,
 } from "@/lib/events/draft-seating-map-v2"
+import {
+  createDraftScheduleDay,
+  resolveNormalizedDraftSchedule,
+  type EventDraftV2ScheduleDay,
+} from "@/lib/events/draft-schedule-slots-v2"
 
 export {
   EVENT_DRAFT_ARCHETYPES,
@@ -18,29 +23,27 @@ export {
 
 export { isMapDraftTicket } from "@/lib/events/draft-seating-map-v2"
 
-export type EventDraftV2ScheduleDay = {
-  id: string
-  name: string
-  startDate: string
-  endDate: string
-}
+export {
+  createDraftScheduleDay,
+  createDraftScheduleSlot,
+  type EventDraftV2ScheduleDay,
+  type EventDraftV2ScheduleSlot,
+} from "@/lib/events/draft-schedule-slots-v2"
 
-export function createDraftScheduleDay(
-  input: Partial<EventDraftV2ScheduleDay> = {},
-): EventDraftV2ScheduleDay {
-  return {
-    id: input.id?.trim() || crypto.randomUUID(),
-    name: input.name ?? "Día 1",
-    startDate: input.startDate ?? "",
-    endDate: input.endDate ?? "",
-  }
-}
+const draftScheduleSlotSchema = z.object({
+  id: z.string().optional().default(""),
+  startTime: z.string().optional().default(""),
+  endTime: z.string().optional().default(""),
+  capacity: z.coerce.number().optional(),
+})
 
 const draftScheduleDaySchema = z.object({
   id: z.string().optional().default(""),
   name: z.string().optional().default(""),
+  date: z.string().optional().default(""),
   startDate: z.string().optional().default(""),
   endDate: z.string().optional().default(""),
+  slots: z.array(draftScheduleSlotSchema).default([]),
 })
 
 export const EVENT_DRAFT_LINEUP_SOURCES = ["spotify", "custom", "local"] as const
@@ -77,6 +80,7 @@ const draftLineItemSchema = z.object({
   source: z.string().optional().default(""),
   sectorId: z.string().optional().default(""),
   layoutType: z.string().optional().default("general"),
+  slotId: z.string().optional().default(""),
 })
 
 export const EVENT_DRAFT_DELIVERY_MODES = ["PRESENCIAL", "ONLINE"] as const
@@ -171,6 +175,7 @@ const publishLineItemSchema = z.object({
   source: z.string().optional(),
   sectorId: z.string().optional(),
   layoutType: z.string().optional(),
+  slotId: z.string().optional(),
 })
 
 export const eventPublishSchema = z
@@ -202,8 +207,10 @@ export const eventPublishSchema = z
         z.object({
           id: z.string().optional(),
           name: z.string().optional(),
+          date: z.string().optional(),
           startDate: z.string().optional(),
           endDate: z.string().optional(),
+          slots: z.array(draftScheduleSlotSchema).optional(),
         }),
       )
       .optional(),
@@ -335,6 +342,7 @@ export function emptyEventDraftV2LineItem(
     source: "",
     sectorId: "",
     layoutType: "general",
+    slotId: "",
   }
 }
 
@@ -438,57 +446,11 @@ function asOptionalString(value: unknown): string {
   return typeof value === "string" ? value : ""
 }
 
-function asDraftScheduleDay(
-  item: unknown,
-  index: number,
-): EventDraftV2ScheduleDay {
-  if (!item || typeof item !== "object" || Array.isArray(item)) {
-    return createDraftScheduleDay({ name: `Día ${index + 1}` })
-  }
-  const record = item as Record<string, unknown>
-  return createDraftScheduleDay({
-    id: asOptionalString(record.id),
-    name: asOptionalString(record.name) || `Día ${index + 1}`,
-    startDate: asOptionalString(
-      record.startDate ?? record.start_time ?? record.startTime,
-    ),
-    endDate: asOptionalString(
-      record.endDate ?? record.end_time ?? record.endTime,
-    ),
-  })
-}
-
 export function resolveDraftSchedule(values: {
   schedule?: unknown
   basicInfo?: { startDate?: string | null; endDate?: string | null }
 }): EventDraftV2ScheduleDay[] {
-  const raw = Array.isArray(values.schedule)
-    ? values.schedule.map((item, index) => asDraftScheduleDay(item, index))
-    : []
-  const fallbackStart = values.basicInfo?.startDate?.trim() ?? ""
-  const fallbackEnd = values.basicInfo?.endDate?.trim() ?? ""
-  if (raw.length === 0) {
-    return [
-      createDraftScheduleDay({
-        name: "Día 1",
-        startDate: fallbackStart,
-        endDate: fallbackEnd,
-      }),
-    ]
-  }
-  const hasStart = raw.some((day) => day.startDate.trim())
-  if (!hasStart && (fallbackStart || fallbackEnd)) {
-    return raw.map((day, index) =>
-      index === 0
-        ? {
-            ...day,
-            startDate: day.startDate || fallbackStart,
-            endDate: day.endDate || fallbackEnd,
-          }
-        : day,
-    )
-  }
-  return raw
+  return resolveNormalizedDraftSchedule(values)
 }
 
 function parseDraftLineupSource(value: unknown): EventDraftLineupSource {
@@ -576,6 +538,7 @@ function parseDraftLineItems(raw: unknown): EventDraftV2LineItem[] {
       source: asOptionalString(record.source),
       sectorId: asOptionalString(record.sectorId ?? record.seatingSectorId),
       layoutType: asOptionalString(record.layoutType) || "general",
+      slotId: asOptionalString(record.slotId ?? record.dayId ?? record.day_id),
     }
   })
 }
@@ -723,16 +686,42 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
 export function draftCapacityThermometer(input: {
   tickets?: Array<{ stock?: unknown; source?: unknown; sectorId?: unknown }> | null
   venueCapacity?: unknown
+  schedule?: unknown
+  slotCount?: number
 }) {
   const used = (input.tickets ?? []).reduce((sum, ticket) => {
     if (isMapDraftTicket(ticket)) return sum
     return sum + asFiniteNumber(ticket.stock)
   }, 0)
-  const capacity = asFiniteNumber(input.venueCapacity)
+  const explicitSlots =
+    input.slotCount != null
+      ? Math.max(0, Math.floor(input.slotCount))
+      : Array.isArray(input.schedule)
+        ? input.schedule.reduce((count, day) => {
+            if (!day || typeof day !== "object" || Array.isArray(day)) return count
+            const slots = (day as { slots?: unknown }).slots
+            if (!Array.isArray(slots)) return count
+            return (
+              count +
+              slots.filter((slot) => {
+                if (!slot || typeof slot !== "object" || Array.isArray(slot)) {
+                  return false
+                }
+                const start = (slot as { startTime?: unknown }).startTime
+                return typeof start === "string" && Boolean(start.trim())
+              }).length
+            )
+          }, 0)
+        : 0
+  const slotCount = explicitSlots > 1 ? explicitSlots : 1
+  const perSession = asFiniteNumber(input.venueCapacity)
+  const capacity = perSession * slotCount
   const ratio = capacity > 0 ? used / capacity : 0
   return {
     used,
     capacity,
+    perSession,
+    slotCount,
     ratio,
     percent: Math.min(100, Math.round(ratio * 100)),
     overCapacity: capacity > 0 && used > capacity,

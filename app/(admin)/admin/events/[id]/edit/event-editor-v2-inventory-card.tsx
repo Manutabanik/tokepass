@@ -14,7 +14,12 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { EventEditorV2SlotSelect } from "./event-editor-v2-slot-select"
 import { hasDraftPresale } from "@/lib/events/inventory-summary-v2"
+import {
+  hasMultipleDraftSlots,
+  listDraftScheduleSlots,
+} from "@/lib/events/draft-schedule-slots-v2"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
@@ -42,8 +47,13 @@ export function DraftInventoryAccordionCard({
   const {
     control,
     register,
+    setValue,
     formState: { errors },
   } = useFormContext<EventDraftV2>()
+  const schedule = useWatch({ control, name: "schedule" }) ?? []
+  const slotId = useWatch({ control, name: `${name}.${index}.slotId` })
+  const slotOptions = listDraftScheduleSlots(schedule)
+  const showSlots = name === "tickets" && hasMultipleDraftSlots(schedule)
   const itemName = useWatch({ control, name: `${name}.${index}.name` })
   const price = useWatch({ control, name: `${name}.${index}.price` })
   const stock = useWatch({ control, name: `${name}.${index}.stock` })
@@ -73,6 +83,7 @@ export function DraftInventoryAccordionCard({
       <input type="hidden" {...register(`${name}.${index}.source`)} />
       <input type="hidden" {...register(`${name}.${index}.sectorId`)} />
       <input type="hidden" {...register(`${name}.${index}.layoutType`)} />
+      <input type="hidden" {...register(`${name}.${index}.slotId`)} />
 
       <div className="flex items-center justify-between gap-2">
         <button
@@ -200,6 +211,29 @@ export function DraftInventoryAccordionCard({
               <DraftHint>Una línea alcanza. El comprador lo ve en el checkout.</DraftHint>
               <DraftFieldError message={itemErrors?.description?.message} />
             </div>
+
+            {showSlots ? (
+              <div className="grid gap-1.5">
+                <DraftFieldLabel htmlFor={`event-v2-${name}-${index}-slot`}>
+                  Turno
+                </DraftFieldLabel>
+                <EventEditorV2SlotSelect
+                  value={String(slotId ?? "")}
+                  options={slotOptions}
+                  ariaLabel={`Turno de ${displayName}`}
+                  onChange={(next) =>
+                    setValue(`${name}.${index}.slotId`, next, {
+                      shouldDirty: true,
+                      shouldTouch: true,
+                    })
+                  }
+                />
+                <DraftHint>
+                  Dejalo en cualquier turno para un pase que sirve en todas las
+                  franjas.
+                </DraftHint>
+              </div>
+            ) : null}
 
             <Button
               type="button"

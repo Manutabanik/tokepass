@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import {
   ARCHETYPES,
   archetypeSupportsVirtual,
+  archetypeUsesTimeSlots,
   getArchetypeConfig,
   resolveDraftArchetype,
 } from "./archetypes.config"
@@ -22,6 +23,15 @@ describe("archetypeSupportsVirtual", () => {
     assert.equal(archetypeSupportsVirtual("course"), true)
     assert.equal(archetypeSupportsVirtual("experience"), false)
     assert.equal(archetypeSupportsVirtual("sport"), false)
+  })
+})
+
+describe("archetypeUsesTimeSlots", () => {
+  it("enables slots for experiences, courses and sports", () => {
+    assert.equal(archetypeUsesTimeSlots("show"), false)
+    assert.equal(archetypeUsesTimeSlots("experience"), true)
+    assert.equal(archetypeUsesTimeSlots("course"), true)
+    assert.equal(archetypeUsesTimeSlots("sport"), true)
   })
 })
 

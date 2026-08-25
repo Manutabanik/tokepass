@@ -485,6 +485,18 @@ describe("draftCapacityThermometer", () => {
     assert.notEqual(snap.used, 40 + extras[0].stock)
   })
 
+  it("multiplies venue capacity by explicit time slots", () => {
+    const snap = draftCapacityThermometer({
+      tickets: [{ stock: 20 }],
+      venueCapacity: 20,
+      slotCount: 3,
+    })
+    assert.equal(snap.capacity, 60)
+    assert.equal(snap.slotCount, 3)
+    assert.equal(snap.perSession, 20)
+    assert.equal(snap.used, 20)
+  })
+
   it("never counts map-backed tickets toward the thermometer", () => {
     const snap = draftCapacityThermometer({
       tickets: [

@@ -4,6 +4,7 @@ import { Clock, LayoutList, Pencil } from "lucide-react"
 import { useFormContext, useWatch } from "react-hook-form"
 
 import { useDraftArchetype } from "./event-editor-v2-archetype"
+import { EventEditorV2SlotSelect } from "./event-editor-v2-slot-select"
 import { DraftCard, DraftHint } from "./event-editor-v2-ui"
 import {
   buildInventorySummaryRows,
@@ -13,6 +14,10 @@ import {
 } from "@/lib/events/inventory-summary-v2"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import {
+  hasMultipleDraftSlots,
+  listDraftScheduleSlots,
+} from "@/lib/events/draft-schedule-slots-v2"
 import {
   draftNumberValue,
   type EventDraftV2,
@@ -45,6 +50,9 @@ export function InventorySummaryTable() {
   const tickets = useWatch({ control, name: "tickets" }) ?? []
   const extras = useWatch({ control, name: "extras" }) ?? []
   const sectors = useWatch({ control, name: "seatingMap.sectors" }) ?? []
+  const schedule = useWatch({ control, name: "schedule" }) ?? []
+  const slotOptions = listDraftScheduleSlots(schedule)
+  const showSlots = hasMultipleDraftSlots(schedule)
   const rows = buildInventorySummaryRows({ tickets, extras, sectors })
   const totals = inventorySummaryTotals(rows)
 
@@ -88,6 +96,14 @@ export function InventorySummaryTable() {
     )
   }
 
+  function writeSlotId(row: InventorySummaryRow, slotId: string) {
+    if (row.source.field !== "tickets") return
+    setValue(`tickets.${row.source.index}.slotId`, slotId, {
+      shouldDirty: true,
+      shouldTouch: true,
+    })
+  }
+
   return (
     <DraftCard>
       <div className="mb-4 flex items-center gap-2">
@@ -112,6 +128,9 @@ export function InventorySummaryTable() {
             <thead>
               <tr className="text-[11px] font-semibold tracking-wide text-gray-500 uppercase">
                 <th className="pb-2 pr-3 font-semibold">Nombre</th>
+                {showSlots ? (
+                  <th className="pb-2 pr-3 font-semibold">Turno</th>
+                ) : null}
                 <th className="pb-2 pr-3 font-semibold">Precio</th>
                 <th className="pb-2 pr-3 font-semibold">Stock</th>
                 <th className="pb-2 text-right font-semibold">Recaudación</th>
@@ -141,6 +160,21 @@ export function InventorySummaryTable() {
                         {row.hasPresale ? <PresaleClock /> : null}
                       </div>
                     </td>
+                    {showSlots ? (
+                      <td className="py-2.5 pr-3">
+                        {row.source.field === "tickets" ? (
+                          <EventEditorV2SlotSelect
+                            compact
+                            value={String(tickets[row.source.index]?.slotId ?? "")}
+                            options={slotOptions}
+                            ariaLabel={`Turno de ${row.name}`}
+                            onChange={(slotId) => writeSlotId(row, slotId)}
+                          />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    ) : null}
                     <td className="py-2.5 pr-3">
                       <LedgerNumberInput
                         value={row.price}
@@ -165,7 +199,10 @@ export function InventorySummaryTable() {
             </tbody>
             <tfoot>
               <tr className="border-t border-slate-300 text-sm font-semibold dark:border-gray-700">
-                <td className="pt-3 pr-3 text-xs uppercase tracking-wide text-gray-500" colSpan={2}>
+                <td
+                  className="pt-3 pr-3 text-xs uppercase tracking-wide text-gray-500"
+                  colSpan={showSlots ? 3 : 2}
+                >
                   Total proyectado
                 </td>
                 <td className="pt-3 pr-3 tabular-nums text-slate-800 dark:text-zinc-100">

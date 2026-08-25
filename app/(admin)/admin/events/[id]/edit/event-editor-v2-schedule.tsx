@@ -1,8 +1,9 @@
 "use client"
 
-import { CalendarDays, Plus, Trash2 } from "lucide-react"
+import { CalendarDays, Copy, Plus, Trash2 } from "lucide-react"
 import { useFieldArray, useFormContext, useWatch } from "react-hook-form"
 
+import { useDraftArchetype } from "./event-editor-v2-archetype"
 import {
   DRAFT_FIELD_CLASS,
   DRAFT_TICKET_CARD_CLASS,
@@ -14,18 +15,27 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { archetypeUsesTimeSlots } from "@/lib/events/archetypes.config"
 import {
   createDraftScheduleDay,
-  type EventDraftV2,
-} from "@/lib/validations/event-draft-v2"
+  createDraftScheduleSlot,
+  duplicateDraftSlotsToOtherDays,
+  syncDraftScheduleBounds,
+} from "@/lib/events/draft-schedule-slots-v2"
+import { cn } from "@/lib/utils"
+import type { EventDraftV2 } from "@/lib/validations/event-draft-v2"
 
 export function EventEditorV2ScheduleFields() {
   const {
     control,
     register,
+    getValues,
+    setValue,
     formState: { errors },
   } = useFormContext<EventDraftV2>()
-  const { fields, append, remove } = useFieldArray({
+  const { archetype } = useDraftArchetype()
+  const usesSlots = archetypeUsesTimeSlots(archetype)
+  const { fields, append, remove, replace } = useFieldArray({
     control,
     name: "schedule",
     keyName: "_rowId",
@@ -40,17 +50,35 @@ export function EventEditorV2ScheduleFields() {
     )
   }
 
+  function syncDay(index: number) {
+    const current = getValues(`schedule.${index}`)
+    const next = syncDraftScheduleBounds({
+      ...createDraftScheduleDay(current),
+      ...current,
+      slots: current?.slots ?? [],
+    })
+    setValue(`schedule.${index}.date`, next.date, { shouldDirty: true })
+    setValue(`schedule.${index}.startDate`, next.startDate, { shouldDirty: true })
+    setValue(`schedule.${index}.endDate`, next.endDate, { shouldDirty: true })
+  }
+
+  function duplicateSlots(fromIndex: number) {
+    const next = duplicateDraftSlotsToOtherDays(getValues("schedule") ?? [], fromIndex)
+    replace(next)
+  }
+
   return (
     <DraftCard>
       <div className="mb-5 flex items-center gap-2">
         <CalendarDays className="size-4 text-emerald-400" aria-hidden />
         <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-          Fechas y funciones
+          {usesSlots ? "Fechas y turnos" : "Fechas y funciones"}
         </h2>
       </div>
       <DraftHint>
-        Por defecto el evento dura un día. Agregá otra función si se repite en
-        varias fechas.
+        {usesSlots
+          ? "Cada fecha puede tener varias franjas horarias. Duplicá los turnos para armar la semana de una vez."
+          : "Por defecto el evento dura un día. Agregá otra función si se repite en varias fechas."}
       </DraftHint>
 
       <ul className="mt-5 space-y-3">
@@ -84,43 +112,81 @@ export function EventEditorV2ScheduleFields() {
                   <Input
                     id={`event-v2-schedule-${index}-name`}
                     className={DRAFT_FIELD_CLASS}
-                    placeholder={`Día ${index + 1}`}
+                    placeholder={
+                      usesSlots ? "Ej. Sábado de Cabalgata" : `Día ${index + 1}`
+                    }
                     {...register(`schedule.${index}.name`)}
                   />
                   <DraftHint>Opcional. Ej. Día 1, Función noche.</DraftHint>
                 </div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div className="grid gap-1.5">
-                    <Label
-                      htmlFor={`event-v2-schedule-${index}-start`}
-                      className="text-xs font-bold text-slate-800 dark:text-zinc-200"
-                    >
-                      Inicio
-                    </Label>
-                    <Input
-                      id={`event-v2-schedule-${index}-start`}
-                      type="datetime-local"
-                      className={DRAFT_FIELD_CLASS}
-                      {...register(`schedule.${index}.startDate`)}
-                    />
-                    <DraftFieldError message={dayErrors?.startDate?.message} />
+
+                {usesSlots ? (
+                  <>
+                    <input type="hidden" {...register(`schedule.${index}.startDate`)} />
+                    <input type="hidden" {...register(`schedule.${index}.endDate`)} />
+                    <div className="grid gap-1.5">
+                      <Label
+                        htmlFor={`event-v2-schedule-${index}-date`}
+                        className="text-xs font-bold text-slate-800 dark:text-zinc-200"
+                      >
+                        Fecha
+                      </Label>
+                      <Input
+                        id={`event-v2-schedule-${index}-date`}
+                        type="date"
+                        className={DRAFT_FIELD_CLASS}
+                        {...register(`schedule.${index}.date`, {
+                          onChange: () => syncDay(index),
+                        })}
+                      />
+                      <DraftFieldError message={dayErrors?.startDate?.message} />
+                    </div>
+                    <DaySlotList dayIndex={index} onChange={() => syncDay(index)} />
+                    {fields.length > 1 && (schedule[index]?.slots?.length ?? 0) > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => duplicateSlots(index)}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 transition hover:text-emerald-500 dark:text-emerald-400"
+                      >
+                        <Copy className="size-3.5" aria-hidden />
+                        Duplicar turnos a otros días
+                      </button>
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div className="grid gap-1.5">
+                      <Label
+                        htmlFor={`event-v2-schedule-${index}-start`}
+                        className="text-xs font-bold text-slate-800 dark:text-zinc-200"
+                      >
+                        Inicio
+                      </Label>
+                      <Input
+                        id={`event-v2-schedule-${index}-start`}
+                        type="datetime-local"
+                        className={DRAFT_FIELD_CLASS}
+                        {...register(`schedule.${index}.startDate`)}
+                      />
+                      <DraftFieldError message={dayErrors?.startDate?.message} />
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label
+                        htmlFor={`event-v2-schedule-${index}-end`}
+                        className="text-xs font-bold text-slate-800 dark:text-zinc-200"
+                      >
+                        Fin
+                      </Label>
+                      <Input
+                        id={`event-v2-schedule-${index}-end`}
+                        type="datetime-local"
+                        className={DRAFT_FIELD_CLASS}
+                        {...register(`schedule.${index}.endDate`)}
+                      />
+                      <DraftFieldError message={dayErrors?.endDate?.message} />
+                    </div>
                   </div>
-                  <div className="grid gap-1.5">
-                    <Label
-                      htmlFor={`event-v2-schedule-${index}-end`}
-                      className="text-xs font-bold text-slate-800 dark:text-zinc-200"
-                    >
-                      Fin
-                    </Label>
-                    <Input
-                      id={`event-v2-schedule-${index}-end`}
-                      type="datetime-local"
-                      className={DRAFT_FIELD_CLASS}
-                      {...register(`schedule.${index}.endDate`)}
-                    />
-                    <DraftFieldError message={dayErrors?.endDate?.message} />
-                  </div>
-                </div>
+                )}
               </div>
             </li>
           )
@@ -134,5 +200,128 @@ export function EventEditorV2ScheduleFields() {
         </DraftAddButton>
       </div>
     </DraftCard>
+  )
+}
+
+function DaySlotList({
+  dayIndex,
+  onChange,
+}: {
+  dayIndex: number
+  onChange: () => void
+}) {
+  const { control, register } = useFormContext<EventDraftV2>()
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: `schedule.${dayIndex}.slots`,
+    keyName: "_rowId",
+  })
+
+  function addSlot() {
+    append(
+      createDraftScheduleSlot({
+        startTime: "10:00",
+        endTime: "12:00",
+      }),
+    )
+    window.setTimeout(onChange, 0)
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-bold text-slate-800 dark:text-zinc-200">
+        Franjas horarias
+      </p>
+      {fields.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Sin turnos todavía. Agregá una franja para ese día.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {fields.map((field, slotIndex) => (
+            <li
+              key={field._rowId}
+              className="grid grid-cols-1 items-end gap-2 rounded-xl border border-slate-200/80 bg-white/70 p-3 dark:border-gray-800 dark:bg-gray-950/40 md:grid-cols-[1fr_1fr_7rem_auto]"
+            >
+              <input
+                type="hidden"
+                {...register(`schedule.${dayIndex}.slots.${slotIndex}.id`)}
+              />
+              <div className="grid gap-1">
+                <Label
+                  htmlFor={`event-v2-slot-${dayIndex}-${slotIndex}-start`}
+                  className="text-[11px] font-bold text-slate-700 dark:text-zinc-300"
+                >
+                  Inicio
+                </Label>
+                <Input
+                  id={`event-v2-slot-${dayIndex}-${slotIndex}-start`}
+                  type="time"
+                  className={cn(DRAFT_FIELD_CLASS, "h-10")}
+                  {...register(`schedule.${dayIndex}.slots.${slotIndex}.startTime`, {
+                    onChange,
+                  })}
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label
+                  htmlFor={`event-v2-slot-${dayIndex}-${slotIndex}-end`}
+                  className="text-[11px] font-bold text-slate-700 dark:text-zinc-300"
+                >
+                  Fin
+                </Label>
+                <Input
+                  id={`event-v2-slot-${dayIndex}-${slotIndex}-end`}
+                  type="time"
+                  className={cn(DRAFT_FIELD_CLASS, "h-10")}
+                  {...register(`schedule.${dayIndex}.slots.${slotIndex}.endTime`, {
+                    onChange,
+                  })}
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label
+                  htmlFor={`event-v2-slot-${dayIndex}-${slotIndex}-cap`}
+                  className="text-[11px] font-bold text-slate-700 dark:text-zinc-300"
+                >
+                  Cupo
+                </Label>
+                <Input
+                  id={`event-v2-slot-${dayIndex}-${slotIndex}-cap`}
+                  type="number"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="—"
+                  className={cn(DRAFT_FIELD_CLASS, "h-10")}
+                  {...register(`schedule.${dayIndex}.slots.${slotIndex}.capacity`)}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-red-500"
+                aria-label={`Eliminar turno ${slotIndex + 1}`}
+                onClick={() => {
+                  remove(slotIndex)
+                  window.setTimeout(onChange, 0)
+                }}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button
+        type="button"
+        onClick={addSlot}
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 transition hover:text-emerald-500 dark:text-emerald-400"
+      >
+        <Plus className="size-3.5" aria-hidden />
+        Agregar turno / franja horaria
+      </button>
+    </div>
   )
 }
