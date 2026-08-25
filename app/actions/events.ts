@@ -96,7 +96,10 @@ import { formHasInventoryOrVenue } from "@/lib/events/event-inventory-fingerprin
 import { resolvePurchaseLimit } from "@/lib/checkout-limits"
 import { asUuidOrNull } from "@/lib/validations/relation-id"
 import type { Database, Event, EventStatus, Json, Venue } from "@/types/database"
-import { computeEventCapacityFromForm } from "@/lib/inventory/capacity-budget"
+import {
+  computeEventCapacityFromForm,
+  venueCapacityPersistError,
+} from "@/lib/inventory/capacity-budget"
 import {
   parseVenueMap,
   serializeVenueMap,
@@ -401,7 +404,8 @@ function formDateToIso(value: string | null | undefined, fallback: string): stri
 
 function positiveInventoryCapacity(value: unknown): number {
   const parsed = Math.floor(Number(value))
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
+  if (!Number.isFinite(parsed) || parsed < 1) return 1
+  return parsed
 }
 
 function persistablePublicPrice(value: unknown): number {
@@ -673,6 +677,7 @@ function mapEventFormToRpcPayload(
             ? Math.max(1, Math.min(50, tier.admitCount ?? 1))
             : 1,
         total_capacity: capacity,
+        // tier_type distingue adicionales (addon) de entradas que ocupan aforo (general/seated).
         tier_type: tierType,
         bundle_type:
           tierType === "bundle"
@@ -3223,6 +3228,10 @@ export async function createCompleteEvent(
       if (freeCapError) {
         return { success: false, error: freeCapError }
       }
+      const venueCapError = venueCapacityPersistError(formValues)
+      if (venueCapError) {
+        return { success: false, error: venueCapError }
+      }
     }
     rpcPayload = mapEventFormToRpcPayload(formValues, feeConfig, flyerUrl)
     console.info("[event-persist] create payload", {
@@ -3593,6 +3602,10 @@ export async function updateCompleteEvent(
       )
       if (freeCapError) {
         return { success: false, error: freeCapError }
+      }
+      const venueCapError = venueCapacityPersistError(formValues)
+      if (venueCapError) {
+        return { success: false, error: venueCapError }
       }
     }
     rpcPayload = mapEventFormToRpcPayload(

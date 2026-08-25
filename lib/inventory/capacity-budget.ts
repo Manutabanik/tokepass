@@ -1,9 +1,8 @@
-import { bundleIncludesSeating } from "@/lib/inventory/flexible-bundles"
 import {
   assignableGeneralSectorCapacity,
   listAssignableGeneralSectors,
 } from "@/lib/inventory/logical-sectors"
-import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
+import { inferInventoryTierType, isAddonInventoryTicket } from "@/lib/inventory/unified-inventory"
 import { venueMapCapacity } from "@/lib/seating/venue-map-geometry"
 import { isMapBackedTicket } from "@/lib/seating/venue-map-pricing"
 import type { EventFormValues } from "@/lib/validations/event-form"
@@ -107,38 +106,30 @@ export function ticketsHavePhaseOverflow(
   return tickets.some((tier) => ticketPhasesExceedParent(tier))
 }
 
-function componentTierTypes(
-  tickets: readonly CapacityTicket[],
-): Record<string, string> {
-  const types: Record<string, string> = {}
-  for (const [index, tier] of tickets.entries()) {
-    const type = inferInventoryTierType({
-      tierType: tier.tierType,
-      layoutType: tier.layoutType,
-      bundleItems: tier.bundleItems,
-    })
-    if (tier.id) types[tier.id] = type
-    types[`index:${index}`] = type
-  }
-  return types
-}
-
-/** Stock general/combo de predio. El mapa no entra: es otra cuenta. */
+/** Stock general del predio. Excluye adicionales, combos y mapa. */
 export function occupiesGeneralCapacity(
   tier: CapacityTicket,
-  tickets: readonly CapacityTicket[] = [],
+  _tickets: readonly CapacityTicket[] = [],
 ): boolean {
   if (isMapBackedTicket(tier)) return false
+  if (isAddonInventoryTicket(tier)) return false
   const type = inferInventoryTierType({
     tierType: tier.tierType,
     layoutType: tier.layoutType,
     bundleItems: tier.bundleItems,
   })
-  if (type === "addon" || type === "seated") return false
-  if (type === "bundle") {
-    return !bundleIncludesSeating(tier.bundleItems ?? [], componentTierTypes(tickets))
-  }
+  if (type === "addon" || type === "seated" || type === "bundle") return false
   return type === "general"
+}
+
+/** Suma de stock que ocupa aforo físico del recinto (solo entradas generales). */
+export function sumVenueOccupyingTicketStock(
+  tickets: readonly CapacityTicket[] = [],
+): number {
+  return tickets.reduce((sum, tier) => {
+    if (!occupiesGeneralCapacity(tier, tickets)) return sum
+    return sum + asPositiveInt(tier.capacity)
+  }, 0)
 }
 
 export function occupiesVenueBudget(
@@ -165,13 +156,11 @@ export function computeEventCapacity(
     : 0
   const declaredIds = new Set(declaredSectors.map((sector) => sector.id))
 
-  const generalAllocatedCapacity = tickets.reduce((sum, tier, index) => {
-    if (input.exceptTicketIndex != null && index === input.exceptTicketIndex) {
-      return sum
-    }
-    if (!occupiesGeneralCapacity(tier, tickets)) return sum
-    return sum + asPositiveInt(tier.capacity)
-  }, 0)
+  const generalAllocatedCapacity = sumVenueOccupyingTicketStock(
+    input.exceptTicketIndex == null
+      ? tickets
+      : tickets.filter((_, index) => index !== input.exceptTicketIndex),
+  )
 
   const sectorOverflow = declaredSectors.reduce((sum, sector) => {
     const allocated = tickets.reduce((inner, tier, index) => {
@@ -256,6 +245,20 @@ export function eventCapacityOverflowMessage(
     return `El stock supera el aforo del recinto por ${snapshot.overflow} lugares.`
   }
   return `El stock de un sector supera su cupo (${snapshot.overflow} lugares). Bajá el stock o ampliá ese sector.`
+}
+
+/** Revalida aforo en servidor; ignora totales agregados del cliente. */
+export function venueCapacityPersistError(
+  values: Parameters<typeof computeEventCapacityFromForm>[0],
+): string | null {
+  const deliveryMode =
+    values && "basics" in values
+      ? (values as EventFormValues).basics?.deliveryMode
+      : null
+  if (deliveryMode === "ONLINE") return null
+  const snap = computeEventCapacityFromForm(values)
+  if (!snap.exceeded) return null
+  return eventCapacityOverflowMessage(snap)
 }
 
 export function generalRemainingForTicket(

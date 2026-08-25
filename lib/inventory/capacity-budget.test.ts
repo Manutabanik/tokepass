@@ -6,9 +6,11 @@ import {
   occupiesVenueBudget,
   parseStrictInt,
   phaseLimitSum,
+  sumVenueOccupyingTicketStock,
   ticketInventorySignature,
   ticketPhasesExceedParent,
   venueCapacityBudget,
+  venueCapacityPersistError,
 } from "@/lib/inventory/capacity-budget"
 import type { EventFormValues } from "@/lib/validations/event-form"
 
@@ -88,6 +90,40 @@ describe("capacity-budget", () => {
     assert.equal(budget.allocated, 80)
     assert.equal(budget.remaining, 20)
     assert.equal(occupiesVenueBudget(addon), false)
+  })
+
+  it("deja afuera combos y adicionales del aforo del recinto", () => {
+    const general = ticket({ tierType: "general", capacity: 80 })
+    const addon = ticket({ tierType: "addon", capacity: 40 })
+    const bundle = ticket({ tierType: "bundle", capacity: 25 })
+    const snap = computeEventCapacity({
+      tickets: [general, addon, bundle],
+      baseVenueCapacity: 100,
+    })
+    assert.equal(snap.generalAllocatedCapacity, 80)
+    assert.equal(snap.totalAllocated, 80)
+    assert.equal(snap.exceeded, false)
+    assert.equal(occupiesVenueBudget(bundle), false)
+  })
+
+  it("sumVenueOccupyingTicketStock ignora adicionales aunque tengan stock alto", () => {
+    const tickets = [
+      ticket({ tierType: "general", capacity: 100 }),
+      ticket({ tierType: "addon", capacity: 500, name: "Estacionamiento" }),
+      ticket({ tierType: "addon", capacity: 200, name: "Merch" }),
+    ]
+    assert.equal(sumVenueOccupyingTicketStock(tickets), 100)
+  })
+
+  it("venueCapacityPersistError rechaza overflow recalculado en servidor", () => {
+    const general = ticket({ tierType: "general", capacity: 1200 })
+    const error = venueCapacityPersistError({
+      tickets: [general],
+      venue: { capacity: 1000 },
+      basics: { deliveryMode: "PHYSICAL", hasSeatingPlan: false },
+    } as never)
+    assert.equal(typeof error, "string")
+    assert.match(error ?? "", /supera el aforo/)
   })
 
   it("no cuenta dos veces el mapa y las entradas map-backed", () => {

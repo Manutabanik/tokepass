@@ -18,7 +18,6 @@ export function EventStudioDock({
   canGoBack,
   isLast,
   submitting,
-  nextDisabled = false,
   eventStatus = null,
   onBack,
   onNext,
@@ -28,7 +27,6 @@ export function EventStudioDock({
   canGoBack: boolean
   isLast: boolean
   submitting: boolean
-  nextDisabled?: boolean
   eventStatus?: string | null
   onBack: () => void
   onNext: () => void
@@ -54,7 +52,7 @@ export function EventStudioDock({
         <Button
           type="submit"
           variant="outline"
-          disabled={submitting || nextDisabled}
+          disabled={submitting}
           className={cn(STUDIO_SECONDARY_BUTTON_CLASS, "h-12 shrink-0 px-4 text-sm")}
         >
           {submitting ? (
@@ -68,7 +66,7 @@ export function EventStudioDock({
       {!isLast ? (
         <Button
           type="button"
-          disabled={nextDisabled || submitting}
+          disabled={submitting}
           onClick={onNext}
           className="h-12 flex-1 rounded-xl bg-emerald-500 text-base font-bold text-black hover:bg-emerald-400"
         >
