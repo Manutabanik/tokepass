@@ -1,8 +1,9 @@
 "use client"
 
-import { CalendarDays, ImagePlus, MapPin, Type } from "lucide-react"
-import { useFormContext } from "react-hook-form"
+import { CalendarDays, ImagePlus, MonitorPlay, Type } from "lucide-react"
+import { Controller, useFormContext } from "react-hook-form"
 
+import { EventEditorV2LocationFields } from "./event-editor-v2-location"
 import { EventEditorV2MediaField } from "./event-editor-v2-media"
 import {
   DRAFT_FIELD_CLASS,
@@ -12,13 +13,17 @@ import {
 } from "./event-editor-v2-ui"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import type { EventDraftV2 } from "@/lib/validations/event-draft-v2"
 
 export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
   const {
+    control,
     register,
+    watch,
     formState: { errors },
   } = useFormContext<EventDraftV2>()
+  const isOnline = watch("settings.deliveryMode") === "ONLINE"
 
   return (
     <div className="space-y-6">
@@ -79,25 +84,53 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
             <DraftHint>Tiene que ser posterior al inicio.</DraftHint>
             <DraftFieldError message={errors.basicInfo?.endDate?.message} />
           </div>
-          <div className="grid gap-2 md:col-span-2">
-            <Label
-              htmlFor="event-v2-location"
-              className="flex items-center gap-1.5 text-sm font-bold text-slate-800 dark:text-zinc-200"
-            >
-              <MapPin className="size-3.5 text-emerald-400" aria-hidden />
-              Nombre del lugar
-            </Label>
-            <Input
-              id="event-v2-location"
-              className={DRAFT_FIELD_CLASS}
-              placeholder="Ej. Club Atlético, Salón Norte"
-              {...register("basicInfo.locationName")}
-            />
-            <DraftHint>Podés dejar la dirección exacta para más adelante.</DraftHint>
-            <DraftFieldError message={errors.basicInfo?.locationName?.message} />
-          </div>
         </div>
       </DraftCard>
+
+      <DraftCard className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <MonitorPlay className="size-4 text-emerald-400" aria-hidden />
+            <Label
+              htmlFor="event-v2-online"
+              className="text-sm font-bold text-slate-800 dark:text-zinc-200"
+            >
+              Evento online
+            </Label>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {isOnline
+              ? "No hace falta una dirección física para publicar."
+              : "Si es presencial, el lugar y la dirección son obligatorios para publicar."}
+          </p>
+        </div>
+        <Controller
+          name="settings.deliveryMode"
+          control={control}
+          render={({ field }) => (
+            <Switch
+              id="event-v2-online"
+              checked={field.value === "ONLINE"}
+              onCheckedChange={(checked) =>
+                field.onChange(checked ? "ONLINE" : "PRESENCIAL")
+              }
+              className="data-checked:bg-emerald-500"
+              aria-label="Evento online"
+            />
+          )}
+        />
+      </DraftCard>
+
+      {isOnline ? (
+        <DraftCard>
+          <p className="text-sm text-muted-foreground">
+            Este evento es online. El mapa y la dirección quedan fuera del
+            borrador hasta que lo pases a presencial.
+          </p>
+        </DraftCard>
+      ) : (
+        <EventEditorV2LocationFields />
+      )}
 
       <DraftCard>
         <div className="mb-5 flex items-center gap-2">

@@ -21,6 +21,14 @@ function publishableDraft() {
       endDate: "2026-09-02T04:00",
       locationName: "Niceto",
     },
+    location: {
+      venueName: "Niceto",
+      address: "Av. Córdoba 1234, CABA",
+      province: "Ciudad Autónoma de Buenos Aires",
+      city: "Comuna 1",
+      lat: -34.6037,
+      lng: -58.3816,
+    },
     venueCapacity: 200,
     tickets: [
       {
@@ -45,6 +53,9 @@ describe("eventDraftSchema", () => {
     assert.deepEqual(parsed.extras, [])
     assert.equal(parsed.flyerUrl, "")
     assert.deepEqual(parsed.seatingMap.sectors, [])
+    assert.equal(parsed.location.venueName, "")
+    assert.equal(parsed.location.address, "")
+    assert.equal(parsed.settings.deliveryMode, "PRESENCIAL")
   })
 
   it("still accepts over-capacity stock without failing", () => {
@@ -86,6 +97,40 @@ describe("eventPublishSchema", () => {
   it("accepts a complete draft", () => {
     assert.equal(eventPublishSchema.safeParse(publishableDraft()).success, true)
     assert.equal(isEventDraftPublishable(publishableDraft()), true)
+  })
+
+  it("requires venue name and address when the event is presencial", () => {
+    const draft = publishableDraft()
+    draft.location.venueName = ""
+    draft.basicInfo.locationName = ""
+    draft.location.address = ""
+    const result = eventPublishSchema.safeParse(draft)
+    assert.equal(result.success, false)
+    if (!result.success) {
+      assert.ok(
+        result.error.issues.some((issue) =>
+          issue.path.join(".").includes("location.venueName"),
+        ),
+      )
+      assert.ok(
+        result.error.issues.some((issue) =>
+          issue.path.join(".").includes("location.address"),
+        ),
+      )
+    }
+  })
+
+  it("allows an online event without a physical address", () => {
+    const draft = publishableDraft()
+    draft.location = {
+      venueName: "",
+      address: "",
+      province: "",
+      city: "",
+    }
+    draft.basicInfo.locationName = ""
+    draft.settings.deliveryMode = "ONLINE"
+    assert.equal(eventPublishSchema.safeParse(draft).success, true)
   })
 })
 
@@ -140,6 +185,23 @@ describe("parseEventDraftV2", () => {
     assert.equal(parsed.tickets[0]?.stock, 80)
     assert.equal(parsed.extras[0]?.minOrder, 1)
     assert.equal(parsed.settings.checkoutMessage, "Gracias")
+  })
+
+  it("hydrates location from locationName and stored geo fields", () => {
+    const parsed = parseEventDraftV2({
+      basicInfo: { name: "Club", locationName: "Niceto" },
+      location: {
+        address: "Av. Córdoba 1234",
+        province: "CABA",
+        lat: "-34.6",
+        lng: "-58.4",
+      },
+    })
+    assert.equal(parsed.location.venueName, "Niceto")
+    assert.equal(parsed.location.address, "Av. Córdoba 1234")
+    assert.equal(parsed.location.province, "CABA")
+    assert.equal(parsed.location.lat, -34.6)
+    assert.equal(parsed.basicInfo.locationName, "Niceto")
   })
 })
 

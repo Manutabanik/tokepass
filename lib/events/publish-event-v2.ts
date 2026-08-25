@@ -7,8 +7,14 @@ import {
 import { parseEventRefundPolicy } from "@/lib/validations/event-form"
 import {
   eventPublishSchema,
+  isEventDraftOnline,
   type EventDraftV2LineItem,
 } from "@/lib/validations/event-draft-v2"
+import { composeVenuePlace } from "@/lib/venues/compose-location"
+import {
+  STREAMING_VENUE_LOCATION,
+  STREAMING_VENUE_NAME,
+} from "@/lib/venues/streaming-venue"
 import type { Json } from "@/types/database"
 
 const UUID_RE =
@@ -49,7 +55,12 @@ export type PublishEventV2Payload = {
     name: string
     location: string
     capacity: number
+    city: string | null
+    province: string | null
+    latitude: number | null
+    longitude: number | null
   }
+  delivery_mode: "PRESENCIAL" | "ONLINE"
   venue_map?: Json
   tickets: PublishEventV2TierPayload[]
 }
@@ -169,7 +180,21 @@ export function buildPublishEventV2Payload(
 ): PublishEventV2Payload {
   const parsed = eventPublishSchema.parse(draft)
   const title = parsed.basicInfo.name.trim()
-  const location = parsed.basicInfo.locationName.trim()
+  const isOnline = isEventDraftOnline(parsed)
+  const venueName = (
+    parsed.location?.venueName ||
+    parsed.basicInfo.locationName ||
+    ""
+  ).trim()
+  const place = composeVenuePlace({
+    street: parsed.location?.address,
+    department: parsed.location?.city,
+    province: parsed.location?.province,
+    city: parsed.location?.city,
+  })
+  const location = isOnline
+    ? STREAMING_VENUE_LOCATION
+    : place.display || venueName
   const absorbFees = parsed.settings?.absorbFees === true
   const tickets = parsed.tickets
     .map((item) => mapLineItemToTier(item, "ticket", fee, absorbFees))
@@ -209,10 +234,21 @@ export function buildPublishEventV2Payload(
     }),
     refund_policy: parseEventRefundPolicy(parsed.settings?.refundPolicy),
     venue: {
-      name: location,
+      name: isOnline ? STREAMING_VENUE_NAME : venueName,
       location,
       capacity: Math.floor(Number(parsed.venueCapacity)),
+      city: isOnline ? null : parsed.location?.city?.trim() || place.city,
+      province: isOnline ? null : parsed.location?.province?.trim() || null,
+      latitude:
+        !isOnline && Number.isFinite(parsed.location?.lat)
+          ? Number(parsed.location?.lat)
+          : null,
+      longitude:
+        !isOnline && Number.isFinite(parsed.location?.lng)
+          ? Number(parsed.location?.lng)
+          : null,
     },
+    delivery_mode: isOnline ? "ONLINE" : "PRESENCIAL",
     ...(venueMap ? { venue_map: venueMap } : {}),
     tickets: [...tickets, ...extras],
   }

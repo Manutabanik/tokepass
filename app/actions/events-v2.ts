@@ -267,6 +267,9 @@ async function upsertPublishedVenue(input: {
     name: input.venue.name,
     location: input.venue.location,
     address: input.venue.location,
+    city: input.venue.city,
+    latitude: input.venue.latitude,
+    longitude: input.venue.longitude,
     capacity: input.venue.capacity,
     max_capacity: input.venue.capacity,
     updated_at: now,
@@ -311,9 +314,6 @@ async function upsertPublishedVenue(input: {
     .from("venues")
     .insert({
       organizer_id: input.organizerId,
-      city: null,
-      latitude: null,
-      longitude: null,
       zone_blueprint: [],
       ...patch,
     } as never)
@@ -454,6 +454,9 @@ async function unpackPublishEventV2Sequential(input: {
       date: input.payload.date,
       ends_at: input.payload.ends_at,
       location: input.payload.location,
+      province: input.payload.venue.province,
+      department: input.payload.venue.city,
+      delivery_mode: input.payload.delivery_mode,
       visibility: input.payload.visibility,
       flyer_url: input.payload.flyer_url ?? input.existingFlyerUrl,
       image_url:

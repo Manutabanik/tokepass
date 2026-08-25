@@ -54,6 +54,14 @@ function publishableDraft() {
         maxOrder: 10,
       },
     ],
+    location: {
+      venueName: "Niceto",
+      address: "Av. Córdoba 1234, CABA",
+      province: "Ciudad Autónoma de Buenos Aires",
+      city: "Comuna 1",
+      lat: -34.6037,
+      lng: -58.3816,
+    },
     settings: {
       isPublic: true,
       absorbFees: true,
@@ -83,13 +91,16 @@ describe("buildPublishEventV2Payload", () => {
       isSponsoredByTokePass: false,
     })
     assert.equal(payload.title, "After")
-    assert.equal(payload.location, "Niceto")
+    assert.equal(payload.venue.name, "Niceto")
+    assert.match(payload.location, /Córdoba 1234/)
+    assert.equal(payload.venue.city, "Comuna 1")
+    assert.equal(payload.venue.latitude, -34.6037)
+    assert.equal(payload.delivery_mode, "PRESENCIAL")
     assert.equal(payload.visibility, "public")
     assert.equal(payload.refund_policy, "no_refunds")
     assert.equal(payload.description, "Gracias por venir")
     assert.equal(payload.flyer_url, "https://cdn.example/flyer.jpg")
     assert.equal(payload.social_share_image_url, "https://cdn.example/banner.jpg")
-    assert.equal(payload.venue.name, "Niceto")
     assert.equal(payload.venue.capacity, 200)
     assert.equal(payload.tickets.length, 2)
     assert.equal(payload.tickets[0]?.id, "550e8400-e29b-41d4-a716-446655440000")

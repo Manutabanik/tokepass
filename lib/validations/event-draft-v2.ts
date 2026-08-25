@@ -10,6 +10,33 @@ const draftLineItemSchema = z.object({
   maxOrder: z.coerce.number().optional().default(10),
 })
 
+export const EVENT_DRAFT_DELIVERY_MODES = ["PRESENCIAL", "ONLINE"] as const
+export type EventDraftDeliveryMode = (typeof EVENT_DRAFT_DELIVERY_MODES)[number]
+
+const optionalDraftCoord = z.preprocess((value) => {
+  if (value === "" || value == null) return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}, z.number().optional())
+
+const draftLocationFields = {
+  venueName: z.string().optional().default(""),
+  address: z.string().optional().default(""),
+  province: z.string().optional().default(""),
+  city: z.string().optional().default(""),
+  lat: optionalDraftCoord,
+  lng: optionalDraftCoord,
+}
+
+const emptyDraftLocation = {
+  venueName: "",
+  address: "",
+  province: "",
+  city: "",
+}
+
+const draftLocationSchema = z.object(draftLocationFields).default(emptyDraftLocation)
+
 const draftBasicInfoSchema = z
   .object({
     name: z.string().optional().default(""),
@@ -25,12 +52,14 @@ const draftSettingsSchema = z
     absorbFees: z.boolean().optional().default(false),
     refundPolicy: z.string().optional().default(""),
     checkoutMessage: z.string().optional().default(""),
+    deliveryMode: z.enum(EVENT_DRAFT_DELIVERY_MODES).optional().default("PRESENCIAL"),
   })
   .default({
     isPublic: false,
     absorbFees: false,
     refundPolicy: "",
     checkoutMessage: "",
+    deliveryMode: "PRESENCIAL",
   })
 
 const draftSeatingMapSchema = z
@@ -42,6 +71,7 @@ const draftSeatingMapSchema = z
 
 const eventDraftFieldsSchema = z.object({
   basicInfo: draftBasicInfoSchema,
+  location: draftLocationSchema,
   flyerUrl: z.string().optional().default(""),
   bannerUrl: z.string().optional().default(""),
   venueCapacity: z.coerce.number().optional().default(0),
@@ -69,8 +99,18 @@ export const eventPublishSchema = z
       name: z.string().min(1, "El nombre es obligatorio"),
       startDate: z.string().min(1, "La fecha de inicio es obligatoria"),
       endDate: z.string().optional(),
-      locationName: z.string().min(1, "El lugar es obligatorio"),
+      locationName: z.string().optional(),
     }),
+    location: z
+      .object({
+        venueName: z.string().optional(),
+        address: z.string().optional(),
+        province: z.string().optional(),
+        city: z.string().optional(),
+        lat: z.coerce.number().optional(),
+        lng: z.coerce.number().optional(),
+      })
+      .optional(),
     flyerUrl: z.string().optional(),
     bannerUrl: z.string().optional(),
     venueCapacity: z.coerce.number().min(1, "Definí el aforo del recinto"),
@@ -90,21 +130,48 @@ export const eventPublishSchema = z
         absorbFees: z.boolean().optional(),
         refundPolicy: z.string().optional(),
         checkoutMessage: z.string().optional(),
+        deliveryMode: z.enum(EVENT_DRAFT_DELIVERY_MODES).optional(),
       })
       .optional(),
   })
   .superRefine((data, ctx) => {
     const start = data.basicInfo.startDate?.trim()
     const end = data.basicInfo.endDate?.trim()
-    if (!start || !end) return
-    const startMs = Date.parse(start)
-    const endMs = Date.parse(end)
-    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return
-    if (endMs <= startMs) {
+    if (start && end) {
+      const startMs = Date.parse(start)
+      const endMs = Date.parse(end)
+      if (
+        Number.isFinite(startMs) &&
+        Number.isFinite(endMs) &&
+        endMs <= startMs
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["basicInfo", "endDate"],
+          message: "La fecha de fin debe ser posterior al inicio",
+        })
+      }
+    }
+
+    if (data.settings?.deliveryMode === "ONLINE") return
+    const venueName = (
+      data.location?.venueName ||
+      data.basicInfo.locationName ||
+      ""
+    ).trim()
+    const address = (data.location?.address || "").trim()
+    if (!venueName) {
       ctx.addIssue({
         code: "custom",
-        path: ["basicInfo", "endDate"],
-        message: "La fecha de fin debe ser posterior al inicio",
+        path: ["location", "venueName"],
+        message: "El nombre del lugar es obligatorio",
+      })
+    }
+    if (!address) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["location", "address"],
+        message: "La dirección es obligatoria",
       })
     }
   })
@@ -114,6 +181,14 @@ export const eventDraftV2UiSchema = eventPublishSchema
 export const eventDraftV2LineItemSchema = draftLineItemSchema
 
 export type EventDraftV2LineItem = z.infer<typeof draftLineItemSchema>
+export type EventDraftV2Location = {
+  venueName: string
+  address: string
+  province: string
+  city: string
+  lat?: number
+  lng?: number
+}
 export type EventDraftV2 = z.infer<typeof eventDraftFieldsSchema>
 
 export function emptyEventDraftV2LineItem(
@@ -130,9 +205,14 @@ export function emptyEventDraftV2LineItem(
   }
 }
 
+export function emptyEventDraftV2Location(): EventDraftV2Location {
+  return { venueName: "", address: "", province: "", city: "" }
+}
+
 export function emptyEventDraftV2(): EventDraftV2 {
   return {
     basicInfo: { name: "", startDate: "", endDate: "", locationName: "" },
+    location: emptyEventDraftV2Location(),
     flyerUrl: "",
     bannerUrl: "",
     venueCapacity: 0,
@@ -144,8 +224,15 @@ export function emptyEventDraftV2(): EventDraftV2 {
       absorbFees: false,
       refundPolicy: "",
       checkoutMessage: "",
+      deliveryMode: "PRESENCIAL",
     },
   }
+}
+
+export function isEventDraftOnline(values: unknown): boolean {
+  if (!values || typeof values !== "object" || Array.isArray(values)) return false
+  const settings = (values as { settings?: { deliveryMode?: unknown } }).settings
+  return settings?.deliveryMode === "ONLINE"
 }
 
 export function createDraftLineItem(): EventDraftV2LineItem {
@@ -160,6 +247,12 @@ export function draftNumberValue(value: unknown, fallback = 0): number {
 
 function asFiniteNumber(value: unknown, fallback = 0): number {
   return draftNumberValue(value, fallback)
+}
+
+function asOptionalCoord(value: unknown): number | undefined {
+  if (value === "" || value == null) return undefined
+  const parsed = typeof value === "number" ? value : Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
 }
 
 function asOptionalString(value: unknown): string {
@@ -197,9 +290,20 @@ function parseDraftLineItems(raw: unknown): EventDraftV2LineItem[] {
 
 export function toEventDraftV2Payload(values: EventDraftV2) {
   const name = values.basicInfo?.name ?? ""
+  const venueName =
+    values.location?.venueName?.trim() || values.basicInfo?.locationName || ""
   return {
     ...values,
     title: name,
+    basicInfo: {
+      ...values.basicInfo,
+      locationName: venueName,
+    },
+    location: {
+      ...emptyEventDraftV2Location(),
+      ...values.location,
+      venueName,
+    },
   }
 }
 
@@ -242,6 +346,17 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
 
   const name =
     asOptionalString(basicRaw.name) || asOptionalString(record.title)
+  const locationRaw =
+    record.location &&
+    typeof record.location === "object" &&
+    !Array.isArray(record.location)
+      ? (record.location as Record<string, unknown>)
+      : {}
+  const venueName =
+    asOptionalString(locationRaw.venueName) ||
+    asOptionalString(basicRaw.locationName)
+  const lat = asOptionalCoord(locationRaw.lat)
+  const lng = asOptionalCoord(locationRaw.lng)
 
   return {
     ...record,
@@ -249,7 +364,17 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
       name,
       startDate: asOptionalString(basicRaw.startDate),
       endDate: asOptionalString(basicRaw.endDate),
-      locationName: asOptionalString(basicRaw.locationName),
+      locationName: venueName,
+    },
+    location: {
+      venueName,
+      address: asOptionalString(locationRaw.address),
+      province: asOptionalString(locationRaw.province),
+      city:
+        asOptionalString(locationRaw.city) ||
+        asOptionalString(locationRaw.department),
+      ...(lat != null ? { lat } : {}),
+      ...(lng != null ? { lng } : {}),
     },
     flyerUrl: asOptionalString(record.flyerUrl),
     bannerUrl: asOptionalString(record.bannerUrl),
@@ -265,6 +390,8 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
       absorbFees: settingsRaw.absorbFees === true,
       refundPolicy: asOptionalString(settingsRaw.refundPolicy),
       checkoutMessage: asOptionalString(settingsRaw.checkoutMessage),
+      deliveryMode:
+        settingsRaw.deliveryMode === "ONLINE" ? "ONLINE" : "PRESENCIAL",
     },
   }
 }
