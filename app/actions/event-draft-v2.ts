@@ -4,8 +4,6 @@ import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
 import { createClient } from "@/lib/supabase/server"
 
-export { saveEventDraftV2, type SaveEventDraftV2Result } from "@/app/actions/events-v2"
-
 export type CreateEventDraftV2Result =
   | { success: true; eventId: string }
   | { success: false; error: string }

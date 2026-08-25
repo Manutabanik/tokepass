@@ -5,10 +5,8 @@ import { useEffect, useRef, useState } from "react"
 import { useForm } from "react-hook-form"
 import { useRouter } from "next/navigation"
 
-import {
-  createEventDraftV2,
-  saveEventDraftV2,
-} from "@/app/actions/event-draft-v2"
+import { createEventDraftV2 } from "@/app/actions/event-draft-v2"
+import { saveEventDraftV2 } from "@/app/actions/events-v2"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
