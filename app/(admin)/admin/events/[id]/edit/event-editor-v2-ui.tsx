@@ -14,6 +14,11 @@ export const DRAFT_TEXTAREA_CLASS =
 export const DRAFT_TICKET_CARD_CLASS =
   "relative rounded-xl border border-slate-200 bg-white/80 p-4 pt-12 transition-all duration-200 hover:border-slate-300 dark:border-gray-700/50 dark:bg-gray-800/50 dark:hover:border-gray-600"
 
+export const BENTO_GRID_CLASS = "grid grid-cols-1 md:grid-cols-12 gap-6"
+
+export const BENTO_CARD_CLASS =
+  "bg-card border border-border/50 rounded-2xl p-6 shadow-sm"
+
 export function DraftCard({
   children,
   className,
@@ -22,12 +27,7 @@ export function DraftCard({
   className?: string
 }) {
   return (
-    <section
-      className={cn(
-        "rounded-2xl border border-slate-200/80 bg-white/70 p-4 shadow-sm transition-all duration-200 sm:p-5 dark:border-gray-800 dark:bg-gray-950/70",
-        className,
-      )}
-    >
+    <section className={cn(BENTO_CARD_CLASS, className)}>
       {children}
     </section>
   )

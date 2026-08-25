@@ -3,8 +3,10 @@ import { describe, it } from "node:test"
 
 import {
   isEventDraftStateEmpty,
+  overlayLiveExperienceOnDraft,
   rehydrateEventDraftV2,
 } from "@/lib/events/rehydrate-event-draft-v2"
+import { emptyEventDraftV2 } from "@/lib/validations/event-draft-v2"
 
 describe("isEventDraftStateEmpty", () => {
   it("treats null, arrays and {} as empty", () => {
@@ -32,6 +34,10 @@ describe("rehydrateEventDraftV2", () => {
         province: "Ciudad Autónoma de Buenos Aires",
         department: "Comuna 1",
         delivery_mode: "PRESENCIAL",
+        promo_video_url: "https://youtu.be/dQw4w9WgXcQ",
+        gallery_urls: ["https://cdn.example/exp.jpg"],
+        restrictions: "+18",
+        what_to_bring: "DNI",
         venue_map: {
           version: 1,
           sectors: [
@@ -64,6 +70,16 @@ describe("rehydrateEventDraftV2", () => {
         max_capacity: 200,
         venue_map: null,
       },
+      lineup: [
+        {
+          id: "550e8400-e29b-41d4-a716-446655440077",
+          name: "Wos",
+          avatarUrl: "https://cdn.example/wos.jpg",
+          role: "Headliner",
+          source: "local",
+          dayIds: [],
+        },
+      ],
       tickets: [
         {
           id: "550e8400-e29b-41d4-a716-446655440000",
@@ -124,6 +140,12 @@ describe("rehydrateEventDraftV2", () => {
     assert.equal(draft.schedule[0]?.name, "Día 1")
     assert.ok(draft.schedule[0]?.startDate)
     assert.equal(draft.basicInfo.startDate, draft.schedule[0]?.startDate)
+    assert.equal(draft.promoVideoUrl, "https://youtu.be/dQw4w9WgXcQ")
+    assert.deepEqual(draft.galleryUrls, ["https://cdn.example/exp.jpg"])
+    assert.equal(draft.restrictions, "+18")
+    assert.equal(draft.whatToBring, "DNI")
+    assert.equal(draft.lineup[0]?.name, "Wos")
+    assert.equal(draft.lineup[0]?.source, "local")
   })
 
   it("rebuilds a multi-day schedule from schedule_days", () => {
@@ -214,5 +236,67 @@ describe("rehydrateEventDraftV2", () => {
     assert.equal(draft.archetype, "show")
     assert.equal(draft.location.venueName, "")
     assert.equal(draft.location.address, "")
+  })
+})
+
+describe("overlayLiveExperienceOnDraft", () => {
+  it("fills missing experience keys from live columns", () => {
+    const overlay = overlayLiveExperienceOnDraft(
+      emptyEventDraftV2(),
+      {
+        promoVideoUrl: "https://youtu.be/dQw4w9WgXcQ",
+        galleryUrls: ["https://cdn.example/exp.jpg"],
+        restrictions: "+18",
+        whatToBring: "DNI",
+        lineup: [
+          {
+            id: "a1",
+            name: "Wos",
+            avatarUrl: "",
+            role: "",
+            source: "custom",
+            dayIds: [],
+          },
+        ],
+      },
+      { basicInfo: { name: "After" } },
+    )
+    assert.equal(overlay.changed, true)
+    assert.equal(overlay.draft.restrictions, "+18")
+    assert.equal(overlay.draft.whatToBring, "DNI")
+    assert.equal(overlay.draft.lineup[0]?.name, "Wos")
+  })
+
+  it("does not restore fields the draft already stored as empty", () => {
+    const overlay = overlayLiveExperienceOnDraft(
+      {
+        ...emptyEventDraftV2(),
+        restrictions: "",
+        whatToBring: "",
+        lineup: [],
+      },
+      {
+        restrictions: "+18",
+        whatToBring: "DNI",
+        lineup: [
+          {
+            id: "a1",
+            name: "Wos",
+            avatarUrl: "",
+            role: "",
+            source: "custom",
+            dayIds: [],
+          },
+        ],
+      },
+      {
+        restrictions: "",
+        whatToBring: "",
+        lineup: [],
+      },
+    )
+    assert.equal(overlay.changed, false)
+    assert.equal(overlay.draft.restrictions, "")
+    assert.deepEqual(overlay.draft.lineup, [])
   })
 })

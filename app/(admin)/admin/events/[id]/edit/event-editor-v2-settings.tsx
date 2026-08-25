@@ -1,6 +1,6 @@
 "use client"
 
-import { Eye, MessageSquareText, Shield } from "lucide-react"
+import { Eye, MessageSquareText } from "lucide-react"
 import { Controller, useFormContext } from "react-hook-form"
 
 import {
@@ -23,7 +23,7 @@ export function EventEditorV2SettingsStep() {
   } = useFormContext<EventDraftV2>()
 
   return (
-    <div className="space-y-6">
+    <>
       <Controller
         name="settings.isPublic"
         control={control}
@@ -43,62 +43,33 @@ export function EventEditorV2SettingsStep() {
         )}
       />
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        <DraftCard>
-          <div className="mb-4 flex items-center gap-2">
-            <Shield className="size-4 text-emerald-400" aria-hidden />
-            <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-              Política de devoluciones
-            </h2>
-          </div>
-          <div className="grid gap-2">
-            <DraftFieldLabel
-              htmlFor="event-v2-refund-policy"
-              optional
-              className="text-sm"
-            >
-              ¿Cómo son las devoluciones?
-            </DraftFieldLabel>
-            <Textarea
-              id="event-v2-refund-policy"
-              rows={5}
-              className={DRAFT_TEXTAREA_CLASS}
-              placeholder="Ej. No se aceptan devoluciones. Cambio de titular hasta 24 h antes."
-              {...register("settings.refundPolicy")}
-            />
-            <DraftHint>Se muestra antes de pagar. Podés dejarlo vacío.</DraftHint>
-            <DraftFieldError message={errors.settings?.refundPolicy?.message} />
-          </div>
-        </DraftCard>
-
-        <DraftCard>
-          <div className="mb-4 flex items-center gap-2">
-            <MessageSquareText className="size-4 text-emerald-400" aria-hidden />
-            <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-              Mensaje post-compra
-            </h2>
-          </div>
-          <div className="grid gap-2">
-            <DraftFieldLabel
-              htmlFor="event-v2-checkout-message"
-              optional
-              className="text-sm"
-            >
-              Mensaje después de pagar
-            </DraftFieldLabel>
-            <Textarea
-              id="event-v2-checkout-message"
-              rows={5}
-              className={DRAFT_TEXTAREA_CLASS}
-              placeholder="Ej. Gracias por tu compra. Revisá el mail para el acceso."
-              {...register("settings.checkoutMessage")}
-            />
-            <DraftHint>Aparece en la pantalla de éxito después del pago.</DraftHint>
-            <DraftFieldError message={errors.settings?.checkoutMessage?.message} />
-          </div>
-        </DraftCard>
-      </div>
-    </div>
+      <DraftCard className="md:col-span-12">
+        <div className="mb-4 flex items-center gap-2">
+          <MessageSquareText className="size-4 text-emerald-400" aria-hidden />
+          <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
+            Mensaje post-compra
+          </h2>
+        </div>
+        <div className="grid gap-2">
+          <DraftFieldLabel
+            htmlFor="event-v2-checkout-message"
+            optional
+            className="text-sm"
+          >
+            Mensaje después de pagar
+          </DraftFieldLabel>
+          <Textarea
+            id="event-v2-checkout-message"
+            rows={5}
+            className={DRAFT_TEXTAREA_CLASS}
+            placeholder="Ej. Gracias por tu compra. Revisá el mail para el acceso."
+            {...register("settings.checkoutMessage")}
+          />
+          <DraftHint>Aparece en la pantalla de éxito después del pago.</DraftHint>
+          <DraftFieldError message={errors.settings?.checkoutMessage?.message} />
+        </div>
+      </DraftCard>
+    </>
   )
 }
 
@@ -118,7 +89,7 @@ function SettingToggle({
   onCheckedChange: (checked: boolean) => void
 }) {
   return (
-    <DraftCard className="flex h-full items-center justify-between gap-4">
+    <DraftCard className="flex h-full items-center justify-between gap-4 md:col-span-12">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <Icon className="size-4 text-emerald-400" aria-hidden />

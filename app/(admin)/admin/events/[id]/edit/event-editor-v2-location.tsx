@@ -288,7 +288,7 @@ export function EventEditorV2LocationFields() {
       : null
 
   return (
-    <DraftCard>
+    <DraftCard className="md:col-span-12">
       <div className="mb-5 flex flex-col items-start justify-between gap-3 sm:flex-row">
         <div className="flex items-center gap-2">
           <MapPinned className="size-4 text-emerald-400" aria-hidden />

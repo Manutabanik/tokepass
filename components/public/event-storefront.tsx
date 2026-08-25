@@ -545,20 +545,22 @@ export function EventStorefront({
               <AccordionTrigger className="py-4 text-sm text-foreground hover:no-underline">
                 Restricciones y edad
               </AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                {isOnlineEvent
-                  ? "Verificá la política de edad del organizador antes del inicio de transmisión. Si el evento es +18, el anfitrión puede pedir DNI."
-                  : "Verificá la política de edad del organizador en puerta. Si el evento es +18, deberás presentar DNI vigente. TokePass no garantiza el ingreso si no cumplís los requisitos del lugar."}
+              <AccordionContent className="whitespace-pre-wrap text-muted-foreground">
+                {event.restrictions?.trim() ||
+                  (isOnlineEvent
+                    ? "Verificá la política de edad del organizador antes del inicio de transmisión. Si el evento es +18, el anfitrión puede pedir DNI."
+                    : "Verificá la política de edad del organizador en puerta. Si el evento es +18, deberás presentar DNI vigente. TokePass no garantiza el ingreso si no cumplís los requisitos del lugar.")}
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="bring">
               <AccordionTrigger className="py-4 text-sm text-foreground hover:no-underline">
                 Qué llevar y qué no llevar
               </AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                {isOnlineEvent
-                  ? "El link de transmisión aparece en Mis entradas después de pagar. No hace falta QR ni presentarse en un recinto."
-                  : "En puerta mostrá esta pantalla. El código se actualiza solo para evitar reventas truchas (no le saques captura de pantalla)."}
+              <AccordionContent className="whitespace-pre-wrap text-muted-foreground">
+                {event.whatToBring?.trim() ||
+                  (isOnlineEvent
+                    ? "El link de transmisión aparece en Mis entradas después de pagar. No hace falta QR ni presentarse en un recinto."
+                    : "En puerta mostrá esta pantalla. El código se actualiza solo para evitar reventas truchas (no le saques captura de pantalla).")}
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="refunds">

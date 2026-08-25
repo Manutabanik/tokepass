@@ -63,6 +63,10 @@ function publishableDraft() {
       lat: -34.6037,
       lng: -58.3816,
     },
+    promoVideoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    galleryUrls: ["https://cdn.example/exp-1.jpg"],
+    restrictions: "+18. DNI en puerta.",
+    whatToBring: "Llevá DNI. No se permiten mochilas grandes.",
     settings: {
       isPublic: true,
       absorbFees: true,
@@ -100,6 +104,10 @@ describe("buildPublishEventV2Payload", () => {
     assert.equal(payload.visibility, "public")
     assert.equal("refund_policy" in payload, false)
     assert.equal(payload.description, "Gracias por venir")
+    assert.equal(payload.promo_video_url, "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    assert.deepEqual(payload.gallery_urls, ["https://cdn.example/exp-1.jpg"])
+    assert.equal(payload.restrictions, "+18. DNI en puerta.")
+    assert.equal(payload.what_to_bring, "Llevá DNI. No se permiten mochilas grandes.")
     assert.equal(payload.flyer_url, "https://cdn.example/flyer.jpg")
     assert.equal(payload.social_share_image_url, "https://cdn.example/banner.jpg")
     assert.equal(payload.venue.capacity, 200)
@@ -296,14 +304,15 @@ describe("buildPublishEventV2Payload", () => {
     assert.equal(general?.seating_sector_id, null)
   })
 
-  it("maps private visibility and free-text refund into description", () => {
+  it("maps private visibility without folding refunds into description", () => {
     const draft = publishableDraft()
     draft.settings.isPublic = false
     draft.settings.refundPolicy = "Reintegro a criterio"
     const payload = buildPublishEventV2Payload(draft)
     assert.equal(payload.visibility, "private")
     assert.equal("refund_policy" in payload, false)
-    assert.match(payload.description, /Reintegro a criterio/)
+    assert.equal(payload.description, "Gracias por venir")
+    assert.equal(payload.description.includes("Reintegro"), false)
   })
 })
 

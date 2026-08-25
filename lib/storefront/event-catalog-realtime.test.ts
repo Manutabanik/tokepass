@@ -107,6 +107,8 @@ function sampleEvent(): EventDetails {
     acceptsMercadoPago: true,
     acceptsPosPayments: true,
     refundPolicy: "organizer",
+    restrictions: null,
+    whatToBring: null,
   }
 }
 

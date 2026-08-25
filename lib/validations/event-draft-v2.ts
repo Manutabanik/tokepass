@@ -153,6 +153,10 @@ const eventDraftFieldsSchema = z.object({
   location: draftLocationSchema,
   flyerUrl: z.string().optional().default(""),
   bannerUrl: z.string().optional().default(""),
+  promoVideoUrl: z.string().url().optional().or(z.literal("")).default(""),
+  galleryUrls: z.array(z.string().url()).default([]),
+  restrictions: z.string().optional().default(""),
+  whatToBring: z.string().optional().default(""),
   venueCapacity: z.coerce.number().optional().default(0),
   schedule: z.array(draftScheduleDaySchema).default([]),
   lineup: z.array(draftLineupItemSchema).default([]),
@@ -222,6 +226,10 @@ export const eventPublishSchema = z
       .min(1, "Agregá al menos una entrada"),
     extras: z.array(draftLineItemSchema).optional(),
     lineup: z.array(draftLineupItemSchema).optional(),
+    promoVideoUrl: z.string().url().optional().or(z.literal("")),
+    galleryUrls: z.array(z.string().url()).optional().default([]),
+    restrictions: z.string().optional(),
+    whatToBring: z.string().optional(),
     seatingMap: z
       .object({
         url: z.string().optional(),
@@ -369,6 +377,10 @@ export function emptyEventDraftV2(): EventDraftV2 {
     location: emptyEventDraftV2Location(),
     flyerUrl: "",
     bannerUrl: "",
+    promoVideoUrl: "",
+    galleryUrls: [],
+    restrictions: "",
+    whatToBring: "",
     venueCapacity: 0,
     schedule: [firstDay],
     lineup: [],
@@ -548,6 +560,21 @@ function parseDraftLineItems(raw: unknown): EventDraftV2LineItem[] {
   })
 }
 
+export const EVENT_DRAFT_GALLERY_MAX = 4
+
+function parseDraftGalleryUrls(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const urls: string[] = []
+  for (const item of raw) {
+    if (typeof item !== "string") continue
+    const url = item.trim()
+    if (!url || urls.includes(url)) continue
+    urls.push(url)
+    if (urls.length >= EVENT_DRAFT_GALLERY_MAX) break
+  }
+  return urls
+}
+
 function parseDraftValidDayIds(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
   return [
@@ -703,6 +730,12 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
     },
     flyerUrl: asOptionalString(record.flyerUrl),
     bannerUrl: asOptionalString(record.bannerUrl),
+    promoVideoUrl: asOptionalString(record.promoVideoUrl ?? record.promo_video_url),
+    galleryUrls: parseDraftGalleryUrls(
+      record.galleryUrls ?? record.gallery_urls,
+    ),
+    restrictions: asOptionalString(record.restrictions),
+    whatToBring: asOptionalString(record.whatToBring ?? record.what_to_bring),
     venueCapacity: asFiniteNumber(record.venueCapacity),
     lineup: parseDraftLineup(record.lineup),
     tickets: parseDraftLineItems(record.tickets).map((ticket) =>

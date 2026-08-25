@@ -5,7 +5,7 @@ import Image from "next/image"
 import { Controller, useFormContext, useWatch } from "react-hook-form"
 
 import { EventEditorV2SettingsStep } from "./event-editor-v2-settings"
-import { DraftCard, DraftHint } from "./event-editor-v2-ui"
+import { BENTO_GRID_CLASS, DraftCard, DraftHint } from "./event-editor-v2-ui"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -76,8 +76,8 @@ export function EventEditorV2LaunchStep({
   })
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className={BENTO_GRID_CLASS}>
+      <div className="md:col-span-12">
         <p className="text-xs font-bold tracking-[0.18em] text-emerald-400 uppercase">
           Centro de lanzamiento
         </p>
@@ -90,10 +90,9 @@ export function EventEditorV2LaunchStep({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
-        <CatalogPreviewCard preview={preview} />
+      <CatalogPreviewCard preview={preview} />
 
-        <DraftCard>
+      <DraftCard className="md:col-span-8">
           <div className="mb-4 flex flex-col items-start justify-between gap-3 sm:flex-row sm:gap-4">
             <div className="min-w-0">
               <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
@@ -165,9 +164,8 @@ export function EventEditorV2LaunchStep({
             </p>
           )}
         </DraftCard>
-      </div>
 
-      <DraftCard>
+      <DraftCard className="md:col-span-12">
         <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
           Pre-Flight Checklist
         </h3>
@@ -205,7 +203,7 @@ export function EventEditorV2LaunchStep({
 
       <EventEditorV2SettingsStep />
 
-      <div className="flex flex-col gap-3 border-t border-border/60 pt-6 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-3 border-t border-border/60 pt-6 md:col-span-12 md:flex-row md:items-center md:justify-between">
         <p className="text-sm text-muted-foreground">
           {launchReady
             ? isPublished
@@ -286,7 +284,7 @@ function CatalogPreviewCard({
         : `Desde ${formatTicketPrice(preview.minPrice)}`
 
   return (
-    <DraftCard className="overflow-hidden p-4">
+    <DraftCard className="overflow-hidden p-4 md:col-span-4">
       <p className="mb-3 text-[10px] font-bold tracking-[0.18em] text-muted-foreground uppercase">
         Vista previa del catálogo
       </p>

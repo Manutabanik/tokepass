@@ -63,6 +63,10 @@ describe("eventDraftSchema", () => {
     assert.equal(parsed.virtualLink, "")
     assert.equal(parsed.schedule.length, 0)
     assert.deepEqual(parsed.lineup, [])
+    assert.equal(parsed.promoVideoUrl, "")
+    assert.deepEqual(parsed.galleryUrls, [])
+    assert.equal(parsed.restrictions, "")
+    assert.equal(parsed.whatToBring, "")
   })
 
   it("emptyEventDraftV2 starts with a single default day", () => {
@@ -335,6 +339,29 @@ describe("parseEventDraftV2", () => {
     assert.equal(parsed.tickets[0]?.endDate, "")
     assert.equal(parsed.extras[0]?.minOrder, 1)
     assert.equal(parsed.settings.checkoutMessage, "Gracias")
+    assert.equal(parsed.promoVideoUrl, "")
+    assert.deepEqual(parsed.galleryUrls, [])
+  })
+
+  it("reads experience fields from camelCase and snake_case JSON", () => {
+    const parsed = parseEventDraftV2({
+      promo_video_url: "https://youtu.be/dQw4w9WgXcQ",
+      gallery_urls: [
+        "https://cdn.example/1.jpg",
+        "https://cdn.example/2.jpg",
+        "not-a-url-but-kept-in-draft",
+      ],
+      restrictions: "+18",
+      what_to_bring: "DNI",
+    })
+    assert.equal(parsed.promoVideoUrl, "https://youtu.be/dQw4w9WgXcQ")
+    assert.deepEqual(parsed.galleryUrls, [
+      "https://cdn.example/1.jpg",
+      "https://cdn.example/2.jpg",
+      "not-a-url-but-kept-in-draft",
+    ])
+    assert.equal(parsed.restrictions, "+18")
+    assert.equal(parsed.whatToBring, "DNI")
   })
 
   it("keeps optional ticket sale windows without blocking the draft schema", () => {

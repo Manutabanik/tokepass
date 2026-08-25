@@ -114,7 +114,7 @@ export function InventorySummaryTable() {
   }
 
   return (
-    <DraftCard>
+    <DraftCard className="md:col-span-6">
       <div className="mb-4 flex items-center gap-2">
         <LayoutList className="size-4 text-emerald-400" aria-hidden />
         <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">

@@ -304,6 +304,10 @@ export type Event = {
   promo_video_url: string | null
   /** Hasta 4 URLs de galería (imágenes ligeras). */
   gallery_urls: string[] | null
+  /** Texto libre de restricciones y edad. */
+  restrictions: string | null
+  /** Texto libre de qué llevar / qué no llevar. */
+  what_to_bring: string | null
   /** Flyer vertical 9:16 para Stories post-compra (opcional). */
   social_share_image_url: string | null
   /** PRESENCIAL = puerta/QR. ONLINE = transmisión virtual. */
@@ -1274,6 +1278,8 @@ type EventInsert = Omit<
   | "ga4_enabled"
   | "promo_video_url"
   | "gallery_urls"
+  | "restrictions"
+  | "what_to_bring"
   | "social_share_image_url"
   | "category_id"
   | "age_restriction"
@@ -1330,6 +1336,8 @@ type EventInsert = Omit<
   ga4_enabled?: boolean
   promo_video_url?: string | null
   gallery_urls?: string[] | null
+  restrictions?: string | null
+  what_to_bring?: string | null
   social_share_image_url?: string | null
   slug?: string
   venue_map?: Json

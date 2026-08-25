@@ -12,6 +12,7 @@ import {
   parseEventDraftV2,
   type EventDraftV2,
   type EventDraftV2LineItem,
+  type EventDraftV2LineupItem,
 } from "@/lib/validations/event-draft-v2"
 import { composeVenuePlace } from "@/lib/venues/compose-location"
 import { isStreamingVenue } from "@/lib/venues/streaming-venue"
@@ -60,6 +61,11 @@ export type LiveEventSnapshotV2 = {
     delivery_mode: string | null
     venue_map: unknown
     schedule_days?: unknown
+    promo_video_url?: string | null
+    gallery_urls?: unknown
+    restrictions?: string | null
+    what_to_bring?: string | null
+    lineup?: unknown
   }
   venue: LiveEventVenueSnapshotV2 | null
   tickets: LiveEventTicketSnapshotV2[]
@@ -69,6 +75,7 @@ export type LiveEventSnapshotV2 = {
     start_time: string
     end_time: string
   }> | null
+  lineup?: EventDraftV2LineupItem[] | null
 }
 
 export function isEventDraftStateEmpty(raw: unknown): boolean {
@@ -176,6 +183,11 @@ export function rehydrateEventDraftV2(
     },
     flyerUrl: event.flyer_url || event.image_url || "",
     bannerUrl: event.social_share_image_url || "",
+    promoVideoUrl: event.promo_video_url ?? "",
+    galleryUrls: event.gallery_urls,
+    restrictions: event.restrictions ?? "",
+    whatToBring: event.what_to_bring ?? "",
+    lineup: snapshot.lineup ?? event.lineup,
     venueCapacity:
       Math.max(
         0,
@@ -234,4 +246,56 @@ function asOptionalCoord(value: unknown): number | undefined {
   if (value == null || value === "") return undefined
   const parsed = typeof value === "number" ? value : Number(value)
   return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function rawHasKeys(raw: unknown, keys: string[]): boolean {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false
+  return keys.some((key) => key in raw)
+}
+
+export function overlayLiveExperienceOnDraft(
+  draft: EventDraftV2,
+  live: {
+    promoVideoUrl?: string | null
+    galleryUrls?: unknown
+    restrictions?: string | null
+    whatToBring?: string | null
+    lineup?: EventDraftV2LineupItem[] | null
+  },
+  raw?: unknown,
+): { draft: EventDraftV2; changed: boolean } {
+  const promoVideoUrl = rawHasKeys(raw, ["promoVideoUrl", "promo_video_url"])
+    ? draft.promoVideoUrl
+    : draft.promoVideoUrl.trim() || (live.promoVideoUrl ?? "").trim()
+  const galleryUrls = rawHasKeys(raw, ["galleryUrls", "gallery_urls"])
+    ? draft.galleryUrls
+    : draft.galleryUrls.length > 0
+      ? draft.galleryUrls
+      : live.galleryUrls
+  const restrictions = rawHasKeys(raw, ["restrictions"])
+    ? draft.restrictions
+    : draft.restrictions.trim() || (live.restrictions ?? "").trim()
+  const whatToBring = rawHasKeys(raw, ["whatToBring", "what_to_bring"])
+    ? draft.whatToBring
+    : draft.whatToBring.trim() || (live.whatToBring ?? "").trim()
+  const lineup = rawHasKeys(raw, ["lineup"])
+    ? draft.lineup
+    : draft.lineup.length > 0
+      ? draft.lineup
+      : (live.lineup ?? [])
+  const next = parseEventDraftV2({
+    ...draft,
+    promoVideoUrl,
+    galleryUrls,
+    restrictions,
+    whatToBring,
+    lineup,
+  })
+  const changed =
+    next.promoVideoUrl !== draft.promoVideoUrl ||
+    next.restrictions !== draft.restrictions ||
+    next.whatToBring !== draft.whatToBring ||
+    next.galleryUrls.join("\n") !== draft.galleryUrls.join("\n") ||
+    next.lineup.length !== draft.lineup.length
+  return { draft: next, changed }
 }

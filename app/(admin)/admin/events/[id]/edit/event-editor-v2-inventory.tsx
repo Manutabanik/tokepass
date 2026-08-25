@@ -8,6 +8,7 @@ import { DraftInventoryAccordionCard } from "./event-editor-v2-inventory-card"
 import { InventorySummaryTable } from "./event-editor-v2-inventory-table"
 import { EventEditorV2SeatingMap } from "./event-editor-v2-seating-map"
 import {
+  BENTO_GRID_CLASS,
   DRAFT_FIELD_CLASS,
   DraftAddButton,
   DraftCard,
@@ -45,15 +46,15 @@ export function EventEditorV2InventoryStep({ eventId }: { eventId: string }) {
   const ticketsLabel = labels.tickets
 
   return (
-    <div className="space-y-6">
-      <DraftCard>
+    <div className={BENTO_GRID_CLASS}>
+      <DraftCard className="md:col-span-6">
         <div className="mb-4 flex items-center gap-2">
           <Users className="size-4 text-emerald-400" aria-hidden />
           <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
             {labels.capacity}
           </h2>
         </div>
-        <div className="grid max-w-xl gap-3">
+        <div className="grid gap-3">
           <DraftFieldLabel
             htmlFor="event-v2-venue-capacity"
             required
@@ -219,7 +220,7 @@ function DraftLineItemList({
       : fields.length
 
   return (
-    <section className="space-y-3">
+    <DraftCard className="space-y-3 md:col-span-12">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-zinc-200">
@@ -295,6 +296,6 @@ function DraftLineItemList({
           {addLabel}
         </DraftAddButton>
       ) : null}
-    </section>
+    </DraftCard>
   )
 }

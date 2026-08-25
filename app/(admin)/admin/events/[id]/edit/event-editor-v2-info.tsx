@@ -6,9 +6,14 @@ import { useFormContext, useWatch } from "react-hook-form"
 import { EventEditorV2ArchetypePicker, useDraftArchetype } from "./event-editor-v2-archetype"
 import { EventEditorV2LocationFields } from "./event-editor-v2-location"
 import { EventEditorV2MediaField } from "./event-editor-v2-media"
+import {
+  EventEditorV2MultimediaCard,
+  EventEditorV2UsefulInfoCard,
+} from "./event-editor-v2-experience"
 import { EventEditorV2LineupFields } from "./event-editor-v2-lineup"
 import { EventEditorV2ScheduleFields } from "./event-editor-v2-schedule"
 import {
+  BENTO_GRID_CLASS,
   DRAFT_FIELD_CLASS,
   DraftCard,
   DraftFieldError,
@@ -47,11 +52,12 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+    <div className={BENTO_GRID_CLASS}>
+      <div className="md:col-span-6">
         <EventEditorV2ArchetypePicker />
+      </div>
         {supportsVirtual ? (
-          <DraftCard className="flex h-full flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+          <DraftCard className="flex h-full flex-col items-start justify-between gap-4 md:col-span-6 sm:flex-row sm:items-center">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <MonitorPlay className="size-4 text-emerald-400" aria-hidden />
@@ -77,16 +83,15 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
             />
           </DraftCard>
         ) : (
-          <DraftCard className="flex h-full items-center">
+          <DraftCard className="flex h-full items-center md:col-span-6">
             <p className="text-sm text-muted-foreground">
               Este tipo de evento es presencial. El lugar se completa al lado de
               las fechas.
             </p>
           </DraftCard>
         )}
-      </div>
 
-      <DraftCard>
+      <DraftCard className="md:col-span-12">
         <div className="mb-5 flex items-center gap-2">
           <Type className="size-4 text-emerald-400" aria-hidden />
           <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
@@ -115,7 +120,7 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
       <EventEditorV2LineupFields />
 
       {supportsVirtual && isVirtual ? (
-        <DraftCard>
+        <DraftCard className="md:col-span-12">
           <div className="grid gap-2">
             <DraftFieldLabel
               htmlFor="event-v2-virtual-link"
@@ -140,7 +145,7 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
         <EventEditorV2LocationFields />
       )}
 
-      <DraftCard>
+      <DraftCard className="md:col-span-12">
         <div className="mb-5 flex items-center gap-2">
           <ImagePlus className="size-4 text-emerald-400" aria-hidden />
           <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
@@ -164,6 +169,9 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
           />
         </div>
       </DraftCard>
+
+      <EventEditorV2MultimediaCard eventId={eventId} />
+      <EventEditorV2UsefulInfoCard />
     </div>
   )
 }

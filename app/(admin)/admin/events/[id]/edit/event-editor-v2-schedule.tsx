@@ -67,7 +67,7 @@ export function EventEditorV2ScheduleFields() {
   }
 
   return (
-    <DraftCard>
+    <DraftCard className="md:col-span-12">
       <div className="mb-5 flex items-center gap-2">
         <CalendarDays className="size-4 text-emerald-400" aria-hidden />
         <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">

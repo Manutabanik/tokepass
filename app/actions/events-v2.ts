@@ -4,8 +4,11 @@ import { revalidatePath } from "next/cache"
 
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
+import { hardReplacePublishedEventArtists } from "@/lib/events/hard-replace-event-artists-v2"
+import { eventArtistRowsToDraftLineup } from "@/lib/events/publish-event-v2-lineup"
 import {
   isEventDraftStateEmpty,
+  overlayLiveExperienceOnDraft,
   rehydrateEventDraftV2,
 } from "@/lib/events/rehydrate-event-draft-v2"
 import {
@@ -13,6 +16,7 @@ import {
   formatEventPublishIssues,
   freePublishCapacity,
   isPublishScheduleForeignKeyError,
+  publishedExperienceColumns,
   type PublishEventV2Issue,
   type PublishEventV2Payload,
   type PublishEventV2TierPayload,
@@ -35,8 +39,10 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import {
   eventPublishSchema,
+  parseDraftLineup,
   parseEventDraftV2,
   toEventDraftV2Payload,
+  type EventDraftV2LineupItem,
 } from "@/lib/validations/event-draft-v2"
 import { MAX_EVENT_FLYER_BYTES } from "@/lib/validations/event-form"
 import type { EventDeliveryMode, EventStatus, Json, TicketTier } from "@/types/database"
@@ -109,7 +115,7 @@ export async function getEventDraftV2(
   const { data, error } = await gate.supabase
     .from("events")
     .select(
-      "id, organizer_id, status, draft_state, title, date, ends_at, location, description, flyer_url, image_url, social_share_image_url, visibility, refund_policy, province, department, delivery_mode, venue_map, venue_id, schedule_days",
+      "id, organizer_id, status, draft_state, title, date, ends_at, location, description, flyer_url, image_url, social_share_image_url, visibility, refund_policy, province, department, delivery_mode, venue_map, venue_id, schedule_days, promo_video_url, gallery_urls, restrictions, what_to_bring, lineup",
     )
     .eq("id", id)
     .maybeSingle()
@@ -132,12 +138,68 @@ export async function getEventDraftV2(
     }
   }
 
+  const current = parseEventDraftV2(data.draft_state)
+  const liveLineup = await loadDraftLineupFromLiveEvent(gate.supabase, data.id, data.lineup)
+  const overlay = overlayLiveExperienceOnDraft(
+    current,
+    {
+      promoVideoUrl: data.promo_video_url,
+      galleryUrls: data.gallery_urls,
+      restrictions: data.restrictions,
+      whatToBring: data.what_to_bring,
+      lineup: liveLineup,
+    },
+    data.draft_state,
+  )
+  const restorePublishedLineup =
+    data.status === "published" &&
+    overlay.draft.lineup.length === 0 &&
+    liveLineup.length > 0
+  const nextDraft = restorePublishedLineup
+    ? parseEventDraftV2({ ...overlay.draft, lineup: liveLineup })
+    : overlay.draft
+  if (overlay.changed || restorePublishedLineup) {
+    const draftState = toEventDraftV2Payload(nextDraft) as Json
+    const written = await gate.supabase
+      .from("events")
+      .update({
+        draft_state: draftState,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", data.id)
+      .select("id, draft_state")
+      .maybeSingle()
+    return {
+      success: true,
+      eventId: data.id,
+      draftState: (written.data?.draft_state ?? draftState) as Json,
+      isPublished: data.status === "published",
+    }
+  }
+
   return {
     success: true,
     eventId: data.id,
     draftState: (data.draft_state ?? null) as Json | null,
     isPublished: data.status === "published",
   }
+}
+
+async function loadDraftLineupFromLiveEvent(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  eventId: string,
+  fallbackLineup: unknown,
+): Promise<EventDraftV2LineupItem[]> {
+  const query = await supabase
+    .from("event_artists")
+    .select("artist_id, stage, sort_order, artists(id, name, image_url, spotify_id)")
+    .eq("event_id", eventId)
+    .order("sort_order", { ascending: true })
+  if (!query.error) {
+    const mapped = eventArtistRowsToDraftLineup(query.data ?? [])
+    if (mapped.length > 0) return mapped
+  }
+  return parseDraftLineup(fallbackLineup)
 }
 
 async function persistRehydratedPublishedDraft(input: {
@@ -160,6 +222,11 @@ async function persistRehydratedPublishedDraft(input: {
     venue_map: unknown
     venue_id: string | null
     schedule_days?: unknown
+    promo_video_url?: string | null
+    gallery_urls?: unknown
+    restrictions?: string | null
+    what_to_bring?: string | null
+    lineup?: unknown
   }
 }): Promise<Json> {
   const venueQuery = input.event.venue_id
@@ -184,12 +251,18 @@ async function persistRehydratedPublishedDraft(input: {
     .eq("event_id", input.event.id)
     .order("start_time", { ascending: true })
 
+  const liveLineup = await loadDraftLineupFromLiveEvent(
+    input.supabase,
+    input.event.id,
+    input.event.lineup,
+  )
   const draftState = toEventDraftV2Payload(
     rehydrateEventDraftV2({
       event: input.event,
       venue: venueQuery.error ? null : (venueQuery.data ?? null),
       tickets: ticketsQuery.error ? [] : (ticketsQuery.data ?? []),
       schedules: schedulesQuery.error ? [] : (schedulesQuery.data ?? []),
+      lineup: liveLineup,
     }),
   ) as Json
 
@@ -279,7 +352,7 @@ function sanitizeMediaFileName(name: string): string {
 
 /**
  * Uploads an image to Storage and returns a public URL.
- * Does not write ticket_tiers, venues, or events.flyer_url.
+ * Does not write ticket_tiers, venues, events.flyer_url, or events.gallery_urls.
  */
 export async function uploadEventDraftMediaV2(
   eventId: string,
@@ -311,7 +384,8 @@ export async function uploadEventDraftMediaV2(
   }
 
   const kindRaw = String(formData.get("kind") ?? "flyer")
-  const kind = kindRaw === "banner" ? "banner" : "flyer"
+  const kind =
+    kindRaw === "banner" ? "banner" : kindRaw === "gallery" ? "gallery" : "flyer"
   const bytes = await readFileBytes(file)
   const raster = detectRasterImageMagic(bytes)
   if (!raster) {
@@ -619,6 +693,26 @@ async function unpackPublishedSchedule(
   if (written.error) throw new Error(formatSupabaseError(written.error))
 }
 
+async function unpackPublishedExperience(
+  eventId: string,
+  payload: PublishEventV2Payload,
+) {
+  const admin = createAdminClient()
+  const written = await admin
+    .from("events")
+    .update(publishedExperienceColumns(payload) as never)
+    .eq("id", eventId)
+  if (!written.error) return
+  if (
+    /restrictions|what_to_bring|promo_video_url|gallery_urls|schema cache|PGRST204|42703/i.test(
+      written.error.message,
+    )
+  ) {
+    return
+  }
+  throw new Error(formatSupabaseError(written.error))
+}
+
 async function unpackPublishEventV2Sequential(input: {
   eventId: string
   organizerId: string
@@ -627,6 +721,7 @@ async function unpackPublishEventV2Sequential(input: {
   existingImageUrl: string | null
   existingShareUrl: string | null
   payload: PublishEventV2Payload
+  lineup: EventDraftV2LineupItem[]
   targetStatus?: PublishEventV2Mode
   keepDraftState?: boolean
 }) {
@@ -636,6 +731,8 @@ async function unpackPublishEventV2Sequential(input: {
     venue: input.payload.venue,
     venueMap: input.payload.venue_map,
   })
+  // Children first: unlink ticket_tiers.day_id, sync tickets, write
+  // event_schedules / schedule_days, then rebind days. Avoids 23503.
   await unlinkPublishedTicketDays(input.eventId)
   const ticketDays = await syncPublishedTickets(
     input.eventId,
@@ -643,6 +740,10 @@ async function unpackPublishEventV2Sequential(input: {
   )
   await unpackPublishedSchedule(input.eventId, input.payload)
   await bindPublishedTicketDays(input.eventId, ticketDays)
+  await hardReplacePublishedEventArtists({
+    eventId: input.eventId,
+    lineup: input.lineup,
+  })
 
   const admin = createAdminClient()
   const written = await admin
@@ -679,6 +780,7 @@ async function unpackPublishEventV2Sequential(input: {
   if (!written.data?.id) {
     throw new Error("events.update publish no devolvió fila")
   }
+  await unpackPublishedExperience(input.eventId, input.payload)
   if (input.payload.has_seating_plan) {
     const materialized = await admin.rpc("materialize_event_seating_units", {
       p_event_id: input.eventId,
@@ -762,6 +864,7 @@ export async function publishEventV2(
     }
   }
 
+  const lineup = parsed.data.lineup ?? []
   let slug = event.slug
   if (targetStatus === "draft") {
     try {
@@ -773,6 +876,7 @@ export async function publishEventV2(
         existingImageUrl: event.image_url,
         existingShareUrl: event.social_share_image_url,
         payload,
+        lineup,
         targetStatus: "draft",
         keepDraftState: true,
       })
@@ -803,6 +907,7 @@ export async function publishEventV2(
           existingImageUrl: event.image_url,
           existingShareUrl: event.social_share_image_url,
           payload,
+          lineup,
         })
         slug = written.slug
       } catch (error) {
@@ -816,6 +921,8 @@ export async function publishEventV2(
         await unlinkPublishedTicketDays(id)
         await unpackPublishedSchedule(id, payload)
         await bindPublishedTicketDays(id, payload.tickets)
+        await hardReplacePublishedEventArtists({ eventId: id, lineup })
+        await unpackPublishedExperience(id, payload)
       } catch (error) {
         return {
           success: false,

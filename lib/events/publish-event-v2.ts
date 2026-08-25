@@ -1,4 +1,5 @@
 import { publishVenueMapFromDraft } from "@/lib/events/draft-seating-map-v2"
+import { parsePromoVideoUrl } from "@/lib/promo-video"
 import { calculateTierPricing } from "@/lib/pricing/flexible-pricing"
 import {
   defaultEventFeeConfig,
@@ -10,6 +11,7 @@ import {
   type DraftScheduleOccurrence,
 } from "@/lib/events/draft-schedule-slots-v2"
 import {
+  EVENT_DRAFT_GALLERY_MAX,
   eventPublishSchema,
   isEventDraftOnline,
   isMapDraftTicket,
@@ -78,6 +80,10 @@ export type PublishEventV2Payload = {
   delivery_mode: "PRESENCIAL" | "ONLINE"
   venue_map?: Json
   has_seating_plan: boolean
+  promo_video_url: string | null
+  gallery_urls: string[]
+  restrictions: string | null
+  what_to_bring: string | null
   tickets: PublishEventV2TierPayload[]
 }
 
@@ -241,16 +247,48 @@ function resolvePublishedTicketDayId(
 export function composePublishDescription(input: {
   title: string
   checkoutMessage?: string
-  refundPolicy?: string
 }): string {
   const checkout = input.checkoutMessage?.trim() ?? ""
-  const refund = input.refundPolicy?.trim() ?? ""
-  const refundIsEnum =
-    refund === "organizer" || refund === "no_refunds" || refund === "until_24h"
-  const parts = [checkout]
-  if (refund && !refundIsEnum) parts.push(refund)
-  const description = parts.filter(Boolean).join("\n\n")
-  return description || input.title
+  return checkout || input.title
+}
+
+function publishOptionalText(value?: string | null): string | null {
+  const text = value?.trim() ?? ""
+  return text || null
+}
+
+function publishPromoVideoUrl(value?: string | null): string | null {
+  const raw = value?.trim() ?? ""
+  if (!raw) return null
+  return parsePromoVideoUrl(raw)?.canonicalUrl ?? raw
+}
+
+function publishGalleryUrls(urls?: string[] | null): string[] {
+  const seen = new Set<string>()
+  const next: string[] = []
+  for (const item of urls ?? []) {
+    const url = item.trim()
+    if (!url || seen.has(url)) continue
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") continue
+    } catch {
+      continue
+    }
+    seen.add(url)
+    next.push(url)
+    if (next.length >= EVENT_DRAFT_GALLERY_MAX) break
+  }
+  return next
+}
+
+export function publishedExperienceColumns(payload: PublishEventV2Payload) {
+  return {
+    promo_video_url: payload.promo_video_url,
+    gallery_urls: payload.gallery_urls,
+    restrictions: payload.restrictions,
+    what_to_bring: payload.what_to_bring,
+  }
 }
 
 export function buildPublishEventV2Payload(
@@ -337,8 +375,11 @@ export function buildPublishEventV2Payload(
     description: composePublishDescription({
       title,
       checkoutMessage: parsed.settings?.checkoutMessage,
-      refundPolicy: parsed.settings?.refundPolicy,
     }),
+    promo_video_url: publishPromoVideoUrl(parsed.promoVideoUrl),
+    gallery_urls: publishGalleryUrls(parsed.galleryUrls),
+    restrictions: publishOptionalText(parsed.restrictions),
+    what_to_bring: publishOptionalText(parsed.whatToBring),
     venue: {
       name: isOnline ? STREAMING_VENUE_NAME : venueName,
       location,
