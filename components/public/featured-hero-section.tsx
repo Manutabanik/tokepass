@@ -137,7 +137,7 @@ export function FeaturedHeroSection({
             <button
               type="button"
               onClick={scrollPrev}
-              className="absolute top-1/2 left-2 z-30 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/50 text-white shadow-xl backdrop-blur-md transition hover:bg-black/70 md:flex"
+              className="absolute top-1/2 left-2 z-30 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full border border-zinc-200 bg-white/90 text-zinc-900 shadow-sm backdrop-blur-md transition hover:bg-white dark:border-zinc-700 dark:bg-zinc-950/80 dark:text-white dark:shadow-none dark:hover:bg-zinc-900 md:flex"
               aria-label="Evento anterior"
             >
               <ChevronLeft className="size-5" />
@@ -145,7 +145,7 @@ export function FeaturedHeroSection({
             <button
               type="button"
               onClick={scrollNext}
-              className="absolute top-1/2 right-2 z-30 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/50 text-white shadow-xl backdrop-blur-md transition hover:bg-black/70 md:flex"
+              className="absolute top-1/2 right-2 z-30 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full border border-zinc-200 bg-white/90 text-zinc-900 shadow-sm backdrop-blur-md transition hover:bg-white dark:border-zinc-700 dark:bg-zinc-950/80 dark:text-white dark:shadow-none dark:hover:bg-zinc-900 md:flex"
               aria-label="Siguiente evento"
             >
               <ChevronRight className="size-5" />

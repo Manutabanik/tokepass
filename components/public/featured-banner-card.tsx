@@ -45,12 +45,12 @@ export function FeaturedBannerCard({
     .join(" · ")
 
   return (
-    <article className="dark relative isolate mx-auto flex h-auto w-full max-w-7xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-black text-white shadow-none md:h-[460px] md:flex-row [color-scheme:dark]">
-      <div className="relative z-10 order-2 flex w-full flex-col justify-between bg-black p-6 text-white md:order-1 md:w-1/2 md:p-10">
+    <article className="relative isolate mx-auto flex h-auto w-full max-w-7xl flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white text-zinc-900 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:shadow-none md:h-[460px] md:flex-row">
+      <div className="relative z-10 order-2 flex w-full flex-col justify-between bg-white p-6 text-zinc-900 dark:bg-zinc-950 dark:text-white md:order-1 md:w-1/2 md:p-10">
         <div>
           <div className="mb-4 flex flex-wrap items-center gap-2">
             {category ? (
-              <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300">
+              <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
                 {category.label}
               </span>
             ) : null}
@@ -60,13 +60,13 @@ export function FeaturedBannerCard({
             </span>
           </div>
 
-          <p className="text-sm font-bold tracking-wide text-emerald-400 uppercase">
+          <p className="text-sm font-bold tracking-wide text-emerald-600 uppercase dark:text-emerald-400">
             {dateLabel}
           </p>
-          <h2 className="mt-2 mb-3 line-clamp-2 text-3xl leading-tight font-black text-white md:text-5xl">
+          <h2 className="mt-2 mb-3 line-clamp-2 text-3xl leading-tight font-black text-zinc-900 md:text-5xl dark:text-white">
             {event.title}
           </h2>
-          <p className="mb-4 flex items-center gap-1 text-sm font-medium text-emerald-400/90">
+          <p className="mb-4 flex items-center gap-1 text-sm font-medium text-emerald-600/90 dark:text-emerald-400/90">
             <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
             <span className="line-clamp-1">{locationLabel}</span>
           </p>
@@ -80,11 +80,11 @@ export function FeaturedBannerCard({
                     name={artist.name}
                     imageUrl={artist.imageUrl}
                     size="xs"
-                    className="h-8 w-8 shrink-0 rounded-full border-2 border-black shadow-none"
+                    className="h-8 w-8 shrink-0 rounded-full border-2 border-white shadow-none dark:border-zinc-950"
                   />
                 ))}
               </div>
-              <span className="line-clamp-1 text-xs font-medium text-white/90">
+              <span className="line-clamp-1 text-xs font-medium text-zinc-700 dark:text-white/90">
                 {artistNames}
               </span>
             </div>
@@ -107,7 +107,7 @@ export function FeaturedBannerCard({
         </Button>
       </div>
 
-      <div className="relative order-1 flex h-[260px] w-full items-center justify-center bg-black md:order-2 md:h-full md:w-1/2">
+      <div className="relative order-1 h-72 w-full overflow-hidden md:order-2 md:h-full md:w-1/2">
         {coverUrl ? (
           <Image
             src={coverUrl}
@@ -115,7 +115,7 @@ export function FeaturedBannerCard({
             fill
             priority={priority}
             sizes="(max-width: 768px) 100vw, 50vw"
-            className="object-contain object-center"
+            className="h-full w-full rounded-t-2xl object-cover object-center md:rounded-l-none md:rounded-r-2xl"
           />
         ) : null}
 
