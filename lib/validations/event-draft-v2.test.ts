@@ -5,6 +5,7 @@ import {
   draftCapacityThermometer,
   emptyEventDraftV2,
   eventDraftSchema,
+  eventPublishDisabledReason,
   eventPublishSchema,
   isEventDraftPublishable,
   parseEventDraftV2,
@@ -59,6 +60,7 @@ describe("eventPublishSchema", () => {
   it("rejects an empty draft", () => {
     assert.equal(eventPublishSchema.safeParse(emptyEventDraftV2()).success, false)
     assert.equal(isEventDraftPublishable(emptyEventDraftV2()), false)
+    assert.ok(eventPublishDisabledReason(emptyEventDraftV2()).length > 0)
   })
 
   it("requires ticket stock greater than 0", () => {

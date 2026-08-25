@@ -8,6 +8,7 @@ import {
   DRAFT_FIELD_CLASS,
   DraftCard,
   DraftFieldError,
+  DraftHint,
 } from "./event-editor-v2-ui"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,44 +21,37 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
   } = useFormContext<EventDraftV2>()
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <DraftCard>
-        <div className="mb-4 flex items-center gap-2">
+        <div className="mb-5 flex items-center gap-2">
           <Type className="size-4 text-emerald-400" aria-hidden />
           <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-            Identidad del evento
+            Datos del evento
           </h2>
         </div>
-        <div className="grid gap-2">
-          <Label
-            htmlFor="event-v2-name"
-            className="text-sm font-bold text-slate-800 dark:text-zinc-200"
-          >
-            Nombre del evento
-          </Label>
-          <Input
-            id="event-v2-name"
-            className={DRAFT_FIELD_CLASS}
-            placeholder="Ej. After en la terraza"
-            {...register("basicInfo.name")}
-          />
-          <DraftFieldError message={errors.basicInfo?.name?.message} />
-        </div>
-      </DraftCard>
-
-      <DraftCard>
-        <div className="mb-4 flex items-center gap-2">
-          <CalendarDays className="size-4 text-emerald-400" aria-hidden />
-          <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-            Fechas
-          </h2>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid gap-2 md:col-span-2">
+            <Label
+              htmlFor="event-v2-name"
+              className="text-sm font-bold text-slate-800 dark:text-zinc-200"
+            >
+              Nombre del evento
+            </Label>
+            <Input
+              id="event-v2-name"
+              className={DRAFT_FIELD_CLASS}
+              placeholder="Ej. After en la terraza"
+              {...register("basicInfo.name")}
+            />
+            <DraftHint>Así lo van a ver en el catálogo y en las entradas.</DraftHint>
+            <DraftFieldError message={errors.basicInfo?.name?.message} />
+          </div>
           <div className="grid gap-2">
             <Label
               htmlFor="event-v2-start-date"
-              className="text-sm font-bold text-slate-800 dark:text-zinc-200"
+              className="flex items-center gap-1.5 text-sm font-bold text-slate-800 dark:text-zinc-200"
             >
+              <CalendarDays className="size-3.5 text-emerald-400" aria-hidden />
               Fecha de inicio
             </Label>
             <Input
@@ -71,8 +65,9 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
           <div className="grid gap-2">
             <Label
               htmlFor="event-v2-end-date"
-              className="text-sm font-bold text-slate-800 dark:text-zinc-200"
+              className="flex items-center gap-1.5 text-sm font-bold text-slate-800 dark:text-zinc-200"
             >
+              <CalendarDays className="size-3.5 text-emerald-400" aria-hidden />
               Fecha de fin
             </Label>
             <Input
@@ -81,43 +76,37 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
               className={DRAFT_FIELD_CLASS}
               {...register("basicInfo.endDate")}
             />
+            <DraftHint>Tiene que ser posterior al inicio.</DraftHint>
             <DraftFieldError message={errors.basicInfo?.endDate?.message} />
+          </div>
+          <div className="grid gap-2 md:col-span-2">
+            <Label
+              htmlFor="event-v2-location"
+              className="flex items-center gap-1.5 text-sm font-bold text-slate-800 dark:text-zinc-200"
+            >
+              <MapPin className="size-3.5 text-emerald-400" aria-hidden />
+              Nombre del lugar
+            </Label>
+            <Input
+              id="event-v2-location"
+              className={DRAFT_FIELD_CLASS}
+              placeholder="Ej. Club Atlético, Salón Norte"
+              {...register("basicInfo.locationName")}
+            />
+            <DraftHint>Podés dejar la dirección exacta para más adelante.</DraftHint>
+            <DraftFieldError message={errors.basicInfo?.locationName?.message} />
           </div>
         </div>
       </DraftCard>
 
       <DraftCard>
-        <div className="mb-4 flex items-center gap-2">
-          <MapPin className="size-4 text-emerald-400" aria-hidden />
-          <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-            Lugar
-          </h2>
-        </div>
-        <div className="grid gap-2">
-          <Label
-            htmlFor="event-v2-location"
-            className="text-sm font-bold text-slate-800 dark:text-zinc-200"
-          >
-            Nombre del lugar
-          </Label>
-          <Input
-            id="event-v2-location"
-            className={DRAFT_FIELD_CLASS}
-            placeholder="Ej. Club Atlético, Salón Norte"
-            {...register("basicInfo.locationName")}
-          />
-          <DraftFieldError message={errors.basicInfo?.locationName?.message} />
-        </div>
-      </DraftCard>
-
-      <DraftCard>
-        <div className="mb-4 flex items-center gap-2">
+        <div className="mb-5 flex items-center gap-2">
           <ImagePlus className="size-4 text-emerald-400" aria-hidden />
           <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
             Imágenes
           </h2>
         </div>
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <EventEditorV2MediaField
             eventId={eventId}
             name="flyerUrl"

@@ -3,7 +3,13 @@ import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
 export const DRAFT_FIELD_CLASS =
-  "h-10 rounded-lg border border-slate-200 bg-white px-3 text-slate-900 dark:border-zinc-800 dark:bg-zinc-900/90 dark:text-white"
+  "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-900 transition-all duration-200 focus-visible:border-emerald-500 focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-gray-700 dark:bg-gray-900/80 dark:text-white"
+
+export const DRAFT_TEXTAREA_CLASS =
+  "min-h-24 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-slate-900 transition-all duration-200 focus-visible:border-emerald-500 focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-gray-700 dark:bg-gray-900/80 dark:text-white"
+
+export const DRAFT_TICKET_CARD_CLASS =
+  "relative rounded-xl border border-slate-200 bg-white/80 p-4 pt-12 transition-all duration-200 hover:border-slate-300 dark:border-gray-700/50 dark:bg-gray-800/50 dark:hover:border-gray-600"
 
 export function DraftCard({
   children,
@@ -15,12 +21,34 @@ export function DraftCard({
   return (
     <section
       className={cn(
-        "rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/70",
+        "rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-sm transition-all duration-200 dark:border-gray-800 dark:bg-gray-950/70",
         className,
       )}
     >
       {children}
     </section>
+  )
+}
+
+export function DraftHint({ children }: { children: ReactNode }) {
+  return <p className="text-sm text-gray-500">{children}</p>
+}
+
+export function DraftAddButton({
+  children,
+  onClick,
+}: {
+  children: ReactNode
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-transparent px-4 py-3 text-sm font-medium text-gray-400 transition-all duration-200 hover:border-emerald-500/50 hover:text-emerald-400 dark:border-gray-700"
+    >
+      {children}
+    </button>
   )
 }
 

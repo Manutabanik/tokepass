@@ -6,8 +6,12 @@ import { useFieldArray, useFormContext, useWatch } from "react-hook-form"
 
 import {
   DRAFT_FIELD_CLASS,
+  DRAFT_TEXTAREA_CLASS,
+  DRAFT_TICKET_CARD_CLASS,
+  DraftAddButton,
   DraftCard,
   DraftFieldError,
+  DraftHint,
 } from "./event-editor-v2-ui"
 import { Button } from "@/components/ui/button"
 import {
@@ -50,7 +54,7 @@ export function EventEditorV2InventoryStep() {
             htmlFor="event-v2-venue-capacity"
             className="text-sm font-bold text-slate-800 dark:text-zinc-200"
           >
-            Capacidad máxima
+            Capacidad del recinto
           </Label>
           <Input
             id="event-v2-venue-capacity"
@@ -61,6 +65,10 @@ export function EventEditorV2InventoryStep() {
             className={DRAFT_FIELD_CLASS}
             {...register("venueCapacity", { setValueAs: draftNumberValue })}
           />
+          <DraftHint>
+            Este número define el tope máximo del termómetro. Los extras no ocupan
+            lugar.
+          </DraftHint>
           {meter.overCapacity ? (
             <p
               role="status"
@@ -111,7 +119,7 @@ function SeatingMapPlaceholder() {
             <MapPinned className="size-4 text-emerald-400" aria-hidden />
             Mapa de asientos
           </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-sm text-gray-500">
             Opcional. La estructura vive en el JSON, no en tablas relacionales.
             {sectorCount > 0
               ? ` ${sectorCount} sector${sectorCount === 1 ? "" : "es"} en el borrador.`
@@ -238,33 +246,26 @@ function DraftLineItemList({
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         </div>
-        {fields.length > 0 ? (
-          <Button type="button" variant="outline" size="sm" onClick={addItem}>
-            <Plus className="size-4" />
-            {addLabel}
-          </Button>
-        ) : null}
       </div>
 
       {fields.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white/40 px-6 py-12 text-center dark:border-zinc-800 dark:bg-zinc-950/40">
-          <EmptyIcon className="size-10 text-muted-foreground" aria-hidden />
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white/40 px-6 py-12 text-center transition-all duration-200 dark:border-gray-700 dark:bg-gray-950/40">
+          <EmptyIcon className="size-10 text-gray-400" aria-hidden />
           <p className="mt-3 text-sm font-semibold text-foreground">{emptyTitle}</p>
-          <p className="mt-1 max-w-sm text-xs text-muted-foreground">{emptyHint}</p>
-          <Button type="button" className="mt-5" onClick={addItem}>
-            <Plus className="size-4" />
-            {addLabel}
-          </Button>
+          <p className="mt-1 max-w-sm text-sm text-gray-500">{emptyHint}</p>
+          <div className="mt-5 w-full max-w-xs">
+            <DraftAddButton onClick={addItem}>
+              <Plus className="size-4" />
+              {addLabel}
+            </DraftAddButton>
+          </div>
         </div>
       ) : (
         <ul className="space-y-3">
           {fields.map((field, index) => {
             const itemErrors = errors[name]?.[index]
             return (
-              <li
-                key={field._rowId}
-                className="relative rounded-2xl border border-slate-200/80 bg-white/70 p-4 pt-12 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/70"
-              >
+              <li key={field._rowId} className={DRAFT_TICKET_CARD_CLASS}>
                 <input type="hidden" {...register(`${name}.${index}.id`)} />
                 <Button
                   type="button"
@@ -277,7 +278,7 @@ function DraftLineItemList({
                   <Trash2 className="size-4" />
                 </Button>
 
-                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem_7rem]">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_8rem_8rem]">
                   <div className="grid gap-1.5">
                     <Label
                       htmlFor={`event-v2-${name}-${index}-name`}
@@ -345,13 +346,15 @@ function DraftLineItemList({
                   <Textarea
                     id={`event-v2-${name}-${index}-description`}
                     rows={2}
+                    className={DRAFT_TEXTAREA_CLASS}
                     placeholder="Qué incluye o cómo se usa."
                     {...register(`${name}.${index}.description`)}
                   />
+                  <DraftHint>Una línea alcanza. El comprador lo ve en el checkout.</DraftHint>
                   <DraftFieldError message={itemErrors?.description?.message} />
                 </div>
 
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                   <div className="grid gap-1.5">
                     <Label
                       htmlFor={`event-v2-${name}-${index}-min`}
@@ -370,6 +373,7 @@ function DraftLineItemList({
                         setValueAs: (value) => draftNumberValue(value, 1),
                       })}
                     />
+                    <DraftHint>Mínimo que puede llevar cada persona.</DraftHint>
                     <DraftFieldError message={itemErrors?.minOrder?.message} />
                   </div>
                   <div className="grid gap-1.5">
@@ -390,6 +394,7 @@ function DraftLineItemList({
                         setValueAs: (value) => draftNumberValue(value, 10),
                       })}
                     />
+                    <DraftHint>Tope por compra. Evita acaparamientos.</DraftHint>
                     <DraftFieldError message={itemErrors?.maxOrder?.message} />
                   </div>
                 </div>
@@ -398,6 +403,13 @@ function DraftLineItemList({
           })}
         </ul>
       )}
+
+      {fields.length > 0 ? (
+        <DraftAddButton onClick={addItem}>
+          <Plus className="size-4" />
+          {addLabel}
+        </DraftAddButton>
+      ) : null}
     </section>
   )
 }

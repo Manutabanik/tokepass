@@ -207,6 +207,15 @@ export function isEventDraftPublishable(values: unknown) {
   return eventPublishSchema.safeParse(values).success
 }
 
+export function eventPublishDisabledReason(values: unknown): string {
+  const result = eventPublishSchema.safeParse(values)
+  if (result.success) return ""
+  return result.error.issues
+    .slice(0, 3)
+    .map((issue) => issue.message)
+    .join(" · ")
+}
+
 export function parseEventDraftV2(raw: unknown): EventDraftV2 {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return emptyEventDraftV2()

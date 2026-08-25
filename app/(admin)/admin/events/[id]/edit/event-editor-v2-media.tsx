@@ -83,7 +83,7 @@ export function EventEditorV2MediaField({
         type="button"
         disabled={busy}
         onClick={() => inputRef.current?.click()}
-        className="relative flex min-h-36 w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-white/40 text-left dark:border-zinc-800 dark:bg-zinc-950/40"
+        className="relative flex min-h-36 w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-white/40 text-left transition-all duration-200 hover:border-emerald-500/40 dark:border-gray-700 dark:bg-gray-950/40"
       >
         {url ? (
           <img src={url} alt={label} className="absolute inset-0 size-full object-cover" />

@@ -13,15 +13,31 @@ import { saveEventDraftV2 } from "@/app/actions/events-v2"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
+  eventPublishDisabledReason,
   isEventDraftPublishable,
   toEventDraftV2Payload,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
 
 const STEPS = [
-  { id: 1, label: "1. Información", icon: Type },
-  { id: 2, label: "2. Entradas y Aforo", icon: Ticket },
-  { id: 3, label: "3. Configuración", icon: Settings2 },
+  {
+    id: 1,
+    label: "Información",
+    hint: "Nombre, fechas e imágenes",
+    icon: Type,
+  },
+  {
+    id: 2,
+    label: "Entradas",
+    hint: "Aforo, tickets y extras",
+    icon: Ticket,
+  },
+  {
+    id: 3,
+    label: "Configuración",
+    hint: "Visibilidad y políticas",
+    icon: Settings2,
+  },
 ] as const
 
 type EventEditorV2Props = {
@@ -44,8 +60,10 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
     shouldUnregister: false,
   })
   const { watch, getValues } = form
-  const title = watch("basicInfo.name")
-  const canPublish = isEventDraftPublishable(watch())
+  const values = watch()
+  const title = values.basicInfo?.name
+  const canPublish = isEventDraftPublishable(values)
+  const publishReason = canPublish ? "" : eventPublishDisabledReason(values)
 
   useEffect(() => {
     let timer: number | undefined
@@ -85,7 +103,7 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
             <Link
               href="/admin/events"
               aria-label="Volver al Panel"
-              className="flex size-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-white/5 hover:text-foreground"
+              className="flex size-10 shrink-0 items-center justify-center rounded-full text-gray-400 transition-all duration-200 hover:bg-white/5 hover:text-foreground"
             >
               <ArrowLeft className="size-5" />
             </Link>
@@ -99,8 +117,8 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
               <h1 className="mt-1 truncate text-3xl font-black tracking-tight text-foreground">
                 {title?.trim() || "Sin título"}
               </h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Autoguardado en <code>draft_state</code>. No toca tickets ni recinto.
+              <p className="mt-2 text-sm text-gray-500">
+                Se guarda solo. Completá lo esencial y publicá cuando esté listo.
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-3">
@@ -110,7 +128,7 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
                   saveStatus === "saving" && "text-amber-600 dark:text-amber-300",
                   saveStatus === "saved" && "text-emerald-600 dark:text-emerald-400",
                   saveStatus === "error" && "text-red-600 dark:text-red-400",
-                  saveStatus === "idle" && "text-muted-foreground",
+                  saveStatus === "idle" && "text-gray-400",
                 )}
                 aria-live="polite"
               >
@@ -125,6 +143,17 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
               <Button
                 type="button"
                 disabled={!canPublish}
+                title={
+                  canPublish
+                    ? "Publicar el evento"
+                    : publishReason || "Completá los datos obligatorios para publicar."
+                }
+                className={cn(
+                  "transition-all duration-200",
+                  canPublish
+                    ? "bg-emerald-500 text-black hover:bg-emerald-400"
+                    : "cursor-not-allowed opacity-50",
+                )}
                 onClick={() =>
                   toast.message("El borrador ya cumple lo mínimo para publicar.", {
                     description:
@@ -137,30 +166,52 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
             </div>
           </header>
 
-          <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
+          <div className="grid gap-8 lg:grid-cols-[240px_minmax(0,1fr)]">
             <nav className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
-              {STEPS.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setStep(item.id)}
-                  className={cn(
-                    "inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition-colors",
-                    step === item.id
-                      ? "border-emerald-500/40 bg-emerald-500/10 text-foreground"
-                      : "border-border/60 text-muted-foreground hover:bg-white/5 hover:text-foreground",
-                  )}
-                >
-                  <item.icon className="mb-0.5 size-3.5 lg:mb-0" aria-hidden />
-                  {item.label}
-                </button>
-              ))}
+              {STEPS.map((item) => {
+                const active = step === item.id
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setStep(item.id)}
+                    className={cn(
+                      "inline-flex min-w-[9.5rem] shrink-0 items-start gap-3 rounded-xl border px-3 py-3 text-left transition-all duration-200 lg:min-w-0",
+                      active
+                        ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400"
+                        : "border-transparent text-gray-400 hover:border-gray-700/60 hover:bg-white/5 hover:text-gray-300",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border text-xs font-semibold transition-all duration-200",
+                        active
+                          ? "border-emerald-500/50 bg-emerald-500/15"
+                          : "border-gray-700 text-gray-400",
+                      )}
+                    >
+                      {item.id}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-1.5 text-sm font-semibold">
+                        <item.icon className="size-3.5" aria-hidden />
+                        {item.label}
+                      </span>
+                      <span className="mt-0.5 hidden text-xs text-gray-500 lg:block">
+                        {item.hint}
+                      </span>
+                    </span>
+                  </button>
+                )
+              })}
             </nav>
 
-            <section className="min-w-0 rounded-2xl border border-border/50 bg-white/40 p-5 dark:bg-zinc-950/40">
-              {step === 1 ? <EventEditorV2InfoStep eventId={eventId} /> : null}
-              {step === 2 ? <EventEditorV2InventoryStep /> : null}
-              {step === 3 ? <EventEditorV2SettingsStep /> : null}
+            <section className="min-w-0 rounded-2xl border border-border/50 bg-white/40 p-5 transition-all duration-200 dark:border-gray-800 dark:bg-gray-950/40">
+              <div key={step} className="animate-in fade-in duration-200">
+                {step === 1 ? <EventEditorV2InfoStep eventId={eventId} /> : null}
+                {step === 2 ? <EventEditorV2InventoryStep /> : null}
+                {step === 3 ? <EventEditorV2SettingsStep /> : null}
+              </div>
 
               {saveStatus === "error" && saveError ? (
                 <pre className="mt-6 overflow-auto whitespace-pre-wrap rounded-lg border border-red-500/40 bg-red-50 p-3 text-xs text-red-900 dark:bg-red-950/40 dark:text-red-100">
