@@ -1,8 +1,17 @@
 "use server"
 
+import { revalidatePath } from "next/cache"
+
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import {
+  emptyEventDraftV2,
+  toEventDraftV2Payload,
+} from "@/lib/validations/event-draft-v2"
+import { asUuidOrNull } from "@/lib/validations/relation-id"
+import type { Json } from "@/types/database"
 
 export type CreateEventDraftV2Result =
   | { success: true; eventId: string }
@@ -60,19 +69,54 @@ async function requireDraftActor(): Promise<
  * Bootstrap only: inserts a stub `events` row so `saveEventDraftV2` can UPDATE.
  * Does not write ticket_tiers or venues.
  */
-export async function createEventDraftV2(): Promise<CreateEventDraftV2Result> {
+export async function createEventDraftV2(options?: {
+  organizerId?: string
+}): Promise<CreateEventDraftV2Result> {
   const gate = await requireDraftActor()
   if (!gate.ok) return { success: false, error: gate.error }
 
-  const { data, error } = await gate.actor.supabase
+  const requestedOrganizerId = asUuidOrNull(options?.organizerId ?? null, [])
+  let organizerId = gate.actor.userId
+  let writer: typeof gate.actor.supabase | ReturnType<typeof createAdminClient> =
+    gate.actor.supabase
+
+  if (requestedOrganizerId && requestedOrganizerId !== gate.actor.userId) {
+    if (!gate.actor.isSuperAdmin) {
+      return {
+        success: false,
+        error: "No tenés permiso para crear eventos en nombre de otra productora.",
+      }
+    }
+
+    const admin = createAdminClient()
+    const { data: organizer, error: organizerError } = await admin
+      .from("profiles")
+      .select("id, role")
+      .eq("id", requestedOrganizerId)
+      .maybeSingle()
+    if (organizerError) {
+      return { success: false, error: formatSupabaseError(organizerError) }
+    }
+    if (
+      !organizer ||
+      (organizer.role !== "admin" && organizer.role !== "super_admin")
+    ) {
+      return { success: false, error: "No encontramos esa productora." }
+    }
+
+    organizerId = organizer.id
+    writer = admin
+  }
+
+  const { data, error } = await writer
     .from("events")
     .insert({
-      organizer_id: gate.actor.userId,
-      title: "Borrador V2",
+      organizer_id: organizerId,
+      title: "Nuevo evento",
       date: new Date().toISOString(),
       status: "draft",
       has_seating_plan: false,
-      draft_state: {},
+      draft_state: toEventDraftV2Payload(emptyEventDraftV2()) as Json,
     })
     .select("id")
     .maybeSingle()
@@ -89,5 +133,6 @@ export async function createEventDraftV2(): Promise<CreateEventDraftV2Result> {
     }
   }
 
+  revalidatePath("/admin/events")
   return { success: true, eventId: data.id }
 }

@@ -9,7 +9,7 @@ import { parseEventDraftV2 } from "@/lib/validations/event-draft-v2"
 export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
-  title: "Editar evento V2",
+  title: "Editar evento",
 }
 
 export default async function EditEventPage({

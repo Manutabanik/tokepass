@@ -1,14 +1,8 @@
 import type { Metadata } from "next"
+import Link from "next/link"
 import { redirect } from "next/navigation"
 
-import { getActiveEventCategories } from "@/app/actions/categories"
-import { getOrganizerLabel } from "@/app/actions/superadmin"
-import { listOrganizerVenues } from "@/app/actions/venues"
-import { EventCreationWizard } from "@/components/admin/event-creation-wizard"
-import {
-  DEFAULT_PLATFORM_FEE_PERCENTAGE,
-  DEFAULT_PLATFORM_FIXED_FEE,
-} from "@/lib/pricing/event-fees"
+import { createEventDraftV2 } from "@/app/actions/event-draft-v2"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
@@ -21,7 +15,10 @@ export default async function CreateEventPage({
   searchParams: Promise<{ organizerId?: string }>
 }) {
   const { organizerId: rawOrganizerId } = await searchParams
-  const requestedOrganizerId = rawOrganizerId?.trim() || null
+  const organizerId = rawOrganizerId?.trim() || undefined
+  const nextPath = organizerId
+    ? `/admin/events/create?organizerId=${encodeURIComponent(organizerId)}`
+    : "/admin/events/create"
 
   const supabase = await createClient()
   const {
@@ -29,46 +26,27 @@ export default async function CreateEventPage({
   } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect("/login-organizador?next=/admin/events/create")
+    redirect(`/login-organizador?next=${encodeURIComponent(nextPath)}`)
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle()
-
-  const isSuperAdmin = profile?.role === "super_admin"
-
-  let impersonation: { id: string; name: string } | null = null
-
-  if (requestedOrganizerId && isSuperAdmin) {
-    try {
-      const label = await getOrganizerLabel(requestedOrganizerId)
-      if (label) {
-        impersonation = { id: label.id, name: label.name }
-      }
-    } catch {
-      impersonation = null
-    }
-  }
-
-  const venues = await listOrganizerVenues(
-    impersonation ? { organizerId: impersonation.id } : {},
-  ).catch(() => [])
-  const categories = await getActiveEventCategories().catch(() => [])
-  const organizerServiceRate = DEFAULT_PLATFORM_FEE_PERCENTAGE / 100
-
-  return (
-    <EventCreationWizard
-      organizerServiceRate={organizerServiceRate}
-      platformFixedFee={DEFAULT_PLATFORM_FIXED_FEE}
-      targetOrganizerId={impersonation?.id ?? null}
-      impersonationName={impersonation?.name ?? null}
-      venues={venues}
-      categories={categories}
-      backHref={impersonation ? "/superadmin" : "/admin/events"}
-      backLabel={impersonation ? "Volver al Panel" : "Volver al Panel"}
-    />
+  const result = await createEventDraftV2(
+    organizerId ? { organizerId } : undefined,
   )
+
+  if (!result.success) {
+    return (
+      <main className="mx-auto max-w-lg p-6">
+        <h1 className="text-xl font-semibold">No se pudo crear el evento</h1>
+        <p className="mt-3 text-sm text-muted-foreground">{result.error}</p>
+        <Link
+          href="/admin/events"
+          className="mt-6 inline-flex text-sm font-semibold underline underline-offset-4"
+        >
+          Volver al panel
+        </Link>
+      </main>
+    )
+  }
+
+  redirect(`/admin/events/${result.eventId}/edit`)
 }
