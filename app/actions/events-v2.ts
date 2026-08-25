@@ -17,6 +17,7 @@ import {
   type PublishEventV2TierPayload,
 } from "@/lib/events/publish-event-v2"
 import { revalidatePublicEventCache } from "@/lib/events/revalidate-public-event"
+import { publicEventPath, publicEventUrl } from "@/lib/seo/site"
 import {
   bytesToBlob,
   detectRasterImageMagic,
@@ -342,7 +343,13 @@ export async function uploadEventDraftMediaV2(
 }
 
 export type PublishEventV2Result =
-  | { success: true; eventId: string }
+  | {
+      success: true
+      eventId: string
+      slug: string | null
+      publicPath: string
+      publicUrl: string
+    }
   | { success: false; error: string; issues?: PublishEventV2Issue[] }
 
 function isMissingPublishRpc(error: { code?: string; message?: string } | null) {
@@ -755,10 +762,25 @@ export async function publishEventV2(
     }
   }
 
+  const latest = await gate.supabase
+    .from("events")
+    .select("slug")
+    .eq("id", id)
+    .maybeSingle()
+  if (!latest.error && latest.data?.slug) {
+    slug = latest.data.slug
+  }
+
   revalidatePath("/admin/events")
   revalidatePath(`/admin/events/${id}`)
   revalidatePath(`/admin/events/${id}/edit`)
   revalidatePublicEventCache({ eventId: id, slug })
 
-  return { success: true, eventId: id }
+  return {
+    success: true,
+    eventId: id,
+    slug: slug?.trim() || null,
+    publicPath: publicEventPath({ id, slug }),
+    publicUrl: publicEventUrl({ id, slug }),
+  }
 }

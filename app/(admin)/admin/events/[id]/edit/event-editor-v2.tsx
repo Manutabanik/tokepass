@@ -1,24 +1,31 @@
 "use client"
 
-import { ArrowLeft, Rocket, Ticket, Type } from "lucide-react"
+import { ArrowLeft, Rocket, Ticket, Type, WifiOff } from "lucide-react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { FormProvider, useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 
 import { EventEditorV2InfoStep } from "./event-editor-v2-info"
 import { EventEditorV2InventoryStep } from "./event-editor-v2-inventory"
 import { EventEditorV2LaunchStep } from "./event-editor-v2-launch"
-import { publishEventV2, saveEventDraftV2 } from "@/app/actions/events-v2"
+import { EventEditorV2SuccessDialog } from "./event-editor-v2-success"
+import { publishEventV2 } from "@/app/actions/events-v2"
 import { Button } from "@/components/ui/button"
+import { useEventDraftV2Persist } from "@/hooks/use-event-draft-v2-persist"
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
 import { getArchetypeConfig, resolveDraftArchetype } from "@/lib/events/archetypes.config"
+import {
+  DRAFT_LEAVE_GUARD_MESSAGE,
+  draftSaveBadge,
+  shouldBlockDraftLeave,
+} from "@/lib/events/editor-v2-ux"
 import {
   draftLaunchSubmitLabel,
   isDraftLaunchReady,
 } from "@/lib/events/launch-center-v2"
 import { cn } from "@/lib/utils"
-import { toEventDraftV2Payload, type EventDraftV2 } from "@/lib/validations/event-draft-v2"
+import { type EventDraftV2 } from "@/lib/validations/event-draft-v2"
 
 const STEPS = [
   {
@@ -52,15 +59,12 @@ export function EventEditorV2({
   initialDraft,
   isPublished,
 }: EventEditorV2Props) {
-  const router = useRouter()
   const [step, setStep] = useState<(typeof STEPS)[number]["id"]>(1)
   const [publishing, setPublishing] = useState(false)
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">(
-    "idle",
-  )
-  const [saveError, setSaveError] = useState("")
-  const autosaveReady = useRef(false)
-  const saveGeneration = useRef(0)
+  const [nowPublished, setNowPublished] = useState(isPublished)
+  const [successOpen, setSuccessOpen] = useState(false)
+  const [successUrl, setSuccessUrl] = useState("")
+  const [successUpdated, setSuccessUpdated] = useState(false)
 
   const form = useForm<EventDraftV2>({
     defaultValues: initialDraft,
@@ -69,65 +73,42 @@ export function EventEditorV2({
   })
   const { control, getValues } = form
   const watched = useWatch({ control })
+  const { saveStatus, saveError, online, flushAndPause, resume } =
+    useEventDraftV2Persist(eventId, getValues, watched)
   const title = watched?.basicInfo?.name
   const labels = getArchetypeConfig(resolveDraftArchetype(watched?.archetype)).labels
   const launchReady = isDraftLaunchReady(getValues())
+  const badge = draftSaveBadge(online, saveStatus)
+  const leaveBlocked = shouldBlockDraftLeave(saveStatus, publishing)
+
+  useUnsavedChanges(leaveBlocked, DRAFT_LEAVE_GUARD_MESSAGE, {
+    interceptLinks: true,
+  })
 
   async function handlePublish() {
     if (!launchReady || publishing) return
+    const wasPublished = nowPublished
     setPublishing(true)
-    saveGeneration.current += 1
     try {
-      const saved = await saveEventDraftV2(
-        eventId,
-        toEventDraftV2Payload(getValues()),
-      )
+      const saved = await flushAndPause()
       if (!saved.success) {
-        setSaveStatus("error")
-        setSaveError(saved.error)
         toast.error(saved.error)
         return
       }
-      setSaveStatus("saved")
       const result = await publishEventV2(eventId)
       if (!result.success) {
         toast.error(result.error)
         return
       }
-      toast.success(isPublished ? "Evento actualizado" : "Evento publicado")
-      router.push(`/admin/events/${eventId}`)
-      router.refresh()
+      setNowPublished(true)
+      setSuccessUpdated(wasPublished)
+      setSuccessUrl(result.publicUrl)
+      setSuccessOpen(true)
     } finally {
+      resume()
       setPublishing(false)
     }
   }
-
-  useEffect(() => {
-    if (!autosaveReady.current) {
-      autosaveReady.current = true
-      return
-    }
-    const timer = window.setTimeout(() => {
-      const generation = ++saveGeneration.current
-      setSaveStatus("saving")
-      setSaveError("")
-      void saveEventDraftV2(
-        eventId,
-        toEventDraftV2Payload(getValues()),
-      ).then((result) => {
-        if (generation !== saveGeneration.current) return
-        if (!result.success) {
-          setSaveStatus("error")
-          setSaveError(result.error)
-          return
-        }
-        setSaveStatus("saved")
-      })
-    }, 1500)
-    return () => {
-      window.clearTimeout(timer)
-    }
-  }, [eventId, getValues, watched])
 
   return (
     <FormProvider {...form}>
@@ -158,28 +139,30 @@ export function EventEditorV2({
             <div className="flex shrink-0 flex-wrap items-center gap-3">
               <p
                 className={cn(
-                  "text-sm font-medium",
-                  saveStatus === "saving" && "text-amber-600 dark:text-amber-300",
-                  saveStatus === "saved" && "text-emerald-600 dark:text-emerald-400",
-                  saveStatus === "error" && "text-red-600 dark:text-red-400",
-                  saveStatus === "idle" && "text-gray-400",
+                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium",
+                  badge.tone === "saving" &&
+                    "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                  badge.tone === "saved" &&
+                    "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+                  badge.tone === "error" &&
+                    "bg-red-500/10 text-red-700 dark:text-red-400",
+                  badge.tone === "offline" &&
+                    "bg-amber-500/15 text-amber-800 dark:text-amber-200",
+                  badge.tone === "idle" && "text-gray-400",
                 )}
                 aria-live="polite"
               >
-                {saveStatus === "saving"
-                  ? "Guardando..."
-                  : saveStatus === "saved"
-                    ? "Guardado"
-                    : saveStatus === "error"
-                      ? "Error al guardar"
-                      : "Sin cambios"}
+                {badge.tone === "offline" ? (
+                  <WifiOff className="size-3.5" aria-hidden />
+                ) : null}
+                {badge.label}
               </p>
               <Button
                 type="button"
                 disabled={!launchReady || publishing}
                 title={
                   launchReady
-                    ? isPublished
+                    ? nowPublished
                       ? "Actualizar el evento publicado"
                       : "Publicar el evento"
                     : "Completá el checklist del paso 3 para continuar."
@@ -187,14 +170,14 @@ export function EventEditorV2({
                 className={cn(
                   "transition-all duration-200",
                   launchReady
-                    ? isPublished
+                    ? nowPublished
                       ? "bg-sky-600 text-white hover:bg-sky-500"
                       : "bg-emerald-500 text-black hover:bg-emerald-400"
                     : "cursor-not-allowed opacity-50",
                 )}
                 onClick={() => void handlePublish()}
               >
-                {draftLaunchSubmitLabel(isPublished, publishing)}
+                {draftLaunchSubmitLabel(nowPublished, publishing)}
               </Button>
             </div>
           </header>
@@ -247,7 +230,7 @@ export function EventEditorV2({
                 {step === 2 ? <EventEditorV2InventoryStep eventId={eventId} /> : null}
                 {step === 3 ? (
                   <EventEditorV2LaunchStep
-                    isPublished={isPublished}
+                    isPublished={nowPublished}
                     publishing={publishing}
                     launchReady={launchReady}
                     onLaunch={() => void handlePublish()}
@@ -264,6 +247,13 @@ export function EventEditorV2({
           </div>
         </div>
       </div>
+      <EventEditorV2SuccessDialog
+        open={successOpen}
+        eventId={eventId}
+        publicUrl={successUrl}
+        updated={successUpdated}
+        onOpenChange={setSuccessOpen}
+      />
     </FormProvider>
   )
 }
