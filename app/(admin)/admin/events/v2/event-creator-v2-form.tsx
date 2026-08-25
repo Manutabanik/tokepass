@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useEffect, useRef, useState } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, type Resolver } from "react-hook-form"
 import { useRouter } from "next/navigation"
 
 import { createEventDraftV2 } from "@/app/actions/event-draft-v2"
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
+  emptyEventDraftV2,
   eventDraftV2Schema,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
@@ -34,8 +35,8 @@ export function EventCreatorV2Form({
   const skipAutosave = useRef(true)
 
   const form = useForm<EventDraftV2>({
-    resolver: zodResolver(eventDraftV2Schema),
-    defaultValues: { title: initialDraft?.title ?? "" },
+    resolver: zodResolver(eventDraftV2Schema) as Resolver<EventDraftV2>,
+    defaultValues: initialDraft ?? emptyEventDraftV2(),
     mode: "onChange",
   })
 
