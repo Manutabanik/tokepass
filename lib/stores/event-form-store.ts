@@ -57,6 +57,8 @@ type EventFormStore = EventFormPersistedState & {
   setWizardStep: (step: number) => void
   setAutosaveStatus: (status: AutosaveStatus, error?: string | null) => void
   clearDraft: (draftKey?: string) => void
+  /** Fija el snapshot guardado en servidor y evita que localStorage pise con datos viejos. */
+  commitSavedSession: (values: EventFormValues, updatedAt?: number) => void
 }
 
 const EMPTY_PRICING: VenuePricingMap = {}
@@ -168,6 +170,14 @@ export const useEventFormStore = create<EventFormStore>()(
           draftKey: "create",
         })
       },
+
+      commitSavedSession: (values, updatedAt) =>
+        set({
+          values,
+          updatedAt: updatedAt ?? Date.now(),
+          autosaveStatus: "saved",
+          autosaveError: null,
+        }),
     }),
     {
       name: "tokepass.event-form.v1",

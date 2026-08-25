@@ -677,7 +677,14 @@ export function EventCreationWizard({
     }, 80)
   }
 
+  function syncAfterSuccessfulSave(values: EventFormValues) {
+    markSaved(values)
+    router.refresh()
+  }
+
   async function onSaveIdentity(data: EventFormValues) {
+    cancelPendingAutosave()
+    await waitForInFlightAutosave()
     const titleOk = await form.trigger("basics.title")
     if (!titleOk || data.basics.title.trim().length < 3) {
       toast.error("Revisá el título del evento")
@@ -728,7 +735,7 @@ export function EventCreationWizard({
     if (result.eventId) {
       useEventFormStore.getState().setEventId(result.eventId)
     }
-    markSaved(data)
+    syncAfterSuccessfulSave(data)
     toast.success("Datos principales guardados", {
       description: "El título y los datos del evento quedaron actualizados.",
     })
@@ -789,7 +796,19 @@ export function EventCreationWizard({
       formData.set("targetOrganizerId", targetOrganizerId)
     }
     const result = await updateCompleteEvent(formData)
-    if (result.success) markSaved(payloadData)
+    if (!result.success) {
+      reportPersistError(
+        result.error,
+        result.title ?? "No pudimos guardar el inventario",
+        result.wizardConflict,
+        result.code,
+        result.field,
+        result.actionHint,
+        result.source,
+      )
+      return result
+    }
+    syncAfterSuccessfulSave(payloadData)
     return result
   }
 
@@ -978,7 +997,7 @@ export function EventCreationWizard({
     if (result.eventId) {
       useEventFormStore.getState().setEventId(result.eventId)
     }
-    markSaved(payloadData)
+    syncAfterSuccessfulSave(payloadData)
 
     if (intent === "publish") {
       clearDraft(draftKey)
