@@ -45,6 +45,10 @@ export function publishedEventPublicPath(
   return `/eventos/${key}`
 }
 
+export function eventPreviewPath(eventId: string): string {
+  return `/events/preview/${eventId.trim()}`
+}
+
 export function isInAppLeaveNavigation(input: {
   currentHref: string
   nextHref: string

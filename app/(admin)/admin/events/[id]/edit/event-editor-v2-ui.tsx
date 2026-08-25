@@ -91,7 +91,7 @@ export function DraftFieldLabel({
       {optional ? (
         <>
           {" "}
-          <span className="text-sm font-normal text-gray-500">(Opcional)</span>
+          <span className="text-muted-foreground text-sm font-normal">(Opcional)</span>
         </>
       ) : null}
     </Label>

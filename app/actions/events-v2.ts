@@ -17,8 +17,9 @@ import {
   type PublishEventV2Payload,
   type PublishEventV2TierPayload,
 } from "@/lib/events/publish-event-v2"
+import { eventPreviewPath } from "@/lib/events/editor-v2-ux"
 import { revalidatePublicEventCache } from "@/lib/events/revalidate-public-event"
-import { publicEventPath, publicEventUrl } from "@/lib/seo/site"
+import { getSeoOrigin, publicEventPath, publicEventUrl } from "@/lib/seo/site"
 import {
   bytesToBlob,
   detectRasterImageMagic,
@@ -343,13 +344,18 @@ export async function uploadEventDraftMediaV2(
   return { success: true, url: data.publicUrl }
 }
 
+export type PublishEventV2Mode = "draft" | "published"
+
 export type PublishEventV2Result =
   | {
       success: true
       eventId: string
       slug: string | null
+      status: PublishEventV2Mode
       publicPath: string
       publicUrl: string
+      previewPath: string
+      previewUrl: string
     }
   | { success: false; error: string; issues?: PublishEventV2Issue[] }
 
@@ -621,6 +627,8 @@ async function unpackPublishEventV2Sequential(input: {
   existingImageUrl: string | null
   existingShareUrl: string | null
   payload: PublishEventV2Payload
+  targetStatus?: PublishEventV2Mode
+  keepDraftState?: boolean
 }) {
   const venueId = await upsertPublishedVenue({
     organizerId: input.organizerId,
@@ -648,7 +656,8 @@ async function unpackPublishEventV2Sequential(input: {
       province: input.payload.venue.province,
       department: input.payload.venue.city,
       delivery_mode: input.payload.delivery_mode as EventDeliveryMode,
-      visibility: input.payload.visibility,
+      visibility:
+        input.targetStatus === "draft" ? "private" : input.payload.visibility,
       flyer_url: input.payload.flyer_url ?? input.existingFlyerUrl,
       image_url:
         input.payload.image_url ??
@@ -659,8 +668,8 @@ async function unpackPublishEventV2Sequential(input: {
       venue_id: venueId,
       ...(input.payload.venue_map ? { venue_map: input.payload.venue_map } : {}),
       has_seating_plan: input.payload.has_seating_plan,
-      status: "published" as EventStatus,
-      draft_state: null,
+      status: (input.targetStatus ?? "published") as EventStatus,
+      ...(input.keepDraftState ? {} : { draft_state: null }),
       updated_at: new Date().toISOString(),
     } as never)
     .eq("id", input.eventId)
@@ -688,9 +697,12 @@ async function unpackPublishEventV2Sequential(input: {
  */
 export async function publishEventV2(
   eventId: string,
+  options: { status?: PublishEventV2Mode } = {},
 ): Promise<PublishEventV2Result> {
   const id = eventId.trim()
   if (!id) return { success: false, error: "Evento inválido." }
+  const targetStatus: PublishEventV2Mode =
+    options.status === "draft" ? "draft" : "published"
 
   const gate = await requireDraftWriter()
   if (!gate.ok) return { success: false, error: gate.error }
@@ -750,17 +762,8 @@ export async function publishEventV2(
     }
   }
 
-  const rpc = await gate.supabase.rpc("publish_event_v2", {
-    p_event_id: id,
-    p_payload: payload as unknown as Json,
-  })
-
   let slug = event.slug
-  if (rpc.error && !shouldFallbackPublishRpc(rpc.error)) {
-    return { success: false, error: formatSupabaseError(rpc.error) }
-  }
-
-  if (rpc.error) {
+  if (targetStatus === "draft") {
     try {
       const written = await unpackPublishEventV2Sequential({
         eventId: id,
@@ -770,6 +773,8 @@ export async function publishEventV2(
         existingImageUrl: event.image_url,
         existingShareUrl: event.social_share_image_url,
         payload,
+        targetStatus: "draft",
+        keepDraftState: true,
       })
       slug = written.slug
     } catch (error) {
@@ -779,14 +784,43 @@ export async function publishEventV2(
       }
     }
   } else {
-    try {
-      await unlinkPublishedTicketDays(id)
-      await unpackPublishedSchedule(id, payload)
-      await bindPublishedTicketDays(id, payload.tickets)
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : formatSupabaseError(error),
+    const rpc = await gate.supabase.rpc("publish_event_v2", {
+      p_event_id: id,
+      p_payload: payload as unknown as Json,
+    })
+
+    if (rpc.error && !shouldFallbackPublishRpc(rpc.error)) {
+      return { success: false, error: formatSupabaseError(rpc.error) }
+    }
+
+    if (rpc.error) {
+      try {
+        const written = await unpackPublishEventV2Sequential({
+          eventId: id,
+          organizerId: event.organizer_id,
+          existingVenueId: event.venue_id,
+          existingFlyerUrl: event.flyer_url,
+          existingImageUrl: event.image_url,
+          existingShareUrl: event.social_share_image_url,
+          payload,
+        })
+        slug = written.slug
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : formatSupabaseError(error),
+        }
+      }
+    } else {
+      try {
+        await unlinkPublishedTicketDays(id)
+        await unpackPublishedSchedule(id, payload)
+        await bindPublishedTicketDays(id, payload.tickets)
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : formatSupabaseError(error),
+        }
       }
     }
   }
@@ -803,13 +837,18 @@ export async function publishEventV2(
   revalidatePath("/admin/events")
   revalidatePath(`/admin/events/${id}`)
   revalidatePath(`/admin/events/${id}/edit`)
+  revalidatePath(eventPreviewPath(id))
   revalidatePublicEventCache({ eventId: id, slug })
 
+  const previewPath = eventPreviewPath(id)
   return {
     success: true,
     eventId: id,
     slug: slug?.trim() || null,
+    status: targetStatus,
     publicPath: publicEventPath({ id, slug }),
     publicUrl: publicEventUrl({ id, slug }),
+    previewPath,
+    previewUrl: `${getSeoOrigin()}${previewPath}`,
   }
 }

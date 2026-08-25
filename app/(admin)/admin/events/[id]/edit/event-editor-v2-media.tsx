@@ -5,7 +5,7 @@ import Image from "next/image"
 import { useRef, useState } from "react"
 import { useFormContext, useWatch } from "react-hook-form"
 
-import { DraftFieldError } from "./event-editor-v2-ui"
+import { DraftFieldError, DraftFieldLabel } from "./event-editor-v2-ui"
 import { uploadEventDraftMediaV2 } from "@/app/actions/events-v2"
 import { Button } from "@/components/ui/button"
 import type { EventDraftV2 } from "@/lib/validations/event-draft-v2"
@@ -17,11 +17,13 @@ export function EventEditorV2MediaField({
   name,
   label,
   hint,
+  optional = false,
 }: {
   eventId: string
   name: "flyerUrl" | "bannerUrl"
   label: string
   hint: string
+  optional?: boolean
 }) {
   const { control, setValue } = useFormContext<EventDraftV2>()
   const url = useWatch({ control, name })
@@ -49,7 +51,9 @@ export function EventEditorV2MediaField({
     <div className="grid gap-2">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-bold text-slate-800 dark:text-zinc-200">{label}</p>
+          <DraftFieldLabel required={!optional} optional={optional} className="text-sm">
+            {label}
+          </DraftFieldLabel>
           <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
         </div>
         {url ? (

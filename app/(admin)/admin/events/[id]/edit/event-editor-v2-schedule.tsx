@@ -10,11 +10,11 @@ import {
   DraftAddButton,
   DraftCard,
   DraftFieldError,
+  DraftFieldLabel,
   DraftHint,
 } from "./event-editor-v2-ui"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { archetypeUsesTimeSlots } from "@/lib/events/archetypes.config"
 import {
   createDraftScheduleDay,
@@ -102,12 +102,12 @@ export function EventEditorV2ScheduleFields() {
 
               <div className="grid grid-cols-1 gap-3">
                 <div className="grid gap-1.5">
-                  <Label
+                  <DraftFieldLabel
                     htmlFor={`event-v2-schedule-${index}-name`}
-                    className="text-xs font-bold text-slate-800 dark:text-zinc-200"
+                    optional
                   >
-                    Nombre del día / función
-                  </Label>
+                    Cómo se llama este día
+                  </DraftFieldLabel>
                   <Input
                     id={`event-v2-schedule-${index}-name`}
                     className={DRAFT_FIELD_CLASS}
@@ -124,12 +124,12 @@ export function EventEditorV2ScheduleFields() {
                     <input type="hidden" {...register(`schedule.${index}.startDate`)} />
                     <input type="hidden" {...register(`schedule.${index}.endDate`)} />
                     <div className="grid gap-1.5">
-                      <Label
+                      <DraftFieldLabel
                         htmlFor={`event-v2-schedule-${index}-date`}
-                        className="text-xs font-bold text-slate-800 dark:text-zinc-200"
+                        required
                       >
-                        Fecha
-                      </Label>
+                        ¿Qué día?
+                      </DraftFieldLabel>
                       <Input
                         id={`event-v2-schedule-${index}-date`}
                         type="date"
@@ -153,14 +153,14 @@ export function EventEditorV2ScheduleFields() {
                     ) : null}
                   </>
                 ) : (
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div className="grid gap-1.5">
-                      <Label
+                      <DraftFieldLabel
                         htmlFor={`event-v2-schedule-${index}-start`}
-                        className="text-xs font-bold text-slate-800 dark:text-zinc-200"
+                        required
                       >
-                        Inicio
-                      </Label>
+                        ¿Cuándo empieza?
+                      </DraftFieldLabel>
                       <Input
                         id={`event-v2-schedule-${index}-start`}
                         type="datetime-local"
@@ -170,12 +170,13 @@ export function EventEditorV2ScheduleFields() {
                       <DraftFieldError message={dayErrors?.startDate?.message} />
                     </div>
                     <div className="grid gap-1.5">
-                      <Label
+                      <DraftFieldLabel
                         htmlFor={`event-v2-schedule-${index}-end`}
-                        className="text-xs font-bold text-slate-800 dark:text-zinc-200"
+                        optional={fields.length === 1}
+                        required={fields.length > 1}
                       >
-                        Fin
-                      </Label>
+                        ¿Cuándo termina?
+                      </DraftFieldLabel>
                       <Input
                         id={`event-v2-schedule-${index}-end`}
                         type="datetime-local"
@@ -247,12 +248,12 @@ function DaySlotList({
                 {...register(`schedule.${dayIndex}.slots.${slotIndex}.id`)}
               />
               <div className="grid gap-1">
-                <Label
+                <DraftFieldLabel
                   htmlFor={`event-v2-slot-${dayIndex}-${slotIndex}-start`}
-                  className="text-[11px] font-bold text-slate-700 dark:text-zinc-300"
+                  required
                 >
-                  Inicio
-                </Label>
+                  ¿Desde?
+                </DraftFieldLabel>
                 <Input
                   id={`event-v2-slot-${dayIndex}-${slotIndex}-start`}
                   type="time"
@@ -263,12 +264,12 @@ function DaySlotList({
                 />
               </div>
               <div className="grid gap-1">
-                <Label
+                <DraftFieldLabel
                   htmlFor={`event-v2-slot-${dayIndex}-${slotIndex}-end`}
-                  className="text-[11px] font-bold text-slate-700 dark:text-zinc-300"
+                  required
                 >
-                  Fin
-                </Label>
+                  ¿Hasta?
+                </DraftFieldLabel>
                 <Input
                   id={`event-v2-slot-${dayIndex}-${slotIndex}-end`}
                   type="time"
@@ -279,12 +280,12 @@ function DaySlotList({
                 />
               </div>
               <div className="grid gap-1">
-                <Label
+                <DraftFieldLabel
                   htmlFor={`event-v2-slot-${dayIndex}-${slotIndex}-cap`}
-                  className="text-[11px] font-bold text-slate-700 dark:text-zinc-300"
+                  optional
                 >
                   Cupo
-                </Label>
+                </DraftFieldLabel>
                 <Input
                   id={`event-v2-slot-${dayIndex}-${slotIndex}-cap`}
                   type="number"

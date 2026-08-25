@@ -59,7 +59,7 @@ export function EventEditorV2InventoryStep({ eventId }: { eventId: string }) {
             required
             className="text-sm"
           >
-            {labels.capacity}
+            ¿Cuánta gente entra?
           </DraftFieldLabel>
           <Input
             id="event-v2-venue-capacity"
@@ -249,7 +249,7 @@ function DraftLineItemList({
       ) : null}
 
       {fields.length > 0 ? (
-        <ul className={visibleCount === 0 ? "hidden" : "space-y-3"}>
+        <ul className={visibleCount === 0 ? "hidden" : "w-full space-y-3"}>
           {fields.map((field, index) => {
             if (name === "tickets" && isMapDraftTicket(field)) {
               return (

@@ -7,6 +7,7 @@ import {
   cheapestDraftTicketPrice,
   draftLaunchChecklist,
   draftLaunchPreview,
+  draftLaunchPreviewLabel,
   draftLaunchSubmitLabel,
   isDraftLaunchReady,
   simulateDraftSale,
@@ -128,12 +129,20 @@ describe("draftLaunchPreview", () => {
 
 describe("draftLaunchSubmitLabel", () => {
   it("switches copy for draft vs published events", () => {
-    assert.equal(
-      draftLaunchSubmitLabel(false, false),
-      "🚀 Publicar y Abrir Boletería",
-    )
-    assert.equal(draftLaunchSubmitLabel(true, false), "💾 Actualizar Evento")
-    assert.equal(draftLaunchSubmitLabel(false, true), "Publicando...")
+    assert.equal(draftLaunchSubmitLabel(false, false), "Subir al catálogo")
+    assert.equal(draftLaunchSubmitLabel(true, false), "Actualizar catálogo")
+    assert.equal(draftLaunchSubmitLabel(false, true), "Subiendo al catálogo...")
     assert.equal(draftLaunchSubmitLabel(true, true), "Actualizando...")
+  })
+})
+
+describe("draftLaunchPreviewLabel", () => {
+  it("keeps catalog events off the draft-save path", () => {
+    assert.equal(
+      draftLaunchPreviewLabel(false, false),
+      "Guardar y probar borrador",
+    )
+    assert.equal(draftLaunchPreviewLabel(true, false), "Ver como comprador")
+    assert.equal(draftLaunchPreviewLabel(false, true), "Guardando borrador...")
   })
 })

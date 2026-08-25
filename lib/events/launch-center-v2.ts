@@ -136,7 +136,17 @@ export function draftLaunchSubmitLabel(
   publishing: boolean,
 ): string {
   if (publishing) {
-    return isPublished ? "Actualizando..." : "Publicando..."
+    return isPublished ? "Actualizando..." : "Subiendo al catálogo..."
   }
-  return isPublished ? "💾 Actualizar Evento" : "🚀 Publicar y Abrir Boletería"
+  return isPublished ? "Actualizar catálogo" : "Subir al catálogo"
+}
+
+export function draftLaunchPreviewLabel(
+  isPublished: boolean,
+  previewing: boolean,
+): string {
+  if (previewing) {
+    return isPublished ? "Abriendo vista previa..." : "Guardando borrador..."
+  }
+  return isPublished ? "Ver como comprador" : "Guardar y probar borrador"
 }

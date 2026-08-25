@@ -7,6 +7,7 @@ import {
   DRAFT_TEXTAREA_CLASS,
   DraftCard,
   DraftFieldError,
+  DraftFieldLabel,
   DraftHint,
 } from "./event-editor-v2-ui"
 import { Label } from "@/components/ui/label"
@@ -30,11 +31,11 @@ export function EventEditorV2SettingsStep() {
           <SettingToggle
             id="event-v2-is-public"
             icon={Eye}
-            title="Visibilidad del evento"
+            title="¿Sale en el catálogo?"
             description={
               field.value
-                ? "Público: visible en el catálogo cuando se publique."
-                : "Privado: no aparece en el catálogo."
+                ? "Sí: aparece en Tokepass cuando lo subas al catálogo."
+                : "No: solo lo ven quienes tengan el link."
             }
             checked={Boolean(field.value)}
             onCheckedChange={field.onChange}
@@ -51,12 +52,13 @@ export function EventEditorV2SettingsStep() {
             </h2>
           </div>
           <div className="grid gap-2">
-            <Label
+            <DraftFieldLabel
               htmlFor="event-v2-refund-policy"
-              className="text-sm font-bold text-slate-800 dark:text-zinc-200"
+              optional
+              className="text-sm"
             >
-              Condiciones para el comprador
-            </Label>
+              ¿Cómo son las devoluciones?
+            </DraftFieldLabel>
             <Textarea
               id="event-v2-refund-policy"
               rows={5}
@@ -77,12 +79,13 @@ export function EventEditorV2SettingsStep() {
             </h2>
           </div>
           <div className="grid gap-2">
-            <Label
+            <DraftFieldLabel
               htmlFor="event-v2-checkout-message"
-              className="text-sm font-bold text-slate-800 dark:text-zinc-200"
+              optional
+              className="text-sm"
             >
-              Texto al finalizar la compra
-            </Label>
+              Mensaje después de pagar
+            </DraftFieldLabel>
             <Textarea
               id="event-v2-checkout-message"
               rows={5}

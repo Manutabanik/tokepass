@@ -51,11 +51,10 @@ export function EventEditorV2ArchetypePicker() {
     <DraftCard>
       <div className="mb-4">
         <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-          Tipo de experiencia
+          ¿Qué tipo de evento es?
         </h2>
         <DraftHint>
-          El diccionario de la UI cambia labels de lugar, cupo, participantes y
-          accesos según el arquetipo.
+          Cambia los nombres de lugar, cupo y accesos según lo que estás armando.
         </DraftHint>
       </div>
       <div

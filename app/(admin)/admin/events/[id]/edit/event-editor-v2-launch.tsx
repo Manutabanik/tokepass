@@ -1,6 +1,6 @@
 "use client"
 
-import { CircleAlert, CircleCheck, MapPin } from "lucide-react"
+import { CircleAlert, CircleCheck, Eye, MapPin, Rocket } from "lucide-react"
 import Image from "next/image"
 import { Controller, useFormContext, useWatch } from "react-hook-form"
 
@@ -13,6 +13,7 @@ import {
   cheapestDraftTicketPrice,
   draftLaunchChecklist,
   draftLaunchPreview,
+  draftLaunchPreviewLabel,
   draftLaunchSubmitLabel,
   simulateDraftSale,
 } from "@/lib/events/launch-center-v2"
@@ -29,12 +30,16 @@ const PLATFORM_FEE = 0.1
 export function EventEditorV2LaunchStep({
   isPublished,
   publishing,
+  previewing,
   launchReady,
+  onPreview,
   onLaunch,
 }: {
   isPublished: boolean
   publishing: boolean
+  previewing: boolean
   launchReady: boolean
+  onPreview: () => void
   onLaunch: () => void
 }) {
   const { control } = useFormContext<EventDraftV2>()
@@ -200,29 +205,40 @@ export function EventEditorV2LaunchStep({
 
       <EventEditorV2SettingsStep />
 
-      <div className="hidden gap-3 md:flex md:items-center md:justify-between">
+      <div className="flex flex-col gap-3 border-t border-border/60 pt-6 md:flex-row md:items-center md:justify-between">
         <p className="text-sm text-muted-foreground">
           {launchReady
             ? isPublished
-              ? "El evento ya está publicado. Esto actualiza la boletería con el borrador."
-              : "Todo listo para publicar y abrir la boletería."
+              ? "El evento ya está en el catálogo. Podés probarlo como comprador o actualizarlo."
+              : "Probá el borrador como comprador. Subilo al catálogo cuando esté listo."
             : "Completá el checklist para habilitar el envío."}
         </p>
-        <Button
-          type="button"
-          disabled={!launchReady || publishing}
-          className={cn(
-            "h-12 min-h-12 min-w-60 transition-all duration-200",
-            launchReady
-              ? isPublished
-                ? "bg-sky-600 text-white hover:bg-sky-500"
-                : "bg-emerald-500 text-black hover:bg-emerald-400"
-              : "cursor-not-allowed opacity-50",
-          )}
-          onClick={onLaunch}
-        >
-          {draftLaunchSubmitLabel(isPublished, publishing)}
-        </Button>
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!launchReady || publishing || previewing}
+            className="h-12 min-h-12"
+            onClick={onPreview}
+          >
+            <Eye className="size-4" aria-hidden />
+            {draftLaunchPreviewLabel(isPublished, previewing)}
+          </Button>
+          <Button
+            type="button"
+            disabled={!launchReady || publishing || previewing}
+            className={cn(
+              "h-12 min-h-12 min-w-52 transition-all duration-200",
+              launchReady
+                ? "bg-emerald-500 text-black hover:bg-emerald-400"
+                : "cursor-not-allowed opacity-50",
+            )}
+            onClick={onLaunch}
+          >
+            <Rocket className="size-4" aria-hidden />
+            {draftLaunchSubmitLabel(isPublished, publishing)}
+          </Button>
+        </div>
       </div>
     </div>
   )

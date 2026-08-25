@@ -78,7 +78,7 @@ export function DraftInventoryAccordionCard({
   const scheduled = hasDraftPresale({ startDate, endDate })
 
   return (
-    <li className="overflow-hidden rounded-xl border border-slate-200 bg-white/80 transition-all duration-200 dark:border-gray-700/50 dark:bg-gray-800/50">
+    <li className="w-full overflow-hidden rounded-xl border border-slate-200 bg-white/80 transition-all duration-200 dark:border-gray-700/50 dark:bg-gray-800/50">
       <input type="hidden" {...register(`${name}.${index}.id`)} />
       <input type="hidden" {...register(`${name}.${index}.source`)} />
       <input type="hidden" {...register(`${name}.${index}.sectorId`)} />
@@ -142,7 +142,7 @@ export function DraftInventoryAccordionCard({
                   htmlFor={`event-v2-${name}-${index}-name`}
                   required
                 >
-                  {name === "tickets" ? "Nombre de la entrada" : "Nombre del adicional"}
+                  {name === "tickets" ? "¿Cómo se llama?" : "¿Cómo se llama el extra?"}
                 </DraftFieldLabel>
                 <Input
                   id={`event-v2-${name}-${index}-name`}
@@ -157,7 +157,7 @@ export function DraftInventoryAccordionCard({
                   htmlFor={`event-v2-${name}-${index}-price`}
                   required
                 >
-                  Precio
+                  ¿Cuánto sale?
                 </DraftFieldLabel>
                 <Input
                   id={`event-v2-${name}-${index}-price`}
@@ -177,7 +177,7 @@ export function DraftInventoryAccordionCard({
                   htmlFor={`event-v2-${name}-${index}-stock`}
                   required
                 >
-                  Stock
+                  ¿Cuántas hay?
                 </DraftFieldLabel>
                 <Input
                   id={`event-v2-${name}-${index}-stock`}
@@ -199,7 +199,7 @@ export function DraftInventoryAccordionCard({
                 htmlFor={`event-v2-${name}-${index}-description`}
                 optional
               >
-                Descripción
+                Detalle
               </DraftFieldLabel>
               <Textarea
                 id={`event-v2-${name}-${index}-description`}
@@ -214,9 +214,9 @@ export function DraftInventoryAccordionCard({
 
             {showSlots ? (
               <div className="grid gap-1.5">
-                <DraftFieldLabel htmlFor={`event-v2-${name}-${index}-slot`}>
-                  Turno
-                </DraftFieldLabel>
+                  <DraftFieldLabel htmlFor={`event-v2-${name}-${index}-slot`} optional>
+                    ¿Para qué turno?
+                  </DraftFieldLabel>
                 <EventEditorV2SlotSelect
                   value={String(slotId ?? "")}
                   options={slotOptions}
@@ -269,7 +269,7 @@ export function DraftInventoryAccordionCard({
                       htmlFor={`event-v2-${name}-${index}-sale-start`}
                       optional
                     >
-                      Inicio de venta
+                      ¿Desde cuándo se vende?
                     </DraftFieldLabel>
                     <Input
                       id={`event-v2-${name}-${index}-sale-start`}
@@ -284,7 +284,7 @@ export function DraftInventoryAccordionCard({
                       htmlFor={`event-v2-${name}-${index}-sale-end`}
                       optional
                     >
-                      Fin de venta
+                      ¿Hasta cuándo se vende?
                     </DraftFieldLabel>
                     <Input
                       id={`event-v2-${name}-${index}-sale-end`}

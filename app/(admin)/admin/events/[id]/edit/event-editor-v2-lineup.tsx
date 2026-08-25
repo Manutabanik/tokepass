@@ -179,11 +179,12 @@ export function EventEditorV2LineupFields() {
       <div className="mb-5 flex items-center gap-2">
         <Users className="size-4 text-emerald-400" aria-hidden />
         <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-          {labels.participants}
+          {labels.participants}{" "}
+          <span className="text-muted-foreground text-sm font-normal">(Opcional)</span>
         </h2>
       </div>
       <DraftHint>
-        {labels.participants}. Se guarda solo en el JSON del borrador.
+        Buscá o cargá a mano. Se guarda en el borrador.
       </DraftHint>
 
       <div ref={rootRef} className="relative mt-5">

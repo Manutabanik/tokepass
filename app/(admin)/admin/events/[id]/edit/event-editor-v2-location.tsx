@@ -10,11 +10,11 @@ import {
   DRAFT_FIELD_CLASS,
   DraftCard,
   DraftFieldError,
+  DraftFieldLabel,
   DraftHint,
 } from "./event-editor-v2-ui"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -297,7 +297,7 @@ export function EventEditorV2LocationFields() {
               {labels.venue}
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Georef + Nominatim + Leaflet. Se guarda solo en el JSON del borrador.
+              Buscá la dirección y afiná el pin en el mapa.
             </p>
           </div>
         </div>
@@ -316,12 +316,9 @@ export function EventEditorV2LocationFields() {
 
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <div className="grid gap-2 md:col-span-2">
-          <Label
-            htmlFor="event-v2-venue-name"
-            className="text-sm font-bold text-slate-800 dark:text-zinc-200"
-          >
-            {labels.venue}
-          </Label>
+          <DraftFieldLabel htmlFor="event-v2-venue-name" required className="text-sm">
+            ¿Dónde es?
+          </DraftFieldLabel>
           <Input
             id="event-v2-venue-name"
             className={DRAFT_FIELD_CLASS}
@@ -338,12 +335,9 @@ export function EventEditorV2LocationFields() {
         </div>
 
         <div className="grid gap-2">
-          <Label
-            htmlFor="event-v2-province"
-            className="text-sm font-bold text-slate-800 dark:text-zinc-200"
-          >
+          <DraftFieldLabel htmlFor="event-v2-province" optional className="text-sm">
             Provincia
-          </Label>
+          </DraftFieldLabel>
           <div className="relative">
             <Select
               value={selectedProvince?.id ?? ""}
@@ -385,12 +379,9 @@ export function EventEditorV2LocationFields() {
         </div>
 
         <div className="grid gap-2">
-          <Label
-            htmlFor="event-v2-city"
-            className="text-sm font-bold text-slate-800 dark:text-zinc-200"
-          >
-            Ciudad / Departamento
-          </Label>
+          <DraftFieldLabel htmlFor="event-v2-city" optional className="text-sm">
+            Ciudad / departamento
+          </DraftFieldLabel>
           <div className="relative">
             <Select
               value={selectedCity?.id ?? ""}
@@ -433,12 +424,9 @@ export function EventEditorV2LocationFields() {
         </div>
 
         <div className="relative z-50 grid gap-2 md:col-span-2">
-          <Label
-            htmlFor="event-v2-address"
-            className="text-sm font-bold text-slate-800 dark:text-zinc-200"
-          >
-            Dirección exacta
-          </Label>
+          <DraftFieldLabel htmlFor="event-v2-address" required className="text-sm">
+            ¿Cuál es la dirección?
+          </DraftFieldLabel>
           <div className="relative">
             <Search
               className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"

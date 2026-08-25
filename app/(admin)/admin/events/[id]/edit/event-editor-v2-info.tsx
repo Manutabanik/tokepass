@@ -12,6 +12,7 @@ import {
   DRAFT_FIELD_CLASS,
   DraftCard,
   DraftFieldError,
+  DraftFieldLabel,
   DraftHint,
 } from "./event-editor-v2-ui"
 import { Input } from "@/components/ui/input"
@@ -47,34 +48,65 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
 
   return (
     <div className="space-y-6">
-      <EventEditorV2ArchetypePicker />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <EventEditorV2ArchetypePicker />
+        {supportsVirtual ? (
+          <DraftCard className="flex h-full flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <MonitorPlay className="size-4 text-emerald-400" aria-hidden />
+                <Label
+                  htmlFor="event-v2-is-virtual"
+                  className="text-sm font-bold text-slate-800 dark:text-zinc-200"
+                >
+                  ¿Es online?
+                </Label>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {isVirtual
+                  ? "Se oculta el mapa. El acceso va por link."
+                  : "Si es presencial, el lugar y la dirección son obligatorios."}
+              </p>
+            </div>
+            <Switch
+              id="event-v2-is-virtual"
+              checked={isVirtual}
+              onCheckedChange={setVirtual}
+              className="data-checked:bg-emerald-500"
+              aria-label="Evento virtual / online"
+            />
+          </DraftCard>
+        ) : (
+          <DraftCard className="flex h-full items-center">
+            <p className="text-sm text-muted-foreground">
+              Este tipo de evento es presencial. El lugar se completa al lado de
+              las fechas.
+            </p>
+          </DraftCard>
+        )}
+      </div>
 
       <DraftCard>
         <div className="mb-5 flex items-center gap-2">
           <Type className="size-4 text-emerald-400" aria-hidden />
           <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-            Datos del evento
+            Lo esencial
           </h2>
         </div>
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <div className="grid gap-2 md:col-span-2">
-            <Label
-              htmlFor="event-v2-name"
-              className="text-sm font-bold text-slate-800 dark:text-zinc-200"
-            >
-              Nombre del evento
-            </Label>
-            <Input
-              id="event-v2-name"
-              className={DRAFT_FIELD_CLASS}
-              placeholder="Ej. After en la terraza"
-              {...register("basicInfo.name")}
-            />
-            <DraftHint>
-              Así lo van a ver en el catálogo y en {labels.tickets.toLowerCase()}.
-            </DraftHint>
-            <DraftFieldError message={errors.basicInfo?.name?.message} />
-          </div>
+        <div className="grid gap-2">
+          <DraftFieldLabel htmlFor="event-v2-name" required className="text-sm">
+            ¿Cómo se llama?
+          </DraftFieldLabel>
+          <Input
+            id="event-v2-name"
+            className={DRAFT_FIELD_CLASS}
+            placeholder="Ej. After en la terraza"
+            {...register("basicInfo.name")}
+          />
+          <DraftHint>
+            Así lo van a ver en el catálogo y en {labels.tickets.toLowerCase()}.
+          </DraftHint>
+          <DraftFieldError message={errors.basicInfo?.name?.message} />
         </div>
       </DraftCard>
 
@@ -82,43 +114,16 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
 
       <EventEditorV2LineupFields />
 
-      {supportsVirtual ? (
-        <DraftCard className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <MonitorPlay className="size-4 text-emerald-400" aria-hidden />
-              <Label
-                htmlFor="event-v2-is-virtual"
-                className="text-sm font-bold text-slate-800 dark:text-zinc-200"
-              >
-                ¿Es un evento virtual / online?
-              </Label>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {isVirtual
-                ? "Se oculta el mapa y no se guardan coordenadas. El acceso va por link."
-                : "Si es presencial, el lugar y la dirección son obligatorios para publicar."}
-            </p>
-          </div>
-          <Switch
-            id="event-v2-is-virtual"
-            checked={isVirtual}
-            onCheckedChange={setVirtual}
-            className="data-checked:bg-emerald-500"
-            aria-label="Evento virtual / online"
-          />
-        </DraftCard>
-      ) : null}
-
       {supportsVirtual && isVirtual ? (
         <DraftCard>
           <div className="grid gap-2">
-            <Label
+            <DraftFieldLabel
               htmlFor="event-v2-virtual-link"
-              className="text-sm font-bold text-slate-800 dark:text-zinc-200"
+              optional
+              className="text-sm"
             >
-              Link de acceso
-            </Label>
+              Link para entrar
+            </DraftFieldLabel>
             <Input
               id="event-v2-virtual-link"
               className={DRAFT_FIELD_CLASS}
@@ -126,8 +131,7 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
               {...register("virtualLink")}
             />
             <DraftHint>
-              El mapa de Leaflet queda fuera del borrador mientras el evento sea
-              virtual.
+              El mapa queda fuera del borrador mientras el evento sea virtual.
             </DraftHint>
             <DraftFieldError message={errors.virtualLink?.message} />
           </div>
@@ -147,14 +151,16 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
           <EventEditorV2MediaField
             eventId={eventId}
             name="flyerUrl"
-            label="Flyer"
-            hint="Portada del evento. Se guarda como URL en el JSON."
+            label="Portada"
+            hint="La imagen principal del evento."
+            optional
           />
           <EventEditorV2MediaField
             eventId={eventId}
             name="bannerUrl"
-            label="Banner"
-            hint="Imagen ancha opcional para la ficha."
+            label="Imagen ancha"
+            hint="Para la ficha y las redes."
+            optional
           />
         </div>
       </DraftCard>
