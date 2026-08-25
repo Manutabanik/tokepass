@@ -14,8 +14,10 @@ export function buildContentSecurityPolicy(nonce?: string | null): string {
   const nonceSrc = nonce ? `'nonce-${nonce}'` : ""
   const scriptInline = isDev || !nonce ? "'unsafe-inline'" : ""
   const scriptEval = isDev ? "'unsafe-eval'" : ""
-  const vercelPreviewManifestSource =
-    process.env.VERCEL_ENV === "preview" ? " https://vercel.com" : ""
+  const vercelSsoManifestSource =
+    process.env.VERCEL === "1" || process.env.VERCEL_ENV
+      ? " https://vercel.com"
+      : ""
 
   const supabaseHostname = (() => {
     try {
@@ -135,7 +137,7 @@ export function buildContentSecurityPolicy(nonce?: string | null): string {
     "base-uri 'self'",
     "object-src 'none'",
     "frame-ancestors 'none'",
-    `manifest-src 'self'${vercelPreviewManifestSource}`,
+    `manifest-src 'self'${vercelSsoManifestSource}`,
     "form-action 'self' https://*.mercadopago.com https://*.mercadopago.com.ar",
     `script-src ${scriptSrc}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
