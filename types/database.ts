@@ -3557,6 +3557,13 @@ export type Database = {
         }
         Returns: string
       }
+      publish_event_v2: {
+        Args: {
+          p_event_id: string
+          p_payload: Json
+        }
+        Returns: Json
+      }
       update_complete_event_with_seating_tx: {
         Args: {
           p_event_id: string

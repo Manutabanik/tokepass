@@ -2,6 +2,7 @@
 
 import { ArrowLeft, Settings2, Ticket, Type } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
 import { FormProvider, useForm } from "react-hook-form"
 import { toast } from "sonner"
@@ -9,7 +10,7 @@ import { toast } from "sonner"
 import { EventEditorV2InfoStep } from "./event-editor-v2-info"
 import { EventEditorV2InventoryStep } from "./event-editor-v2-inventory"
 import { EventEditorV2SettingsStep } from "./event-editor-v2-settings"
-import { saveEventDraftV2 } from "@/app/actions/events-v2"
+import { publishEventV2, saveEventDraftV2 } from "@/app/actions/events-v2"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
@@ -46,7 +47,9 @@ type EventEditorV2Props = {
 }
 
 export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
+  const router = useRouter()
   const [step, setStep] = useState<(typeof STEPS)[number]["id"]>(1)
+  const [publishing, setPublishing] = useState(false)
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">(
     "idle",
   )
@@ -64,6 +67,35 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
   const title = values.basicInfo?.name
   const canPublish = isEventDraftPublishable(values)
   const publishReason = canPublish ? "" : eventPublishDisabledReason(values)
+
+  async function handlePublish() {
+    if (!canPublish || publishing) return
+    setPublishing(true)
+    saveGeneration.current += 1
+    try {
+      const saved = await saveEventDraftV2(
+        eventId,
+        toEventDraftV2Payload(getValues()),
+      )
+      if (!saved.success) {
+        setSaveStatus("error")
+        setSaveError(saved.error)
+        toast.error(saved.error)
+        return
+      }
+      setSaveStatus("saved")
+      const result = await publishEventV2(eventId)
+      if (!result.success) {
+        toast.error(result.error)
+        return
+      }
+      toast.success("Evento publicado")
+      router.push(`/admin/events/${eventId}`)
+      router.refresh()
+    } finally {
+      setPublishing(false)
+    }
+  }
 
   useEffect(() => {
     let timer: number | undefined
@@ -142,7 +174,7 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
               </p>
               <Button
                 type="button"
-                disabled={!canPublish}
+                disabled={!canPublish || publishing}
                 title={
                   canPublish
                     ? "Publicar el evento"
@@ -154,14 +186,9 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
                     ? "bg-emerald-500 text-black hover:bg-emerald-400"
                     : "cursor-not-allowed opacity-50",
                 )}
-                onClick={() =>
-                  toast.message("El borrador ya cumple lo mínimo para publicar.", {
-                    description:
-                      "Publicar V2 todavía no materializa tickets ni recinto.",
-                  })
-                }
+                onClick={() => void handlePublish()}
               >
-                Publicar V2
+                {publishing ? "Publicando..." : "Publicar V2"}
               </Button>
             </div>
           </header>
