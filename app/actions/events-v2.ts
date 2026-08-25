@@ -43,7 +43,12 @@ export type SaveEventDraftV2Result =
   | { success: false; error: string }
 
 export type GetEventDraftV2Result =
-  | { success: true; eventId: string; draftState: Json | null }
+  | {
+      success: true
+      eventId: string
+      draftState: Json | null
+      isPublished: boolean
+    }
   | { success: false; error: string; code?: string }
 
 async function requireDraftWriter() {
@@ -120,6 +125,7 @@ export async function getEventDraftV2(
       success: true,
       eventId: data.id,
       draftState,
+      isPublished: true,
     }
   }
 
@@ -127,6 +133,7 @@ export async function getEventDraftV2(
     success: true,
     eventId: data.id,
     draftState: (data.draft_state ?? null) as Json | null,
+    isPublished: data.status === "published",
   }
 }
 

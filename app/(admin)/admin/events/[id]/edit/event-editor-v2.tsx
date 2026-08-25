@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, Settings2, Ticket, Type } from "lucide-react"
+import { ArrowLeft, Rocket, Ticket, Type } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
@@ -9,16 +9,15 @@ import { toast } from "sonner"
 
 import { EventEditorV2InfoStep } from "./event-editor-v2-info"
 import { EventEditorV2InventoryStep } from "./event-editor-v2-inventory"
-import { EventEditorV2SettingsStep } from "./event-editor-v2-settings"
+import { EventEditorV2LaunchStep } from "./event-editor-v2-launch"
 import { publishEventV2, saveEventDraftV2 } from "@/app/actions/events-v2"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
 import {
-  eventPublishDisabledReason,
-  isEventDraftPublishable,
-  toEventDraftV2Payload,
-  type EventDraftV2,
-} from "@/lib/validations/event-draft-v2"
+  draftLaunchSubmitLabel,
+  isDraftLaunchReady,
+} from "@/lib/events/launch-center-v2"
+import { cn } from "@/lib/utils"
+import { toEventDraftV2Payload, type EventDraftV2 } from "@/lib/validations/event-draft-v2"
 
 const STEPS = [
   {
@@ -35,18 +34,23 @@ const STEPS = [
   },
   {
     id: 3,
-    label: "Configuración",
-    hint: "Visibilidad y políticas",
-    icon: Settings2,
+    label: "Lanzamiento",
+    hint: "Revisión y publicación",
+    icon: Rocket,
   },
 ] as const
 
 type EventEditorV2Props = {
   eventId: string
   initialDraft: EventDraftV2
+  isPublished: boolean
 }
 
-export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
+export function EventEditorV2({
+  eventId,
+  initialDraft,
+  isPublished,
+}: EventEditorV2Props) {
   const router = useRouter()
   const [step, setStep] = useState<(typeof STEPS)[number]["id"]>(1)
   const [publishing, setPublishing] = useState(false)
@@ -65,11 +69,10 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
   const { control, getValues } = form
   const watched = useWatch({ control })
   const title = watched?.basicInfo?.name
-  const canPublish = isEventDraftPublishable(getValues())
-  const publishReason = canPublish ? "" : eventPublishDisabledReason(getValues())
+  const launchReady = isDraftLaunchReady(getValues())
 
   async function handlePublish() {
-    if (!canPublish || publishing) return
+    if (!launchReady || publishing) return
     setPublishing(true)
     saveGeneration.current += 1
     try {
@@ -89,7 +92,7 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
         toast.error(result.error)
         return
       }
-      toast.success("Evento publicado")
+      toast.success(isPublished ? "Evento actualizado" : "Evento publicado")
       router.push(`/admin/events/${eventId}`)
       router.refresh()
     } finally {
@@ -171,21 +174,25 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
               </p>
               <Button
                 type="button"
-                disabled={!canPublish || publishing}
+                disabled={!launchReady || publishing}
                 title={
-                  canPublish
-                    ? "Publicar el evento"
-                    : publishReason || "Completá los datos obligatorios para publicar."
+                  launchReady
+                    ? isPublished
+                      ? "Actualizar el evento publicado"
+                      : "Publicar el evento"
+                    : "Completá el checklist del paso 3 para continuar."
                 }
                 className={cn(
                   "transition-all duration-200",
-                  canPublish
-                    ? "bg-emerald-500 text-black hover:bg-emerald-400"
+                  launchReady
+                    ? isPublished
+                      ? "bg-sky-600 text-white hover:bg-sky-500"
+                      : "bg-emerald-500 text-black hover:bg-emerald-400"
                     : "cursor-not-allowed opacity-50",
                 )}
                 onClick={() => void handlePublish()}
               >
-                {publishing ? "Publicando..." : "Publicar V2"}
+                {draftLaunchSubmitLabel(isPublished, publishing)}
               </Button>
             </div>
           </header>
@@ -234,7 +241,14 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
               <div key={step} className="animate-in fade-in duration-200">
                 {step === 1 ? <EventEditorV2InfoStep eventId={eventId} /> : null}
                 {step === 2 ? <EventEditorV2InventoryStep eventId={eventId} /> : null}
-                {step === 3 ? <EventEditorV2SettingsStep /> : null}
+                {step === 3 ? (
+                  <EventEditorV2LaunchStep
+                    isPublished={isPublished}
+                    publishing={publishing}
+                    launchReady={launchReady}
+                    onLaunch={() => void handlePublish()}
+                  />
+                ) : null}
               </div>
 
               {saveStatus === "error" && saveError ? (

@@ -1,6 +1,6 @@
 "use client"
 
-import { Eye, MessageSquareText, Receipt, Shield } from "lucide-react"
+import { Eye, MessageSquareText, Shield } from "lucide-react"
 import { Controller, useFormContext } from "react-hook-form"
 
 import {
@@ -23,41 +23,24 @@ export function EventEditorV2SettingsStep() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        <Controller
-          name="settings.isPublic"
-          control={control}
-          render={({ field }) => (
-            <SettingToggle
-              id="event-v2-is-public"
-              icon={Eye}
-              title="Visibilidad del evento"
-              description={
-                field.value
-                  ? "Público: visible en el catálogo cuando se publique."
-                  : "Privado: no aparece en el catálogo."
-              }
-              checked={Boolean(field.value)}
-              onCheckedChange={field.onChange}
-            />
-          )}
-        />
-
-        <Controller
-          name="settings.absorbFees"
-          control={control}
-          render={({ field }) => (
-            <SettingToggle
-              id="event-v2-absorb-fees"
-              icon={Receipt}
-              title="Absorber cargos"
-              description="Tú pagas el costo del servicio, el cliente ve el precio final limpio."
-              checked={Boolean(field.value)}
-              onCheckedChange={field.onChange}
-            />
-          )}
-        />
-      </div>
+      <Controller
+        name="settings.isPublic"
+        control={control}
+        render={({ field }) => (
+          <SettingToggle
+            id="event-v2-is-public"
+            icon={Eye}
+            title="Visibilidad del evento"
+            description={
+              field.value
+                ? "Público: visible en el catálogo cuando se publique."
+                : "Privado: no aparece en el catálogo."
+            }
+            checked={Boolean(field.value)}
+            onCheckedChange={field.onChange}
+          />
+        )}
+      />
 
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <DraftCard>

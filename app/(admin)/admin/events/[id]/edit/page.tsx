@@ -39,6 +39,7 @@ export default async function EditEventPage({
     <EventEditorV2
       eventId={result.eventId}
       initialDraft={parseEventDraftV2(result.draftState)}
+      isPublished={result.isPublished}
     />
   )
 }
