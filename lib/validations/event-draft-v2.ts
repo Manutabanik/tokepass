@@ -76,7 +76,7 @@ const draftSettingsSchema = z
 const draftSeatingMapSchema = z
   .object({
     url: z.string().optional().default(""),
-    sectors: z.array(z.any()).default([]),
+    sectors: z.array(z.unknown()).default([]),
   })
   .passthrough()
   .default({ url: "", sectors: [] })
@@ -136,7 +136,7 @@ export const eventPublishSchema = z
     seatingMap: z
       .object({
         url: z.string().optional(),
-        sectors: z.array(z.any()).optional(),
+        sectors: z.array(z.unknown()).optional(),
       })
       .passthrough()
       .optional(),

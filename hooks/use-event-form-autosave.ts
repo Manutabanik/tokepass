@@ -42,7 +42,7 @@ export function useEventFormAutosave(input: {
     flushAutosave: async () => {},
     cancelPendingAutosave: () => {},
     waitForInFlightAutosave: async () => {},
-    markSaved: (_values: EventFormValues) => {},
-    acknowledgeServerSnapshot: (_values: EventFormValues) => {},
+    markSaved: () => {},
+    acknowledgeServerSnapshot: () => {},
   }
 }

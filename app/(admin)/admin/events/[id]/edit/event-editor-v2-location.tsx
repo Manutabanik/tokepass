@@ -3,7 +3,7 @@
 import { LoaderCircle, MapPinned, Search, X } from "lucide-react"
 import dynamic from "next/dynamic"
 import { useEffect, useId, useRef, useState } from "react"
-import { useFormContext } from "react-hook-form"
+import { useFormContext, useWatch } from "react-hook-form"
 
 import {
   DRAFT_FIELD_CLASS,
@@ -78,22 +78,26 @@ function matchGeorefName(rows: GeorefEntity[], name: string) {
 export function EventEditorV2LocationFields() {
   const listboxId = useId()
   const {
+    control,
     register,
-    watch,
     getValues,
     setValue,
     formState: { errors },
   } = useFormContext<EventDraftV2>()
 
-  const location = watch("location") ?? emptyEventDraftV2Location()
+  const location = useWatch({ control, name: "location" }) ?? emptyEventDraftV2Location()
   const [provinces, setProvinces] = useState<GeorefEntity[]>([])
-  const [departments, setDepartments] = useState<GeorefEntity[]>([])
+  const [departmentCache, setDepartmentCache] = useState<{
+    provinceId: string
+    rows: GeorefEntity[]
+  } | null>(null)
   const [loadingProvinces, setLoadingProvinces] = useState(true)
-  const [loadingDepartments, setLoadingDepartments] = useState(false)
   const [georefError, setGeorefError] = useState<string | null>(null)
-  const [query, setQuery] = useState(location.address ?? "")
-  const [results, setResults] = useState<NominatimResult[]>([])
-  const [searching, setSearching] = useState(false)
+  const [searchState, setSearchState] = useState<{
+    key: string
+    status: "loading" | "done"
+    rows: NominatimResult[]
+  } | null>(null)
   const [searchError, setSearchError] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [hasPinned, setHasPinned] = useState(() =>
@@ -101,12 +105,15 @@ export function EventEditorV2LocationFields() {
   )
   const abortRef = useRef<AbortController | null>(null)
   const formAddress = location.address ?? ""
-
-  useEffect(() => {
-    setQuery(formAddress)
-    if (formAddress || location.lat != null) setHasPinned(true)
-    if (!formAddress && location.lat == null) setHasPinned(false)
-  }, [formAddress, location.lat])
+  const selectedProvince = matchGeorefName(provinces, location.province ?? "")
+  const provinceId = selectedProvince?.id
+  const departments =
+    provinceId && departmentCache?.provinceId === provinceId
+      ? departmentCache.rows
+      : []
+  const loadingDepartments = Boolean(
+    provinceId && departmentCache?.provinceId !== provinceId,
+  )
 
   function writeLocation(patch: Partial<EventDraftV2Location>) {
     const current = getValues("location") ?? emptyEventDraftV2Location()
@@ -122,8 +129,7 @@ export function EventEditorV2LocationFields() {
   }
 
   function clearLocation() {
-    setQuery("")
-    setResults([])
+    setSearchState(null)
     setMenuOpen(false)
     setHasPinned(false)
     setValue("location", emptyEventDraftV2Location(), {
@@ -154,28 +160,19 @@ export function EventEditorV2LocationFields() {
     }
   }, [])
 
-  const selectedProvince = matchGeorefName(provinces, location.province ?? "")
-  const provinceId = selectedProvince?.id
-
   useEffect(() => {
-    if (!provinceId) {
-      setDepartments([])
-      return
-    }
+    if (!provinceId) return
+    const requested = provinceId
     let cancelled = false
-    setLoadingDepartments(true)
-    void fetchArgentinaDepartments(provinceId)
+    void fetchArgentinaDepartments(requested)
       .then((rows) => {
-        if (!cancelled) setDepartments(rows)
+        if (!cancelled) setDepartmentCache({ provinceId: requested, rows })
       })
       .catch(() => {
         if (!cancelled) {
-          setDepartments([])
+          setDepartmentCache({ provinceId: requested, rows: [] })
           setGeorefError("No se pudieron cargar los departamentos.")
         }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingDepartments(false)
       })
     return () => {
       cancelled = true
@@ -196,22 +193,30 @@ export function EventEditorV2LocationFields() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCity?.id, selectedCity?.name])
 
-  const trimmedQuery = query.trim()
-  const searchBlocked =
-    trimmedQuery.length < 3 ||
-    (trimmedQuery === formAddress.trim() && hasPinned)
+  const trimmedQuery = formAddress.trim()
+  const searchKey = [trimmedQuery, location.city, location.province]
+    .filter(Boolean)
+    .join("|")
+  const searchBlocked = trimmedQuery.length < 3 || hasPinned
+  const results =
+    !searchBlocked &&
+    searchState?.key === searchKey &&
+    searchState.status === "done"
+      ? searchState.rows
+      : []
+  const searching =
+    !searchBlocked &&
+    searchState?.key === searchKey &&
+    searchState.status === "loading"
 
   useEffect(() => {
-    if (searchBlocked) {
-      setResults([])
-      setSearching(false)
-      return
-    }
+    if (searchBlocked) return
+    const key = searchKey
     const timer = window.setTimeout(() => {
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
-      setSearching(true)
+      setSearchState({ key, status: "loading", rows: [] })
       setSearchError(null)
       const scoped = [trimmedQuery, location.city, location.province]
         .filter(Boolean)
@@ -221,7 +226,7 @@ export function EventEditorV2LocationFields() {
         signal: controller.signal,
       })
         .then((rows) => {
-          setResults(rows)
+          setSearchState({ key, status: "done", rows })
           setMenuOpen(rows.length > 0)
         })
         .catch((error: unknown) => {
@@ -229,15 +234,14 @@ export function EventEditorV2LocationFields() {
             return
           }
           setSearchError("No pudimos buscar direcciones. Intentá de nuevo.")
-          setResults([])
+          setSearchState({ key, status: "done", rows: [] })
         })
-        .finally(() => setSearching(false))
     }, 500)
     return () => {
       window.clearTimeout(timer)
       abortRef.current?.abort()
     }
-  }, [searchBlocked, trimmedQuery, location.city, location.province])
+  }, [searchBlocked, searchKey, trimmedQuery, location.city, location.province])
 
   function chooseResult(result: NominatimResult) {
     const province =
@@ -248,8 +252,7 @@ export function EventEditorV2LocationFields() {
       matchGeorefName(departments, result.address?.city ?? "")?.name ||
       result.address?.city ||
       location.city
-    setQuery(result.displayName)
-    setResults([])
+    setSearchState(null)
     setMenuOpen(false)
     setHasPinned(true)
     writeLocation({
@@ -444,7 +447,7 @@ export function EventEditorV2LocationFields() {
               role="combobox"
               aria-expanded={menuOpen}
               aria-controls={listboxId}
-              value={query}
+              value={formAddress}
               autoComplete="off"
               className={cn(DRAFT_FIELD_CLASS, "pl-9 pr-10")}
               placeholder={
@@ -456,7 +459,6 @@ export function EventEditorV2LocationFields() {
               }
               onChange={(event) => {
                 setHasPinned(false)
-                setQuery(event.target.value)
                 setMenuOpen(true)
                 writeLocation({ address: event.target.value })
               }}

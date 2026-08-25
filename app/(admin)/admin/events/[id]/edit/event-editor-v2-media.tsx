@@ -1,8 +1,9 @@
 "use client"
 
 import { ImagePlus, LoaderCircle, Trash2 } from "lucide-react"
+import Image from "next/image"
 import { useRef, useState } from "react"
-import { useFormContext } from "react-hook-form"
+import { useFormContext, useWatch } from "react-hook-form"
 
 import { DraftFieldError } from "./event-editor-v2-ui"
 import { uploadEventDraftMediaV2 } from "@/app/actions/events-v2"
@@ -22,8 +23,8 @@ export function EventEditorV2MediaField({
   label: string
   hint: string
 }) {
-  const { setValue, watch } = useFormContext<EventDraftV2>()
-  const url = watch(name)
+  const { control, setValue } = useFormContext<EventDraftV2>()
+  const url = useWatch({ control, name })
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -86,7 +87,14 @@ export function EventEditorV2MediaField({
         className="relative flex min-h-36 w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-white/40 text-left transition-all duration-200 hover:border-emerald-500/40 dark:border-gray-700 dark:bg-gray-950/40"
       >
         {url ? (
-          <img src={url} alt={label} className="absolute inset-0 size-full object-cover" />
+          <Image
+            src={url}
+            alt={label}
+            fill
+            sizes="(max-width: 768px) 100vw, 640px"
+            className="object-cover"
+            unoptimized
+          />
         ) : (
           <span className="flex flex-col items-center gap-2 px-4 text-center text-xs text-muted-foreground">
             {busy ? (

@@ -16,17 +16,17 @@ import { isMapDraftTicket, type EventDraftV2 } from "@/lib/validations/event-dra
 import type { InteractiveVenueMap } from "@/types/venue-map"
 
 export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
-  const form = useFormContext<EventDraftV2>()
+  const { control, getValues, setValue } = useFormContext<EventDraftV2>()
   const [open, setOpen] = useState(false)
-  const seatingMap = useWatch({ name: "seatingMap" })
-  const tickets = useWatch({ name: "tickets" }) ?? []
-  const title = useWatch({ name: "basicInfo.name" })
-  const startDate = useWatch({ name: "basicInfo.startDate" })
-  const venueName = useWatch({ name: "location.venueName" })
+  const seatingMap = useWatch({ control, name: "seatingMap" })
+  const tickets = useWatch({ control, name: "tickets" }) ?? []
+  const title = useWatch({ control, name: "basicInfo.name" })
+  const startDate = useWatch({ control, name: "basicInfo.startDate" })
+  const venueName = useWatch({ control, name: "location.venueName" })
   const map = draftSeatingMapToVenueMap(seatingMap)
 
   function persistMapOnly(next: InteractiveVenueMap) {
-    form.setValue("seatingMap", toDraftSeatingMap(next), {
+    setValue("seatingMap", toDraftSeatingMap(next), {
       shouldDirty: true,
       shouldTouch: true,
     })
@@ -34,9 +34,9 @@ export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
 
   function persistMapAndTickets(next: InteractiveVenueMap) {
     persistMapOnly(next)
-    form.setValue(
+    setValue(
       "tickets",
-      mergeDraftTicketsWithMap(form.getValues("tickets") ?? [], next),
+      mergeDraftTicketsWithMap(getValues("tickets") ?? [], next),
       { shouldDirty: true, shouldTouch: true },
     )
   }

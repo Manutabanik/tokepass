@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, useWatch } from "react-hook-form"
 import { useRouter } from "next/navigation"
 
 import { createEventDraftV2 } from "@/app/actions/event-draft-v2"
@@ -38,7 +38,8 @@ export function EventCreatorV2Form({
     mode: "onTouched",
   })
 
-  const title = form.watch("basicInfo.name")
+  const { control, getValues, handleSubmit, register, formState } = form
+  const title = useWatch({ control, name: "basicInfo.name" })
 
   async function persistDraft(id: string, values: EventDraftV2) {
     const result = await saveEventDraftV2(id, toEventDraftV2Payload(values))
@@ -83,7 +84,7 @@ export function EventCreatorV2Form({
       setStatus("saving")
       void saveEventDraftV2(
         eventId,
-        toEventDraftV2Payload(form.getValues()),
+        toEventDraftV2Payload(getValues()),
       ).then((result) => {
         if (!result.success) {
           setStatus("error")
@@ -96,11 +97,11 @@ export function EventCreatorV2Form({
       })
     }, 700)
     return () => window.clearTimeout(timer)
-  }, [eventId, title])
+  }, [eventId, getValues, title])
 
   return (
     <form
-      onSubmit={form.handleSubmit(onSubmit)}
+      onSubmit={handleSubmit(onSubmit)}
       className="mx-auto w-full max-w-xl space-y-6"
     >
       <div className="grid gap-2">
@@ -111,11 +112,11 @@ export function EventCreatorV2Form({
           id="event-v2-title"
           className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-slate-900 dark:border-zinc-800 dark:bg-zinc-900/90 dark:text-white"
           placeholder="Ej. After en la terraza"
-          {...form.register("basicInfo.name")}
+          {...register("basicInfo.name")}
         />
-        {form.formState.errors.basicInfo?.name ? (
+        {formState.errors.basicInfo?.name ? (
           <p className="text-xs text-red-500">
-            {form.formState.errors.basicInfo.name.message}
+            {formState.errors.basicInfo.name.message}
           </p>
         ) : null}
       </div>

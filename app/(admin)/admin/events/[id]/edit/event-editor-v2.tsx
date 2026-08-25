@@ -4,7 +4,7 @@ import { ArrowLeft, Settings2, Ticket, Type } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
-import { FormProvider, useForm } from "react-hook-form"
+import { FormProvider, useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 
 import { EventEditorV2InfoStep } from "./event-editor-v2-info"
@@ -62,11 +62,11 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
     mode: "onTouched",
     shouldUnregister: false,
   })
-  const { watch, getValues } = form
-  const values = watch()
-  const title = values.basicInfo?.name
-  const canPublish = isEventDraftPublishable(values)
-  const publishReason = canPublish ? "" : eventPublishDisabledReason(values)
+  const { control, getValues } = form
+  const watched = useWatch({ control })
+  const title = watched?.basicInfo?.name
+  const canPublish = isEventDraftPublishable(getValues())
+  const publishReason = canPublish ? "" : eventPublishDisabledReason(getValues())
 
   async function handlePublish() {
     if (!canPublish || publishing) return
@@ -98,34 +98,31 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
   }
 
   useEffect(() => {
-    let timer: number | undefined
-    const { unsubscribe } = watch(() => {
-      if (!autosaveReady.current) return
-      window.clearTimeout(timer)
-      timer = window.setTimeout(() => {
-        const generation = ++saveGeneration.current
-        setSaveStatus("saving")
-        setSaveError("")
-        void saveEventDraftV2(
-          eventId,
-          toEventDraftV2Payload(getValues()),
-        ).then((result) => {
-          if (generation !== saveGeneration.current) return
-          if (!result.success) {
-            setSaveStatus("error")
-            setSaveError(result.error)
-            return
-          }
-          setSaveStatus("saved")
-        })
-      }, 1500)
-    })
-    autosaveReady.current = true
+    if (!autosaveReady.current) {
+      autosaveReady.current = true
+      return
+    }
+    const timer = window.setTimeout(() => {
+      const generation = ++saveGeneration.current
+      setSaveStatus("saving")
+      setSaveError("")
+      void saveEventDraftV2(
+        eventId,
+        toEventDraftV2Payload(getValues()),
+      ).then((result) => {
+        if (generation !== saveGeneration.current) return
+        if (!result.success) {
+          setSaveStatus("error")
+          setSaveError(result.error)
+          return
+        }
+        setSaveStatus("saved")
+      })
+    }, 1500)
     return () => {
-      unsubscribe()
       window.clearTimeout(timer)
     }
-  }, [eventId, getValues, watch])
+  }, [eventId, getValues, watched])
 
   return (
     <FormProvider {...form}>
