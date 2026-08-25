@@ -5,6 +5,7 @@ import dynamic from "next/dynamic"
 import { useEffect, useId, useRef, useState } from "react"
 import { useFormContext, useWatch } from "react-hook-form"
 
+import { useDraftArchetype } from "./event-editor-v2-archetype"
 import {
   DRAFT_FIELD_CLASS,
   DraftCard,
@@ -77,6 +78,7 @@ function matchGeorefName(rows: GeorefEntity[], name: string) {
 
 export function EventEditorV2LocationFields() {
   const listboxId = useId()
+  const { labels } = useDraftArchetype()
   const {
     control,
     register,
@@ -292,7 +294,7 @@ export function EventEditorV2LocationFields() {
           <MapPinned className="size-4 text-emerald-400" aria-hidden />
           <div>
             <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-              Ubicación
+              {labels.venue}
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
               Georef + Nominatim + Leaflet. Se guarda solo en el JSON del borrador.
@@ -318,7 +320,7 @@ export function EventEditorV2LocationFields() {
             htmlFor="event-v2-venue-name"
             className="text-sm font-bold text-slate-800 dark:text-zinc-200"
           >
-            Nombre del lugar
+            {labels.venue}
           </Label>
           <Input
             id="event-v2-venue-name"

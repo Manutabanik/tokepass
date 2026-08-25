@@ -12,6 +12,7 @@ import { EventEditorV2InventoryStep } from "./event-editor-v2-inventory"
 import { EventEditorV2LaunchStep } from "./event-editor-v2-launch"
 import { publishEventV2, saveEventDraftV2 } from "@/app/actions/events-v2"
 import { Button } from "@/components/ui/button"
+import { getArchetypeConfig, resolveDraftArchetype } from "@/lib/events/archetypes.config"
 import {
   draftLaunchSubmitLabel,
   isDraftLaunchReady,
@@ -69,6 +70,7 @@ export function EventEditorV2({
   const { control, getValues } = form
   const watched = useWatch({ control })
   const title = watched?.basicInfo?.name
+  const labels = getArchetypeConfig(resolveDraftArchetype(watched?.archetype)).labels
   const launchReady = isDraftLaunchReady(getValues())
 
   async function handlePublish() {
@@ -226,10 +228,12 @@ export function EventEditorV2({
                     <span className="min-w-0">
                       <span className="flex items-center gap-1.5 text-sm font-semibold">
                         <item.icon className="size-3.5" aria-hidden />
-                        {item.label}
+                        {item.id === 2 ? labels.tickets : item.label}
                       </span>
                       <span className="mt-0.5 hidden text-xs text-gray-500 lg:block">
-                        {item.hint}
+                        {item.id === 2
+                          ? `${labels.capacity} y ${labels.tickets.toLowerCase()}`
+                          : item.hint}
                       </span>
                     </span>
                   </button>

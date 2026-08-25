@@ -3,6 +3,7 @@
 import { Clock, LayoutList, Pencil } from "lucide-react"
 import { useFormContext, useWatch } from "react-hook-form"
 
+import { useDraftArchetype } from "./event-editor-v2-archetype"
 import { DraftCard, DraftHint } from "./event-editor-v2-ui"
 import {
   buildInventorySummaryRows,
@@ -39,6 +40,7 @@ const KIND_BADGE: Record<
 }
 
 export function InventorySummaryTable() {
+  const { labels } = useDraftArchetype()
   const { control, getValues, setValue } = useFormContext<EventDraftV2>()
   const tickets = useWatch({ control, name: "tickets" }) ?? []
   const extras = useWatch({ control, name: "extras" }) ?? []
@@ -101,7 +103,8 @@ export function InventorySummaryTable() {
 
       {rows.length === 0 ? (
         <p className="mt-5 rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-gray-500 dark:border-gray-800">
-          Todavía no hay entradas, extras ni sectores para resumir.
+          Todavía no hay {labels.tickets.toLowerCase()}, extras ni sectores para
+          resumir.
         </p>
       ) : (
         <div className="mt-5 overflow-x-auto">

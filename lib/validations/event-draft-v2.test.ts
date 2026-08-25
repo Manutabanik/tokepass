@@ -58,6 +58,9 @@ describe("eventDraftSchema", () => {
     assert.equal(parsed.location.venueName, "")
     assert.equal(parsed.location.address, "")
     assert.equal(parsed.settings.deliveryMode, "PRESENCIAL")
+    assert.equal(parsed.archetype, "show")
+    assert.equal(parsed.isVirtual, false)
+    assert.equal(parsed.virtualLink, "")
     assert.equal(parsed.schedule.length, 0)
     assert.deepEqual(parsed.lineup, [])
   })
@@ -198,9 +201,41 @@ describe("eventPublishSchema", () => {
     draft.settings.deliveryMode = "ONLINE"
     assert.equal(eventPublishSchema.safeParse(draft).success, true)
   })
+
+  it("allows a virtual course without a physical address", () => {
+    const draft = publishableDraft()
+    draft.archetype = "course"
+    draft.isVirtual = true
+    draft.virtualLink = "https://zoom.example/aula"
+    draft.location = {
+      venueName: "",
+      address: "",
+      province: "",
+      city: "",
+    }
+    draft.basicInfo.locationName = ""
+    assert.equal(eventPublishSchema.safeParse(draft).success, true)
+  })
 })
 
 describe("parseEventDraftV2", () => {
+  it("defaults archetype to show and infers isVirtual from online delivery", () => {
+    const parsed = parseEventDraftV2({
+      settings: { deliveryMode: "ONLINE" },
+    })
+    assert.equal(parsed.archetype, "show")
+    assert.equal(parsed.isVirtual, true)
+    assert.equal(parsed.settings.deliveryMode, "ONLINE")
+    const sport = parseEventDraftV2({
+      archetype: "sport",
+      isVirtual: true,
+      settings: { deliveryMode: "ONLINE" },
+    })
+    assert.equal(sport.archetype, "sport")
+    assert.equal(sport.isVirtual, false)
+    assert.equal(sport.settings.deliveryMode, "PRESENCIAL")
+  })
+
   it("hydrates draft_state without inventing tickets or dropping extra keys", () => {
     const parsed = parseEventDraftV2({ title: "Fiesta", tickets: [], keep: 1 })
     assert.equal(parsed.basicInfo.name, "Fiesta")
@@ -403,6 +438,30 @@ describe("toEventDraftV2Payload", () => {
     assert.equal(payload.basicInfo.startDate, "2026-09-01T22:00")
     assert.equal(payload.basicInfo.endDate, "2026-09-02T04:00")
     assert.equal(payload.schedule[0]?.id, "day-1")
+  })
+
+  it("clears coordinates and marks delivery online when the draft is virtual", () => {
+    const empty = emptyEventDraftV2()
+    const payload = toEventDraftV2Payload({
+      ...empty,
+      archetype: "course",
+      isVirtual: true,
+      virtualLink: "https://meet.example/clase",
+      location: {
+        venueName: "Niceto",
+        address: "Av. Córdoba 1234",
+        province: "CABA",
+        city: "Comuna 1",
+        lat: -34.6,
+        lng: -58.3,
+      },
+    })
+    assert.equal(payload.isVirtual, true)
+    assert.equal(payload.settings.deliveryMode, "ONLINE")
+    assert.equal(payload.location.venueName, "")
+    assert.equal(payload.location.address, "")
+    assert.equal(payload.location.lat, undefined)
+    assert.equal(payload.virtualLink, "https://meet.example/clase")
   })
 })
 

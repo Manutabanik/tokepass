@@ -18,6 +18,7 @@ import {
   type EventDraftV2LineupItem,
 } from "@/lib/validations/event-draft-v2"
 
+import { useDraftArchetype } from "./event-editor-v2-archetype"
 import {
   DRAFT_FIELD_CLASS,
   DraftCard,
@@ -36,6 +37,7 @@ type LineupSuggestion = {
 }
 
 export function EventEditorV2LineupFields() {
+  const { labels } = useDraftArchetype()
   const { control, getValues, register, setValue } =
     useFormContext<EventDraftV2>()
   const { fields, append, remove } = useFieldArray({
@@ -177,12 +179,11 @@ export function EventEditorV2LineupFields() {
       <div className="mb-5 flex items-center gap-2">
         <Users className="size-4 text-emerald-400" aria-hidden />
         <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-          Protagonistas
+          {labels.participants}
         </h2>
       </div>
       <DraftHint>
-        Lineup universal: artistas, oradores o invitados. Se guarda solo en el
-        JSON del borrador.
+        {labels.participants}. Se guarda solo en el JSON del borrador.
       </DraftHint>
 
       <div ref={rootRef} className="relative mt-5">
@@ -197,10 +198,10 @@ export function EventEditorV2LineupFields() {
             setOpen(true)
           }}
           onFocus={() => setOpen(true)}
-          placeholder="Buscar artista, orador o invitado..."
+          placeholder={`Buscar ${labels.participants.toLowerCase()}...`}
           autoComplete="off"
           className={cn(DRAFT_FIELD_CLASS, "h-12 pl-11")}
-          aria-label="Buscar protagonista"
+          aria-label={`Buscar ${labels.participants.toLowerCase()}`}
           aria-expanded={showDropdown}
           aria-controls="event-v2-lineup-results"
         />

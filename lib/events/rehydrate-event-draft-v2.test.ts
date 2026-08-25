@@ -210,6 +210,8 @@ describe("rehydrateEventDraftV2", () => {
       tickets: [],
     })
     assert.equal(draft.settings.deliveryMode, "ONLINE")
+    assert.equal(draft.isVirtual, true)
+    assert.equal(draft.archetype, "show")
     assert.equal(draft.location.venueName, "")
     assert.equal(draft.location.address, "")
   })

@@ -1,10 +1,20 @@
 import { z } from "zod"
 
 import {
+  EVENT_DRAFT_ARCHETYPES,
+  archetypeSupportsVirtual,
+  resolveDraftArchetype,
+} from "@/lib/events/archetypes.config"
+import {
   emptyDraftSeatingMap,
   isMapDraftTicket,
   toDraftSeatingMap,
 } from "@/lib/events/draft-seating-map-v2"
+
+export {
+  EVENT_DRAFT_ARCHETYPES,
+  type EventDraftArchetype,
+} from "@/lib/events/archetypes.config"
 
 export { isMapDraftTicket } from "@/lib/events/draft-seating-map-v2"
 
@@ -130,6 +140,9 @@ const draftSeatingMapSchema = z
   .default({ url: "", sectors: [] })
 
 const eventDraftFieldsSchema = z.object({
+  archetype: z.enum(EVENT_DRAFT_ARCHETYPES).optional().default("show"),
+  isVirtual: z.boolean().optional().default(false),
+  virtualLink: z.string().optional().default(""),
   basicInfo: draftBasicInfoSchema,
   location: draftLocationSchema,
   flyerUrl: z.string().optional().default(""),
@@ -162,6 +175,9 @@ const publishLineItemSchema = z.object({
 
 export const eventPublishSchema = z
   .object({
+    archetype: z.enum(EVENT_DRAFT_ARCHETYPES).optional(),
+    isVirtual: z.boolean().optional(),
+    virtualLink: z.string().optional(),
     basicInfo: z.object({
       name: z.string().min(1, "El nombre es obligatorio"),
       startDate: z.string().optional(),
@@ -263,7 +279,9 @@ export const eventPublishSchema = z
       }
     }
 
-    if (data.settings?.deliveryMode === "ONLINE") return
+    if (data.isVirtual === true || data.settings?.deliveryMode === "ONLINE") {
+      return
+    }
     const venueName = (
       data.location?.venueName ||
       data.basicInfo.locationName ||
@@ -327,6 +345,9 @@ export function emptyEventDraftV2Location(): EventDraftV2Location {
 export function emptyEventDraftV2(): EventDraftV2 {
   const firstDay = createDraftScheduleDay({ name: "Día 1" })
   return {
+    archetype: "show",
+    isVirtual: false,
+    virtualLink: "",
     basicInfo: {
       name: "",
       startDate: firstDay.startDate,
@@ -354,8 +375,11 @@ export function emptyEventDraftV2(): EventDraftV2 {
 
 export function isEventDraftOnline(values: unknown): boolean {
   if (!values || typeof values !== "object" || Array.isArray(values)) return false
-  const settings = (values as { settings?: { deliveryMode?: unknown } }).settings
-  return settings?.deliveryMode === "ONLINE"
+  const record = values as {
+    isVirtual?: unknown
+    settings?: { deliveryMode?: unknown }
+  }
+  return record.isVirtual === true || record.settings?.deliveryMode === "ONLINE"
 }
 
 export function createDraftLineItem(): EventDraftV2LineItem {
@@ -558,13 +582,21 @@ function parseDraftLineItems(raw: unknown): EventDraftV2LineItem[] {
 
 export function toEventDraftV2Payload(values: EventDraftV2) {
   const name = values.basicInfo?.name ?? ""
-  const venueName =
-    values.location?.venueName?.trim() || values.basicInfo?.locationName || ""
+  const archetype = resolveDraftArchetype(values.archetype)
+  const isVirtual =
+    archetypeSupportsVirtual(archetype) &&
+    (values.isVirtual === true || values.settings?.deliveryMode === "ONLINE")
+  const venueName = isVirtual
+    ? ""
+    : values.location?.venueName?.trim() || values.basicInfo?.locationName || ""
   const schedule = resolveDraftSchedule(values)
   const primary = schedule[0]
   return {
     ...values,
     title: name,
+    archetype,
+    isVirtual,
+    virtualLink: values.virtualLink?.trim() ?? "",
     schedule,
     basicInfo: {
       ...values.basicInfo,
@@ -572,10 +604,16 @@ export function toEventDraftV2Payload(values: EventDraftV2) {
       endDate: primary?.endDate || values.basicInfo?.endDate || "",
       locationName: venueName,
     },
-    location: {
-      ...emptyEventDraftV2Location(),
-      ...values.location,
-      venueName,
+    location: isVirtual
+      ? emptyEventDraftV2Location()
+      : {
+          ...emptyEventDraftV2Location(),
+          ...values.location,
+          venueName,
+        },
+    settings: {
+      ...values.settings,
+      deliveryMode: isVirtual ? "ONLINE" : "PRESENCIAL",
     },
   }
 }
@@ -637,9 +675,16 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
     basicInfo: { startDate, endDate },
   })
   const primary = schedule[0]
+  const archetype = resolveDraftArchetype(record.archetype)
+  const isVirtual =
+    archetypeSupportsVirtual(archetype) &&
+    (record.isVirtual === true || settingsRaw.deliveryMode === "ONLINE")
 
   return {
     ...record,
+    archetype,
+    isVirtual,
+    virtualLink: asOptionalString(record.virtualLink),
     basicInfo: {
       name,
       startDate: primary?.startDate || startDate,
@@ -669,8 +714,7 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
       absorbFees: settingsRaw.absorbFees === true,
       refundPolicy: asOptionalString(settingsRaw.refundPolicy),
       checkoutMessage: asOptionalString(settingsRaw.checkoutMessage),
-      deliveryMode:
-        settingsRaw.deliveryMode === "ONLINE" ? "ONLINE" : "PRESENCIAL",
+      deliveryMode: isVirtual ? "ONLINE" : "PRESENCIAL",
     },
   }
 }

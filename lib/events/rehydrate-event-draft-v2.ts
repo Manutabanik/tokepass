@@ -150,6 +150,9 @@ export function rehydrateEventDraftV2(
   const primary = schedule[0]
 
   return parseEventDraftV2({
+    archetype: "show",
+    isVirtual: online,
+    virtualLink: "",
     basicInfo: {
       name: title,
       startDate: primary?.startDate ?? "",
