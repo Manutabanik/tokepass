@@ -11,7 +11,7 @@ import {
   Ticket,
 } from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
-import { useCallback, useEffect, useRef, useState, useTransition } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   useFieldArray,
   useForm,
@@ -26,7 +26,6 @@ import {
   updateCompleteEvent,
   type EditableEventData,
 } from "@/app/actions/events"
-import { EventAutosaveIndicator } from "@/components/admin/event-autosave-indicator"
 import { EventCapacityHeader } from "@/components/admin/event-capacity-header"
 import { EventStudioDock } from "@/components/admin/event-studio-dock"
 import { EventStudioDateTimeField } from "@/components/admin/events/event-studio-datetime-field"
@@ -115,7 +114,6 @@ import {
 } from "@/lib/errors/form-field"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
 import { formHasInventoryOrVenue } from "@/lib/events/event-inventory-fingerprint"
-import { mergePersistedEventForm } from "@/lib/events/merge-persisted-event-form"
 import {
   collectLiveSeatingSectorIds,
   sanitizeEventSubmitPayload,
@@ -393,10 +391,8 @@ export function EventCreationWizard({
   const draftKey = initialData ? `edit:${initialData.id}` : "create"
   const {
     persistedEventId,
-    flushAutosave,
     cancelPendingAutosave,
     waitForInFlightAutosave,
-    acknowledgeServerSnapshot,
   } = useEventFormAutosave({
     form,
     draftKey,
@@ -418,9 +414,7 @@ export function EventCreationWizard({
       ? Date.parse(initialData.updatedAt)
       : null,
   })
-  const setEventId = useEventFormStore((s) => s.setEventId)
   const clearSession = useEventFormStore((s) => s.clearSession)
-  const [isSaving, startTransition] = useTransition()
 
   const resolvedStep = clampWizardStep(activeStep, wizardFlags)
   if (activeStep !== resolvedStep) {
@@ -493,7 +487,6 @@ export function EventCreationWizard({
         return
       }
     }
-    flushAutosave()
     setActiveStep(target)
   }
 
@@ -558,38 +551,14 @@ export function EventCreationWizard({
     toast.error(firstMessage ?? "Revisá los campos marcados para continuar.")
   }
 
-  function rememberCreatedEventUrl(eventId: string) {
-    if (isEditing || typeof window === "undefined") return
-    const nextUrl = `/admin/events/${eventId}/edit`
-    window.history.replaceState(window.history.state, "", nextUrl)
-  }
-
-  function rehydrateFromServer(
-    result: Extract<
-      Awaited<ReturnType<typeof updateCompleteEvent>>,
-      { success: true }
-    >,
-    options?: { refresh?: boolean },
-  ) {
-    const snapshot = result.data
-    setEventId(snapshot.eventId)
-    if (snapshot.zoneTierPricing.length > 0) {
-      setZoneTierPricing(snapshot.zoneTierPricing)
+  function hardReloadAfterSave(eventId: string) {
+    if (typeof window === "undefined") return
+    const editUrl = `/admin/events/${eventId}/edit`
+    if (window.location.pathname !== editUrl) {
+      window.location.assign(editUrl)
+      return
     }
-    if (snapshot.values.venue.venueMap) {
-      setVenuePricingMap(
-        venueMapToPricingMap(parseVenueMap(snapshot.values.venue.venueMap)),
-      )
-    }
-    const merged = mergePersistedEventForm(form.getValues(), snapshot.values)
-    if (options?.refresh !== false && isEditing) {
-      startTransition(() => {
-        router.refresh()
-      })
-    }
-    form.reset(merged)
-    acknowledgeServerSnapshot(merged)
-    rememberCreatedEventUrl(snapshot.eventId)
+    window.location.reload()
   }
 
   function reportPersistError(
@@ -674,7 +643,7 @@ export function EventCreationWizard({
     toast.success("Datos principales guardados", {
       description: "El título y los datos del evento quedaron actualizados.",
     })
-    rehydrateFromServer(result)
+    hardReloadAfterSave(result.data.eventId)
   }
 
   function buildConsolidatedPayload(data: EventFormValues): EventFormValues {
@@ -725,9 +694,6 @@ export function EventCreationWizard({
         rehydrate: true,
       }),
     )
-    if (result.success) {
-      rehydrateFromServer(result, { refresh: false })
-    }
     return result
   }
 
@@ -891,7 +857,6 @@ export function EventCreationWizard({
           description: "Confirmá el envío a revisión de TokePass.",
         },
       )
-      rehydrateFromServer(result)
       setPublishConfirm({ open: true, eventId: result.data.eventId })
       return true
     }
@@ -900,7 +865,7 @@ export function EventCreationWizard({
       toast.success("Cambios actualizados", {
         description: "El estado del evento no cambió. Los datos ya están guardados.",
       })
-      rehydrateFromServer(result)
+      hardReloadAfterSave(result.data.eventId)
       return true
     }
 
@@ -909,7 +874,7 @@ export function EventCreationWizard({
         ? "Borrador con flyer listo. Completá barra y multimedia cuando quieras."
         : "Podés seguir editando en esta pestaña.",
     })
-    rehydrateFromServer(result)
+    hardReloadAfterSave(result.data.eventId)
     return true
   }
 
@@ -1035,7 +1000,11 @@ export function EventCreationWizard({
               onSelect={(index) => void moveToStep(index)}
             />
           }
-          status={<EventAutosaveIndicator onRetry={() => void flushAutosave()} />}
+          status={
+            <span className="text-xs font-medium text-muted-foreground">
+              Autoguardado desactivado
+            </span>
+          }
           capacity={<EventCapacityHeader form={form} />}
           banner={
             impersonationName ? (
@@ -1054,7 +1023,7 @@ export function EventCreationWizard({
             <EventStudioDock
               canGoBack={resolvedStep !== WIZARD_STEP_IDENTITY}
               isLast={isLastVisibleWizardStep(resolvedStep, wizardFlags)}
-              submitting={form.formState.isSubmitting || isSaving}
+              submitting={form.formState.isSubmitting}
               nextDisabled={inventoryBlocked}
               eventStatus={initialData?.status ?? null}
               onBack={() =>

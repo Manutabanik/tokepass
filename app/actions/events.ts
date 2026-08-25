@@ -817,6 +817,11 @@ async function persistEventVenueFields(
       capacity: officialCapacity,
       max_capacity: effectiveCapacity,
     }
+    console.log("ACTUALIZANDO BD CON ESTOS DATOS EXACTOS:", {
+      table: "venues",
+      venueId,
+      updatePayload: withMax,
+    })
     const updated = await client
       .from("venues")
       .update(withMax as never)
@@ -1000,13 +1005,19 @@ async function persistEventSchedule(
       ? parseDateTimeLocal(data.basics.endDate)?.toISOString() ?? null
       : null
 
+  const schedulePayload = {
+    schedule_days: scheduleDays,
+    date,
+    ends_at: endsAt,
+  }
+  console.log("ACTUALIZANDO BD CON ESTOS DATOS EXACTOS:", {
+    table: "events.schedule",
+    eventId,
+    updatePayload: schedulePayload,
+  })
   const { error } = await client
     .from("events")
-    .update({
-      schedule_days: scheduleDays,
-      date,
-      ends_at: endsAt,
-    } as never)
+    .update(schedulePayload as never)
     .eq("id", eventId)
   console.log("RESPUESTA SUPABASE:", {
     op: "events.update.schedule",
@@ -1308,6 +1319,11 @@ async function updateEventReturning(
   eventId: string,
   patch: Record<string, unknown>,
 ): Promise<{ data: Record<string, unknown> } | { error: string }> {
+  console.log("ACTUALIZANDO BD CON ESTOS DATOS EXACTOS:", {
+    table: "events",
+    eventId,
+    updatePayload: patch,
+  })
   const { data, error } = await client
     .from("events")
     .update(patch as never)
@@ -3373,6 +3389,10 @@ export async function createCompleteEvent(
       }
     }
     rpcPayload = mapEventFormToRpcPayload(formValues, feeConfig, flyerUrl)
+    console.log("ACTUALIZANDO BD CON ESTOS DATOS EXACTOS:", {
+      table: "rpc.create_complete_event_with_seating_tx",
+      updatePayload: rpcPayload,
+    })
     console.info("[event-persist] create payload", {
       tickets: rpcPayload.tiers.length,
       lineup: formValues.lineup?.length ?? 0,
@@ -3783,6 +3803,11 @@ export async function updateCompleteEvent(
         schedule_days: event.schedule_days,
       },
     )
+    console.log("ACTUALIZANDO BD CON ESTOS DATOS EXACTOS:", {
+      table: "rpc.update_complete_event_with_seating_tx",
+      eventId,
+      updatePayload: rpcPayload,
+    })
     console.info("[event-persist] update payload", {
       eventId,
       tickets: rpcPayload.tiers.length,
