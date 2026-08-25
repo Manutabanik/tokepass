@@ -92,13 +92,47 @@ describe("capacity thermometer", () => {
     assert.equal(snap.ratio < 1, true)
   })
 
-  it("does not invent a venue max of 1 when the recinto has no aforo", () => {
+  it("derives venue max from ticket stock when no aforo is declared", () => {
     const snap = computeCapacityThermometer({
       tickets: [ticket({ tierType: "general", capacity: 40 })],
       venueCapacity: undefined,
     })
-    assert.equal(snap.venueMax, 0)
+    assert.equal(snap.venueMax, 40)
+    assert.equal(snap.used, 40)
     assert.equal(snap.overCapacity, false)
-    assert.equal(snap.ratio, 0)
+    assert.equal(snap.ratio, 1)
+  })
+
+  it("ignores stale map geometry when the seating plan is off", () => {
+    const venueMap = emptyVenueMap()
+    venueMap.zones = [
+      {
+        id: "zone-campo",
+        name: "Campo",
+        color: "#22d3ee",
+        price: 0,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 8, y: 0 },
+          { x: 8, y: 8 },
+        ],
+        layoutType: "general",
+        sellMode: "group",
+        rows: 1,
+        itemsPerRow: 1,
+        capacityPerUnit: 1,
+        capacity: 500,
+        labelPrefix: "Campo ",
+      },
+    ]
+    const snap = computeCapacityThermometer({
+      tickets: [ticket({ tierType: "general", capacity: 40 })],
+      venueMap,
+      venueCapacity: 200,
+      hasSeatingPlan: false,
+    })
+    assert.equal(snap.mapCapacity, 0)
+    assert.equal(snap.used, 40)
+    assert.equal(snap.overCapacity, false)
   })
 })

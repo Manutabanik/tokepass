@@ -11,7 +11,7 @@ import {
   sheetDifferentiateDefault,
   TicketEditorSheet,
 } from "@/components/admin/events/ticket-editor-sheet"
-import { FormLabel, FormMessage } from "@/components/ui/form"
+import { FormLabel } from "@/components/ui/form"
 import { listEventFormJornadas } from "@/lib/event-schedule"
 import { createInventoryTicket } from "@/lib/inventory/create-inventory-ticket"
 import { EMPTY_MAP_ENABLE_ERROR } from "@/lib/inventory/map-enablement"
@@ -190,9 +190,6 @@ export function PricingStep({
         Entradas
       </FormLabel>
       <CapacityThermometer form={form} />
-      {typeof form.formState.errors.tickets?.message === "string" ? (
-        <FormMessage>{form.formState.errors.tickets.message}</FormMessage>
-      ) : null}
       {typeof mapError === "string" ? (
         <p className="text-sm text-destructive" role="alert">
           {mapError || EMPTY_MAP_ENABLE_ERROR}

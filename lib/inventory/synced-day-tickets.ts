@@ -93,7 +93,7 @@ function familyFromIndexes(
     name: rows[0]?.name?.trim() || (kind === "map" ? "Sector" : "Entrada"),
     kind,
     indexes,
-    stock: asStock(rows[0]?.capacity),
+    stock: rows.reduce((sum, row) => sum + asStock(row?.capacity), 0),
     sold: rows.reduce((sum, row) => sum + ticketSoldCount(row), 0),
     price: Math.min(...prices),
     priceMixed: pricesAreDifferentiated(prices),

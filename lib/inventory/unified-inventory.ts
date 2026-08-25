@@ -91,3 +91,13 @@ export function serializeBundleItems(
 export function isQuantityInventoryType(tierType: InventoryTierType): boolean {
   return tierType === "general" || tierType === "addon" || tierType === "bundle"
 }
+
+/** Adicionales (estacionamiento, merch, consumiciones). No consumen aforo del recinto. */
+export function isAddonInventoryTicket(input: {
+  tierType?: string | null
+  layoutType?: string | null
+  bundleItems?: InventoryBundleItem[] | null
+}): boolean {
+  if (parseInventoryTierType(input.tierType) === "addon") return true
+  return inferInventoryTierType(input) === "addon"
+}

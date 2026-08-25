@@ -1,8 +1,9 @@
 "use client"
 
-import { useWatch, type UseFormReturn } from "react-hook-form"
+import type { UseFormReturn } from "react-hook-form"
 
-import { computeCapacityThermometer } from "@/lib/inventory/capacity-thermometer"
+import { useEventCapacity } from "@/hooks/use-event-capacity"
+import { eventCapacityOverflowMessage } from "@/lib/inventory/capacity-budget"
 import { formatNumber } from "@/lib/format"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
@@ -12,57 +13,48 @@ export function CapacityThermometer({
 }: {
   form: UseFormReturn<EventFormValues>
 }) {
-  const tickets = useWatch({ control: form.control, name: "tickets" }) ?? []
-  const venueMap = useWatch({ control: form.control, name: "venue.venueMap" })
-  const venueCapacity = useWatch({ control: form.control, name: "venue.capacity" })
-  const customMaxCapacity = useWatch({
-    control: form.control,
-    name: "venue.customMaxCapacity",
-  })
-  const snap = computeCapacityThermometer({
-    tickets,
-    venueMap,
-    venueCapacity,
-    customMaxCapacity,
-  })
-  const percent = Math.min(100, Math.round(snap.ratio * 100))
-  const totalLabel = snap.venueMax > 0 ? formatNumber(snap.venueMax) : "—"
+  const capacity = useEventCapacity(form)
+  const used = capacity.totalAllocated
+  const venueMax = capacity.effectiveMaxCapacity
+  const percent =
+    venueMax > 0 ? Math.min(100, Math.round((used / venueMax) * 100)) : 0
+  const totalLabel = venueMax > 0 ? formatNumber(venueMax) : "—"
 
   return (
     <section className="space-y-1.5">
       <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
         <span>Capacidad del recinto</span>
         <span className="font-medium tabular-nums text-foreground">
-          {formatNumber(snap.used)} / {totalLabel}
+          {formatNumber(used)} / {totalLabel}
         </span>
       </div>
       <div
         className="h-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800"
         role="meter"
         aria-valuemin={0}
-        aria-valuemax={snap.venueMax || snap.used}
-        aria-valuenow={snap.used}
+        aria-valuemax={venueMax || used}
+        aria-valuenow={used}
         aria-label="Stock ocupado sobre capacidad del recinto"
       >
         <div
           className={cn(
             "h-full rounded-full transition-[width,background-color]",
-            snap.overCapacity
+            capacity.exceeded
               ? "bg-amber-500"
-              : snap.remaining > 0
+              : capacity.remaining > 0
                 ? "bg-emerald-600 dark:bg-emerald-400"
                 : "bg-zinc-700 dark:bg-zinc-300",
           )}
           style={{ width: `${percent}%` }}
         />
       </div>
-      {snap.overCapacity ? (
+      {capacity.exceeded ? (
         <p className="text-[11px] text-amber-700 dark:text-amber-300">
-          El stock supera el aforo por {formatNumber(snap.overflow)} lugares.
+          {eventCapacityOverflowMessage(capacity)}
         </p>
-      ) : snap.remaining > 0 ? (
+      ) : capacity.remaining > 0 ? (
         <p className="text-[11px] text-muted-foreground">
-          Aforo disponible: {formatNumber(snap.remaining)} lugares
+          Aforo disponible: {formatNumber(capacity.remaining)} lugares
         </p>
       ) : null}
     </section>

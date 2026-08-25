@@ -3,6 +3,7 @@ import { z } from "zod"
 import {
   computeEventCapacity,
   eventCapacityOverflowMessage,
+  asPositiveInt,
 } from "@/lib/inventory/capacity-budget"
 import { findLogicalSector } from "@/lib/inventory/logical-sectors"
 import {
@@ -123,16 +124,24 @@ export const scheduleDaySchema = z.object({
     ),
 })
 
+const coerceTicketCapacity = z.coerce
+  .number({ error: "Indicá cuántas entradas vas a poner a la venta" })
+  .int()
+  .min(1, "Indicá cuántas entradas vas a poner a la venta")
+
+const coerceOptionalTicketCapacity = z.coerce.number().int().optional()
+
+const coerceVenueCapacity = z.coerce.number().int().positive().optional()
+
+const coerceZoneCapacity = z.coerce.number().int().positive()
+
 export const ticketPhaseSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(2, "Nombrá el lote."),
   price: z
     .number({ error: "Ingresá un precio válido o marcá la opción de entrada gratuita" })
     .min(0, "Ingresá un precio válido o marcá la opción de entrada gratuita"),
-  capacityLimit: z
-    .number({ error: "Indicá cuántas entradas vas a poner a la venta" })
-    .int()
-    .min(1, "Indicá cuántas entradas vas a poner a la venta"),
+  capacityLimit: coerceTicketCapacity,
   startTime: z.string().nullable().optional(),
   endTime: z.string().nullable().optional(),
   status: z
@@ -162,10 +171,7 @@ export const ticketTierSchema = z.preprocess(
     .enum(TICKET_CALCULATION_MODES)
     .optional()
     .default("public_price"),
-  capacity: z
-    .number({ error: "Indicá cuántas entradas vas a poner a la venta" })
-    .int()
-    .min(1, "Indicá cuántas entradas vas a poner a la venta"),
+  capacity: coerceTicketCapacity,
   sold: z.number().int().min(0).optional(),
   timeLimit: z.string().optional(),
   /** datetime-local. Vacío = inmediato. */
@@ -278,8 +284,8 @@ const eventFormObject = z
       department: z.string().trim().optional(),
       provinceId: z.string().trim().optional().nullable(),
       departmentId: z.string().trim().optional().nullable(),
-      capacity: z.number().int().positive().optional(),
-      customMaxCapacity: z.number().int().min(0).nullable().optional(),
+      capacity: coerceVenueCapacity,
+      customMaxCapacity: z.coerce.number().int().min(0).nullable().optional(),
       rows: z.number().int().positive().optional(),
       seatsPerRow: z.number().int().positive().optional(),
       latitude: z.number().nullable().optional(),
@@ -295,7 +301,7 @@ const eventFormObject = z
             id: z.string().trim().min(1).optional(),
             name: z.string().trim().min(1),
             type: z.enum(["general_admission", "reserved_seating"]),
-            capacity: z.number().int().positive(),
+            capacity: coerceZoneCapacity,
             rows: z.number().int().positive().optional().nullable(),
             seatsPerRow: z.number().int().positive().optional().nullable(),
           }),
@@ -524,6 +530,7 @@ const eventFormObject = z
         message: EMPTY_MAP_ENABLE_ERROR,
       })
     }
+    // Adicionales (tierType addon) viven en tickets[] pero no consumen aforo físico.
     const capacitySnap = computeEventCapacity({
       tickets: data.tickets,
       venueMap: data.basics.hasSeatingPlan ? data.venue.venueMap : null,
@@ -543,7 +550,7 @@ const eventFormObject = z
     for (const [index, tier] of data.tickets.entries()) {
       const phases = tier.phases ?? []
       const phaseSum = phases.reduce(
-        (sum, phase) => sum + (Number(phase.capacityLimit) || 0),
+        (sum, phase) => sum + asPositiveInt(phase.capacityLimit),
         0,
       )
       if (phases.length > 0 && phaseSum > (Number(tier.capacity) || 0)) {
@@ -647,7 +654,7 @@ const draftTicketSchema = z.preprocess(
     .enum(TICKET_CALCULATION_MODES)
     .optional()
     .default("public_price"),
-  capacity: z.number().int().optional(),
+  capacity: coerceOptionalTicketCapacity,
   sold: z.number().int().min(0).optional(),
   timeLimit: z.string().optional(),
   saleStartsAt: z.string().optional().default(""),
@@ -739,7 +746,7 @@ export const draftEventSchema = z.object({
       department: z.string().optional(),
       provinceId: z.string().optional().nullable(),
       departmentId: z.string().optional().nullable(),
-      capacity: z.number().int().optional(),
+      capacity: coerceOptionalTicketCapacity,
       customMaxCapacity: z.number().int().min(0).nullable().optional(),
       rows: z.number().int().optional(),
       seatsPerRow: z.number().int().optional(),

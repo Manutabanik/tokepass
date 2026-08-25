@@ -94,6 +94,7 @@ import {
 } from "@/lib/inventory/capacity-budget"
 import {
   EMPTY_MAP_ENABLE_ERROR,
+  eventHasActiveSeatingMap,
   venueMapHasConfiguredSectors,
 } from "@/lib/inventory/map-enablement"
 import { assignableLogicalSectorIds } from "@/lib/inventory/logical-sectors"
@@ -510,14 +511,12 @@ export function EventCreationWizard({
       const capacity = computeEventCapacityFromForm(form.getValues())
       if (capacity.exceeded) {
         const message = eventCapacityOverflowMessage(capacity)
-        form.setError("tickets", { type: "manual", message })
         toast.error("El aforo está excedido", { description: message })
         return
       }
       if (ticketsHavePhaseOverflow(form.getValues("tickets") ?? [])) {
         const message =
           "La suma de los lotes de precio no puede superar la capacidad máxima del ticket."
-        form.setError("tickets", { type: "manual", message })
         toast.error("Lotes de precio excedidos", { description: message })
         return
       }
@@ -678,7 +677,14 @@ export function EventCreationWizard({
     }, 80)
   }
 
+  function syncAfterSuccessfulSave(values: EventFormValues) {
+    markSaved(values)
+    router.refresh()
+  }
+
   async function onSaveIdentity(data: EventFormValues) {
+    cancelPendingAutosave()
+    await waitForInFlightAutosave()
     const titleOk = await form.trigger("basics.title")
     if (!titleOk || data.basics.title.trim().length < 3) {
       toast.error("Revisá el título del evento")
@@ -729,7 +735,7 @@ export function EventCreationWizard({
     if (result.eventId) {
       useEventFormStore.getState().setEventId(result.eventId)
     }
-    markSaved(data)
+    syncAfterSuccessfulSave(data)
     toast.success("Datos principales guardados", {
       description: "El título y los datos del evento quedaron actualizados.",
     })
@@ -758,10 +764,16 @@ export function EventCreationWizard({
     })
     return {
       ...next,
-      tickets: applyMapCapacityToTickets(
-        next.tickets,
-        parseVenueMap(next.venue.venueMap),
-      ),
+      tickets: eventHasActiveSeatingMap({
+        hasSeatingPlan: next.basics.hasSeatingPlan,
+        includesSeatingMap: next.venue.includesSeatingMap,
+        venueMap: next.venue.venueMap,
+      })
+        ? applyMapCapacityToTickets(
+            next.tickets,
+            parseVenueMap(next.venue.venueMap),
+          )
+        : next.tickets,
     }
   }
 
@@ -784,7 +796,19 @@ export function EventCreationWizard({
       formData.set("targetOrganizerId", targetOrganizerId)
     }
     const result = await updateCompleteEvent(formData)
-    if (result.success) markSaved(payloadData)
+    if (!result.success) {
+      reportPersistError(
+        result.error,
+        result.title ?? "No pudimos guardar el inventario",
+        result.wizardConflict,
+        result.code,
+        result.field,
+        result.actionHint,
+        result.source,
+      )
+      return result
+    }
+    syncAfterSuccessfulSave(payloadData)
     return result
   }
 
@@ -802,7 +826,6 @@ export function EventCreationWizard({
     const capacity = computeEventCapacityFromForm(data)
     if (capacity.exceeded) {
       const message = eventCapacityOverflowMessage(capacity)
-      form.setError("tickets", { type: "manual", message })
       toast.error("El aforo está excedido", { description: message })
       goToWizardStep(2)
       return false
@@ -852,7 +875,13 @@ export function EventCreationWizard({
       data.venue.saveVenueForReuse &&
       data.venue.venueName.trim().length >= 2
     if (canPersistVenue) {
-      const venueCapacity = Math.floor(Number(data.venue.capacity))
+      const capacitySnap = computeEventCapacityFromForm(data)
+      const venueCapacity = Math.max(
+        1,
+        capacitySnap.baseVenueCapacity ||
+          Math.floor(Number(data.venue.capacity)) ||
+          1,
+      )
       if (!Number.isFinite(venueCapacity) || venueCapacity < 1) {
         toast.error("Definí el aforo máximo del recinto.")
         goToWizardStep(WIZARD_STEP_IDENTITY)
@@ -968,7 +997,7 @@ export function EventCreationWizard({
     if (result.eventId) {
       useEventFormStore.getState().setEventId(result.eventId)
     }
-    markSaved(payloadData)
+    syncAfterSuccessfulSave(payloadData)
 
     if (intent === "publish") {
       clearDraft(draftKey)

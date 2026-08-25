@@ -88,11 +88,13 @@ export function useEventFormAutosave(input: {
   const setZoneTierPricing = useEventFormStore((s) => s.setZoneTierPricing)
   const setEventId = useEventFormStore((s) => s.setEventId)
   const setAutosaveStatus = useEventFormStore((s) => s.setAutosaveStatus)
+  const commitSavedSession = useEventFormStore((s) => s.commitSavedSession)
   const storeEventId = useEventFormStore((s) => s.eventId)
 
   const readyRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savingRef = useRef(false)
+  const saveGenerationRef = useRef(0)
   const queuedRef = useRef(false)
   const skipWatchRef = useRef(false)
   const lastSavedKeyRef = useRef<string | null>(null)
@@ -147,9 +149,11 @@ export function useEventFormAutosave(input: {
       })
       const persisted = useEventFormStore.getState()
       if (persisted.values && persisted.draftKey === draftKey) {
-        form.reset(persisted.values)
-        onVenuePricingMapChange(persisted.venuePricingMap)
-        onZoneTierPricingChange?.(persisted.zoneTierPricing)
+        if (!eventId) {
+          form.reset(persisted.values)
+          onVenuePricingMapChange(persisted.venuePricingMap)
+          onZoneTierPricingChange?.(persisted.zoneTierPricing)
+        }
       }
       latestRef.current = {
         ...latestRef.current,
@@ -187,6 +191,7 @@ export function useEventFormAutosave(input: {
       queuedRef.current = true
       return
     }
+    const generation = saveGenerationRef.current
     const snapshot = latestRef.current
     const values = sanitizeFormValues(snapshot.values)
     const payloadKey = JSON.stringify(values)
@@ -209,6 +214,9 @@ export function useEventFormAutosave(input: {
         identityOnly,
         flyer: flyerRef.current,
       })
+      if (generation !== saveGenerationRef.current) {
+        return
+      }
       if (!result.ok) {
         setAutosaveStatus("error", result.error)
         if (lastErrorToastRef.current !== result.error) {
@@ -271,6 +279,7 @@ export function useEventFormAutosave(input: {
   }
 
   function cancelPendingAutosave() {
+    saveGenerationRef.current += 1
     if (timerRef.current) {
       clearTimeout(timerRef.current)
       timerRef.current = null
@@ -286,9 +295,13 @@ export function useEventFormAutosave(input: {
   }
 
   function markSaved(values: EventFormValues) {
-    lastSavedKeyRef.current = JSON.stringify(sanitizeFormValues(values))
-    inventoryFingerprintRef.current = eventInventoryFingerprint(values)
-    setAutosaveStatus("saved")
+    const sanitized = sanitizeFormValues(values)
+    lastSavedKeyRef.current = JSON.stringify(sanitized)
+    inventoryFingerprintRef.current = eventInventoryFingerprint(sanitized)
+    latestRef.current.values = sanitized
+    commitSavedSession(sanitized)
+    skipWatchRef.current = true
+    form.reset(sanitized, { keepDirty: false, keepDefaultValues: false })
   }
 
   const scheduleSave = useCallback(() => {
