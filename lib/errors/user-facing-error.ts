@@ -4,6 +4,7 @@ import {
   isSafeUserFacingCopy,
   mapUnknownError,
 } from "@/lib/errors/error-handler"
+import { isUnmaskedSupabaseError } from "@/lib/errors/supabase-error"
 
 export const INVENTORY_SYNC_MESSAGE = APP_ERRORS.INVENTORY_SYNC.message
 
@@ -16,6 +17,7 @@ export function toUserFacingError(
   text: unknown,
   fallback = INVENTORY_SYNC_MESSAGE,
 ): string {
+  if (isUnmaskedSupabaseError(text)) return text
   const safeFallback = isSafeUserFacingCopy(fallback)
     ? fallback
     : GENERIC_PUBLIC_ERROR

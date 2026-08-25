@@ -27,7 +27,7 @@ import {
   parseTicketTierCategory,
   type TicketTierCategory,
 } from "@/lib/ticket-tier-category"
-import { toUserFacingError } from "@/lib/errors/user-facing-error"
+import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import { writeSecurityAuditLog } from "@/lib/security/audit-log"
 import { asUuidOrNull } from "@/lib/validations/relation-id"
 
@@ -299,7 +299,7 @@ export async function upsertTicketBundle(input: {
   if (tierId) {
     const { error } = await admin
       .from("ticket_tiers")
-      .update(payload)
+      .update({ ...payload, id: tierId, event_id: input.eventId })
       .eq("id", tierId)
       .eq("event_id", input.eventId)
     if (error && /promo_discount|schema cache|PGRST204|42703/i.test(error.message)) {
@@ -320,10 +320,10 @@ export async function upsertTicketBundle(input: {
         .eq("id", tierId)
         .eq("event_id", input.eventId)
       if (retry.error) {
-        return { success: false, error: toUserFacingError(retry.error.message) }
+        return { success: false, error: formatSupabaseError(retry.error) }
       }
     } else if (error) {
-      return { success: false, error: toUserFacingError(error.message) }
+      return { success: false, error: formatSupabaseError(error) }
     }
   } else {
     const { data, error } = await admin
@@ -351,18 +351,26 @@ export async function upsertTicketBundle(input: {
       if (retry.error || !retry.data) {
         return {
           success: false,
-          error: toUserFacingError(
-            retry.error?.message ?? "No se pudo crear la tarifa.",
-          ),
+          error: retry.error
+            ? formatSupabaseError(retry.error)
+            : formatSupabaseError({
+                code: "NO_ROWS",
+                message: "ticket_tiers.insert no devolvió fila",
+                details: name,
+              }),
         }
       }
       tierId = retry.data.id
     } else if (error || !data) {
       return {
         success: false,
-        error: toUserFacingError(
-          error?.message ?? "No se pudo crear la tarifa.",
-        ),
+        error: error
+          ? formatSupabaseError(error)
+          : formatSupabaseError({
+              code: "NO_ROWS",
+              message: "ticket_tiers.insert no devolvió fila",
+              details: name,
+            }),
       }
     } else {
       tierId = data.id
@@ -383,7 +391,7 @@ export async function upsertTicketBundle(input: {
     const { error } = await gate.supabase
       .from("ticket_tier_combo_items")
       .insert(lines)
-    if (error) return { success: false, error: toUserFacingError(error.message) }
+    if (error) return { success: false, error: formatSupabaseError(error) }
   }
 
   revalidatePath(`/admin/events/${input.eventId}`)
@@ -437,7 +445,7 @@ export async function deleteTicketBundle(input: {
     .eq("id", input.tierId)
     .eq("event_id", input.eventId)
 
-  if (error) return { success: false, error: toUserFacingError(error.message) }
+  if (error) return { success: false, error: formatSupabaseError(error) }
   revalidatePath(`/admin/events/${input.eventId}/tiers`)
   return { success: true }
 }

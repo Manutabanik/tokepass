@@ -112,7 +112,6 @@ import {
   firstFieldErrorPath,
   focusInvalidFormField,
 } from "@/lib/errors/form-field"
-import { toUserFacingError } from "@/lib/errors/user-facing-error"
 import { formHasInventoryOrVenue } from "@/lib/events/event-inventory-fingerprint"
 import {
   collectLiveSeatingSectorIds,
@@ -577,7 +576,7 @@ export function EventCreationWizard({
       })
     }
     console.error("Fallo al guardar:", result.error)
-    toast.error(JSON.stringify(result.error))
+    toast.error(result.error)
     const action = result.wizardConflict?.actions[0]
     if (action?.step != null) {
       goToWizardStep(action.step, undefined, action.field ?? field)
@@ -792,7 +791,7 @@ export function EventCreationWizard({
       })
       if (!persist.success) {
         console.error("Fallo al guardar:", persist.error)
-        toast.error(JSON.stringify(persist.error))
+        toast.error(persist.error)
         return false
       }
       payloadData = {
@@ -845,7 +844,7 @@ export function EventCreationWizard({
       })
       if (!pricingResult.success) {
         console.error("Fallo al guardar:", pricingResult.error)
-        toast.error(JSON.stringify(pricingResult.error))
+        toast.error(pricingResult.error)
         return false
       }
     }
@@ -921,9 +920,7 @@ export function EventCreationWizard({
     if (!eventId) return
     const result = await persistInventoryDraft()
     if (!result.success) {
-      toast.error("El mapa quedó en el evento, pero no se pudo sincronizar", {
-        description: toUserFacingError(result.error),
-      })
+      toast.error(result.error)
     }
   }
 
@@ -1638,7 +1635,7 @@ export function EventCreationWizard({
                   const result = await persistInventoryDraft()
                   if (!result.success) {
                     console.error("ERRORES AL GUARDAR EL MAPA:", result.error)
-                    throw new Error(toUserFacingError(result.error))
+                    throw new Error(result.error)
                   }
                 }}
               />

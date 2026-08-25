@@ -486,9 +486,7 @@ export function InteractiveVenueMapEditor({
       toast.success("Mapa guardado correctamente")
     } catch (error) {
       setExplicitSaveStatus("error")
-      toast.error(
-        error instanceof Error ? error.message : "No se pudo guardar el mapa",
-      )
+      toast.error(error instanceof Error ? error.message : String(error))
     }
   }
   useEffect(() => {

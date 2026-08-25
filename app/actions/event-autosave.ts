@@ -13,11 +13,10 @@ import {
   createCompleteEvent,
   updateCompleteEvent,
 } from "@/app/actions/events"
-import { toUserFacingError } from "@/lib/errors/user-facing-error"
+import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import {
   classifyPersistError,
   logPersistError,
-  persistErrorUserMessage,
   type PersistErrorSource,
 } from "@/lib/errors/persist-error"
 import { writeSecurityAuditLog } from "@/lib/security/audit-log"
@@ -135,7 +134,7 @@ export async function autosaveEventDraft(input: {
     return {
       ok: false,
       source: classifyPersistError(error),
-      error: persistErrorUserMessage(error),
+      error: formatSupabaseError(error),
     }
   }
 
@@ -351,7 +350,7 @@ export async function syncZoneTierPricing(input: {
     .eq("event_id", input.eventId)
 
   if (delError) {
-    return { success: false, error: toUserFacingError(delError.message) }
+    return { success: false, error: formatSupabaseError(delError) }
   }
 
   if (payload.length > 0) {
@@ -365,7 +364,7 @@ export async function syncZoneTierPricing(input: {
         success: false,
         error: overlap
           ? "Los rangos de mesa se superponen para el mismo sector y tipo de entrada."
-          : toUserFacingError(upsertError.message),
+          : formatSupabaseError(upsertError),
       }
     }
   }

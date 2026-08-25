@@ -138,6 +138,7 @@ import { isSandboxEventStatus } from "@/lib/events/review-status"
 import { logger } from "@/lib/logger"
 import { writeSecurityAuditLog } from "@/lib/security/audit-log"
 import { mapUnknownError } from "@/lib/errors/error-handler"
+import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import type { AppErrorCode } from "@/lib/errors/app-error"
 import {
   isZodLikeError,
@@ -785,10 +786,14 @@ async function forceUpdateVenueFromForm(
     error: written.error,
   })
   if (written.error) {
-    return `Error actualizando el aforo del recinto: ${written.error.message}`
+    return formatSupabaseError(written.error)
   }
   if (!written.data) {
-    return "Error actualizando el aforo del recinto: 0 filas (RLS o ID inválido)"
+    return formatSupabaseError({
+      code: "NO_ROWS",
+      message: "venues.update no devolvió fila (RLS o ID inválido)",
+      details: venueId,
+    })
   }
   return null
 }
@@ -906,7 +911,7 @@ async function persistEventVenueFields(
     ) {
       return {
         venueId,
-        error: `Error actualizando el aforo del recinto: ${mapWrite.error.message}`,
+        error: formatSupabaseError(mapWrite.error),
       }
     }
   } else if (
@@ -953,7 +958,7 @@ async function persistEventVenueFields(
     ) {
       venueId = await findVenueIdByExactName(client, organizerId, venueName)
     } else if (created.error) {
-      return { venueId: null, error: created.error.message }
+      return { venueId: null, error: formatSupabaseError(created.error) }
     } else {
       venueId = created.data?.id ?? null
     }
@@ -1077,7 +1082,7 @@ async function persistEventSchedule(
   })
   if ("error" in written) {
     logPersistError("event-persist", written.error)
-    return `Error guardando fechas: ${written.error}`
+    return written.error
   }
   return null
 }
@@ -1192,9 +1197,7 @@ async function upsertRelatedTicketTiers(
       existing,
     ).tiers
   } catch (error) {
-    return `Error guardando tickets: ${
-      error instanceof Error ? error.message : String(error)
-    }`
+    return formatSupabaseError(error)
   }
 
   const admin = createAdminClient()
@@ -1203,7 +1206,7 @@ async function upsertRelatedTicketTiers(
     .select("id, sold, name")
     .eq("event_id", eventId)
   if (loadError) {
-    return `Error guardando tickets: ${loadError.message}`
+    return formatSupabaseError(loadError)
   }
 
   const claimedIds = new Set<string>()
@@ -1259,11 +1262,9 @@ async function upsertRelatedTicketTiers(
 
     const writeTier = async (payload: Record<string, unknown>) => {
       if (persistedId) {
-        const { event_id: _eventId, ...patch } = payload
-        void _eventId
         return admin
           .from("ticket_tiers")
-          .update(patch as never)
+          .update({ ...payload, event_id: eventId, id: persistedId } as never)
           .eq("id", persistedId)
           .eq("event_id", eventId)
           .select("id")
@@ -1271,7 +1272,7 @@ async function upsertRelatedTicketTiers(
       }
       return admin
         .from("ticket_tiers")
-        .insert(payload as never)
+        .insert({ ...payload, event_id: eventId } as never)
         .select("id")
         .maybeSingle()
     }
@@ -1297,10 +1298,14 @@ async function upsertRelatedTicketTiers(
       error: written.error,
     })
     if (written.error) {
-      return `Error guardando tickets: ${written.error.message}`
+      return formatSupabaseError(written.error)
     }
     if (!written.data?.id) {
-      return `Error guardando tickets: no se ${persistedId ? "actualizó" : "insertó"} "${mapped.name}"`
+      return formatSupabaseError({
+        code: "NO_ROWS",
+        message: `ticket_tiers.${persistedId ? "update" : "insert"} no devolvió fila`,
+        details: mapped.name,
+      })
     }
     formValues.tickets[index]!.id = written.data.id
   }
@@ -1439,40 +1444,6 @@ async function revalidatePersistedEvent(
   })
 }
 
-function diagnosticErrorMessage(error: unknown): string {
-  if (typeof error === "string" && error.trim()) return error
-  if (isZodLikeError(error)) {
-    try {
-      return JSON.stringify(
-        typeof error.flatten === "function" ? error.flatten() : error.issues,
-      )
-    } catch {
-      return error.issues?.[0]?.message || "ZodError"
-    }
-  }
-  if (error && typeof error === "object") {
-    const record = error as {
-      message?: unknown
-      details?: unknown
-      hint?: unknown
-      code?: unknown
-    }
-    const parts = [
-      typeof record.message === "string" ? record.message : null,
-      typeof record.details === "string" ? `details=${record.details}` : null,
-      typeof record.hint === "string" ? `hint=${record.hint}` : null,
-      record.code != null ? `code=${String(record.code)}` : null,
-    ].filter(Boolean)
-    if (parts.length > 0) return parts.join(" | ")
-  }
-  if (error instanceof Error && error.message) return error.message
-  try {
-    return JSON.stringify(error)
-  } catch {
-    return String(error)
-  }
-}
-
 function persistFailure(error: unknown): {
   success: false
   error: string
@@ -1484,7 +1455,9 @@ function persistFailure(error: unknown): {
   wizardConflict?: WizardConflict
 } {
   const source = logPersistError("event-persist", error)
-  const message = diagnosticErrorMessage(error)
+  const message = isZodLikeError(error)
+    ? error.issues[0]?.message?.trim() || formatSupabaseError(error)
+    : formatSupabaseError(error)
   console.log("PERSIST FAILURE:", message, error)
   logger.error({
     context: "event-persist",
@@ -1615,10 +1588,16 @@ async function updateEventReturning(
     error,
   })
   if (error) {
-    return { error: error.message }
+    return { error: formatSupabaseError(error) }
   }
   if (options?.requireRow && !data) {
-    return { error: "la fila no se actualizó (0 filas)" }
+    return {
+      error: formatSupabaseError({
+        code: "NO_ROWS",
+        message: "events.update no devolvió fila (0 filas)",
+        details: eventId,
+      }),
+    }
   }
   return { data: (data as Record<string, unknown> | null) ?? { id: eventId } }
 }
@@ -2100,7 +2079,7 @@ export async function materializeEventSeatingUnits(
     event_id: eventId,
     error,
   })
-  return error.message.replace(/^materialize_event_seating_units:\s*/i, "")
+  return formatSupabaseError(error)
 }
 
 async function resyncEventSeatingUnitsAfterMapSave(
@@ -2127,7 +2106,7 @@ async function syncMapBackedTiersAfterMapSave(
     .from("ticket_tiers")
     .select("id, name, seating_sector_id, layout_type, capacity, sold, capacity_per_unit")
     .eq("event_id", eventId)
-  if (error) return error.message
+  if (error) return formatSupabaseError(error)
 
   const groups = listVenuePriceGroups(map)
   const linked = (tiers ?? []).map((tier) => {
@@ -2159,6 +2138,8 @@ async function syncMapBackedTiersAfterMapSave(
     const { error: updateError } = await client
       .from("ticket_tiers")
       .update({
+        id: tier.id,
+        event_id: eventId,
         seating_sector_id: sectorId,
         layout_type: layoutType,
         capacity,
@@ -2166,7 +2147,7 @@ async function syncMapBackedTiersAfterMapSave(
       } as never)
       .eq("id", tier.id)
       .eq("event_id", eventId)
-    if (updateError) return updateError.message
+    if (updateError) return formatSupabaseError(updateError)
   }
   return null
 }
@@ -2186,8 +2167,8 @@ async function syncTicketCapacityFromSeatingUnits(
         .select("id, seating_sector_id, layout_type, capacity, sold")
         .eq("event_id", eventId),
     ])
-  if (unitsError) return unitsError.message
-  if (tiersError) return tiersError.message
+  if (unitsError) return formatSupabaseError(unitsError)
+  if (tiersError) return formatSupabaseError(tiersError)
   if (!units?.length) return null
 
   const placesBySector = new Map<string, number>()
@@ -2214,10 +2195,14 @@ async function syncTicketCapacityFromSeatingUnits(
     if (nextCapacity === Number(tier.capacity)) continue
     const { error } = await client
       .from("ticket_tiers")
-      .update({ capacity: nextCapacity } as never)
+      .update({
+        id: tier.id,
+        event_id: eventId,
+        capacity: nextCapacity,
+      } as never)
       .eq("id", tier.id)
       .eq("event_id", eventId)
-    if (error) return error.message
+    if (error) return formatSupabaseError(error)
   }
   return null
 }
@@ -2232,7 +2217,7 @@ async function assertPersistedInventoryCapacity(
     .eq("event_id", eventId)
   if (error) {
     logPersistError("event-persist", error)
-    return error.message
+    return formatSupabaseError(error)
   }
   const broken = (tiers ?? []).filter(
     (tier) => tier.capacity == null || Number(tier.capacity) < 1,
@@ -2257,7 +2242,7 @@ async function syncTierAdmitCounts(
 
   if (tiersLoadError) {
     logPersistError("event-persist", tiersLoadError)
-    return tiersLoadError.message
+    return formatSupabaseError(tiersLoadError)
   }
 
   if (!tiers?.length) return null
@@ -2378,10 +2363,13 @@ async function syncTierAdmitCounts(
       .from("ticket_tiers")
       .update({
         ...patch,
+        id: tier.id,
+        event_id: eventId,
         description,
         highlight_badge: highlightBadge,
       })
       .eq("id", tier.id)
+      .eq("event_id", eventId)
     if (
       withCopy.error &&
       /description|highlight_badge|min_purchase_limit|max_purchase_limit|promo_discount|schema cache|PGRST204|42703/i.test(
@@ -2412,11 +2400,12 @@ async function syncTierAdmitCounts(
       void omittedPay
       const retry = await admin
         .from("ticket_tiers")
-        .update(safePatch)
+        .update({ ...safePatch, id: tier.id, event_id: eventId })
         .eq("id", tier.id)
-      if (retry.error) return retry.error.message
+        .eq("event_id", eventId)
+      if (retry.error) return formatSupabaseError(retry.error)
     } else if (withCopy.error) {
-      return withCopy.error.message
+      return formatSupabaseError(withCopy.error)
     }
   }
   return null
@@ -2438,7 +2427,7 @@ async function syncTicketTierPhases(
 
   if (tiersError) {
     logPersistError("event-persist", tiersError)
-    return tiersError.message
+    return formatSupabaseError(tiersError)
   }
   if (!tiers?.length) return null
 
@@ -2453,7 +2442,7 @@ async function syncTicketTierPhases(
   if (existingError) {
     if (isMissingPhasesTable(existingError.message)) return null
     logPersistError("event-persist", existingError)
-    return existingError.message
+    return formatSupabaseError(existingError)
   }
 
   const keepIds = new Set<string>()
@@ -2498,7 +2487,7 @@ async function syncTicketTierPhases(
           .eq("tier_id", tier.id)
         if (error) {
           logPersistError("event-persist", error)
-          return error.message
+          return formatSupabaseError(error)
         }
         keepIds.add(phase.id)
         continue
@@ -2511,7 +2500,7 @@ async function syncTicketTierPhases(
         .maybeSingle()
       if (error) {
         logPersistError("event-persist", error)
-        return error.message
+        return formatSupabaseError(error)
       }
       if (created?.id) keepIds.add(created.id)
     }
@@ -2549,7 +2538,7 @@ async function syncTicketSaleWindows(
 
   if (tiersError) {
     logPersistError("event-persist", tiersError)
-    return tiersError.message
+    return formatSupabaseError(tiersError)
   }
 
   for (const tier of tiers ?? []) {
@@ -2559,14 +2548,17 @@ async function syncTicketSaleWindows(
     const { error } = await admin
       .from("ticket_tiers")
       .update({
+        id: tier.id,
+        event_id: eventId,
         sale_starts_at: saleWindowToIso(match?.saleStartsAt),
         sale_ends_at: saleWindowToIso(match?.saleEndsAt),
       })
       .eq("id", tier.id)
+      .eq("event_id", eventId)
     if (error) {
       if (isMissingSaleWindowSchema(error.message)) return null
       logPersistError("event-persist", error)
-      return error.message
+      return formatSupabaseError(error)
     }
   }
   return null
@@ -2858,7 +2850,7 @@ async function persistLogicalEventZones(
     .eq("event_id", eventId)
   if (existingError) {
     logPersistError("event-persist", existingError)
-    return existingError.message
+    return formatSupabaseError(existingError)
   }
 
   const keepNames = new Set(
@@ -2875,7 +2867,7 @@ async function persistLogicalEventZones(
       .eq("event_id", eventId)
     if (error) {
       logPersistError("event-persist", error)
-      return error.message
+      return formatSupabaseError(error)
     }
   }
 
@@ -2905,7 +2897,7 @@ async function persistLogicalEventZones(
         .eq("event_id", eventId)
       if (error) {
         logPersistError("event-persist", error)
-        return error.message
+        return formatSupabaseError(error)
       }
       continue
     }
@@ -2917,7 +2909,7 @@ async function persistLogicalEventZones(
     } as never)
     if (error) {
       logPersistError("event-persist", error)
-      return error.message
+      return formatSupabaseError(error)
     }
   }
   return null
@@ -4332,7 +4324,7 @@ export async function publishEvent(
     .maybeSingle()
 
   if (eventError) {
-    return persistFailure(eventError.message)
+    return persistFailure(eventError)
   }
 
   if (!event || (event.organizer_id !== user.id && !isSuperAdmin)) {
@@ -4385,7 +4377,7 @@ export async function publishEvent(
       { p_event_id: eventId },
     )
     if (purgeError) {
-      return persistFailure(purgeError.message)
+      return persistFailure(purgeError)
     }
     purgedTestTickets = Number(purged ?? 0)
   }
@@ -4404,7 +4396,7 @@ export async function publishEvent(
     .maybeSingle()
 
   if (updateError) {
-    return persistFailure(updateError.message)
+    return persistFailure(updateError)
   }
 
   if (!updated) {
@@ -4461,7 +4453,7 @@ export async function updateEventSalesStatus(
     .eq("id", eventId)
     .maybeSingle()
 
-  if (eventError) return persistFailure(eventError.message)
+  if (eventError) return persistFailure(eventError)
   if (!event) return { success: false, error: "Evento no encontrado." }
 
   const isOwner = event.organizer_id === user.id
@@ -4481,7 +4473,7 @@ export async function updateEventSalesStatus(
         .from("events")
         .update({ status: "published", updated_at: new Date().toISOString() })
         .eq("id", eventId)
-      if (error) return persistFailure(error.message)
+      if (error) return persistFailure(error)
       revalidateEventSalesPaths(eventId)
       return { success: true, status: "published" }
     }
@@ -4501,7 +4493,7 @@ export async function updateEventSalesStatus(
       .from("events")
       .update({ status: "paused", updated_at: new Date().toISOString() })
       .eq("id", eventId)
-    if (error) return persistFailure(error.message)
+    if (error) return persistFailure(error)
     revalidateEventSalesPaths(eventId)
     return { success: true, status: "paused" }
   }
@@ -4517,7 +4509,7 @@ export async function updateEventSalesStatus(
     .from("events")
     .update({ status: "draft", updated_at: new Date().toISOString() })
     .eq("id", eventId)
-  if (error) return persistFailure(error.message)
+  if (error) return persistFailure(error)
   revalidateEventSalesPaths(eventId)
   return { success: true, status: "draft" }
 }
@@ -4619,7 +4611,7 @@ export async function deleteOrArchiveEvent(
     .maybeSingle()
 
   if (eventError) {
-    return persistFailure(eventError.message)
+    return persistFailure(eventError)
   }
   if (!event || event.organizer_id !== user.id) {
     return { success: false, error: "No tenés permiso sobre este evento." }
@@ -4645,7 +4637,7 @@ export async function deleteOrArchiveEvent(
     .in("status", ["valid", "used", "scanned", "pending_payment"])
 
   if (countError) {
-    return persistFailure(countError.message)
+    return persistFailure(countError)
   }
 
   const ticketsSold = count ?? 0
@@ -4658,7 +4650,7 @@ export async function deleteOrArchiveEvent(
       .eq("organizer_id", user.id)
 
     if (deleteError) {
-      return { success: false, error: deleteError.message }
+      return { success: false, error: formatSupabaseError(deleteError) }
     }
 
     revalidatePath("/admin")
@@ -4681,7 +4673,7 @@ export async function deleteOrArchiveEvent(
     .maybeSingle()
 
   if (updateError) {
-    return persistFailure(updateError.message)
+    return persistFailure(updateError)
   }
   if (!updated) {
     return {
@@ -4717,7 +4709,7 @@ export async function archiveEvent(
     .maybeSingle()
 
   if (eventError) {
-    return persistFailure(eventError.message)
+    return persistFailure(eventError)
   }
   if (!event || event.organizer_id !== user.id) {
     return { success: false, error: "No tenés permiso sobre este evento." }
@@ -4741,7 +4733,7 @@ export async function archiveEvent(
     .in("status", ["valid", "used", "scanned", "pending_payment"])
 
   if (countError) {
-    return persistFailure(countError.message)
+    return persistFailure(countError)
   }
 
   const paidOrderCount = await countPaidOrdersForEvent(eventId)
@@ -4773,7 +4765,7 @@ export async function archiveEvent(
     .maybeSingle()
 
   if (updateError) {
-    return persistFailure(updateError.message)
+    return persistFailure(updateError)
   }
   if (!updated) {
     return { success: false, error: "No se pudo archivar el evento." }
@@ -4903,7 +4895,7 @@ export async function updateEventCommercialSettings(
     .eq("id", eventId)
 
   if (updateError) {
-    return persistFailure(updateError.message)
+    return persistFailure(updateError)
   }
 
   const { data: tiers, error: tiersError } = await admin
@@ -4912,7 +4904,7 @@ export async function updateEventCommercialSettings(
     .eq("event_id", eventId)
 
   if (tiersError) {
-    return persistFailure(tiersError.message)
+    return persistFailure(tiersError)
   }
 
   let recalculatedTiers = 0
@@ -4925,11 +4917,14 @@ export async function updateEventCommercialSettings(
     const { error } = await admin
       .from("ticket_tiers")
       .update({
+        id: tier.id,
+        event_id: eventId,
         base_price: breakdown.basePrice,
         platform_fee: breakdown.platformFee,
         updated_at: new Date().toISOString(),
       })
       .eq("id", tier.id)
+      .eq("event_id", eventId)
     if (!error) recalculatedTiers += 1
   }
 
@@ -4977,7 +4972,10 @@ export async function saveVenueMapOnly(
     .eq("id", id)
     .maybeSingle()
 
-  if (eventError || !event) {
+  if (eventError) {
+    return { success: false, error: formatSupabaseError(eventError) }
+  }
+  if (!event) {
     return { success: false, error: "Evento no encontrado." }
   }
 
@@ -5015,7 +5013,7 @@ export async function saveVenueMapOnly(
     .eq("id", id)
     .maybeSingle()
   if (eventReadError) {
-    return { success: false, error: eventReadError.message }
+    return { success: false, error: formatSupabaseError(eventReadError) }
   }
 
   const mapPatch = {
@@ -5037,10 +5035,10 @@ export async function saveVenueMapOnly(
       } as never)
       .eq("id", id)
     if (retry.error) {
-      return { success: false, error: retry.error.message }
+      return { success: false, error: formatSupabaseError(retry.error) }
     }
   } else if (error) {
-    return { success: false, error: error.message }
+    return { success: false, error: formatSupabaseError(error) }
   }
 
   if (eventRow?.venue_id) {
@@ -5053,7 +5051,7 @@ export async function saveVenueMapOnly(
       } as never)
       .eq("id", eventRow.venue_id)
     if (venueWrite.error) {
-      return { success: false, error: venueWrite.error.message }
+      return { success: false, error: formatSupabaseError(venueWrite.error) }
     }
   }
 

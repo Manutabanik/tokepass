@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { Json } from "@/types/database"
@@ -112,7 +113,7 @@ async function rematerializeEventsForVenue(
       p_event_id: row.id,
     })
     if (error) {
-      return error.message.replace(/^materialize_event_seating_units:\s*/i, "")
+      return formatSupabaseError(error)
     }
   }
   return null
@@ -723,7 +724,7 @@ async function writeVenueRow(
           error: "Ya tenés un recinto con ese nombre exacto.",
         }
       }
-      return { success: false, error: error.message }
+      return { success: false, error: formatSupabaseError(error) }
     }
     if (!data) return { success: false, error: "No encontramos ese lugar." }
     return { success: true, data: { id: data.id } }
@@ -768,7 +769,13 @@ async function writeVenueRow(
   if (created.error || !created.data) {
     return {
       success: false,
-      error: created.error?.message ?? "No se pudo crear.",
+      error: created.error
+        ? formatSupabaseError(created.error)
+        : formatSupabaseError({
+            code: "NO_ROWS",
+            message: "venues.insert no devolvió fila",
+            details: fields.name,
+          }),
     }
   }
   return { success: true, data: { id: created.data.id } }
@@ -820,7 +827,7 @@ export async function upsertVenue(
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "No pudimos guardar el lugar.",
+      error: formatSupabaseError(error),
     }
   }
 }
@@ -907,7 +914,7 @@ export async function updateVenueIdentity(input: {
           error: "Ya tenés un recinto con ese nombre exacto.",
         }
       }
-      return { success: false, error: error.message }
+      return { success: false, error: formatSupabaseError(error) }
     }
     if (!data) return { success: false, error: "No encontramos ese lugar." }
 
@@ -916,10 +923,7 @@ export async function updateVenueIdentity(input: {
   } catch (error) {
     return {
       success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "No pudimos actualizar el lugar.",
+      error: formatSupabaseError(error),
     }
   }
 }
@@ -949,7 +953,7 @@ export async function setVenueArchived(
             "Todavía no se puede archivar recintos. Actualizá la base de datos e intentá de nuevo.",
         }
       }
-      return { success: false, error: error.message }
+      return { success: false, error: formatSupabaseError(error) }
     }
     if (!data) return { success: false, error: "No encontramos ese lugar." }
 
@@ -958,8 +962,7 @@ export async function setVenueArchived(
   } catch (error) {
     return {
       success: false,
-      error:
-        error instanceof Error ? error.message : "No pudimos archivar el lugar.",
+      error: formatSupabaseError(error),
     }
   }
 }
@@ -972,7 +975,7 @@ export async function deleteVenue(venueId: string): Promise<ActionResult> {
       .select("id", { count: "exact", head: true })
       .eq("venue_id", venueId)
 
-    if (countError) return { success: false, error: countError.message }
+    if (countError) return { success: false, error: formatSupabaseError(countError) }
     if ((count ?? 0) > 0) {
       return {
         success: false,
@@ -987,14 +990,14 @@ export async function deleteVenue(venueId: string): Promise<ActionResult> {
       .eq("id", venueId)
       .eq("organizer_id", userId)
 
-    if (error) return { success: false, error: error.message }
+    if (error) return { success: false, error: formatSupabaseError(error) }
 
     revalidateVenuePaths()
     return { success: true, data: undefined }
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "No pudimos eliminar el lugar.",
+      error: formatSupabaseError(error),
     }
   }
 }
@@ -1044,7 +1047,7 @@ export async function uploadVenueSeatingBackground(
     if (error) {
       return {
         success: false,
-        error: `No pudimos subir la imagen: ${error.message}`,
+        error: formatSupabaseError(error),
       }
     }
 
@@ -1058,7 +1061,7 @@ export async function uploadVenueSeatingBackground(
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "No pudimos subir la imagen.",
+      error: formatSupabaseError(error),
     }
   }
 }

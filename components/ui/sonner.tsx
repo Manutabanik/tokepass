@@ -5,9 +5,11 @@ import { toast, Toaster as Sonner, type ToasterProps } from "sonner"
 
 import { isAppErrorCode } from "@/lib/errors/app-error"
 import { dispatchGuidedError, mapUnknownError } from "@/lib/errors/error-handler"
+import { isUnmaskedSupabaseError } from "@/lib/errors/supabase-error"
 import { cn } from "@/lib/utils"
 
 function maskToastMessage(value: unknown) {
+  if (isUnmaskedSupabaseError(value)) return value
   return typeof value === "string" ? mapUnknownError(value).message : value
 }
 
@@ -35,6 +37,9 @@ export function Toaster({ className, ...props }: ToasterProps) {
       const rawTitle = typeof message === "string" ? message.trim() : ""
       const rawDescription =
         data && typeof data === "object" ? data.description : undefined
+      if (isUnmaskedSupabaseError(rawTitle)) {
+        return originalError(rawTitle as never, data as never)
+      }
       const mappedTitle = mapUnknownError(message)
       const mappedDescription =
         typeof rawDescription === "string"

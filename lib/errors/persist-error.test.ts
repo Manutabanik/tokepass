@@ -32,6 +32,14 @@ describe("classifyPersistError", () => {
       }),
       "sql",
     )
+    assert.equal(
+      persistErrorUserMessage({
+        code: "PGRST204",
+        message: "Could not find the 'capacity' column",
+        details: "schema cache",
+      }),
+      "[SUPABASE ERROR - Code: PGRST204]: Could not find the 'capacity' column. Details: schema cache",
+    )
   })
 
   it("labels fetch failures as network", () => {

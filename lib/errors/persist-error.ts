@@ -1,7 +1,7 @@
 import { ZodError } from "zod"
 
 import { containsInternalErrorCode } from "@/lib/errors/error-handler"
-import { toUserFacingError } from "@/lib/errors/user-facing-error"
+import { formatSupabaseError } from "@/lib/errors/supabase-error"
 
 export type PersistErrorSource = "zod" | "sql" | "network" | "app"
 
@@ -76,7 +76,8 @@ export function persistErrorUserMessage(
     const first = error.issues[0]?.message?.trim()
     if (first) return first
   }
-  return toUserFacingError(error, fallback)
+  const formatted = formatSupabaseError(error)
+  return formatted || fallback
 }
 
 export function logPersistError(context: string, error: unknown): PersistErrorSource {
