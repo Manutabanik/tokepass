@@ -40,6 +40,7 @@ import {
   normalizeScheduleDaysFromForm,
   parseDateTimeLocal,
   parseScheduleDays,
+  resolveEventSchedulePersist,
   scheduleDaysToFormValues,
   toDatetimeLocalInput,
 } from "@/lib/event-schedule"
@@ -397,10 +398,6 @@ async function loadEventFeeConfig(
   }
 }
 
-function formDateToIso(value: string | null | undefined, fallback: string): string {
-  return parseDateTimeLocal(value ?? "")?.toISOString() ?? fallback
-}
-
 function positiveInventoryCapacity(value: unknown): number {
   const parsed = Math.floor(Number(value))
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
@@ -493,30 +490,19 @@ function mapEventFormToRpcPayload(
     ? ""
     : place.display || data.venue.venueName
 
-  const incomingDays = data.basics.isMultiDay
-    ? normalizeScheduleDaysFromForm(data.basics.scheduleDays ?? [])
-    : []
-  const existingDays = parseScheduleDays(existing?.schedule_days)
-  const preserveExistingSchedule =
-    Boolean(data.basics.isMultiDay) && incomingDays.length === 0 && existingDays.length > 0
-  const scheduleDays = data.basics.isMultiDay
-    ? preserveExistingSchedule
-      ? existingDays
-      : incomingDays
-    : []
-
-  const nowIso = new Date().toISOString()
-  const anchorDate = data.basics.isMultiDay
-    ? scheduleDays[0]?.start_time ??
-      existing?.date ??
-      formDateToIso(data.basics.date, nowIso)
-    : formDateToIso(data.basics.date, existing?.date ?? nowIso)
-
-  const endsAt = data.basics.isMultiDay
-    ? scheduleDays[scheduleDays.length - 1]?.end_time ?? existing?.ends_at ?? null
-    : data.basics.endDate?.trim()
-      ? formDateToIso(data.basics.endDate, existing?.ends_at ?? nowIso)
-      : existing?.ends_at ?? null
+  const resolvedSchedule = resolveEventSchedulePersist({
+    isMultiDay: Boolean(data.basics.isMultiDay),
+    date: data.basics.date,
+    endDate: data.basics.endDate,
+    scheduleDays: data.basics.scheduleDays,
+    existing,
+  })
+  if ("error" in resolvedSchedule) {
+    throw new Error(resolvedSchedule.error)
+  }
+  const scheduleDays = resolvedSchedule.schedule_days
+  const anchorDate = resolvedSchedule.date
+  const endsAt = resolvedSchedule.ends_at
 
   return {
     title: data.basics.title,
@@ -981,54 +967,261 @@ async function persistEventIdentityVenueLabel(
 }
 
 async function persistEventSchedule(
-  client: SupabaseClient<Database>,
+  _client: SupabaseClient<Database>,
   eventId: string,
   data: EventFormValues,
   existing?: { date?: string | null; ends_at?: string | null; schedule_days?: unknown },
 ): Promise<string | null> {
-  const incomingDays = data.basics.isMultiDay
-    ? normalizeScheduleDaysFromForm(data.basics.scheduleDays ?? [])
-    : []
-
-  if (data.basics.isMultiDay && incomingDays.length === 0) {
-    return null
-  }
-
-  const scheduleDays = data.basics.isMultiDay ? incomingDays : []
-  const nowIso = new Date().toISOString()
-  const date = data.basics.isMultiDay
-    ? scheduleDays[0]?.start_time ?? existing?.date ?? nowIso
-    : formDateToIso(data.basics.date, existing?.date ?? nowIso)
-  const endsAt = data.basics.isMultiDay
-    ? scheduleDays[scheduleDays.length - 1]?.end_time ?? null
-    : data.basics.endDate?.trim()
-      ? parseDateTimeLocal(data.basics.endDate)?.toISOString() ?? null
-      : null
+  const resolved = resolveEventSchedulePersist({
+    isMultiDay: Boolean(data.basics.isMultiDay),
+    date: data.basics.date,
+    endDate: data.basics.endDate,
+    scheduleDays: data.basics.scheduleDays,
+    existing,
+  })
+  if ("error" in resolved) return resolved.error
+  if (resolved.skipWrite) return null
 
   const schedulePayload = {
-    schedule_days: scheduleDays,
-    date,
-    ends_at: endsAt,
+    schedule_days: resolved.schedule_days,
+    date: resolved.date,
+    ends_at: resolved.ends_at,
+    updated_at: new Date().toISOString(),
   }
-  console.log("ACTUALIZANDO BD CON ESTOS DATOS EXACTOS:", {
-    table: "events.schedule",
-    eventId,
-    updatePayload: schedulePayload,
+  const writer = createAdminClient()
+  const written = await updateEventReturning(writer, eventId, schedulePayload, {
+    requireRow: true,
   })
-  const { error } = await client
-    .from("events")
-    .update(schedulePayload as never)
-    .eq("id", eventId)
-  console.log("RESPUESTA SUPABASE:", {
-    op: "events.update.schedule",
-    eventId,
-    data: null,
-    error,
-  })
-  if (error) {
-    logPersistError("event-persist", error)
-    return error.message
+  if ("error" in written) {
+    logPersistError("event-persist", written.error)
+    return `Error guardando fechas: ${written.error}`
   }
+  return null
+}
+
+const OPTIONAL_TIER_UPSERT_COLUMNS_RE =
+  /sale_starts_at|sale_ends_at|min_purchase_limit|max_purchase_limit|description|highlight_badge|bundle_items|bundle_type|tier_type|category|list_price|admit_count|total_capacity|capacity_per_unit|layout_type|seating_sector_id|day_id|time_limit|bonus_reward|schema cache|PGRST204|42703/i
+
+function isSkipRelationalTicket(
+  tier: EventFormValues["tickets"][number],
+): boolean {
+  const name = (tier.name ?? "").trim()
+  if (isCoercedDraftPlaceholderTicket(tier) && !tier.id) return true
+  if (
+    !tier.id &&
+    name.length < 2 &&
+    persistablePublicPrice(tier.price) <= 0 &&
+    positiveInventoryCapacity(tier.capacity) <= 1
+  ) {
+    return true
+  }
+  return name.length < 2 && persistablePublicPrice(tier.price) <= 0 && !tier.id
+}
+
+function relationalTicketRow(
+  eventId: string,
+  mapped: CreateCompleteEventRpcPayload["tiers"][number] & {
+    sale_starts_at?: string | null
+    sale_ends_at?: string | null
+  },
+  sold: number,
+): Record<string, unknown> {
+  const capacity = Number(
+    Math.max(positiveInventoryCapacity(mapped.capacity), sold),
+  )
+  const totalCapacity = Number(
+    Math.max(
+      positiveInventoryCapacity(mapped.total_capacity ?? mapped.capacity),
+      sold,
+    ),
+  )
+  const price = persistablePublicPrice(mapped.price)
+  const basePrice = persistablePublicPrice(mapped.base_price)
+  const platformFee = persistablePublicPrice(mapped.platform_fee)
+  const tierType = inferInventoryTierType({
+    tierType: mapped.tier_type,
+    layoutType: mapped.layout_type,
+  })
+  return {
+    event_id: eventId,
+    name: String(mapped.name ?? "").trim(),
+    price,
+    base_price: basePrice,
+    platform_fee: platformFee,
+    capacity,
+    total_capacity: totalCapacity,
+    time_limit: mapped.time_limit ?? null,
+    sale_starts_at: mapped.sale_starts_at ?? null,
+    sale_ends_at: mapped.sale_ends_at ?? null,
+    bonus_reward: mapped.bonus_reward ?? null,
+    day_id: mapped.day_id ?? null,
+    visibility: mapped.visibility ?? "public",
+    layout_type: mapped.layout_type,
+    seating_sector_id: mapped.seating_sector_id ?? null,
+    capacity_per_unit: Number(mapped.capacity_per_unit) || 1,
+    admit_count: Number(mapped.admit_count) || 1,
+    min_purchase_limit: Number(mapped.min_purchase_limit) || 1,
+    max_purchase_limit:
+      mapped.max_purchase_limit == null || Number(mapped.max_purchase_limit) <= 0
+        ? null
+        : Number(mapped.max_purchase_limit),
+    tier_type: tierType,
+    category: ticketCategoryForInventory(tierType),
+    bundle_type: mapped.bundle_type ?? null,
+    bundle_items: mapped.bundle_items ?? [],
+    list_price:
+      mapped.list_price == null ? null : persistablePublicPrice(mapped.list_price),
+    updated_at: new Date().toISOString(),
+  }
+}
+
+/**
+ * Fuente de verdad JS para stock, precios y extras (addon/bundle).
+ * Si el RPC ignora el payload o RLS traga un UPDATE de 0 filas, esto
+ * escribe con service-role y aborta el save si no hay fila afectada.
+ */
+async function upsertRelatedTicketTiers(
+  eventId: string,
+  formValues: EventFormValues,
+  feeConfig: EventFeeConfig,
+  existing?: {
+    date?: string | null
+    ends_at?: string | null
+    schedule_days?: unknown
+  },
+): Promise<string | null> {
+  const persistableIndexes = formValues.tickets
+    .map((tier, index) => ({ tier, index }))
+    .filter(({ tier }) => !isSkipRelationalTicket(tier))
+  if (persistableIndexes.length === 0) return null
+
+  let mappedTiers: Array<
+    CreateCompleteEventRpcPayload["tiers"][number] & {
+      sale_starts_at?: string | null
+      sale_ends_at?: string | null
+    }
+  >
+  try {
+    mappedTiers = mapEventFormToRpcPayload(
+      formValues,
+      feeConfig,
+      null,
+      existing,
+    ).tiers
+  } catch (error) {
+    return `Error guardando tickets: ${
+      error instanceof Error ? error.message : String(error)
+    }`
+  }
+
+  const admin = createAdminClient()
+  const { data: existingTiers, error: loadError } = await admin
+    .from("ticket_tiers")
+    .select("id, sold, name")
+    .eq("event_id", eventId)
+  if (loadError) {
+    return `Error guardando tickets: ${loadError.message}`
+  }
+
+  const claimedIds = new Set<string>()
+  const claimExistingId = (
+    preferredId: string | undefined,
+    name: string,
+  ): string | undefined => {
+    if (preferredId) {
+      const hit = (existingTiers ?? []).find((row) => row.id === preferredId)
+      if (hit && !claimedIds.has(hit.id)) {
+        claimedIds.add(hit.id)
+        return hit.id
+      }
+    }
+    const byName = (existingTiers ?? []).find(
+      (row) => !claimedIds.has(row.id) && row.name.trim() === name.trim(),
+    )
+    if (byName) {
+      claimedIds.add(byName.id)
+      return byName.id
+    }
+    return undefined
+  }
+
+  for (const { tier, index } of persistableIndexes) {
+    const mapped = mappedTiers[index]
+    if (!mapped) {
+      return `Error guardando tickets: no se pudo mapear "${tier.name || index}"`
+    }
+    const soldRow = (existingTiers ?? []).find(
+      (row) => row.id === tier.id || row.name.trim() === mapped.name.trim(),
+    )
+    const sold = Math.max(0, Number(soldRow?.sold) || 0)
+    const requestedCapacity = positiveInventoryCapacity(mapped.capacity)
+    if (sold > 0 && requestedCapacity < sold) {
+      return `Error guardando tickets: la capacidad de "${mapped.name}" no puede ser menor a ${sold} entradas vendidas`
+    }
+    const row = relationalTicketRow(eventId, mapped, sold)
+    const persistedId = claimExistingId(tier.id, String(row.name))
+
+    console.log("ACTUALIZANDO BD CON ESTOS DATOS EXACTOS:", {
+      table: "ticket_tiers",
+      eventId,
+      tierId: persistedId ?? "insert",
+      updatePayload: {
+        price: row.price,
+        base_price: row.base_price,
+        capacity: row.capacity,
+        total_capacity: row.total_capacity,
+        name: row.name,
+      },
+    })
+
+    const writeTier = async (payload: Record<string, unknown>) => {
+      if (persistedId) {
+        const { event_id: _eventId, ...patch } = payload
+        void _eventId
+        return admin
+          .from("ticket_tiers")
+          .update(patch as never)
+          .eq("id", persistedId)
+          .eq("event_id", eventId)
+          .select("id")
+          .maybeSingle()
+      }
+      return admin
+        .from("ticket_tiers")
+        .insert(payload as never)
+        .select("id")
+        .maybeSingle()
+    }
+
+    let written = await writeTier(row)
+    if (written.error && OPTIONAL_TIER_UPSERT_COLUMNS_RE.test(written.error.message)) {
+      written = await writeTier({
+        event_id: eventId,
+        name: row.name,
+        price: row.price,
+        base_price: row.base_price,
+        platform_fee: row.platform_fee,
+        capacity: row.capacity,
+        total_capacity: row.total_capacity,
+        visibility: row.visibility,
+        updated_at: row.updated_at,
+      })
+    }
+    console.log("RESPUESTA SUPABASE:", {
+      op: persistedId ? "ticket_tiers.update" : "ticket_tiers.insert",
+      eventId,
+      data: written.data,
+      error: written.error,
+    })
+    if (written.error) {
+      return `Error guardando tickets: ${written.error.message}`
+    }
+    if (!written.data?.id) {
+      return `Error guardando tickets: no se ${persistedId ? "actualizó" : "insertó"} "${mapped.name}"`
+    }
+    formValues.tickets[index]!.id = written.data.id
+  }
+
   return null
 }
 
@@ -1318,6 +1511,7 @@ async function updateEventReturning(
   client: SupabaseClient<Database>,
   eventId: string,
   patch: Record<string, unknown>,
+  options?: { requireRow?: boolean },
 ): Promise<{ data: Record<string, unknown> } | { error: string }> {
   console.log("ACTUALIZANDO BD CON ESTOS DATOS EXACTOS:", {
     table: "events",
@@ -1339,6 +1533,9 @@ async function updateEventReturning(
   })
   if (error) {
     return { error: error.message }
+  }
+  if (options?.requireRow && !data) {
+    return { error: "la fila no se actualizó (0 filas)" }
   }
   return { data: (data as Record<string, unknown> | null) ?? { id: eventId } }
 }
@@ -1469,7 +1666,19 @@ async function persistEventIdentityOnly(input: {
     input.formValues.basics.ageRestriction,
   )
 
-  const identityPatch = {
+  const formValues = input.formValues as EventFormValues
+  const scheduleWrite = resolveEventSchedulePersist({
+    isMultiDay: Boolean(formValues.basics.isMultiDay),
+    date: formValues.basics.date,
+    endDate: formValues.basics.endDate,
+    scheduleDays: formValues.basics.scheduleDays,
+    existing: input.existing,
+  })
+  if ("error" in scheduleWrite) {
+    return persistFailure(scheduleWrite.error)
+  }
+
+  const identityPatch: Record<string, unknown> = {
     title,
     description: input.formValues.basics.description,
     visibility: input.formValues.basics.visibility,
@@ -1485,6 +1694,13 @@ async function persistEventIdentityOnly(input: {
       : null,
     ...(isOnlineDelivery(input.formValues.basics.deliveryMode)
       ? { location: null, has_seating_plan: false }
+      : {}),
+    ...(!scheduleWrite.skipWrite
+      ? {
+          date: scheduleWrite.date,
+          ends_at: scheduleWrite.ends_at,
+          schedule_days: scheduleWrite.schedule_days,
+        }
       : {}),
     updated_at: new Date().toISOString(),
   }
@@ -1510,17 +1726,23 @@ async function persistEventIdentityOnly(input: {
   const scheduleError = await persistEventSchedule(
     input.mutationClient,
     input.eventId,
-    input.formValues as EventFormValues,
+    formValues,
     input.existing,
   )
   if (scheduleError) return persistFailure(scheduleError)
+  const ticketUpsertError = await upsertRelatedTicketTiers(
+    input.eventId,
+    formValues,
+    defaultEventFeeConfig(),
+    input.existing,
+  )
+  if (ticketUpsertError) return persistFailure(ticketUpsertError)
   const lineupError = await persistEventLineupIfProvided(
     input.eventId,
     input.formValues.lineup,
   )
   if (lineupError) return persistFailure(lineupError)
 
-  const formValues = input.formValues as EventFormValues
   const venueLabelError = await persistEventIdentityVenueLabel(
     input.mutationClient,
     input.eventId,
@@ -1719,6 +1941,14 @@ async function persistNewEventIdentityOnly(
     )
     if (scheduleError) return persistFailure(scheduleError)
   }
+
+  const createdTickets = coerceDraftEventForm(raw, { inventPlaceholders: false })
+  const createdTicketError = await upsertRelatedTicketTiers(
+    eventId,
+    createdTickets,
+    defaultEventFeeConfig(),
+  )
+  if (createdTicketError) return persistFailure(createdTicketError)
 
   const createdLineupError = await persistEventLineupIfProvided(
     eventId,
@@ -3440,6 +3670,12 @@ export async function createCompleteEvent(
     }
   }
 
+  const ticketUpsertError = await upsertRelatedTicketTiers(
+    String(eventId),
+    formValues,
+    feeConfig,
+  )
+  if (ticketUpsertError) return persistFailure(ticketUpsertError)
   const admitError = await syncTierAdmitCounts(String(eventId), formValues.tickets)
   if (admitError) {
     return persistFailure(admitError)
@@ -3762,6 +3998,17 @@ export async function updateCompleteEvent(
       formValues,
     )
     if (emptyCheckoutError) return persistFailure(emptyCheckoutError)
+    const emptyScheduleError = await persistEventSchedule(
+      mutationClient,
+      eventId,
+      formValues,
+      {
+        date: event.date,
+        ends_at: event.ends_at,
+        schedule_days: event.schedule_days,
+      },
+    )
+    if (emptyScheduleError) return persistFailure(emptyScheduleError)
     await revalidatePersistedEvent(mutationClient, eventId)
     return finalizePersistedEvent(eventId, venueId, formValues, rehydrate)
   }
@@ -3855,6 +4102,17 @@ export async function updateCompleteEvent(
 
   const updatedId = rpcResult.data
 
+  const ticketUpsertError = await upsertRelatedTicketTiers(
+    eventId,
+    formValues,
+    feeConfig,
+    {
+      date: event.date,
+      ends_at: event.ends_at,
+      schedule_days: event.schedule_days,
+    },
+  )
+  if (ticketUpsertError) return persistFailure(ticketUpsertError)
   const admitSyncError = await syncTierAdmitCounts(eventId, formValues.tickets)
   if (admitSyncError) {
     return persistFailure(admitSyncError)

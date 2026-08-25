@@ -13,6 +13,7 @@ import {
   remapBoundDayId,
   remapDayIdsByOrder,
   resolveEventAnchorDate,
+  resolveEventSchedulePersist,
   scheduleDaysFromEvent,
 } from "@/lib/event-schedule"
 
@@ -173,5 +174,48 @@ describe("event-schedule", () => {
     const remap = remapDayIdsByOrder(["old-a", "old-b"], ["new-a", "new-b"])
     assert.equal(remap.get("old-a"), "new-a")
     assert.equal(remap.get("old-b"), "new-b")
+  })
+
+  it("formats form dates to ISO 8601 timestamptz", () => {
+    const written = resolveEventSchedulePersist({
+      date: "2026-09-15T20:00",
+      endDate: "2026-09-16T02:00",
+    })
+    assert.ok(!("error" in written))
+    if ("error" in written) return
+    assert.equal(written.skipWrite, false)
+    assert.match(written.date, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+    assert.match(
+      written.ends_at ?? "",
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+    )
+    assert.equal(new Date(written.date).getTime(), new Date(2026, 8, 15, 20, 0).getTime())
+  })
+
+  it("rejects unparseable dates instead of falling back silently", () => {
+    const start = resolveEventSchedulePersist({ date: "no-es-una-fecha" })
+    assert.ok("error" in start)
+    if ("error" in start) {
+      assert.match(start.error, /Error guardando fechas/)
+    }
+    const end = resolveEventSchedulePersist({
+      date: "2026-09-15T20:00",
+      endDate: "fecha-rota",
+    })
+    assert.ok("error" in end)
+  })
+
+  it("keeps the existing date when the form did not send a new one", () => {
+    const written = resolveEventSchedulePersist({
+      existing: {
+        date: "2026-08-01T23:00:00.000Z",
+        ends_at: "2026-08-02T04:00:00.000Z",
+      },
+    })
+    assert.ok(!("error" in written))
+    if ("error" in written) return
+    assert.equal(written.skipWrite, true)
+    assert.equal(written.date, "2026-08-01T23:00:00.000Z")
+    assert.equal(written.ends_at, "2026-08-02T04:00:00.000Z")
   })
 })

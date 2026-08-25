@@ -399,6 +399,104 @@ export function isTicketValidForNow(input: {
   return { ok: true }
 }
 
+export type EventSchedulePersist = {
+  date: string
+  ends_at: string | null
+  schedule_days: ScheduleDay[]
+  skipWrite: boolean
+}
+
+/**
+ * Convierte fechas del formulario a timestamptz ISO 8601.
+ * Si el usuario escribió un valor que no parsea, falla: no hay fallback silencioso.
+ */
+export function resolveEventSchedulePersist(input: {
+  isMultiDay?: boolean
+  date?: string | null
+  endDate?: string | null
+  scheduleDays?: unknown
+  existing?: {
+    date?: string | null
+    ends_at?: string | null
+    schedule_days?: unknown
+  }
+}): EventSchedulePersist | { error: string } {
+  const nowIso = new Date().toISOString()
+  const existingDate = input.existing?.date?.trim() || nowIso
+  const existingEnds = input.existing?.ends_at?.trim() || null
+
+  if (input.isMultiDay) {
+    const incomingDays = normalizeScheduleDaysFromForm(
+      (Array.isArray(input.scheduleDays) ? input.scheduleDays : []) as Array<
+        Partial<ScheduleDayFormValue> | ScheduleDay | null | undefined
+      >,
+    )
+    const existingDays = parseScheduleDays(input.existing?.schedule_days)
+    if (incomingDays.length === 0) {
+      return {
+        date: existingDays[0]?.start_time ?? existingDate,
+        ends_at: existingDays.at(-1)?.end_time ?? existingEnds,
+        schedule_days: existingDays,
+        skipWrite: true,
+      }
+    }
+    return {
+      date: incomingDays[0]!.start_time,
+      ends_at: incomingDays.at(-1)?.end_time ?? null,
+      schedule_days: incomingDays,
+      skipWrite: false,
+    }
+  }
+
+  const rawStart = (input.date ?? "").trim()
+  const rawEnd = (input.endDate ?? "").trim()
+
+  if (rawStart) {
+    const start = parseDateTimeLocal(rawStart)
+    if (!start) {
+      return { error: "Error guardando fechas: la fecha de inicio no es válida" }
+    }
+    if (rawEnd) {
+      const end = parseDateTimeLocal(rawEnd)
+      if (!end) {
+        return { error: "Error guardando fechas: la fecha de fin no es válida" }
+      }
+      return {
+        date: start.toISOString(),
+        ends_at: end.toISOString(),
+        schedule_days: [],
+        skipWrite: false,
+      }
+    }
+    return {
+      date: start.toISOString(),
+      ends_at: null,
+      schedule_days: [],
+      skipWrite: false,
+    }
+  }
+
+  if (rawEnd) {
+    const end = parseDateTimeLocal(rawEnd)
+    if (!end) {
+      return { error: "Error guardando fechas: la fecha de fin no es válida" }
+    }
+    return {
+      date: existingDate,
+      ends_at: end.toISOString(),
+      schedule_days: [],
+      skipWrite: false,
+    }
+  }
+
+  return {
+    date: existingDate,
+    ends_at: existingEnds,
+    schedule_days: [],
+    skipWrite: true,
+  }
+}
+
 export function formatDayValidityLabel(input: {
   scheduleDays: ScheduleDay[]
   dayId: TicketDayId | undefined
