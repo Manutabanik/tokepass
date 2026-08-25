@@ -2,7 +2,7 @@ import { z } from "zod"
 
 export const eventDraftV2Schema = z
   .object({
-    title: z.string().default(""),
+    title: z.string(),
   })
   .passthrough()
 
