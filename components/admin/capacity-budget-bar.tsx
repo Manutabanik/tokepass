@@ -4,6 +4,7 @@ import { ShieldCheck } from "lucide-react"
 import type { UseFormReturn } from "react-hook-form"
 
 import { useEventCapacity } from "@/hooks/use-event-capacity"
+import { eventCapacityOverflowMessage } from "@/lib/inventory/capacity-budget"
 import { formatNumber } from "@/lib/format"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
@@ -70,8 +71,7 @@ export function CapacityBudgetBar({
       </div>
       {capacity.exceeded ? (
         <p className="mt-2 text-xs text-destructive" role="alert">
-          Un sector asignado supera su cupo por {formatNumber(capacity.overflow)}{" "}
-          lugares. Las entradas libres no se cruzan con el mapa.
+          {eventCapacityOverflowMessage(capacity)}
         </p>
       ) : capacity.totalCapacity > 0 && capacity.remaining > 0 ? (
         <p className="mt-2 text-xs text-muted-foreground">

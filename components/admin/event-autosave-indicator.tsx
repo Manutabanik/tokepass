@@ -2,10 +2,7 @@
 
 import { CheckCircle2, CloudOff, Loader2 } from "lucide-react"
 
-import {
-  useEventFormStore,
-  type AutosaveStatus,
-} from "@/lib/stores/event-form-store"
+import type { AutosaveStatus } from "@/lib/events/event-form-types"
 import { cn } from "@/lib/utils"
 
 const LABELS: Record<AutosaveStatus, string> = {
@@ -18,13 +15,15 @@ const LABELS: Record<AutosaveStatus, string> = {
 
 export function EventAutosaveIndicator({
   className,
+  status,
+  error = null,
   onRetry,
 }: {
   className?: string
+  status: AutosaveStatus
+  error?: string | null
   onRetry?: () => void
 }) {
-  const status = useEventFormStore((s) => s.autosaveStatus)
-  const error = useEventFormStore((s) => s.autosaveError)
   const isBusy = status === "saving" || status === "dirty"
   const isError = status === "error"
 

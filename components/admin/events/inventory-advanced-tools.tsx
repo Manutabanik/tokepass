@@ -13,6 +13,8 @@ import {
   BundleCreatorModal,
   type BundleComponentOption,
 } from "@/components/admin/bundle-creator-modal"
+import { ExtraSheet, isBlankExtraTicket } from "@/components/admin/events/extra-sheet"
+import { ExtraSummaryRow } from "@/components/admin/events/extra-summary-row"
 import { TicketWalletCard } from "@/components/admin/events/ticket-tier-form"
 import { Button } from "@/components/ui/button"
 import {
@@ -47,6 +49,11 @@ import type { EventFormValues } from "@/lib/validations/event-form"
 
 const EMPTY_FORM_TICKETS: EventFormValues["tickets"] = []
 
+type ExtraSheetState = {
+  index: number
+  created: boolean
+}
+
 export function InventoryAdvancedTools({
   form,
   appendTicket,
@@ -71,6 +78,7 @@ export function InventoryAdvancedTools({
   const [editingBundleIndex, setEditingBundleIndex] = useState<number | null>(
     null,
   )
+  const [extraSheet, setExtraSheet] = useState<ExtraSheetState | null>(null)
 
   const grouped = tickets
     .map((tier, index) => {
@@ -92,6 +100,32 @@ export function InventoryAdvancedTools({
   function remove(index: number) {
     if (ticketSoldCount(tickets[index]) > 0) return
     removeTicket(index)
+    if (extraSheet?.index === index) {
+      setExtraSheet(null)
+    }
+  }
+
+  function addExtra() {
+    const dayId = defaultInventoryDayId(eventDates)
+    const next = createInventoryTicket("addon", { dayId })
+    const start = (form.getValues("tickets") ?? []).length
+    appendTicket(next)
+    setExtraSheet({ index: start, created: true })
+  }
+
+  function openExtra(index: number) {
+    setExtraSheet({ index, created: false })
+  }
+
+  function closeExtraSheet(open: boolean) {
+    if (open) return
+    if (extraSheet) {
+      const ticket = form.getValues(`tickets.${extraSheet.index}`)
+      if (extraSheet.created && isBlankExtraTicket(ticket)) {
+        removeTicket(extraSheet.index)
+      }
+    }
+    setExtraSheet(null)
   }
 
   function duplicate(index: number) {
@@ -189,32 +223,24 @@ export function InventoryAdvancedTools({
         description="Estacionamiento, consumiciones u otros extras."
         icon={Car}
         actionLabel="Agregar adicional"
-        onAdd={() =>
-          append(
-            createInventoryTicket("addon", {
-              dayId: defaultInventoryDayId(eventDates),
-            }),
-          )
-        }
+        onAdd={addExtra}
       >
         {addons.length === 0 ? (
           <p className="text-xs text-muted-foreground">
             Los adicionales aparecen como upsell antes del pago.
           </p>
         ) : (
-          addons.map((item) => (
-            <TicketWalletCard
-              key={item.key}
-              form={form}
-              index={item.index}
-              onDuplicate={() => duplicate(item.index)}
-              onRemove={() => remove(item.index)}
-              capacityLabel="Stock del adicional"
-              feePercentage={feePercentage}
-              fixedFee={fixedFee}
-              isSponsored={isSponsored}
-            />
-          ))
+          <div className="space-y-2">
+            {addons.map((item) => (
+              <ExtraSummaryRow
+                key={item.key}
+                ticket={item.tier}
+                index={item.index}
+                onEdit={() => openExtra(item.index)}
+                onRemove={() => remove(item.index)}
+              />
+            ))}
+          </div>
         )}
       </AdvancedBlock>
 
@@ -359,6 +385,16 @@ export function InventoryAdvancedTools({
           setEditingBundleIndex(null)
         }}
       />
+
+      {extraSheet ? (
+        <ExtraSheet
+          form={form}
+          update={updateTicket}
+          open
+          onOpenChange={closeExtraSheet}
+          index={extraSheet.index}
+        />
+      ) : null}
     </div>
   )
 }
