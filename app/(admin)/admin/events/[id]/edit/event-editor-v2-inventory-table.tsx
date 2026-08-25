@@ -1,6 +1,6 @@
 "use client"
 
-import { LayoutList, Pencil } from "lucide-react"
+import { Clock, LayoutList, Pencil } from "lucide-react"
 import { useFormContext, useWatch } from "react-hook-form"
 
 import { DraftCard, DraftHint } from "./event-editor-v2-ui"
@@ -108,13 +108,10 @@ export function InventorySummaryTable() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="text-[11px] font-semibold tracking-wide text-gray-500 uppercase">
-                <th className="pb-2 pr-3 font-semibold">Tipo</th>
                 <th className="pb-2 pr-3 font-semibold">Nombre</th>
                 <th className="pb-2 pr-3 font-semibold">Precio</th>
-                <th className="pb-2 pr-3 font-semibold">Stock / capacidad</th>
-                <th className="pb-2 text-right font-semibold">
-                  Recaudación máx.
-                </th>
+                <th className="pb-2 pr-3 font-semibold">Stock</th>
+                <th className="pb-2 text-right font-semibold">Recaudación</th>
               </tr>
             </thead>
             <tbody>
@@ -126,17 +123,20 @@ export function InventorySummaryTable() {
                     className="border-b border-slate-200/80 last:border-b-0 dark:border-gray-800"
                   >
                     <td className="py-2.5 pr-3">
-                      <span
-                        className={cn(
-                          "inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase",
-                          badge.className,
-                        )}
-                      >
-                        {badge.label}
-                      </span>
-                    </td>
-                    <td className="py-2.5 pr-3 font-medium text-slate-800 dark:text-zinc-100">
-                      {row.name}
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          className={cn(
+                            "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase",
+                            badge.className,
+                          )}
+                        >
+                          {badge.label}
+                        </span>
+                        <span className="truncate font-medium text-slate-800 dark:text-zinc-100">
+                          {row.name}
+                        </span>
+                        {row.hasPresale ? <PresaleClock /> : null}
+                      </div>
                     </td>
                     <td className="py-2.5 pr-3">
                       <LedgerNumberInput
@@ -162,14 +162,11 @@ export function InventorySummaryTable() {
             </tbody>
             <tfoot>
               <tr className="border-t border-slate-300 text-sm font-semibold dark:border-gray-700">
-                <td className="pt-3 pr-3 text-xs uppercase tracking-wide text-gray-500" colSpan={3}>
-                  Proyección
+                <td className="pt-3 pr-3 text-xs uppercase tracking-wide text-gray-500" colSpan={2}>
+                  Total proyectado
                 </td>
                 <td className="pt-3 pr-3 tabular-nums text-slate-800 dark:text-zinc-100">
-                  {formatNumber(totals.stock)}{" "}
-                  <span className="text-xs font-medium text-gray-500">
-                    tickets / lugares
-                  </span>
+                  {formatNumber(totals.stock)}
                 </td>
                 <td className="pt-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
                   {formatCurrency(totals.revenue)}
@@ -180,6 +177,23 @@ export function InventorySummaryTable() {
         </div>
       )}
     </DraftCard>
+  )
+}
+
+function PresaleClock() {
+  return (
+    <span className="group/presale relative inline-flex shrink-0">
+      <Clock
+        className="size-3.5 text-amber-500"
+        aria-label="Preventa programada"
+      />
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 rounded-md bg-gray-900 px-2 py-1 text-[10px] font-medium whitespace-nowrap text-white opacity-0 shadow-sm transition-opacity group-hover/presale:opacity-100 group-focus-within/presale:opacity-100"
+      >
+        Preventa programada
+      </span>
+    </span>
   )
 }
 

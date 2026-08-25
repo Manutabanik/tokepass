@@ -10,10 +10,10 @@ import {
   DRAFT_FIELD_CLASS,
   DraftAddButton,
   DraftCard,
+  DraftFieldLabel,
   DraftHint,
 } from "./event-editor-v2-ui"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
@@ -40,12 +40,13 @@ export function EventEditorV2InventoryStep({ eventId }: { eventId: string }) {
           </h2>
         </div>
         <div className="grid max-w-xl gap-3">
-          <Label
+          <DraftFieldLabel
             htmlFor="event-v2-venue-capacity"
-            className="text-sm font-bold text-slate-800 dark:text-zinc-200"
+            required
+            className="text-sm"
           >
             Capacidad del recinto
-          </Label>
+          </DraftFieldLabel>
           <Input
             id="event-v2-venue-capacity"
             type="number"
@@ -230,6 +231,8 @@ function DraftLineItemList({
                   <input type="hidden" {...register(`${name}.${index}.source`)} />
                   <input type="hidden" {...register(`${name}.${index}.sectorId`)} />
                   <input type="hidden" {...register(`${name}.${index}.layoutType`)} />
+                  <input type="hidden" {...register(`${name}.${index}.startDate`)} />
+                  <input type="hidden" {...register(`${name}.${index}.endDate`)} />
                 </li>
               )
             }
@@ -239,6 +242,8 @@ function DraftLineItemList({
                 name={name}
                 index={index}
                 initialName={field.name}
+                initialStartDate={field.startDate}
+                initialEndDate={field.endDate}
                 emptyTitle={name === "tickets" ? "Nueva Entrada" : "Nuevo adicional"}
                 onRemove={() => remove(index)}
               />

@@ -23,6 +23,8 @@ export type DraftMapTicket = {
   stock: number
   minOrder: number
   maxOrder: number
+  startDate?: string
+  endDate?: string
   source: "map" | "general" | string
   sectorId: string
   layoutType: string
@@ -107,6 +109,8 @@ export function mergeDraftTicketsWithMap<T extends DraftMapTicketLike>(
       id: id && !id.startsWith("map:") ? id : ticket.id,
       minOrder: previous?.minOrder ?? ticket.minOrder,
       maxOrder: previous?.maxOrder ?? ticket.maxOrder,
+      startDate: previous?.startDate ?? "",
+      endDate: previous?.endDate ?? "",
       description: previous?.description?.trim()
         ? previous.description
         : ticket.description,
@@ -138,6 +142,8 @@ type DraftMapTicketLike = {
   stock?: number
   minOrder?: number
   maxOrder?: number
+  startDate?: string
+  endDate?: string
   source?: string
   sectorId?: string
   layoutType?: string

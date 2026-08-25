@@ -16,6 +16,7 @@ export type InventorySummaryRow = {
   price: number
   stock: number
   stockReadOnly: boolean
+  hasPresale: boolean
   source: InventorySummarySource
 }
 
@@ -30,6 +31,17 @@ type DraftSummaryItem = {
   stock?: unknown
   source?: unknown
   sectorId?: unknown
+  startDate?: unknown
+  endDate?: unknown
+}
+
+export function hasDraftPresale(item?: {
+  startDate?: unknown
+  endDate?: unknown
+} | null): boolean {
+  const start = typeof item?.startDate === "string" ? item.startDate.trim() : ""
+  const end = typeof item?.endDate === "string" ? item.endDate.trim() : ""
+  return Boolean(start || end)
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -84,6 +96,7 @@ export function buildInventorySummaryRows(input: {
       price: draftNumberValue(ticket.price),
       stock: draftNumberValue(ticket.stock),
       stockReadOnly: false,
+      hasPresale: hasDraftPresale(ticket),
       source: { field: "tickets", index },
     })
   })
@@ -105,6 +118,7 @@ export function buildInventorySummaryRows(input: {
       price: draftNumberValue(record.price),
       stock: sectorCapacity(sector),
       stockReadOnly: true,
+      hasPresale: ticketIndex >= 0 ? hasDraftPresale(tickets[ticketIndex]) : false,
       source: {
         field: "seatingMap.sectors",
         index,
@@ -124,6 +138,7 @@ export function buildInventorySummaryRows(input: {
       price: draftNumberValue(ticket.price),
       stock: draftNumberValue(ticket.stock),
       stockReadOnly: true,
+      hasPresale: hasDraftPresale(ticket),
       source: { field: "tickets", index },
     })
   })
@@ -136,6 +151,7 @@ export function buildInventorySummaryRows(input: {
       price: draftNumberValue(extra.price),
       stock: draftNumberValue(extra.stock),
       stockReadOnly: false,
+      hasPresale: hasDraftPresale(extra),
       source: { field: "extras", index },
     })
   })

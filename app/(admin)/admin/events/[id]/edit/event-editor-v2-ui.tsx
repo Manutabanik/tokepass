@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 
+import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 
 export const DRAFT_FIELD_CLASS =
@@ -55,4 +56,42 @@ export function DraftAddButton({
 export function DraftFieldError({ message }: { message?: string }) {
   if (!message) return null
   return <p className="text-xs text-red-500">{message}</p>
+}
+
+export function DraftFieldLabel({
+  htmlFor,
+  required = false,
+  optional = false,
+  className,
+  children,
+}: {
+  htmlFor?: string
+  required?: boolean
+  optional?: boolean
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <Label
+      htmlFor={htmlFor}
+      className={cn(
+        "text-xs font-bold text-slate-800 dark:text-zinc-200",
+        className,
+      )}
+    >
+      {children}
+      {required ? (
+        <>
+          {" "}
+          <span className="text-red-500">*</span>
+        </>
+      ) : null}
+      {optional ? (
+        <>
+          {" "}
+          <span className="text-sm font-normal text-gray-500">(Opcional)</span>
+        </>
+      ) : null}
+    </Label>
+  )
 }

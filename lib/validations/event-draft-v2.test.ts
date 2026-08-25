@@ -292,8 +292,31 @@ describe("parseEventDraftV2", () => {
     assert.equal(parsed.tickets[0]?.stock, 80)
     assert.equal(parsed.tickets[0]?.source, "")
     assert.equal(parsed.tickets[0]?.sectorId, "")
+    assert.equal(parsed.tickets[0]?.startDate, "")
+    assert.equal(parsed.tickets[0]?.endDate, "")
     assert.equal(parsed.extras[0]?.minOrder, 1)
     assert.equal(parsed.settings.checkoutMessage, "Gracias")
+  })
+
+  it("keeps optional ticket sale windows without blocking the draft schema", () => {
+    const parsed = parseEventDraftV2({
+      tickets: [
+        {
+          id: "t1",
+          name: "Early bird",
+          startDate: "2026-08-01T10:00",
+          endDate: "2026-08-20T23:59",
+        },
+      ],
+    })
+    assert.equal(parsed.tickets[0]?.startDate, "2026-08-01T10:00")
+    assert.equal(parsed.tickets[0]?.endDate, "2026-08-20T23:59")
+    assert.equal(
+      eventDraftSchema.safeParse({
+        tickets: [{ name: "Early bird", startDate: "2026-08-01T10:00" }],
+      }).success,
+      true,
+    )
   })
 
   it("hydrates location from locationName and stored geo fields", () => {

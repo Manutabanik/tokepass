@@ -27,7 +27,13 @@ describe("buildInventorySummaryRows", () => {
   it("merges generals, extras and map sectors without duplicating map tickets", () => {
     const rows = buildInventorySummaryRows({
       tickets: [
-        { name: "General", price: 10000, stock: 80, source: "general" },
+        {
+          name: "General",
+          price: 10000,
+          stock: 80,
+          source: "general",
+          startDate: "2026-08-01T10:00",
+        },
         {
           name: "Platea",
           price: 18000,
@@ -49,10 +55,12 @@ describe("buildInventorySummaryRows", () => {
 
     assert.equal(rows.length, 3)
     assert.equal(rows[0]?.type, "general")
+    assert.equal(rows[0]?.hasPresale, true)
     assert.equal(rows[0]?.source.field, "tickets")
     assert.equal(rows[1]?.type, "mapa")
     assert.equal(rows[1]?.stock, 2)
     assert.equal(rows[1]?.stockReadOnly, true)
+    assert.equal(rows[1]?.hasPresale, false)
     assert.equal(rows[1]?.source.field, "seatingMap.sectors")
     if (rows[1]?.source.field === "seatingMap.sectors") {
       assert.equal(rows[1].source.ticketIndex, 1)

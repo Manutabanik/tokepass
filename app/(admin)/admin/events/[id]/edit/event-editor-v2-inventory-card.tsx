@@ -1,6 +1,6 @@
 "use client"
 
-import { ChevronDown, Trash2 } from "lucide-react"
+import { ChevronDown, Settings2, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { useFormContext, useWatch } from "react-hook-form"
 
@@ -8,12 +8,13 @@ import {
   DRAFT_FIELD_CLASS,
   DRAFT_TEXTAREA_CLASS,
   DraftFieldError,
+  DraftFieldLabel,
   DraftHint,
 } from "./event-editor-v2-ui"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { hasDraftPresale } from "@/lib/events/inventory-summary-v2"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
@@ -26,12 +27,16 @@ export function DraftInventoryAccordionCard({
   index,
   emptyTitle,
   initialName,
+  initialStartDate,
+  initialEndDate,
   onRemove,
 }: {
   name: "tickets" | "extras"
   index: number
   emptyTitle: string
   initialName?: string
+  initialStartDate?: string
+  initialEndDate?: string
   onRemove: () => void
 }) {
   const {
@@ -42,8 +47,16 @@ export function DraftInventoryAccordionCard({
   const itemName = useWatch({ control, name: `${name}.${index}.name` })
   const price = useWatch({ control, name: `${name}.${index}.price` })
   const stock = useWatch({ control, name: `${name}.${index}.stock` })
+  const startDate = useWatch({ control, name: `${name}.${index}.startDate` })
+  const endDate = useWatch({ control, name: `${name}.${index}.endDate` })
   const [isExpanded, setIsExpanded] = useState(
     () => !String(initialName ?? "").trim(),
+  )
+  const [showAdvanced, setShowAdvanced] = useState(() =>
+    hasDraftPresale({
+      startDate: initialStartDate,
+      endDate: initialEndDate,
+    }),
   )
 
   const itemErrors = errors[name]?.[index]
@@ -51,6 +64,8 @@ export function DraftInventoryAccordionCard({
   const priceValue = draftNumberValue(price)
   const stockValue = draftNumberValue(stock)
   const panelId = `event-v2-${name}-${index}-panel`
+  const advancedId = `${panelId}-advanced`
+  const scheduled = hasDraftPresale({ startDate, endDate })
 
   return (
     <li className="overflow-hidden rounded-xl border border-slate-200 bg-white/80 transition-all duration-200 dark:border-gray-700/50 dark:bg-gray-800/50">
@@ -101,7 +116,7 @@ export function DraftInventoryAccordionCard({
         className={cn(
           "grid transition-all duration-300 ease-in-out",
           isExpanded
-            ? "grid-rows-[1fr] mt-0 opacity-100"
+            ? "mt-0 grid-rows-[1fr] opacity-100"
             : "pointer-events-none grid-rows-[0fr] opacity-0",
         )}
       >
@@ -112,12 +127,12 @@ export function DraftInventoryAccordionCard({
             </p>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_8rem_8rem]">
               <div className="grid gap-1.5">
-                <Label
+                <DraftFieldLabel
                   htmlFor={`event-v2-${name}-${index}-name`}
-                  className="text-xs font-bold text-slate-800 dark:text-zinc-200"
+                  required
                 >
-                  Nombre
-                </Label>
+                  {name === "tickets" ? "Nombre de la entrada" : "Nombre del adicional"}
+                </DraftFieldLabel>
                 <Input
                   id={`event-v2-${name}-${index}-name`}
                   className={DRAFT_FIELD_CLASS}
@@ -127,12 +142,12 @@ export function DraftInventoryAccordionCard({
                 <DraftFieldError message={itemErrors?.name?.message} />
               </div>
               <div className="grid gap-1.5">
-                <Label
+                <DraftFieldLabel
                   htmlFor={`event-v2-${name}-${index}-price`}
-                  className="text-xs font-bold text-slate-800 dark:text-zinc-200"
+                  required
                 >
                   Precio
-                </Label>
+                </DraftFieldLabel>
                 <Input
                   id={`event-v2-${name}-${index}-price`}
                   type="number"
@@ -147,12 +162,12 @@ export function DraftInventoryAccordionCard({
                 <DraftFieldError message={itemErrors?.price?.message} />
               </div>
               <div className="grid gap-1.5">
-                <Label
+                <DraftFieldLabel
                   htmlFor={`event-v2-${name}-${index}-stock`}
-                  className="text-xs font-bold text-slate-800 dark:text-zinc-200"
+                  required
                 >
                   Stock
-                </Label>
+                </DraftFieldLabel>
                 <Input
                   id={`event-v2-${name}-${index}-stock`}
                   type="number"
@@ -169,12 +184,12 @@ export function DraftInventoryAccordionCard({
             </div>
 
             <div className="grid gap-1.5">
-              <Label
+              <DraftFieldLabel
                 htmlFor={`event-v2-${name}-${index}-description`}
-                className="text-xs font-bold text-slate-800 dark:text-zinc-200"
+                optional
               >
-                Descripción breve
-              </Label>
+                Descripción
+              </DraftFieldLabel>
               <Textarea
                 id={`event-v2-${name}-${index}-description`}
                 rows={2}
@@ -186,48 +201,106 @@ export function DraftInventoryAccordionCard({
               <DraftFieldError message={itemErrors?.description?.message} />
             </div>
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label
-                  htmlFor={`event-v2-${name}-${index}-min`}
-                  className="text-xs font-bold text-slate-800 dark:text-zinc-200"
-                >
-                  Mínimo por persona
-                </Label>
-                <Input
-                  id={`event-v2-${name}-${index}-min`}
-                  type="number"
-                  min={0}
-                  step={1}
-                  inputMode="numeric"
-                  className={DRAFT_FIELD_CLASS}
-                  {...register(`${name}.${index}.minOrder`, {
-                    setValueAs: (value) => draftNumberValue(value, 1),
-                  })}
-                />
-                <DraftHint>Mínimo que puede llevar cada persona.</DraftHint>
-                <DraftFieldError message={itemErrors?.minOrder?.message} />
-              </div>
-              <div className="grid gap-1.5">
-                <Label
-                  htmlFor={`event-v2-${name}-${index}-max`}
-                  className="text-xs font-bold text-slate-800 dark:text-zinc-200"
-                >
-                  Máximo por persona
-                </Label>
-                <Input
-                  id={`event-v2-${name}-${index}-max`}
-                  type="number"
-                  min={0}
-                  step={1}
-                  inputMode="numeric"
-                  className={DRAFT_FIELD_CLASS}
-                  {...register(`${name}.${index}.maxOrder`, {
-                    setValueAs: (value) => draftNumberValue(value, 10),
-                  })}
-                />
-                <DraftHint>Tope por compra. Evita acaparamientos.</DraftHint>
-                <DraftFieldError message={itemErrors?.maxOrder?.message} />
+            <Button
+              type="button"
+              variant="ghost"
+              aria-expanded={showAdvanced}
+              aria-controls={advancedId}
+              onClick={() => setShowAdvanced((open) => !open)}
+              className="h-9 w-full justify-start gap-2 px-2 text-sm font-medium text-gray-500 hover:text-emerald-500"
+            >
+              <Settings2 className="size-4" aria-hidden />
+              Opciones de preventa y límites
+              {scheduled ? (
+                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold tracking-wide text-amber-600 uppercase dark:text-amber-300">
+                  Programada
+                </span>
+              ) : null}
+            </Button>
+
+            <div
+              id={advancedId}
+              aria-hidden={!showAdvanced}
+              className={cn(
+                "grid transition-all duration-300 ease-in-out",
+                showAdvanced
+                  ? "grid-rows-[1fr] opacity-100"
+                  : "pointer-events-none grid-rows-[0fr] opacity-0",
+              )}
+            >
+              <div className="overflow-hidden">
+                <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 dark:border-gray-800 dark:bg-gray-950/40 md:grid-cols-2">
+                  <div className="grid gap-1.5">
+                    <DraftFieldLabel
+                      htmlFor={`event-v2-${name}-${index}-sale-start`}
+                      optional
+                    >
+                      Inicio de venta
+                    </DraftFieldLabel>
+                    <Input
+                      id={`event-v2-${name}-${index}-sale-start`}
+                      type="datetime-local"
+                      className={DRAFT_FIELD_CLASS}
+                      {...register(`${name}.${index}.startDate`)}
+                    />
+                    <DraftHint>Vacío = se vende apenas publiques.</DraftHint>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <DraftFieldLabel
+                      htmlFor={`event-v2-${name}-${index}-sale-end`}
+                      optional
+                    >
+                      Fin de venta
+                    </DraftFieldLabel>
+                    <Input
+                      id={`event-v2-${name}-${index}-sale-end`}
+                      type="datetime-local"
+                      className={DRAFT_FIELD_CLASS}
+                      {...register(`${name}.${index}.endDate`)}
+                    />
+                    <DraftHint>Vacío = hasta la fecha del evento.</DraftHint>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <DraftFieldLabel
+                      htmlFor={`event-v2-${name}-${index}-min`}
+                      optional
+                    >
+                      Mínimo por persona
+                    </DraftFieldLabel>
+                    <Input
+                      id={`event-v2-${name}-${index}-min`}
+                      type="number"
+                      min={0}
+                      step={1}
+                      inputMode="numeric"
+                      className={DRAFT_FIELD_CLASS}
+                      {...register(`${name}.${index}.minOrder`, {
+                        setValueAs: (value) => draftNumberValue(value, 1),
+                      })}
+                    />
+                    <DraftFieldError message={itemErrors?.minOrder?.message} />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <DraftFieldLabel
+                      htmlFor={`event-v2-${name}-${index}-max`}
+                      optional
+                    >
+                      Máximo por persona
+                    </DraftFieldLabel>
+                    <Input
+                      id={`event-v2-${name}-${index}-max`}
+                      type="number"
+                      min={0}
+                      step={1}
+                      inputMode="numeric"
+                      className={DRAFT_FIELD_CLASS}
+                      {...register(`${name}.${index}.maxOrder`, {
+                        setValueAs: (value) => draftNumberValue(value, 10),
+                      })}
+                    />
+                    <DraftFieldError message={itemErrors?.maxOrder?.message} />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
