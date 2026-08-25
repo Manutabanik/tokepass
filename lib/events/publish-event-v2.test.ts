@@ -115,6 +115,34 @@ describe("buildPublishEventV2Payload", () => {
     assert.equal(payload.tickets[1]?.category, "special")
     assert.equal(payload.tickets[1]?.id, null)
     assert.match(payload.date, /^2026-09-0[12]T/)
+    assert.deepEqual(payload.schedule_days, [])
+  })
+
+  it("writes the first day to events.date and the rest to schedule_days", () => {
+    const draft = publishableDraft()
+    draft.schedule = [
+      {
+        id: "550e8400-e29b-41d4-a716-446655440001",
+        name: "Día 1",
+        startDate: "2026-09-01T18:00",
+        endDate: "2026-09-01T23:00",
+      },
+      {
+        id: "550e8400-e29b-41d4-a716-446655440002",
+        name: "Función Noche",
+        startDate: "2026-09-02T20:00",
+        endDate: "2026-09-02T23:30",
+      },
+    ]
+    const payload = buildPublishEventV2Payload(draft)
+    assert.match(payload.date, /^2026-09-0[12]T/)
+    assert.match(payload.ends_at ?? "", /^2026-09-0[23]T/)
+    assert.equal(payload.schedule_days.length, 2)
+    assert.equal(payload.schedule_days[0]?.id, "550e8400-e29b-41d4-a716-446655440001")
+    assert.equal(payload.schedule_days[0]?.title, "Día 1")
+    assert.equal(payload.schedule_days[1]?.title, "Función Noche")
+    assert.match(payload.schedule_days[0]?.start_time ?? "", /^2026-09-0[12]T/)
+    assert.match(payload.schedule_days[1]?.end_time ?? "", /^2026-09-0[23]T/)
   })
 
   it("keeps general tickets off the seating map and skips nameless extras", () => {

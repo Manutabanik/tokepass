@@ -101,7 +101,7 @@ export async function getEventDraftV2(
   const { data, error } = await gate.supabase
     .from("events")
     .select(
-      "id, organizer_id, status, draft_state, title, date, ends_at, location, description, flyer_url, image_url, social_share_image_url, visibility, refund_policy, province, department, delivery_mode, venue_map, venue_id",
+      "id, organizer_id, status, draft_state, title, date, ends_at, location, description, flyer_url, image_url, social_share_image_url, visibility, refund_policy, province, department, delivery_mode, venue_map, venue_id, schedule_days",
     )
     .eq("id", id)
     .maybeSingle()
@@ -149,6 +149,7 @@ async function persistRehydratedPublishedDraft(input: {
     delivery_mode: string | null
     venue_map: unknown
     venue_id: string | null
+    schedule_days?: unknown
   }
 }): Promise<Json> {
   const venueQuery = input.event.venue_id
@@ -167,12 +168,18 @@ async function persistRehydratedPublishedDraft(input: {
     )
     .eq("event_id", input.event.id)
     .order("created_at", { ascending: true })
+  const schedulesQuery = await input.supabase
+    .from("event_schedules")
+    .select("id, title, start_time, end_time")
+    .eq("event_id", input.event.id)
+    .order("start_time", { ascending: true })
 
   const draftState = toEventDraftV2Payload(
     rehydrateEventDraftV2({
       event: input.event,
       venue: venueQuery.error ? null : (venueQuery.data ?? null),
       tickets: ticketsQuery.error ? [] : (ticketsQuery.data ?? []),
+      schedules: schedulesQuery.error ? [] : (schedulesQuery.data ?? []),
     }),
   ) as Json
 
@@ -534,6 +541,22 @@ async function syncPublishedTickets(
   }
 }
 
+async function unpackPublishedSchedule(
+  eventId: string,
+  payload: PublishEventV2Payload,
+) {
+  const admin = createAdminClient()
+  const written = await admin
+    .from("events")
+    .update({
+      date: payload.date,
+      ends_at: payload.ends_at,
+      schedule_days: payload.schedule_days as unknown as Json,
+    } as never)
+    .eq("id", eventId)
+  if (written.error) throw new Error(formatSupabaseError(written.error))
+}
+
 async function unpackPublishEventV2Sequential(input: {
   eventId: string
   organizerId: string
@@ -559,6 +582,7 @@ async function unpackPublishEventV2Sequential(input: {
       description: input.payload.description,
       date: input.payload.date,
       ends_at: input.payload.ends_at,
+      schedule_days: input.payload.schedule_days as unknown as Json,
       location: input.payload.location,
       province: input.payload.venue.province,
       department: input.payload.venue.city,
@@ -688,6 +712,15 @@ export async function publishEventV2(
         payload,
       })
       slug = written.slug
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : formatSupabaseError(error),
+      }
+    }
+  } else {
+    try {
+      await unpackPublishedSchedule(id, payload)
     } catch (error) {
       return {
         success: false,

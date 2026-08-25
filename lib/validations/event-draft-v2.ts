@@ -8,6 +8,31 @@ import {
 
 export { isMapDraftTicket } from "@/lib/events/draft-seating-map-v2"
 
+export type EventDraftV2ScheduleDay = {
+  id: string
+  name: string
+  startDate: string
+  endDate: string
+}
+
+export function createDraftScheduleDay(
+  input: Partial<EventDraftV2ScheduleDay> = {},
+): EventDraftV2ScheduleDay {
+  return {
+    id: input.id?.trim() || crypto.randomUUID(),
+    name: input.name ?? "Día 1",
+    startDate: input.startDate ?? "",
+    endDate: input.endDate ?? "",
+  }
+}
+
+const draftScheduleDaySchema = z.object({
+  id: z.string().optional().default(""),
+  name: z.string().optional().default(""),
+  startDate: z.string().optional().default(""),
+  endDate: z.string().optional().default(""),
+})
+
 const draftLineItemSchema = z.object({
   id: z.string().optional().default(""),
   name: z.string().optional().default(""),
@@ -87,6 +112,7 @@ const eventDraftFieldsSchema = z.object({
   flyerUrl: z.string().optional().default(""),
   bannerUrl: z.string().optional().default(""),
   venueCapacity: z.coerce.number().optional().default(0),
+  schedule: z.array(draftScheduleDaySchema).default([]),
   tickets: z.array(draftLineItemSchema).default([]),
   extras: z.array(draftLineItemSchema).default([]),
   seatingMap: draftSeatingMapSchema,
@@ -112,7 +138,7 @@ export const eventPublishSchema = z
   .object({
     basicInfo: z.object({
       name: z.string().min(1, "El nombre es obligatorio"),
-      startDate: z.string().min(1, "La fecha de inicio es obligatoria"),
+      startDate: z.string().optional(),
       endDate: z.string().optional(),
       locationName: z.string().optional(),
     }),
@@ -129,6 +155,16 @@ export const eventPublishSchema = z
     flyerUrl: z.string().optional(),
     bannerUrl: z.string().optional(),
     venueCapacity: z.coerce.number().min(1, "Definí el aforo del recinto"),
+    schedule: z
+      .array(
+        z.object({
+          id: z.string().optional(),
+          name: z.string().optional(),
+          startDate: z.string().optional(),
+          endDate: z.string().optional(),
+        }),
+      )
+      .optional(),
     tickets: z
       .array(publishLineItemSchema)
       .min(1, "Agregá al menos una entrada"),
@@ -151,21 +187,52 @@ export const eventPublishSchema = z
       .optional(),
   })
   .superRefine((data, ctx) => {
-    const start = data.basicInfo.startDate?.trim()
-    const end = data.basicInfo.endDate?.trim()
-    if (start && end) {
-      const startMs = Date.parse(start)
-      const endMs = Date.parse(end)
-      if (
-        Number.isFinite(startMs) &&
-        Number.isFinite(endMs) &&
-        endMs <= startMs
-      ) {
+    const days = resolveDraftSchedule(data)
+    const dated = days.filter((day) => day.startDate.trim())
+    if (dated.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["schedule", 0, "startDate"],
+        message: "La fecha de inicio es obligatoria",
+      })
+    }
+
+    const multi = dated.length > 1
+    for (const [index, day] of days.entries()) {
+      const start = day.startDate.trim()
+      const end = day.endDate.trim()
+      if (!start) {
+        if (days.length > 1) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["schedule", index, "startDate"],
+            message: "Cada función necesita fecha de inicio",
+          })
+        }
+        continue
+      }
+      if (multi && !end) {
         ctx.addIssue({
           code: "custom",
-          path: ["basicInfo", "endDate"],
-          message: "La fecha de fin debe ser posterior al inicio",
+          path: ["schedule", index, "endDate"],
+          message: "Cada función necesita fecha de fin",
         })
+        continue
+      }
+      if (start && end) {
+        const startMs = Date.parse(start)
+        const endMs = Date.parse(end)
+        if (
+          Number.isFinite(startMs) &&
+          Number.isFinite(endMs) &&
+          endMs <= startMs
+        ) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["schedule", index, "endDate"],
+            message: "La fecha de fin debe ser posterior al inicio",
+          })
+        }
       }
     }
 
@@ -229,12 +296,19 @@ export function emptyEventDraftV2Location(): EventDraftV2Location {
 }
 
 export function emptyEventDraftV2(): EventDraftV2 {
+  const firstDay = createDraftScheduleDay({ name: "Día 1" })
   return {
-    basicInfo: { name: "", startDate: "", endDate: "", locationName: "" },
+    basicInfo: {
+      name: "",
+      startDate: firstDay.startDate,
+      endDate: firstDay.endDate,
+      locationName: "",
+    },
     location: emptyEventDraftV2Location(),
     flyerUrl: "",
     bannerUrl: "",
     venueCapacity: 0,
+    schedule: [firstDay],
     tickets: [],
     extras: [],
     seatingMap: emptyDraftSeatingMap(),
@@ -278,6 +352,59 @@ function asOptionalString(value: unknown): string {
   return typeof value === "string" ? value : ""
 }
 
+function asDraftScheduleDay(
+  item: unknown,
+  index: number,
+): EventDraftV2ScheduleDay {
+  if (!item || typeof item !== "object" || Array.isArray(item)) {
+    return createDraftScheduleDay({ name: `Día ${index + 1}` })
+  }
+  const record = item as Record<string, unknown>
+  return createDraftScheduleDay({
+    id: asOptionalString(record.id),
+    name: asOptionalString(record.name) || `Día ${index + 1}`,
+    startDate: asOptionalString(
+      record.startDate ?? record.start_time ?? record.startTime,
+    ),
+    endDate: asOptionalString(
+      record.endDate ?? record.end_time ?? record.endTime,
+    ),
+  })
+}
+
+export function resolveDraftSchedule(values: {
+  schedule?: unknown
+  basicInfo?: { startDate?: string | null; endDate?: string | null }
+}): EventDraftV2ScheduleDay[] {
+  const raw = Array.isArray(values.schedule)
+    ? values.schedule.map((item, index) => asDraftScheduleDay(item, index))
+    : []
+  const fallbackStart = values.basicInfo?.startDate?.trim() ?? ""
+  const fallbackEnd = values.basicInfo?.endDate?.trim() ?? ""
+  if (raw.length === 0) {
+    return [
+      createDraftScheduleDay({
+        name: "Día 1",
+        startDate: fallbackStart,
+        endDate: fallbackEnd,
+      }),
+    ]
+  }
+  const hasStart = raw.some((day) => day.startDate.trim())
+  if (!hasStart && (fallbackStart || fallbackEnd)) {
+    return raw.map((day, index) =>
+      index === 0
+        ? {
+            ...day,
+            startDate: day.startDate || fallbackStart,
+            endDate: day.endDate || fallbackEnd,
+          }
+        : day,
+    )
+  }
+  return raw
+}
+
 function parseDraftLineItems(raw: unknown): EventDraftV2LineItem[] {
   if (!Array.isArray(raw)) return []
   return raw.map((item, index) => {
@@ -314,11 +441,16 @@ export function toEventDraftV2Payload(values: EventDraftV2) {
   const name = values.basicInfo?.name ?? ""
   const venueName =
     values.location?.venueName?.trim() || values.basicInfo?.locationName || ""
+  const schedule = resolveDraftSchedule(values)
+  const primary = schedule[0]
   return {
     ...values,
     title: name,
+    schedule,
     basicInfo: {
       ...values.basicInfo,
+      startDate: primary?.startDate || values.basicInfo?.startDate || "",
+      endDate: primary?.endDate || values.basicInfo?.endDate || "",
       locationName: venueName,
     },
     location: {
@@ -379,15 +511,23 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
     asOptionalString(basicRaw.locationName)
   const lat = asOptionalCoord(locationRaw.lat)
   const lng = asOptionalCoord(locationRaw.lng)
+  const startDate = asOptionalString(basicRaw.startDate)
+  const endDate = asOptionalString(basicRaw.endDate)
+  const schedule = resolveDraftSchedule({
+    schedule: record.schedule,
+    basicInfo: { startDate, endDate },
+  })
+  const primary = schedule[0]
 
   return {
     ...record,
     basicInfo: {
       name,
-      startDate: asOptionalString(basicRaw.startDate),
-      endDate: asOptionalString(basicRaw.endDate),
+      startDate: primary?.startDate || startDate,
+      endDate: primary?.endDate || endDate,
       locationName: venueName,
     },
+    schedule,
     location: {
       venueName,
       address: asOptionalString(locationRaw.address),

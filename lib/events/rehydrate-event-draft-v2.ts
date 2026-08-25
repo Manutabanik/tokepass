@@ -1,4 +1,8 @@
-import { toDatetimeLocalInput } from "@/lib/event-schedule"
+import {
+  newScheduleDayId,
+  scheduleDaysFromEvent,
+  toDatetimeLocalInput,
+} from "@/lib/event-schedule"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
 import { toDraftSeatingMap } from "@/lib/events/draft-seating-map-v2"
 import { parseEventRefundPolicy } from "@/lib/validations/event-form"
@@ -53,9 +57,16 @@ export type LiveEventSnapshotV2 = {
     department: string | null
     delivery_mode: string | null
     venue_map: unknown
+    schedule_days?: unknown
   }
   venue: LiveEventVenueSnapshotV2 | null
   tickets: LiveEventTicketSnapshotV2[]
+  schedules?: Array<{
+    id: string
+    title: string
+    start_time: string
+    end_time: string
+  }> | null
 }
 
 export function isEventDraftStateEmpty(raw: unknown): boolean {
@@ -116,14 +127,36 @@ export function rehydrateEventDraftV2(
 
   const lat = asOptionalCoord(venue?.latitude)
   const lng = asOptionalCoord(venue?.longitude)
+  const liveDays = scheduleDaysFromEvent({
+    relational: snapshot.schedules,
+    json: event.schedule_days,
+  })
+  const schedule =
+    liveDays.length > 0
+      ? liveDays.map((day, index) => ({
+          id: day.id,
+          name: day.title || `Día ${index + 1}`,
+          startDate: toDatetimeLocalInput(day.start_time),
+          endDate: toDatetimeLocalInput(day.end_time),
+        }))
+      : [
+          {
+            id: newScheduleDayId(),
+            name: "Día 1",
+            startDate: event.date ? toDatetimeLocalInput(event.date) : "",
+            endDate: event.ends_at ? toDatetimeLocalInput(event.ends_at) : "",
+          },
+        ]
+  const primary = schedule[0]
 
   return parseEventDraftV2({
     basicInfo: {
       name: title,
-      startDate: event.date ? toDatetimeLocalInput(event.date) : "",
-      endDate: event.ends_at ? toDatetimeLocalInput(event.ends_at) : "",
+      startDate: primary?.startDate ?? "",
+      endDate: primary?.endDate ?? "",
       locationName: venueName,
     },
+    schedule,
     location: {
       venueName,
       address: online ? "" : place.street,

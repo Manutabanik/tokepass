@@ -21,7 +21,9 @@ export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
   const seatingMap = useWatch({ control, name: "seatingMap" })
   const tickets = useWatch({ control, name: "tickets" }) ?? []
   const title = useWatch({ control, name: "basicInfo.name" })
-  const startDate = useWatch({ control, name: "basicInfo.startDate" })
+  const scheduleStart = useWatch({ control, name: "schedule.0.startDate" })
+  const basicStart = useWatch({ control, name: "basicInfo.startDate" })
+  const startDate = scheduleStart || basicStart
   const venueName = useWatch({ control, name: "location.venueName" })
   const map = draftSeatingMapToVenueMap(seatingMap)
 

@@ -1,10 +1,11 @@
 "use client"
 
-import { CalendarDays, ImagePlus, MonitorPlay, Type } from "lucide-react"
-import { Controller, useFormContext } from "react-hook-form"
+import { ImagePlus, MonitorPlay, Type } from "lucide-react"
+import { Controller, useFormContext, useWatch } from "react-hook-form"
 
 import { EventEditorV2LocationFields } from "./event-editor-v2-location"
 import { EventEditorV2MediaField } from "./event-editor-v2-media"
+import { EventEditorV2ScheduleFields } from "./event-editor-v2-schedule"
 import {
   DRAFT_FIELD_CLASS,
   DraftCard,
@@ -20,10 +21,10 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
   const {
     control,
     register,
-    watch,
     formState: { errors },
   } = useFormContext<EventDraftV2>()
-  const isOnline = watch("settings.deliveryMode") === "ONLINE"
+  const deliveryMode = useWatch({ control, name: "settings.deliveryMode" })
+  const isOnline = deliveryMode === "ONLINE"
 
   return (
     <div className="space-y-6">
@@ -51,41 +52,10 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
             <DraftHint>Así lo van a ver en el catálogo y en las entradas.</DraftHint>
             <DraftFieldError message={errors.basicInfo?.name?.message} />
           </div>
-          <div className="grid gap-2">
-            <Label
-              htmlFor="event-v2-start-date"
-              className="flex items-center gap-1.5 text-sm font-bold text-slate-800 dark:text-zinc-200"
-            >
-              <CalendarDays className="size-3.5 text-emerald-400" aria-hidden />
-              Fecha de inicio
-            </Label>
-            <Input
-              id="event-v2-start-date"
-              type="datetime-local"
-              className={DRAFT_FIELD_CLASS}
-              {...register("basicInfo.startDate")}
-            />
-            <DraftFieldError message={errors.basicInfo?.startDate?.message} />
-          </div>
-          <div className="grid gap-2">
-            <Label
-              htmlFor="event-v2-end-date"
-              className="flex items-center gap-1.5 text-sm font-bold text-slate-800 dark:text-zinc-200"
-            >
-              <CalendarDays className="size-3.5 text-emerald-400" aria-hidden />
-              Fecha de fin
-            </Label>
-            <Input
-              id="event-v2-end-date"
-              type="datetime-local"
-              className={DRAFT_FIELD_CLASS}
-              {...register("basicInfo.endDate")}
-            />
-            <DraftHint>Tiene que ser posterior al inicio.</DraftHint>
-            <DraftFieldError message={errors.basicInfo?.endDate?.message} />
-          </div>
         </div>
       </DraftCard>
+
+      <EventEditorV2ScheduleFields />
 
       <DraftCard className="flex items-center justify-between gap-4">
         <div className="min-w-0">

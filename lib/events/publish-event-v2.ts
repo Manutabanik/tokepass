@@ -10,6 +10,7 @@ import {
   eventPublishSchema,
   isEventDraftOnline,
   isMapDraftTicket,
+  resolveDraftSchedule,
   type EventDraftV2LineItem,
 } from "@/lib/validations/event-draft-v2"
 import { composeVenuePlace } from "@/lib/venues/compose-location"
@@ -43,10 +44,18 @@ export type PublishEventV2TierPayload = {
   seating_sector_id: string | null
 }
 
+export type PublishEventV2ScheduleDay = {
+  id: string | null
+  title: string
+  start_time: string
+  end_time: string
+}
+
 export type PublishEventV2Payload = {
   title: string
   date: string
   ends_at: string | null
+  schedule_days: PublishEventV2ScheduleDay[]
   location: string
   visibility: "public" | "private"
   flyer_url: string | null
@@ -230,13 +239,30 @@ export function buildPublishEventV2Payload(
   const flyer = parsed.flyerUrl?.trim() || null
   const banner = parsed.bannerUrl?.trim() || null
   const publishedMap = publishVenueMapFromDraft(parsed.seatingMap)
+  const schedule = resolveDraftSchedule(parsed).filter((day) =>
+    day.startDate.trim(),
+  )
+  const firstDay = schedule[0]
+  if (!firstDay) {
+    throw new Error("La fecha de inicio es obligatoria")
+  }
+  const lastDay = schedule[schedule.length - 1] ?? firstDay
+  const lastEnd = lastDay.endDate.trim() || firstDay.endDate.trim()
+  const scheduleDays =
+    schedule.length >= 2
+      ? schedule.map((day, index) => ({
+          id: asPublishUuid(day.id),
+          title: day.name.trim() || `Día ${index + 1}`,
+          start_time: draftDateToIso(day.startDate),
+          end_time: draftDateToIso(day.endDate),
+        }))
+      : []
 
   return {
     title,
-    date: draftDateToIso(parsed.basicInfo.startDate),
-    ends_at: parsed.basicInfo.endDate?.trim()
-      ? draftDateToIso(parsed.basicInfo.endDate)
-      : null,
+    date: draftDateToIso(firstDay.startDate),
+    ends_at: lastEnd ? draftDateToIso(lastEnd) : null,
+    schedule_days: scheduleDays,
     location,
     visibility: parsed.settings?.isPublic === true ? "public" : "private",
     flyer_url: flyer,

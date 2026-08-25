@@ -56,6 +56,15 @@ describe("eventDraftSchema", () => {
     assert.equal(parsed.location.venueName, "")
     assert.equal(parsed.location.address, "")
     assert.equal(parsed.settings.deliveryMode, "PRESENCIAL")
+    assert.equal(parsed.schedule.length, 0)
+  })
+
+  it("emptyEventDraftV2 starts with a single default day", () => {
+    const draft = emptyEventDraftV2()
+    assert.equal(draft.schedule.length, 1)
+    assert.equal(draft.schedule[0]?.name, "Día 1")
+    assert.equal(draft.schedule[0]?.startDate, "")
+    assert.ok(draft.schedule[0]?.id)
   })
 
   it("still accepts over-capacity stock without failing", () => {
@@ -83,12 +92,65 @@ describe("eventPublishSchema", () => {
   it("requires endDate to be after startDate", () => {
     const draft = publishableDraft()
     draft.basicInfo.endDate = "2026-08-01T22:00"
+    draft.schedule = [
+      {
+        id: "day-1",
+        name: "Día 1",
+        startDate: "2026-09-01T22:00",
+        endDate: "2026-08-01T22:00",
+      },
+    ]
     const result = eventPublishSchema.safeParse(draft)
     assert.equal(result.success, false)
     if (!result.success) {
       assert.ok(
         result.error.issues.some((issue) =>
           issue.path.join(".").includes("endDate"),
+        ),
+      )
+    }
+  })
+
+  it("requires a start date on the first schedule day", () => {
+    const draft = publishableDraft()
+    draft.basicInfo.startDate = ""
+    draft.basicInfo.endDate = ""
+    draft.schedule = [
+      { id: "day-1", name: "Día 1", startDate: "", endDate: "" },
+    ]
+    const result = eventPublishSchema.safeParse(draft)
+    assert.equal(result.success, false)
+    if (!result.success) {
+      assert.ok(
+        result.error.issues.some((issue) =>
+          issue.path.join(".").includes("schedule"),
+        ),
+      )
+    }
+  })
+
+  it("requires an end date on every day of a multi-day schedule", () => {
+    const draft = publishableDraft()
+    draft.schedule = [
+      {
+        id: "day-1",
+        name: "Día 1",
+        startDate: "2026-09-01T22:00",
+        endDate: "2026-09-02T04:00",
+      },
+      {
+        id: "day-2",
+        name: "Función Noche",
+        startDate: "2026-09-02T22:00",
+        endDate: "",
+      },
+    ]
+    const result = eventPublishSchema.safeParse(draft)
+    assert.equal(result.success, false)
+    if (!result.success) {
+      assert.ok(
+        result.error.issues.some((issue) =>
+          issue.path.join(".").includes("schedule.1.endDate"),
         ),
       )
     }
@@ -146,7 +208,50 @@ describe("parseEventDraftV2", () => {
     assert.deepEqual(parsed.seatingMap.sectors, [])
     assert.equal(parsed.settings.isPublic, false)
     assert.equal((parsed as { keep?: number }).keep, 1)
-    assert.deepEqual(parseEventDraftV2(null), emptyEventDraftV2())
+    assert.equal(parsed.schedule.length, 1)
+    assert.equal(parsed.schedule[0]?.name, "Día 1")
+    const empty = parseEventDraftV2(null)
+    assert.equal(empty.schedule.length, 1)
+    assert.equal(empty.schedule[0]?.name, "Día 1")
+    assert.equal(empty.basicInfo.name, "")
+  })
+
+  it("hydrates schedule from legacy basicInfo dates when the array is missing", () => {
+    const parsed = parseEventDraftV2({
+      basicInfo: {
+        name: "After",
+        startDate: "2026-09-01T22:00",
+        endDate: "2026-09-02T04:00",
+      },
+    })
+    assert.equal(parsed.schedule.length, 1)
+    assert.equal(parsed.schedule[0]?.name, "Día 1")
+    assert.equal(parsed.schedule[0]?.startDate, "2026-09-01T22:00")
+    assert.equal(parsed.schedule[0]?.endDate, "2026-09-02T04:00")
+  })
+
+  it("keeps an existing schedule array and mirrors the first day into basicInfo", () => {
+    const parsed = parseEventDraftV2({
+      basicInfo: { name: "Festival", startDate: "", endDate: "" },
+      schedule: [
+        {
+          id: "day-1",
+          name: "Día 1",
+          startDate: "2026-09-01T18:00",
+          endDate: "2026-09-01T23:00",
+        },
+        {
+          id: "day-2",
+          name: "Función Noche",
+          startDate: "2026-09-02T18:00",
+          endDate: "2026-09-02T23:00",
+        },
+      ],
+    })
+    assert.equal(parsed.schedule.length, 2)
+    assert.equal(parsed.schedule[1]?.name, "Función Noche")
+    assert.equal(parsed.basicInfo.startDate, "2026-09-01T18:00")
+    assert.equal(parsed.basicInfo.endDate, "2026-09-01T23:00")
   })
 
   it("reads media, seating map, tickets and settings from stored JSON", () => {
@@ -219,6 +324,24 @@ describe("toEventDraftV2Payload", () => {
       },
     })
     assert.equal(payload.title, "After")
+  })
+
+  it("mirrors schedule[0] back into basicInfo dates for older readers", () => {
+    const empty = emptyEventDraftV2()
+    const payload = toEventDraftV2Payload({
+      ...empty,
+      schedule: [
+        {
+          id: "day-1",
+          name: "Día 1",
+          startDate: "2026-09-01T22:00",
+          endDate: "2026-09-02T04:00",
+        },
+      ],
+    })
+    assert.equal(payload.basicInfo.startDate, "2026-09-01T22:00")
+    assert.equal(payload.basicInfo.endDate, "2026-09-02T04:00")
+    assert.equal(payload.schedule[0]?.id, "day-1")
   })
 })
 

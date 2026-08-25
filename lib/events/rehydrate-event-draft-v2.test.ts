@@ -120,6 +120,62 @@ describe("rehydrateEventDraftV2", () => {
     assert.equal(draft.tickets[1]?.sectorId, "sector-platea")
     assert.equal(draft.extras[0]?.name, "Cerveza")
     assert.equal(draft.seatingMap.sectors[0]?.id, "sector-platea")
+    assert.equal(draft.schedule.length, 1)
+    assert.equal(draft.schedule[0]?.name, "Día 1")
+    assert.ok(draft.schedule[0]?.startDate)
+    assert.equal(draft.basicInfo.startDate, draft.schedule[0]?.startDate)
+  })
+
+  it("rebuilds a multi-day schedule from schedule_days", () => {
+    const draft = rehydrateEventDraftV2({
+      event: {
+        title: "Festival",
+        date: "2026-09-01T18:00:00-03:00",
+        ends_at: "2026-09-02T23:30:00-03:00",
+        location: "Av. Córdoba 1234, CABA",
+        description: null,
+        flyer_url: null,
+        image_url: null,
+        social_share_image_url: null,
+        visibility: "public",
+        refund_policy: "organizer",
+        province: "Ciudad Autónoma de Buenos Aires",
+        department: "Comuna 1",
+        delivery_mode: "PRESENCIAL",
+        venue_map: null,
+        schedule_days: [
+          {
+            id: "550e8400-e29b-41d4-a716-446655440001",
+            title: "Día 1",
+            start_time: "2026-09-01T18:00:00-03:00",
+            end_time: "2026-09-01T23:00:00-03:00",
+          },
+          {
+            id: "550e8400-e29b-41d4-a716-446655440002",
+            title: "Función Noche",
+            start_time: "2026-09-02T20:00:00-03:00",
+            end_time: "2026-09-02T23:30:00-03:00",
+          },
+        ],
+      },
+      venue: {
+        name: "Niceto",
+        location: "Av. Córdoba 1234, CABA",
+        address: "Av. Córdoba 1234",
+        city: "Comuna 1",
+        latitude: -34.6037,
+        longitude: -58.3816,
+        capacity: 200,
+        max_capacity: 200,
+        venue_map: null,
+      },
+      tickets: [],
+    })
+    assert.equal(draft.schedule.length, 2)
+    assert.equal(draft.schedule[0]?.name, "Día 1")
+    assert.equal(draft.schedule[1]?.name, "Función Noche")
+    assert.ok(draft.schedule[0]?.startDate)
+    assert.ok(draft.schedule[1]?.endDate)
   })
 
   it("marks streaming venues as online without a physical address", () => {
