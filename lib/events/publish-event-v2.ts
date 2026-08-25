@@ -1,3 +1,4 @@
+import { publishVenueMapFromDraft } from "@/lib/events/draft-seating-map-v2"
 import { calculateTierPricing } from "@/lib/pricing/flexible-pricing"
 import {
   defaultEventFeeConfig,
@@ -8,6 +9,7 @@ import { parseEventRefundPolicy } from "@/lib/validations/event-form"
 import {
   eventPublishSchema,
   isEventDraftOnline,
+  isMapDraftTicket,
   type EventDraftV2LineItem,
 } from "@/lib/validations/event-draft-v2"
 import { composeVenuePlace } from "@/lib/venues/compose-location"
@@ -35,9 +37,10 @@ export type PublishEventV2TierPayload = {
   capacity: number
   min_purchase_limit: number
   max_purchase_limit: number | null
-  tier_type: "general" | "addon"
+  tier_type: "general" | "addon" | "seated"
   category: "standard" | "special"
-  layout_type: "general"
+  layout_type: "general" | "numbered_seat" | "table_combo"
+  seating_sector_id: string | null
 }
 
 export type PublishEventV2Payload = {
@@ -62,6 +65,7 @@ export type PublishEventV2Payload = {
   }
   delivery_mode: "PRESENCIAL" | "ONLINE"
   venue_map?: Json
+  has_seating_plan: boolean
   tickets: PublishEventV2TierPayload[]
 }
 
@@ -113,6 +117,16 @@ function trimTicketDescription(value: unknown): string | null {
   return text.slice(0, 180)
 }
 
+function publishLayoutType(
+  item: { layoutType?: string | null; source?: string; sectorId?: string },
+  isMap: boolean,
+): PublishEventV2TierPayload["layout_type"] {
+  if (item.layoutType === "table_combo") return "table_combo"
+  if (item.layoutType === "numbered_seat") return "numbered_seat"
+  if (isMap) return "numbered_seat"
+  return "general"
+}
+
 function mapLineItemToTier(
   item: EventDraftV2LineItem | {
     id: string
@@ -122,6 +136,9 @@ function mapLineItemToTier(
     stock: number
     minOrder?: number
     maxOrder?: number
+    source?: string
+    sectorId?: string
+    layoutType?: string
   },
   kind: "ticket" | "extra",
   fee: EventFeeConfig,
@@ -142,6 +159,8 @@ function mapLineItemToTier(
   })
   const minPurchase = clampLimit(item.minOrder, 1)
   const isExtra = kind === "extra"
+  const isMap = !isExtra && isMapDraftTicket(item)
+  const sectorId = String(item.sectorId ?? "").trim()
 
   return {
     id: asPublishUuid(item.id),
@@ -153,9 +172,10 @@ function mapLineItemToTier(
     capacity: stock,
     min_purchase_limit: minPurchase,
     max_purchase_limit: optionalMaxLimit(item.maxOrder, minPurchase),
-    tier_type: isExtra ? "addon" : "general",
+    tier_type: isExtra ? "addon" : isMap ? "seated" : "general",
     category: isExtra ? "special" : "standard",
-    layout_type: "general",
+    layout_type: isExtra ? "general" : publishLayoutType(item, isMap),
+    seating_sector_id: isMap && sectorId ? sectorId : null,
   }
 }
 
@@ -209,12 +229,7 @@ export function buildPublishEventV2Payload(
 
   const flyer = parsed.flyerUrl?.trim() || null
   const banner = parsed.bannerUrl?.trim() || null
-  const seating = parsed.seatingMap
-  const venueMap =
-    seating &&
-    (Boolean(seating.url?.trim()) || (seating.sectors?.length ?? 0) > 0)
-      ? (seating as Json)
-      : undefined
+  const publishedMap = publishVenueMapFromDraft(parsed.seatingMap)
 
   return {
     title,
@@ -249,7 +264,8 @@ export function buildPublishEventV2Payload(
           : null,
     },
     delivery_mode: isOnline ? "ONLINE" : "PRESENCIAL",
-    ...(venueMap ? { venue_map: venueMap } : {}),
+    has_seating_plan: publishedMap.has_seating_plan,
+    ...(publishedMap.venue_map ? { venue_map: publishedMap.venue_map } : {}),
     tickets: [...tickets, ...extras],
   }
 }

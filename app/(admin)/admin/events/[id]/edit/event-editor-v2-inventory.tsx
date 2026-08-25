@@ -1,9 +1,9 @@
 "use client"
 
-import { MapPinned, Package, Plus, Ticket, Trash2, Users } from "lucide-react"
-import { useState } from "react"
+import { Package, Plus, Ticket, Trash2, Users } from "lucide-react"
 import { useFieldArray, useFormContext, useWatch } from "react-hook-form"
 
+import { EventEditorV2SeatingMap } from "./event-editor-v2-seating-map"
 import {
   DRAFT_FIELD_CLASS,
   DRAFT_TEXTAREA_CLASS,
@@ -14,14 +14,6 @@ import {
   DraftHint,
 } from "./event-editor-v2-ui"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -31,10 +23,11 @@ import {
   createDraftLineItem,
   draftCapacityThermometer,
   draftNumberValue,
+  isMapDraftTicket,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
 
-export function EventEditorV2InventoryStep() {
+export function EventEditorV2InventoryStep({ eventId }: { eventId: string }) {
   const { register } = useFormContext<EventDraftV2>()
   const tickets = useWatch({ name: "tickets" }) ?? []
   const venueCapacity = useWatch({ name: "venueCapacity" })
@@ -81,7 +74,7 @@ export function EventEditorV2InventoryStep() {
         </div>
       </DraftCard>
 
-      <SeatingMapPlaceholder />
+      <EventEditorV2SeatingMap eventId={eventId} />
 
       <DraftLineItemList
         name="tickets"
@@ -103,47 +96,6 @@ export function EventEditorV2InventoryStep() {
         emptyIcon={Package}
       />
     </div>
-  )
-}
-
-function SeatingMapPlaceholder() {
-  const [open, setOpen] = useState(false)
-  const seatingMap = useWatch({ name: "seatingMap" })
-  const sectorCount = seatingMap?.sectors?.length ?? 0
-
-  return (
-    <DraftCard>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-zinc-100">
-            <MapPinned className="size-4 text-emerald-400" aria-hidden />
-            Mapa de asientos
-          </h2>
-          <p className="mt-1 text-sm text-gray-500">
-            Opcional. La estructura vive en el JSON, no en tablas relacionales.
-            {sectorCount > 0
-              ? ` ${sectorCount} sector${sectorCount === 1 ? "" : "es"} en el borrador.`
-              : ""}
-          </p>
-        </div>
-        <Button type="button" variant="outline" onClick={() => setOpen(true)}>
-          Configurar Mapa (Opcional)
-        </Button>
-      </div>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="border-border bg-card text-foreground sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Mapa de asientos</DialogTitle>
-            <DialogDescription>
-              El editor de mapa llega en un próximo paso. El campo{" "}
-              <code>seatingMap</code> ya forma parte de <code>draft_state</code>.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter showCloseButton />
-        </DialogContent>
-      </Dialog>
-    </DraftCard>
   )
 }
 
@@ -232,6 +184,11 @@ function DraftLineItemList({
     append(createDraftLineItem())
   }
 
+  const visibleCount =
+    name === "tickets"
+      ? fields.filter((field) => !isMapDraftTicket(field)).length
+      : fields.length
+
   return (
     <section className="space-y-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -248,7 +205,7 @@ function DraftLineItemList({
         </div>
       </div>
 
-      {fields.length === 0 ? (
+      {visibleCount === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white/40 px-6 py-12 text-center transition-all duration-200 dark:border-gray-700 dark:bg-gray-950/40">
           <EmptyIcon className="size-10 text-gray-400" aria-hidden />
           <p className="mt-3 text-sm font-semibold text-foreground">{emptyTitle}</p>
@@ -260,13 +217,34 @@ function DraftLineItemList({
             </DraftAddButton>
           </div>
         </div>
-      ) : (
-        <ul className="space-y-3">
+      ) : null}
+
+      {fields.length > 0 ? (
+        <ul className={visibleCount === 0 ? "hidden" : "space-y-3"}>
           {fields.map((field, index) => {
             const itemErrors = errors[name]?.[index]
+            if (name === "tickets" && isMapDraftTicket(field)) {
+              return (
+                <li key={field._rowId} className="hidden">
+                  <input type="hidden" {...register(`${name}.${index}.id`)} />
+                  <input type="hidden" {...register(`${name}.${index}.name`)} />
+                  <input type="hidden" {...register(`${name}.${index}.description`)} />
+                  <input type="hidden" {...register(`${name}.${index}.price`)} />
+                  <input type="hidden" {...register(`${name}.${index}.stock`)} />
+                  <input type="hidden" {...register(`${name}.${index}.minOrder`)} />
+                  <input type="hidden" {...register(`${name}.${index}.maxOrder`)} />
+                  <input type="hidden" {...register(`${name}.${index}.source`)} />
+                  <input type="hidden" {...register(`${name}.${index}.sectorId`)} />
+                  <input type="hidden" {...register(`${name}.${index}.layoutType`)} />
+                </li>
+              )
+            }
             return (
               <li key={field._rowId} className={DRAFT_TICKET_CARD_CLASS}>
                 <input type="hidden" {...register(`${name}.${index}.id`)} />
+                <input type="hidden" {...register(`${name}.${index}.source`)} />
+                <input type="hidden" {...register(`${name}.${index}.sectorId`)} />
+                <input type="hidden" {...register(`${name}.${index}.layoutType`)} />
                 <Button
                   type="button"
                   variant="ghost"
@@ -402,9 +380,9 @@ function DraftLineItemList({
             )
           })}
         </ul>
-      )}
+      ) : null}
 
-      {fields.length > 0 ? (
+      {visibleCount > 0 ? (
         <DraftAddButton onClick={addItem}>
           <Plus className="size-4" />
           {addLabel}

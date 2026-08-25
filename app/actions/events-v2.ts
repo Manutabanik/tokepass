@@ -5,6 +5,10 @@ import { revalidatePath } from "next/cache"
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
 import {
+  isEventDraftStateEmpty,
+  rehydrateEventDraftV2,
+} from "@/lib/events/rehydrate-event-draft-v2"
+import {
   buildPublishEventV2Payload,
   formatEventPublishIssues,
   freePublishCapacity,
@@ -29,6 +33,7 @@ import { createClient } from "@/lib/supabase/server"
 import {
   eventPublishSchema,
   parseEventDraftV2,
+  toEventDraftV2Payload,
 } from "@/lib/validations/event-draft-v2"
 import { MAX_EVENT_FLYER_BYTES } from "@/lib/validations/event-form"
 import type { Json } from "@/types/database"
@@ -95,7 +100,9 @@ export async function getEventDraftV2(
 
   const { data, error } = await gate.supabase
     .from("events")
-    .select("id, organizer_id, draft_state")
+    .select(
+      "id, organizer_id, status, draft_state, title, date, ends_at, location, description, flyer_url, image_url, social_share_image_url, visibility, refund_policy, province, department, delivery_mode, venue_map, venue_id",
+    )
     .eq("id", id)
     .maybeSingle()
   if (error) return { success: false, error: formatSupabaseError(error) }
@@ -104,11 +111,85 @@ export async function getEventDraftV2(
     return { success: false, error: "No tenés permiso para editar este evento." }
   }
 
+  if (data.status === "published" && isEventDraftStateEmpty(data.draft_state)) {
+    const draftState = await persistRehydratedPublishedDraft({
+      supabase: gate.supabase,
+      event: data,
+    })
+    return {
+      success: true,
+      eventId: data.id,
+      draftState,
+    }
+  }
+
   return {
     success: true,
     eventId: data.id,
     draftState: (data.draft_state ?? null) as Json | null,
   }
+}
+
+async function persistRehydratedPublishedDraft(input: {
+  supabase: Awaited<ReturnType<typeof createClient>>
+  event: {
+    id: string
+    title: string | null
+    date: string | null
+    ends_at: string | null
+    location: string | null
+    description: string | null
+    flyer_url: string | null
+    image_url: string | null
+    social_share_image_url: string | null
+    visibility: string | null
+    refund_policy: string | null
+    province: string | null
+    department: string | null
+    delivery_mode: string | null
+    venue_map: unknown
+    venue_id: string | null
+  }
+}): Promise<Json> {
+  const venueQuery = input.event.venue_id
+    ? await input.supabase
+        .from("venues")
+        .select(
+          "name, location, address, city, latitude, longitude, capacity, max_capacity, venue_map",
+        )
+        .eq("id", input.event.venue_id)
+        .maybeSingle()
+    : { data: null, error: null }
+  const ticketsQuery = await input.supabase
+    .from("ticket_tiers")
+    .select(
+      "id, name, description, price, capacity, min_purchase_limit, max_purchase_limit, tier_type, category, layout_type, seating_sector_id",
+    )
+    .eq("event_id", input.event.id)
+    .order("created_at", { ascending: true })
+
+  const draftState = toEventDraftV2Payload(
+    rehydrateEventDraftV2({
+      event: input.event,
+      venue: venueQuery.error ? null : (venueQuery.data ?? null),
+      tickets: ticketsQuery.error ? [] : (ticketsQuery.data ?? []),
+    }),
+  ) as Json
+
+  const written = await input.supabase
+    .from("events")
+    .update({
+      draft_state: draftState,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.event.id)
+    .select("id, draft_state")
+    .maybeSingle()
+
+  if (written.error || !written.data?.id) {
+    return draftState
+  }
+  return (written.data.draft_state ?? draftState) as Json
 }
 
 /**
@@ -260,6 +341,7 @@ async function upsertPublishedVenue(input: {
   organizerId: string
   existingVenueId: string | null
   venue: PublishEventV2Payload["venue"]
+  venueMap?: Json
 }): Promise<string> {
   const admin = createAdminClient()
   const now = new Date().toISOString()
@@ -273,6 +355,7 @@ async function upsertPublishedVenue(input: {
     capacity: input.venue.capacity,
     max_capacity: input.venue.capacity,
     updated_at: now,
+    ...(input.venueMap ? { venue_map: input.venueMap } : {}),
   }
 
   if (input.existingVenueId) {
@@ -346,7 +429,7 @@ function relationalTierRow(
     tier_type: ticket.tier_type,
     category: ticket.category,
     layout_type: ticket.layout_type,
-    seating_sector_id: null,
+    seating_sector_id: ticket.seating_sector_id,
     visibility: "public" as const,
     capacity_per_unit: 1,
     admit_count: 1,
@@ -411,7 +494,9 @@ async function syncPublishedTickets(
 
   const leftovers = (existing.data ?? []).filter(
     (row) =>
-      (row.tier_type === "general" || row.tier_type === "addon") &&
+      (row.tier_type === "general" ||
+        row.tier_type === "addon" ||
+        row.tier_type === "seated") &&
       !seen.has(row.id),
   )
   const blocked = leftovers.find((row) => Number(row.sold) > 0)
@@ -442,6 +527,7 @@ async function unpackPublishEventV2Sequential(input: {
     organizerId: input.organizerId,
     existingVenueId: input.existingVenueId,
     venue: input.payload.venue,
+    venueMap: input.payload.venue_map,
   })
   await syncPublishedTickets(input.eventId, input.payload.tickets)
 
@@ -468,7 +554,7 @@ async function unpackPublishEventV2Sequential(input: {
       refund_policy: input.payload.refund_policy,
       venue_id: venueId,
       ...(input.payload.venue_map ? { venue_map: input.payload.venue_map } : {}),
-      has_seating_plan: false,
+      has_seating_plan: input.payload.has_seating_plan,
       status: "published",
       draft_state: null,
       updated_at: new Date().toISOString(),
@@ -479,6 +565,14 @@ async function unpackPublishEventV2Sequential(input: {
   if (written.error) throw new Error(formatSupabaseError(written.error))
   if (!written.data?.id) {
     throw new Error("events.update publish no devolvió fila")
+  }
+  if (input.payload.has_seating_plan) {
+    const materialized = await admin.rpc("materialize_event_seating_units", {
+      p_event_id: input.eventId,
+    })
+    if (materialized.error) {
+      throw new Error(formatSupabaseError(materialized.error))
+    }
   }
   return written.data
 }

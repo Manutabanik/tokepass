@@ -1,5 +1,13 @@
 import { z } from "zod"
 
+import {
+  emptyDraftSeatingMap,
+  isMapDraftTicket,
+  toDraftSeatingMap,
+} from "@/lib/events/draft-seating-map-v2"
+
+export { isMapDraftTicket } from "@/lib/events/draft-seating-map-v2"
+
 const draftLineItemSchema = z.object({
   id: z.string().optional().default(""),
   name: z.string().optional().default(""),
@@ -8,6 +16,9 @@ const draftLineItemSchema = z.object({
   stock: z.coerce.number().optional().default(0),
   minOrder: z.coerce.number().optional().default(1),
   maxOrder: z.coerce.number().optional().default(10),
+  source: z.string().optional().default(""),
+  sectorId: z.string().optional().default(""),
+  layoutType: z.string().optional().default("general"),
 })
 
 export const EVENT_DRAFT_DELIVERY_MODES = ["PRESENCIAL", "ONLINE"] as const
@@ -67,6 +78,7 @@ const draftSeatingMapSchema = z
     url: z.string().optional().default(""),
     sectors: z.array(z.any()).default([]),
   })
+  .passthrough()
   .default({ url: "", sectors: [] })
 
 const eventDraftFieldsSchema = z.object({
@@ -91,6 +103,9 @@ const publishLineItemSchema = z.object({
   stock: z.coerce.number().min(1, "El stock debe ser mayor a 0"),
   minOrder: z.coerce.number().optional(),
   maxOrder: z.coerce.number().optional(),
+  source: z.string().optional(),
+  sectorId: z.string().optional(),
+  layoutType: z.string().optional(),
 })
 
 export const eventPublishSchema = z
@@ -123,6 +138,7 @@ export const eventPublishSchema = z
         url: z.string().optional(),
         sectors: z.array(z.any()).optional(),
       })
+      .passthrough()
       .optional(),
     settings: z
       .object({
@@ -202,6 +218,9 @@ export function emptyEventDraftV2LineItem(
     stock: 0,
     minOrder: 1,
     maxOrder: 10,
+    source: "",
+    sectorId: "",
+    layoutType: "general",
   }
 }
 
@@ -218,7 +237,7 @@ export function emptyEventDraftV2(): EventDraftV2 {
     venueCapacity: 0,
     tickets: [],
     extras: [],
-    seatingMap: { url: "", sectors: [] },
+    seatingMap: emptyDraftSeatingMap(),
     settings: {
       isPublic: false,
       absorbFees: false,
@@ -284,6 +303,9 @@ function parseDraftLineItems(raw: unknown): EventDraftV2LineItem[] {
         record.maxOrder == null || record.maxOrder === ""
           ? 10
           : asFiniteNumber(record.maxOrder, 10),
+      source: asOptionalString(record.source),
+      sectorId: asOptionalString(record.sectorId ?? record.seatingSectorId),
+      layoutType: asOptionalString(record.layoutType) || "general",
     }
   })
 }
@@ -381,10 +403,7 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
     venueCapacity: asFiniteNumber(record.venueCapacity),
     tickets: parseDraftLineItems(record.tickets),
     extras: parseDraftLineItems(record.extras),
-    seatingMap: {
-      url: asOptionalString(seatingRaw.url),
-      sectors: Array.isArray(seatingRaw.sectors) ? seatingRaw.sectors : [],
-    },
+    seatingMap: toDraftSeatingMap(seatingRaw),
     settings: {
       isPublic: settingsRaw.isPublic === true,
       absorbFees: settingsRaw.absorbFees === true,
@@ -396,15 +415,15 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
   }
 }
 
-/** SSOT: only general ticket stock counts. Extras never occupy venue capacity. */
+/** SSOT: only general ticket stock counts. Extras and map seats never occupy venue capacity. */
 export function draftCapacityThermometer(input: {
-  tickets?: Array<{ stock?: unknown }> | null
+  tickets?: Array<{ stock?: unknown; source?: unknown; sectorId?: unknown }> | null
   venueCapacity?: unknown
 }) {
-  const used = (input.tickets ?? []).reduce(
-    (sum, ticket) => sum + asFiniteNumber(ticket.stock),
-    0,
-  )
+  const used = (input.tickets ?? []).reduce((sum, ticket) => {
+    if (isMapDraftTicket(ticket)) return sum
+    return sum + asFiniteNumber(ticket.stock)
+  }, 0)
   const capacity = asFiniteNumber(input.venueCapacity)
   const ratio = capacity > 0 ? used / capacity : 0
   return {

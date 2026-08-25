@@ -142,7 +142,8 @@ describe("parseEventDraftV2", () => {
     assert.deepEqual(parsed.tickets, [])
     assert.deepEqual(parsed.extras, [])
     assert.equal(parsed.flyerUrl, "")
-    assert.deepEqual(parsed.seatingMap, { url: "", sectors: [] })
+    assert.equal(parsed.seatingMap.url, "")
+    assert.deepEqual(parsed.seatingMap.sectors, [])
     assert.equal(parsed.settings.isPublic, false)
     assert.equal((parsed as { keep?: number }).keep, 1)
     assert.deepEqual(parseEventDraftV2(null), emptyEventDraftV2())
@@ -181,8 +182,11 @@ describe("parseEventDraftV2", () => {
     assert.equal(parsed.flyerUrl, "https://cdn.example/flyer.jpg")
     assert.equal(parsed.bannerUrl, "https://cdn.example/banner.jpg")
     assert.equal(parsed.seatingMap.url, "https://cdn.example/map.png")
+    assert.equal(parsed.seatingMap.backgroundImage, "https://cdn.example/map.png")
     assert.equal(parsed.seatingMap.sectors.length, 1)
     assert.equal(parsed.tickets[0]?.stock, 80)
+    assert.equal(parsed.tickets[0]?.source, "")
+    assert.equal(parsed.tickets[0]?.sectorId, "")
     assert.equal(parsed.extras[0]?.minOrder, 1)
     assert.equal(parsed.settings.checkoutMessage, "Gracias")
   })
@@ -236,5 +240,16 @@ describe("draftCapacityThermometer", () => {
     })
     assert.equal(snap.used, 40)
     assert.notEqual(snap.used, 40 + extras[0].stock)
+  })
+
+  it("never counts map-backed tickets toward the thermometer", () => {
+    const snap = draftCapacityThermometer({
+      tickets: [
+        { stock: 40, source: "general" },
+        { stock: 80, source: "map", sectorId: "platea" },
+      ],
+      venueCapacity: 100,
+    })
+    assert.equal(snap.used, 40)
   })
 })

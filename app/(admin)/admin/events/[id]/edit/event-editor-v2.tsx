@@ -236,7 +236,7 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
             <section className="min-w-0 rounded-2xl border border-border/50 bg-white/40 p-5 transition-all duration-200 dark:border-gray-800 dark:bg-gray-950/40">
               <div key={step} className="animate-in fade-in duration-200">
                 {step === 1 ? <EventEditorV2InfoStep eventId={eventId} /> : null}
-                {step === 2 ? <EventEditorV2InventoryStep /> : null}
+                {step === 2 ? <EventEditorV2InventoryStep eventId={eventId} /> : null}
                 {step === 3 ? <EventEditorV2SettingsStep /> : null}
               </div>
 
