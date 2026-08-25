@@ -348,6 +348,8 @@ export type Event = {
   review_note: string | null
   reviewed_at: string | null
   reviewed_by: string | null
+  /** Event Creator V2: progreso crudo del wizard. No es catálogo público. */
+  draft_state?: Json | null
 }
 
 export type SupportThreadStatus = "open" | "resolved" | "pending_admin"
@@ -1339,6 +1341,7 @@ type EventInsert = Omit<
   reviewed_by?: string | null
   created_at?: string
   updated_at?: string
+  draft_state?: Json | null
 }
 type VenueInsert = Omit<
   Venue,
