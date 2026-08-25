@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { UseFormReturn } from "react-hook-form"
 import { toast } from "sonner"
 
@@ -69,26 +69,19 @@ export function useEventFormAutosave(input: {
 }) {
   const {
     form,
-    draftKey,
     eventId,
     initialValues,
     venuePricingMap,
-    onVenuePricingMapChange,
     zoneTierPricing,
-    onZoneTierPricingChange,
     targetOrganizerId = null,
     enabled = true,
-    serverUpdatedAt = null,
     flyerFile = null,
   } = input
 
-  const hydrateSession = useEventFormStore((s) => s.hydrateSession)
-  const setFormValues = useEventFormStore((s) => s.setFormValues)
-  const setVenuePricingMapStore = useEventFormStore((s) => s.setVenuePricingMap)
-  const setZoneTierPricing = useEventFormStore((s) => s.setZoneTierPricing)
   const setEventId = useEventFormStore((s) => s.setEventId)
   const setAutosaveStatus = useEventFormStore((s) => s.setAutosaveStatus)
   const storeEventId = useEventFormStore((s) => s.eventId)
+  const [createdEventId, setCreatedEventId] = useState<string | null>(null)
 
   const readyRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -122,54 +115,7 @@ export function useEventFormAutosave(input: {
     flyerRef.current = flyerFile
   }, [flyerFile])
 
-  useEffect(() => {
-    let cancelled = false
-
-    async function boot() {
-      const persistApi = useEventFormStore.persist
-      if (!persistApi.hasHydrated()) {
-        await new Promise<void>((resolve) => {
-          const unsub = persistApi.onFinishHydration(() => {
-            unsub()
-            resolve()
-          })
-        })
-      }
-      if (cancelled) return
-
-      hydrateSession({
-        draftKey,
-        eventId,
-        values: initialValues,
-        venuePricingMap,
-        zoneTierPricing,
-        serverUpdatedAt,
-      })
-      const persisted = useEventFormStore.getState()
-      if (persisted.values && persisted.draftKey === draftKey) {
-        form.reset(persisted.values)
-        onVenuePricingMapChange(persisted.venuePricingMap)
-        onZoneTierPricingChange?.(persisted.zoneTierPricing)
-      }
-      latestRef.current = {
-        ...latestRef.current,
-        values: form.getValues(),
-        venuePricingMap: useEventFormStore.getState().venuePricingMap,
-        zoneTierPricing: useEventFormStore.getState().zoneTierPricing,
-        eventId: eventId ?? useEventFormStore.getState().eventId,
-      }
-      inventoryFingerprintRef.current = eventInventoryFingerprint(
-        latestRef.current.values,
-      )
-      readyRef.current = true
-    }
-
-    void boot()
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only hydrate
-  }, [])
+  const persistedEventId = eventId ?? createdEventId ?? storeEventId
 
   useEffect(() => {
     latestRef.current = {
@@ -177,9 +123,10 @@ export function useEventFormAutosave(input: {
       values: form.getValues(),
       venuePricingMap,
       zoneTierPricing,
-      eventId: eventId ?? storeEventId,
+      eventId: persistedEventId,
     }
-  }, [form, venuePricingMap, zoneTierPricing, eventId, storeEventId])
+    readyRef.current = true
+  }, [form, venuePricingMap, zoneTierPricing, persistedEventId])
 
   async function runAutosave() {
     if (!readyRef.current || !latestRef.current.enabled) return
@@ -226,6 +173,7 @@ export function useEventFormAutosave(input: {
       }
       if (result.eventId) {
         setEventId(result.eventId)
+        setCreatedEventId(result.eventId)
         latestRef.current.eventId = result.eventId
       }
       if (result.venueId && result.venueId !== values.venue.existingVenueId) {
@@ -291,6 +239,11 @@ export function useEventFormAutosave(input: {
     setAutosaveStatus("saved")
   }
 
+  function acknowledgeServerSnapshot(values: EventFormValues) {
+    skipWatchRef.current = true
+    markSaved(values)
+  }
+
   const scheduleSave = useCallback(() => {
     if (!readyRef.current || !latestRef.current.enabled) return
     setAutosaveStatus("dirty")
@@ -322,7 +275,6 @@ export function useEventFormAutosave(input: {
       const next = form.getValues()
       latestRef.current.values = next
       if (!readyRef.current) return
-      setFormValues(next)
       if (skipWatchRef.current) {
         skipWatchRef.current = false
         return
@@ -331,21 +283,19 @@ export function useEventFormAutosave(input: {
       scheduleSaveRef.current()
     })
     return () => subscription.unsubscribe()
-  }, [enabled, form, setAutosaveStatus, setFormValues])
+  }, [enabled, form, setAutosaveStatus])
 
   useEffect(() => {
     if (!enabled || !readyRef.current) return
-    setVenuePricingMapStore(venuePricingMap)
     latestRef.current.venuePricingMap = venuePricingMap
     scheduleSaveRef.current()
-  }, [enabled, venuePricingMap, setVenuePricingMapStore])
+  }, [enabled, venuePricingMap])
 
   useEffect(() => {
     if (!enabled || !readyRef.current) return
-    setZoneTierPricing(zoneTierPricing)
     latestRef.current.zoneTierPricing = zoneTierPricing
     scheduleSaveRef.current()
-  }, [enabled, zoneTierPricing, setZoneTierPricing])
+  }, [enabled, zoneTierPricing])
 
   useEffect(() => {
     function onHide() {
@@ -364,10 +314,11 @@ export function useEventFormAutosave(input: {
   }, [])
 
   return {
-    persistedEventId: storeEventId ?? eventId,
+    persistedEventId,
     flushAutosave,
     cancelPendingAutosave,
     waitForInFlightAutosave,
     markSaved,
+    acknowledgeServerSnapshot,
   }
 }

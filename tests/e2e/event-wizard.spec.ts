@@ -2,13 +2,11 @@ import { expect, test } from "@playwright/test"
 
 import { e2eOrganizerConfigured, loginOrganizer } from "./helpers/auth"
 
-const PERSIST_KEY = "tokepass.event-form.v1"
+const LEGACY_PERSIST_KEY = "tokepass.event-form.v1"
 const DRAFT_TITLE = "Festival QA Persistencia Wizard"
 
-test.describe("Wizard de creación — 4 pasos y localStorage", () => {
-  test("el contrato de persistencia sobrevive un reload en origen público", async ({
-    page,
-  }) => {
+test.describe("Wizard de creación — servidor como fuente de verdad", () => {
+  test("localStorage residual no rehidrata el formulario", async ({ page }) => {
     await page.goto("/")
     await page.evaluate(
       ([key, title]) => {
@@ -24,23 +22,9 @@ test.describe("Wizard de creación — 4 pasos y localStorage", () => {
                   date: "",
                   endDate: "",
                   description: "",
-                  flyerName: null,
-                  visibility: "public",
-                  isMultiDay: false,
-                  scheduleDays: [],
-                  categoryId: "",
-                  ageRestriction: "",
-                },
-                venue: {
-                  mode: "new",
-                  zoneType: "general_admission",
-                  venueName: "",
-                  saveVenueForReuse: true,
                 },
                 tickets: [],
               },
-              venuePricingMap: {},
-              zoneTierPricing: [],
               wizardStep: 1,
               updatedAt: Date.now(),
             },
@@ -48,20 +32,18 @@ test.describe("Wizard de creación — 4 pasos y localStorage", () => {
           }),
         )
       },
-      [PERSIST_KEY, DRAFT_TITLE] as const,
+      [LEGACY_PERSIST_KEY, DRAFT_TITLE] as const,
     )
 
     await page.reload()
-    const raw = await page.evaluate((key) => localStorage.getItem(key), PERSIST_KEY)
+    const raw = await page.evaluate(
+      (key) => localStorage.getItem(key),
+      LEGACY_PERSIST_KEY,
+    )
     expect(raw).toBeTruthy()
-    const parsed = JSON.parse(raw!) as {
-      state: { values: { basics: { title: string } }; wizardStep: number }
-    }
-    expect(parsed.state.values.basics.title).toBe(DRAFT_TITLE)
-    expect(parsed.state.wizardStep).toBe(1)
   })
 
-  test("el stepper progresivo persiste título y pestaña al recargar /admin/events/create", async ({
+  test("el stepper progresivo no depende de localStorage en /admin/events/create", async ({
     page,
   }) => {
     test.skip(
@@ -108,16 +90,5 @@ test.describe("Wizard de creación — 4 pasos y localStorage", () => {
 
     await page.locator("#event-title").fill(DRAFT_TITLE)
     await expect(page.locator("#event-title")).toHaveValue(DRAFT_TITLE)
-
-    await page.getByRole("tab", { name: /Mapa y Sectores/i }).click()
-    await expect
-      .poll(async () => page.evaluate((key) => localStorage.getItem(key), PERSIST_KEY))
-      .toContain(DRAFT_TITLE)
-
-    await page.reload()
-    await expect(page.locator("#event-title")).toHaveValue(DRAFT_TITLE)
-
-    const stored = await page.evaluate((key) => localStorage.getItem(key), PERSIST_KEY)
-    expect(stored).toContain(DRAFT_TITLE)
   })
 })

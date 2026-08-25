@@ -123,8 +123,8 @@ export async function autosaveEventDraft(input: {
           error: result.error,
         }
       }
-      eventId = result.eventId
-      venueId = result.venueId
+      eventId = result.data.eventId
+      venueId = result.data.venueId
     } else {
       const result = await createCompleteEvent(formData)
       if (!result.success) {
@@ -134,8 +134,8 @@ export async function autosaveEventDraft(input: {
           error: result.error,
         }
       }
-      eventId = result.eventId
-      venueId = result.venueId
+      eventId = result.data.eventId
+      venueId = result.data.venueId
     }
   } catch (error) {
     logPersistError("event-autosave persist", error)

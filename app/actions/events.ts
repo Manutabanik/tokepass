@@ -421,14 +421,11 @@ async function persistEventServiceFeePercentage(
   percentage: number,
 ): Promise<string | null> {
   const admin = createAdminClient()
-  const { error } = await admin
-    .from("events")
-    .update({
-      platform_fee_percentage: clampServiceFeePercentage(percentage),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", eventId)
-  return error?.message ?? null
+  const written = await updateEventReturning(admin, eventId, {
+    platform_fee_percentage: clampServiceFeePercentage(percentage),
+    updated_at: new Date().toISOString(),
+  })
+  return "error" in written ? written.error : null
 }
 
 function mapEventFormToRpcPayload(
@@ -738,17 +735,17 @@ async function persistEventVenueFields(
   if (isOnlineDelivery(data.basics.deliveryMode)) {
     const deliveryError = await persistEventDeliveryProfile(client, eventId, data)
     if (deliveryError) return { venueId: null, error: deliveryError }
-    const { error } = await client
-      .from("events")
-      .update({
-        venue_id: null,
-        location: null,
-        has_seating_plan: false,
-        updated_at: new Date().toISOString(),
-      } as never)
-      .eq("id", eventId)
-    if (error && !OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(error.message)) {
-      return { venueId: null, error: error.message }
+    const written = await updateEventReturning(client, eventId, {
+      venue_id: null,
+      location: null,
+      has_seating_plan: false,
+      updated_at: new Date().toISOString(),
+    })
+    if (
+      "error" in written &&
+      !OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(written.error)
+    ) {
+      return { venueId: null, error: written.error }
     }
     return { venueId: null }
   }
@@ -822,6 +819,8 @@ async function persistEventVenueFields(
       .from("venues")
       .update(withMax as never)
       .eq("id", venueId)
+      .select("id")
+      .single()
     if (
       updated.error &&
       /max_capacity|schema cache|PGRST204|42703/i.test(updated.error.message)
@@ -830,6 +829,8 @@ async function persistEventVenueFields(
         .from("venues")
         .update({ ...venuePatch, capacity: officialCapacity } as never)
         .eq("id", venueId)
+        .select("id")
+        .single()
       if (retry.error) {
         return { venueId, error: retry.error.message }
       }
@@ -893,61 +894,36 @@ async function persistEventVenueFields(
     updated_at: now,
   }
   const defaultTicketTab = parseDefaultTicketTab(data.ticketsDefaultTab)
-  const withPicker = await client
-    .from("events")
-    .update({
+  let eventWrite = await updateEventReturning(client, eventId, {
+    ...eventCore,
+    province,
+    department,
+    default_ticket_tab: defaultTicketTab,
+  })
+
+  if (
+    "error" in eventWrite &&
+    /default_ticket_tab|schema cache|PGRST204|42703/i.test(eventWrite.error)
+  ) {
+    eventWrite = await updateEventReturning(client, eventId, {
       ...eventCore,
       province,
       department,
-      default_ticket_tab: defaultTicketTab,
-    } as never)
-    .eq("id", eventId)
-
-  if (
-    withPicker.error &&
-    /default_ticket_tab|schema cache|PGRST204|42703/i.test(
-      withPicker.error.message,
-    )
-  ) {
-    const withPlace = await client
-      .from("events")
-      .update({
-        ...eventCore,
-        province,
-        department,
-      } as never)
-      .eq("id", eventId)
+    })
     if (
-      withPlace.error &&
-      /province|department|schema cache|PGRST204|42703/i.test(
-        withPlace.error.message,
-      )
+      "error" in eventWrite &&
+      /province|department|schema cache|PGRST204|42703/i.test(eventWrite.error)
     ) {
-      const coreWrite = await client
-        .from("events")
-        .update(eventCore as never)
-        .eq("id", eventId)
-      if (coreWrite.error) {
-        return { venueId, error: coreWrite.error.message }
-      }
-    } else if (withPlace.error) {
-      return { venueId, error: withPlace.error.message }
+      eventWrite = await updateEventReturning(client, eventId, eventCore)
     }
   } else if (
-    withPicker.error &&
-    /province|department|schema cache|PGRST204|42703/i.test(
-      withPicker.error.message,
-    )
+    "error" in eventWrite &&
+    /province|department|schema cache|PGRST204|42703/i.test(eventWrite.error)
   ) {
-    const coreWrite = await client
-      .from("events")
-      .update(eventCore as never)
-      .eq("id", eventId)
-    if (coreWrite.error) {
-      return { venueId, error: coreWrite.error.message }
-    }
-  } else if (withPicker.error) {
-    return { venueId, error: withPicker.error.message }
+    eventWrite = await updateEventReturning(client, eventId, eventCore)
+  }
+  if ("error" in eventWrite) {
+    return { venueId, error: eventWrite.error }
   }
 
   return { venueId }
@@ -982,23 +958,18 @@ async function persistEventIdentityVenueLabel(
     department: data.venue.department?.trim() || null,
     updated_at: new Date().toISOString(),
   }
-  const written = await client.from("events").update(patch as never).eq("id", eventId)
+  let written = await updateEventReturning(client, eventId, patch)
   if (
-    written.error &&
-    /province|department|schema cache|PGRST204|42703/i.test(written.error.message)
+    "error" in written &&
+    /province|department|schema cache|PGRST204|42703/i.test(written.error)
   ) {
-    const retry = await client
-      .from("events")
-      .update({
-        ...(location ? { location } : {}),
-        ...(venueId ? { venue_id: venueId } : {}),
-        updated_at: patch.updated_at,
-      } as never)
-      .eq("id", eventId)
-    if (retry.error) return retry.error.message
-    return null
+    written = await updateEventReturning(client, eventId, {
+      ...(location ? { location } : {}),
+      ...(venueId ? { venue_id: venueId } : {}),
+      updated_at: patch.updated_at,
+    })
   }
-  if (written.error) return written.error.message
+  if ("error" in written) return written.error
   return null
 }
 
@@ -1281,6 +1252,28 @@ function identityAgeRestriction(
 const OPTIONAL_EVENT_FLAG_COLUMNS_RE =
   /has_seating_plan|has_schedule|delivery_mode|access_link|accepts_mercado_pago|accepts_pos_payments|refund_policy|schema cache|PGRST204|42703/i
 
+async function updateEventReturning(
+  client: SupabaseClient<Database>,
+  eventId: string,
+  patch: Record<string, unknown>,
+): Promise<{ data: Record<string, unknown> } | { error: string }> {
+  const { data, error } = await client
+    .from("events")
+    .update(patch as never)
+    .eq("id", eventId)
+    .select()
+    .single()
+  if (error || !data) {
+    return { error: error?.message ?? "No se pudo actualizar el evento." }
+  }
+  return { data: data as Record<string, unknown> }
+}
+
+function revalidateEventWizardPath(eventId: string) {
+  revalidatePath(`/admin/events/${eventId}/edit`, "layout")
+  revalidatePath("/admin/events/[id]/edit", "layout")
+}
+
 async function persistEventDeliveryProfile(
   client: SupabaseClient<Database>,
   eventId: string,
@@ -1299,27 +1292,24 @@ async function persistEventDeliveryProfile(
     patch.location = null
     patch.has_seating_plan = false
   }
-  const { error } = await client
-    .from("events")
-    .update(patch as never)
-    .eq("id", eventId)
-  if (error && OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(error.message)) {
-    const retry = await client
-      .from("events")
-      .update({
-        location: online ? null : undefined,
-        updated_at: patch.updated_at,
-      } as never)
-      .eq("id", eventId)
-    if (retry.error) {
-      logPersistError("event-persist", retry.error)
-      return retry.error.message
+  let written = await updateEventReturning(client, eventId, patch)
+  if (
+    "error" in written &&
+    OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(written.error)
+  ) {
+    written = await updateEventReturning(client, eventId, {
+      location: online ? null : undefined,
+      updated_at: patch.updated_at,
+    })
+    if ("error" in written) {
+      logPersistError("event-persist", written.error)
+      return written.error
     }
     return null
   }
-  if (error) {
-    logPersistError("event-persist", error)
-    return error.message
+  if ("error" in written) {
+    logPersistError("event-persist", written.error)
+    return written.error
   }
   return null
 }
@@ -1355,19 +1345,16 @@ async function persistEventCheckoutPolicy(
   eventId: string,
   formValues: EventFormValues | DraftEventFormValues,
 ): Promise<string | null> {
-  const { error } = await client
-    .from("events")
-    .update({
-      ...checkoutPolicyFromForm(formValues),
-      updated_at: new Date().toISOString(),
-    } as never)
-    .eq("id", eventId)
-  if (error && OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(error.message)) {
+  const written = await updateEventReturning(client, eventId, {
+    ...checkoutPolicyFromForm(formValues),
+    updated_at: new Date().toISOString(),
+  })
+  if ("error" in written && OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(written.error)) {
     return null
   }
-  if (error) {
-    logPersistError("event-persist", error)
-    return error.message
+  if ("error" in written) {
+    logPersistError("event-persist", written.error)
+    return written.error
   }
   return null
 }
@@ -1427,21 +1414,23 @@ async function persistEventIdentityOnly(input: {
       : {}),
     updated_at: new Date().toISOString(),
   }
-  const { error: updateError } = await input.mutationClient
-    .from("events")
-    .update(identityPatch as never)
-    .eq("id", input.eventId)
-
-  if (updateError && OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(updateError.message)) {
-    const retry = await input.mutationClient
-      .from("events")
-      .update(stripOptionalEventFlags(identityPatch) as never)
-      .eq("id", input.eventId)
-    if (retry.error) {
-      return persistFailure(retry.error.message)
-    }
-  } else if (updateError) {
-    return persistFailure(updateError.message)
+  let identityWrite = await updateEventReturning(
+    input.mutationClient,
+    input.eventId,
+    identityPatch,
+  )
+  if (
+    "error" in identityWrite &&
+    OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(identityWrite.error)
+  ) {
+    identityWrite = await updateEventReturning(
+      input.mutationClient,
+      input.eventId,
+      stripOptionalEventFlags(identityPatch),
+    )
+  }
+  if ("error" in identityWrite) {
+    return persistFailure(identityWrite.error)
   }
 
   const scheduleError = await persistEventSchedule(
@@ -1476,11 +1465,11 @@ async function persistEventIdentityOnly(input: {
 
   await revalidatePersistedEvent(input.mutationClient, input.eventId)
 
-  return {
-    success: true,
-    eventId: input.eventId,
+  return finalizePersistedEvent(
+    input.eventId,
     venueId,
-  }
+    input.formValues as EventFormValues,
+  )
 }
 
 /**
@@ -1664,9 +1653,9 @@ async function persistNewEventIdentityOnly(
   if (createdCheckoutError) return persistFailure(createdCheckoutError)
 
   revalidatePath(`/admin/events/${eventId}`)
-  revalidatePath(`/admin/events/${eventId}/edit`)
+  await revalidatePersistedEvent(mutationClient, eventId)
 
-  return { success: true, eventId, venueId: null }
+  return finalizePersistedEvent(eventId, null, raw as EventFormValues)
 }
 
 async function runSeatingRpcWithRetry<T>(input: {
@@ -2261,19 +2250,6 @@ async function uploadEventFlyer(
   return { url: data.publicUrl }
 }
 
-export type CreateCompleteEventResult =
-  | { success: true; eventId: string; venueId: string | null }
-  | {
-      success: false
-      error: string
-      code?: AppErrorCode
-      source?: PersistErrorSource
-      title?: string
-      field?: string
-      actionHint?: string
-      wizardConflict?: WizardConflict
-    }
-
 export type EditableEventData = {
   id: string
   organizerId: string
@@ -2293,6 +2269,26 @@ export type EditableEventData = {
     tableNumberEnd: number | null
   }>
 }
+
+export type PersistEventSuccessData = {
+  eventId: string
+  venueId: string | null
+  values: EventFormValues
+  zoneTierPricing: EditableEventData["zoneTierPricing"]
+}
+
+export type CreateCompleteEventResult =
+  | { success: true; data: PersistEventSuccessData }
+  | {
+      success: false
+      error: string
+      code?: AppErrorCode
+      source?: PersistErrorSource
+      title?: string
+      field?: string
+      actionHint?: string
+      wizardConflict?: WizardConflict
+    }
 
 function toLocalDateTimeInput(value: string): string {
   return toDatetimeLocalInput(value)
@@ -3069,6 +3065,41 @@ export async function getEventForEditing(
   }
 }
 
+async function finalizePersistedEvent(
+  eventId: string,
+  venueId: string | null,
+  fallbackValues?: EventFormValues,
+): Promise<CreateCompleteEventResult> {
+  revalidateEventWizardPath(eventId)
+  const fresh = await getEventForEditing(eventId)
+  if (fresh) {
+    return {
+      success: true,
+      data: {
+        eventId: fresh.id,
+        venueId: venueId ?? fresh.values.venue.existingVenueId ?? null,
+        values: fresh.values,
+        zoneTierPricing: fresh.zoneTierPricing,
+      },
+    }
+  }
+  if (fallbackValues) {
+    return {
+      success: true,
+      data: {
+        eventId,
+        venueId,
+        values: fallbackValues,
+        zoneTierPricing: [],
+      },
+    }
+  }
+  return {
+    success: false,
+    error: "El evento se guardó pero no se pudo releer. Recargá la página.",
+  }
+}
+
 /**
  * Crea el evento atómicamente. Espera FormData con:
  * - `payload`: JSON string de `EventFormValues`
@@ -3364,7 +3395,7 @@ export async function createCompleteEvent(
     revalidatePath("/superadmin/events")
   }
 
-  return { success: true, eventId: String(eventId), venueId }
+  return finalizePersistedEvent(String(eventId), venueId, formValues)
 }
 
 /**
@@ -3565,7 +3596,7 @@ export async function updateCompleteEvent(
     )
     if (emptyCheckoutError) return persistFailure(emptyCheckoutError)
     await revalidatePersistedEvent(mutationClient, eventId)
-    return { success: true, eventId, venueId }
+    return finalizePersistedEvent(eventId, venueId, formValues)
   }
 
   const flyerEntry = formData.get("flyer")
@@ -3718,11 +3749,7 @@ export async function updateCompleteEvent(
     },
   })
 
-  return {
-    success: true,
-    eventId: String(updatedId ?? eventId),
-    venueId,
-  }
+  return finalizePersistedEvent(String(updatedId ?? eventId), venueId, formValues)
 }
 
 export type PublishEventResult =
