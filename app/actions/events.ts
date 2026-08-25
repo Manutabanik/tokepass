@@ -714,6 +714,85 @@ async function findVenueIdByExactName(
   return data?.[0]?.id ?? null
 }
 
+function venueAforoFromForm(data: EventFormValues): number | null {
+  const capacity = Math.floor(Number(data.venue.capacity))
+  if (!Number.isFinite(capacity) || capacity < 1) return null
+  return capacity
+}
+
+/**
+ * UPDATE explícito de `venues`. El trigger sync_venue_max_capacity iguala
+ * capacity y max_capacity: hay que mandar el mismo Number o el aforo vuelve.
+ */
+async function forceUpdateVenueFromForm(
+  venueId: string,
+  data: EventFormValues,
+): Promise<string | null> {
+  const capacity = venueAforoFromForm(data)
+  const place = composeVenuePlace({
+    street: data.venue.venueLocation,
+    department: data.venue.department,
+    province: data.venue.province,
+    city: data.venue.venueCity,
+  })
+  const name = normalizeExactVenueName(data.venue.venueName)
+  const location = place.street || place.display || name
+  const patch: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  }
+  if (name) patch.name = name
+  if (location) {
+    patch.location = location
+    patch.address = location
+  }
+  if (place.city) patch.city = place.city
+  if (data.venue.latitude != null) patch.latitude = data.venue.latitude
+  if (data.venue.longitude != null) patch.longitude = data.venue.longitude
+  if (capacity != null) {
+    patch.capacity = capacity
+    patch.max_capacity = capacity
+  }
+
+  const admin = createAdminClient()
+  console.log("ACTUALIZANDO BD CON ESTOS DATOS EXACTOS:", {
+    table: "venues",
+    venueId,
+    updatePayload: patch,
+  })
+  let written = await admin
+    .from("venues")
+    .update(patch as never)
+    .eq("id", venueId)
+    .select("id, capacity, max_capacity")
+    .maybeSingle()
+  if (
+    written.error &&
+    /max_capacity|schema cache|PGRST204|42703/i.test(written.error.message)
+  ) {
+    const { max_capacity: omittedMax, ...withoutMax } = patch
+    void omittedMax
+    written = await admin
+      .from("venues")
+      .update(withoutMax as never)
+      .eq("id", venueId)
+      .select("id, capacity")
+      .maybeSingle()
+  }
+  console.log("RESPUESTA SUPABASE:", {
+    op: "venues.update",
+    venueId,
+    data: written.data,
+    error: written.error,
+  })
+  if (written.error) {
+    return `Error actualizando el aforo del recinto: ${written.error.message}`
+  }
+  if (!written.data) {
+    return "Error actualizando el aforo del recinto: 0 filas (RLS o ID inválido)"
+  }
+  return null
+}
+
 async function persistEventVenueFields(
   client: SupabaseClient<Database>,
   eventId: string,
@@ -767,7 +846,9 @@ async function persistEventVenueFields(
     data.venue.mode === "new" && !data.venue.existingVenueId?.trim()
   const allowCreate = options?.allowCreate !== false
 
-  let venueId: string | null = null
+  const requestedVenueId =
+    data.venue.existingVenueId?.trim() || eventRow?.venue_id || null
+  let venueId: string | null = requestedVenueId
   if (organizerId) {
     venueId = creatingNewCatalogVenue
       ? await findOwnedVenueId(client, organizerId, eventRow?.venue_id)
@@ -777,6 +858,7 @@ async function persistEventVenueFields(
           data.venue.existingVenueId,
         )) ||
         (await findOwnedVenueId(client, organizerId, eventRow?.venue_id)) ||
+        requestedVenueId ||
         (await findVenueIdByExactName(client, organizerId, venueName))
   }
 
@@ -793,42 +875,39 @@ async function persistEventVenueFields(
     updated_at: now,
   }
 
+  const formAforo = venueAforoFromForm(data)
   const capacitySnap = computeEventCapacityFromForm(data)
-  const officialCapacity = Math.max(1, capacitySnap.baseVenueCapacity || 1)
-  const effectiveCapacity = Math.max(1, capacitySnap.effectiveMaxCapacity || officialCapacity)
+  const officialCapacity = Math.max(
+    1,
+    formAforo ?? capacitySnap.baseVenueCapacity ?? 1,
+  )
 
   if (venueId) {
-    const withMax = {
+    const aforoError = await forceUpdateVenueFromForm(venueId, data)
+    if (aforoError) return { venueId, error: aforoError }
+
+    const mapPatch = {
       ...venuePatch,
-      capacity: officialCapacity,
-      max_capacity: effectiveCapacity,
+      ...(formAforo != null
+        ? { capacity: formAforo, max_capacity: formAforo }
+        : { capacity: officialCapacity, max_capacity: officialCapacity }),
     }
-    console.log("ACTUALIZANDO BD CON ESTOS DATOS EXACTOS:", {
-      table: "venues",
-      venueId,
-      updatePayload: withMax,
-    })
-    const updated = await client
+    const mapWrite = await createAdminClient()
       .from("venues")
-      .update(withMax as never)
+      .update(mapPatch as never)
       .eq("id", venueId)
       .select("id")
       .maybeSingle()
     if (
-      updated.error &&
-      /max_capacity|schema cache|PGRST204|42703/i.test(updated.error.message)
+      mapWrite.error &&
+      !/max_capacity|venue_map|seating_layout|schema cache|PGRST204|42703/i.test(
+        mapWrite.error.message,
+      )
     ) {
-      const retry = await client
-        .from("venues")
-        .update({ ...venuePatch, capacity: officialCapacity } as never)
-        .eq("id", venueId)
-        .select("id")
-        .maybeSingle()
-      if (retry.error) {
-        return { venueId, error: retry.error.message }
+      return {
+        venueId,
+        error: `Error actualizando el aforo del recinto: ${mapWrite.error.message}`,
       }
-    } else if (updated.error) {
-      return { venueId, error: updated.error.message }
     }
   } else if (
     allowCreate &&
@@ -844,7 +923,7 @@ async function persistEventVenueFields(
       latitude: data.venue.latitude ?? null,
       longitude: data.venue.longitude ?? null,
       capacity: officialCapacity,
-      max_capacity: effectiveCapacity,
+      max_capacity: officialCapacity,
       venue_map: venueMap,
       seating_layout: seatingLayout,
       seating_background_url: data.venue.seatingBackgroundUrl ?? null,
@@ -922,7 +1001,7 @@ async function persistEventVenueFields(
   return { venueId }
 }
 
-/** Paso 1 / autosave de identidad: lugar y dirección, sin tocar mapa ni aforo. */
+/** Paso 1 / autosave de identidad: lugar, dirección y aforo si hay recinto. */
 async function persistEventIdentityVenueLabel(
   client: SupabaseClient<Database>,
   eventId: string,
@@ -942,6 +1021,10 @@ async function persistEventIdentityVenueLabel(
   const location = place.display || venueName
   const venueId =
     data.venue.existingVenueId?.trim() || currentVenueId || null
+  if (venueId) {
+    const venueError = await forceUpdateVenueFromForm(venueId, data)
+    if (venueError) return venueError
+  }
   if (!location && !venueId) return null
 
   const patch = {
@@ -3059,9 +3142,6 @@ export async function getEventForEditing(
     )
     const firstZone = venueZones?.[0]
     const venueCapacity = Number(venue?.capacity ?? 0) || 1
-    const venueMaxCapacity = Number(
-      (venue as { max_capacity?: number | null } | null)?.max_capacity ?? 0,
-    )
     const parsedDays = parseScheduleDays(event.schedule_days)
     const scheduleDays = scheduleDaysToFormValues(parsedDays)
     const isMultiDay = isMultiDaySchedule(parsedDays)
@@ -3338,12 +3418,9 @@ export async function getEventForEditing(
             if (isDraftPlaceholderVenueName(rawName) && venueCapacity <= 1) {
               return undefined
             }
-            return firstZone?.capacity ?? venueCapacity
+            return venueCapacity > 0 ? venueCapacity : undefined
           })(),
-          customMaxCapacity:
-            venueMaxCapacity > (firstZone?.capacity ?? venueCapacity)
-              ? venueMaxCapacity
-              : null,
+          customMaxCapacity: null,
           rows: firstZone?.rows ?? undefined,
           seatsPerRow: firstZone?.seatsPerRow ?? undefined,
           latitude,

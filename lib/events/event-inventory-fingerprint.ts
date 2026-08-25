@@ -49,6 +49,7 @@ export function formHasInventoryOrVenue(
   const venue = values.venue
   if (venue) {
     if ((venue.existingVenueId ?? "").trim()) return true
+    if (Number(venue.capacity) > 1) return true
     if (canPersistCatalogVenueName(venue.venueName)) return true
     if (venue.includesSeatingMap) return true
     if ((venue.zones ?? []).length > 0) return true

@@ -552,6 +552,7 @@ export function EventCreationWizard({
   }
 
   function hardReloadAfterSave(eventId: string) {
+    router.refresh()
     if (typeof window === "undefined") return
     const editUrl = `/admin/events/${eventId}/edit`
     if (window.location.pathname !== editUrl) {

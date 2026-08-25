@@ -1,7 +1,12 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
-import { coerceDraftEventForm, type DraftEventFormValues } from "@/lib/validations/event-form"
+import {
+  coerceDraftEventForm,
+  draftEventSchema,
+  publishEventSchema,
+  type DraftEventFormValues,
+} from "@/lib/validations/event-form"
 
 function draftWithDays(
   isMultiDay: boolean,
@@ -256,5 +261,61 @@ describe("multi-day draft coercion", () => {
     assert.equal(coerced.basics.ageRestriction, "")
     assert.equal(coerced.venue.venueName, "")
     assert.equal(coerced.venue.capacity, undefined)
+  })
+
+  it("coerces venue aforo from string so the wizard save does not drop it", () => {
+    const draft = draftEventSchema.safeParse({
+      basics: { title: "Recinto test" },
+      venue: {
+        mode: "existing",
+        existingVenueId: "11111111-1111-4111-8111-111111111111",
+        venueName: "Club",
+        capacity: "800",
+        saveVenueForReuse: true,
+      },
+    })
+    assert.equal(draft.success, true)
+    if (draft.success) {
+      assert.equal(draft.data.venue.capacity, 800)
+    }
+
+    const published = publishEventSchema.safeParse({
+      basics: {
+        title: "Recinto test",
+        date: "2026-11-14T20:00",
+        endDate: "2026-11-14T23:00",
+        description: "Show",
+        flyerName: "flyer.jpg",
+        visibility: "public",
+        isMultiDay: false,
+        scheduleDays: [],
+        categoryId: "11111111-1111-4111-8111-111111111111",
+        ageRestriction: "atp",
+      },
+      venue: {
+        mode: "existing",
+        existingVenueId: "11111111-1111-4111-8111-111111111111",
+        zoneType: "general_admission",
+        venueName: "Club",
+        venueLocation: "Calle 1",
+        capacity: "800",
+        saveVenueForReuse: true,
+      },
+      tickets: [
+        {
+          name: "General",
+          price: 10000,
+          capacity: 100,
+          visibility: "public",
+          layoutType: "general",
+          capacityPerUnit: 1,
+          admitCount: 1,
+        },
+      ],
+    })
+    if (!published.success) {
+      assert.fail(JSON.stringify(published.error.issues, null, 2))
+    }
+    assert.equal(published.data.venue.capacity, 800)
   })
 })
