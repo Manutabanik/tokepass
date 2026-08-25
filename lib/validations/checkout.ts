@@ -264,10 +264,17 @@ export const CheckoutSeatHoldSchema = z.object({
   seatingUnitId: z.string().uuid(UUID_ERROR),
 })
 
+const optionalHoldEventDateId = z
+  .union([z.string().uuid(UUID_ERROR), z.literal(""), z.null()])
+  .optional()
+  .transform((value) => (value ? value : null))
+
 export const CheckoutLayoutHoldSchema = z.object({
   eventId: z.string().uuid(UUID_ERROR),
   sectorId: z.string().trim().min(1, UUID_ERROR).max(120),
   layoutItemId: z.string().trim().min(1, UUID_ERROR).max(200),
+  eventDateId: optionalHoldEventDateId,
+  dateId: optionalHoldEventDateId,
 })
 
 export const CheckoutLockTicketsSchema = z.object({

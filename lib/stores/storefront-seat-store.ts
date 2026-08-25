@@ -37,6 +37,9 @@ export type StorefrontSelectedItem = {
   inventoryType?: StorefrontInventoryType
   ticketTierId?: string
   isMappedSelection?: boolean
+  /** Jornada (`event_schedules.id`) del mapa instanciado. */
+  eventDateId?: string
+  dateId?: string
 }
 
 export type StorefrontLayoutSeat = {
@@ -48,6 +51,7 @@ export type StorefrontLayoutSeat = {
   price: number
   color: string
   label?: string
+  eventDateId?: string
 }
 
 export type StorefrontToggleResult =
@@ -137,6 +141,8 @@ function layoutSeatToItem(seat: StorefrontLayoutSeat): StorefrontSelectedItem {
     priceMode: "per_person",
     inventoryType: "SEATED_NUMERATED",
     isMappedSelection: true,
+    eventDateId: seat.eventDateId,
+    dateId: seat.eventDateId,
   }
 }
 

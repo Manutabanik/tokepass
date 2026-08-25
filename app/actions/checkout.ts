@@ -76,6 +76,12 @@ import {
   pickSeatingUnitForLayoutHold,
 } from "@/lib/checkout/layout-hold-unit"
 import {
+  MISSING_EVENT_DATE_ID,
+  asHoldEventDateId,
+  requireHoldEventDateId,
+  seatingUnitMatchesEventDate,
+} from "@/lib/checkout/seat-hold-day"
+import {
   generalTierRemaining,
   partitionMixedCartItems,
   tierIsNumbered,
@@ -181,6 +187,10 @@ type ReserveTxRow = {
 function mapReserveRpcError(
   message: string,
 ): Extract<CheckoutResult, { success: false }> | null {
+  if (/missing_event_date_id/i.test(message)) {
+    return { success: false, error: MISSING_EVENT_DATE_ID }
+  }
+
   if (isHighDemandLockError(message)) {
     return { success: false, error: HIGH_DEMAND_LOCK_TIMEOUT }
   }
@@ -1144,10 +1154,11 @@ export async function holdSeatingUnitForCart(
 async function loadEventSeatingSectorIds(
   db: CheckoutSupabase,
   eventId: string,
+  eventDateId: string | null = null,
 ): Promise<string[]> {
   const { data, error } = await db
     .from("ticket_tiers")
-    .select("seating_sector_id")
+    .select("seating_sector_id, day_id")
     .eq("event_id", eventId)
   if (error) {
     logger.error({
@@ -1161,6 +1172,10 @@ async function loadEventSeatingSectorIds(
   const seen = new Set<string>()
   const next: string[] = []
   for (const row of data ?? []) {
+    const dayId = asHoldEventDateId(
+      (row as { day_id?: string | null }).day_id,
+    )
+    if (eventDateId && dayId && dayId !== eventDateId) continue
     const id = (
       row as { seating_sector_id?: string | null }
     ).seating_sector_id?.trim()
@@ -1171,16 +1186,124 @@ async function loadEventSeatingSectorIds(
   return next
 }
 
+async function loadEventScheduleDayIds(
+  db: CheckoutSupabase,
+  eventId: string,
+): Promise<string[]> {
+  const { data, error } = await db
+    .from("event_schedules")
+    .select("id")
+    .eq("event_id", eventId)
+  if (error) {
+    if (/event_schedules|schema cache|PGRST205|42P01/i.test(error.message)) {
+      return []
+    }
+    logger.error({
+      context: "checkout/cart-hold",
+      message: "hold_schedule_days_failed",
+      eventId,
+      error: error.message,
+    })
+    return []
+  }
+  return (data ?? [])
+    .map((row) => asHoldEventDateId(row.id))
+    .filter((id): id is string => Boolean(id))
+}
+
+type LayoutHoldDbRow = {
+  id: string
+  status: string
+  sector_id: string
+  event_date_id?: string | null
+  ticket_tiers?:
+    | { day_id?: string | null }
+    | Array<{ day_id?: string | null }>
+    | null
+}
+
+function layoutHoldRowsFromDb(rows: LayoutHoldDbRow[]) {
+  return rows.map((row) => {
+    const tier = Array.isArray(row.ticket_tiers)
+      ? row.ticket_tiers[0]
+      : row.ticket_tiers
+    return {
+      id: row.id,
+      status: row.status,
+      sector_id: row.sector_id,
+      event_date_id: row.event_date_id ?? null,
+      day_id: tier?.day_id ?? null,
+    }
+  })
+}
+
+async function loadLayoutHoldUnits(
+  db: CheckoutSupabase,
+  input: { eventId: string; layoutItemId: string; eventDateId?: string | null },
+) {
+  const eventDateId = asHoldEventDateId(input.eventDateId)
+  let withDay = db
+    .from("event_seating_units")
+    .select("id, status, sector_id, event_date_id, ticket_tiers(day_id)")
+    .eq("event_id", input.eventId)
+    .eq("layout_item_id", input.layoutItemId)
+  if (eventDateId) {
+    withDay = withDay.or(
+      `event_date_id.eq.${eventDateId},event_date_id.is.null`,
+    )
+  }
+  withDay = withDay.limit(24)
+  const withDayResult = await withDay
+  if (!withDayResult.error) {
+    return layoutHoldRowsFromDb((withDayResult.data ?? []) as LayoutHoldDbRow[])
+  }
+  if (
+    !/event_date_id|ticket_tiers|schema cache|PGRST204|42703/i.test(
+      withDayResult.error.message,
+    )
+  ) {
+    logger.error({
+      context: "checkout/cart-hold",
+      message: "hold_layout_unit_lookup_failed",
+      eventId: input.eventId,
+      layoutItemId: input.layoutItemId,
+      eventDateId,
+      error: withDayResult.error.message,
+    })
+    return []
+  }
+  const fallback = await db
+    .from("event_seating_units")
+    .select("id, status, sector_id")
+    .eq("event_id", input.eventId)
+    .eq("layout_item_id", input.layoutItemId)
+    .limit(24)
+  if (fallback.error) {
+    logger.error({
+      context: "checkout/cart-hold",
+      message: "hold_layout_unit_lookup_failed",
+      eventId: input.eventId,
+      layoutItemId: input.layoutItemId,
+      error: fallback.error.message,
+    })
+    return []
+  }
+  return layoutHoldRowsFromDb((fallback.data ?? []) as LayoutHoldDbRow[])
+}
+
 export async function holdSeatingUnitForCartByLayoutItem(
   eventId: string,
   sectorId: string,
   layoutItemId: string,
   previewKey?: string | null,
+  eventDateId?: string | null,
 ): Promise<CartSeatingHoldResult & { seatingUnitId?: string }> {
   const parsed = CheckoutLayoutHoldSchema.safeParse({
     eventId,
     sectorId,
     layoutItemId,
+    eventDateId,
+    dateId: eventDateId,
   })
   if (!parsed.success) {
     return { success: false, error: formatCheckoutPayloadError(parsed.error) }
@@ -1188,13 +1311,9 @@ export async function holdSeatingUnitForCartByLayoutItem(
   eventId = parsed.data.eventId
   sectorId = parsed.data.sectorId
   layoutItemId = parsed.data.layoutItemId
-  logger.info({
-    context: "checkout/cart-hold",
-    message: `Intentando reservar: eventId=${eventId}, layoutItemId=${layoutItemId}, sectorId=${sectorId}`,
-    event_id: eventId,
-    layoutItemId,
-    sectorId,
-  })
+  eventDateId =
+    asHoldEventDateId(parsed.data.eventDateId) ??
+    asHoldEventDateId(parsed.data.dateId)
 
   const supabase = await createClient()
   const {
@@ -1215,6 +1334,30 @@ export async function holdSeatingUnitForCartByLayoutItem(
     return { success: false, error: access.error }
   }
   const db = access.db
+  const scheduleDayIds = await loadEventScheduleDayIds(db, eventId)
+  const dayGate = requireHoldEventDateId({
+    eventDateId,
+    scheduleDayIds,
+  })
+  if (!dayGate.ok) {
+    logger.error({
+      context: "checkout/cart-hold",
+      message: MISSING_EVENT_DATE_ID,
+      eventId,
+      sectorId,
+      layoutItemId,
+    })
+    return { success: false, error: MISSING_EVENT_DATE_ID }
+  }
+  eventDateId = dayGate.eventDateId
+  logger.info({
+    context: "checkout/cart-hold",
+    message: `Intentando reservar: eventId=${eventId}, layoutItemId=${layoutItemId}, sectorId=${sectorId}, eventDateId=${eventDateId ?? ""}`,
+    event_id: eventId,
+    layoutItemId,
+    sectorId,
+    eventDateId,
+  })
 
   const room = await assertCheckoutWaitingRoom({
     eventId: access.eventId,
@@ -1233,30 +1376,31 @@ export async function holdSeatingUnitForCartByLayoutItem(
     }
   }
 
-  const { data: unitRows, error: lookupError } = await db
-    .from("event_seating_units")
-    .select("id, status, sector_id")
-    .eq("event_id", eventId)
-    .eq("layout_item_id", layoutItemId)
-    .limit(12)
-  if (lookupError) {
+  const unitRows = await loadLayoutHoldUnits(db, {
+    eventId,
+    layoutItemId,
+    eventDateId,
+  })
+  const matchedUnit = pickSeatingUnitForLayoutHold(
+    unitRows,
+    sectorId,
+    eventDateId,
+  )
+  if (
+    eventDateId &&
+    unitRows.length > 0 &&
+    !unitRows.some((row) => seatingUnitMatchesEventDate(row, eventDateId))
+  ) {
     logger.error({
       context: "checkout/cart-hold",
-      message: "hold_layout_unit_lookup_failed",
+      message: "hold_layout_unit_wrong_day",
       eventId,
       sectorId,
       layoutItemId,
-      error: lookupError.message,
+      eventDateId,
     })
+    return { success: false, error: "not_materialized" }
   }
-  const matchedUnit = pickSeatingUnitForLayoutHold(
-    (unitRows ?? []).map((row) => ({
-      id: row.id,
-      status: row.status,
-      sector_id: row.sector_id,
-    })),
-    sectorId,
-  )
   if (
     matchedUnit &&
     matchedUnit.status !== "available" &&
@@ -1300,24 +1444,52 @@ export async function holdSeatingUnitForCartByLayoutItem(
     }
   }
 
-  const tierSectorIds = await loadEventSeatingSectorIds(db, eventId)
+  const tierSectorIds = await loadEventSeatingSectorIds(
+    db,
+    eventId,
+    eventDateId,
+  )
   let lastError: string | null = null
   for (const candidate of layoutHoldSectorCandidates(
     sectorId,
     layoutItemId,
     tierSectorIds,
   )) {
+    const rpcArgs = {
+      p_event_id: eventId,
+      p_owner_id: user.id,
+      p_sector_id: candidate,
+      p_layout_item_id: layoutItemId,
+      ...(eventDateId ? { p_event_date_id: eventDateId } : {}),
+    }
     const { data, error } = await db.rpc(
       "hold_seating_unit_for_cart_by_layout" as never,
-      {
-        p_event_id: eventId,
-        p_owner_id: user.id,
-        p_sector_id: candidate,
-        p_layout_item_id: layoutItemId,
-      } as never,
+      rpcArgs as never,
     )
+    if (
+      error &&
+      eventDateId &&
+      /PGRST202|could not find the function|p_event_date_id/i.test(
+        reserveRpcErrorText(error),
+      )
+    ) {
+      logger.error({
+        context: "checkout/cart-hold",
+        message: "hold_layout_rpc_missing_event_date_id_arg",
+        eventId,
+        sectorId,
+        layoutItemId,
+        eventDateId,
+        error: reserveRpcErrorText(error),
+      })
+      lastError = reserveRpcErrorText(error)
+      continue
+    }
     if (error) {
       lastError = reserveRpcErrorText(error)
+      if (/missing_event_date_id/i.test(lastError)) {
+        return { success: false, error: MISSING_EVENT_DATE_ID }
+      }
       const mapped = mapReserveRpcError(lastError)
       if (mapped?.error === "out_of_stock") {
         return { success: false, error: mapped.error }
@@ -1345,6 +1517,7 @@ export async function holdSeatingUnitForCartByLayoutItem(
       eventId,
       sectorId,
       layoutItemId,
+      eventDateId,
       error: lastError,
     })
   }

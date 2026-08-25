@@ -87,6 +87,11 @@ import {
   HIGH_DEMAND_LOCK_TIMEOUT,
 } from "@/lib/checkout/lock-timeout"
 import {
+  MISSING_EVENT_DATE_ID,
+  MISSING_EVENT_DATE_ID_MESSAGE,
+  withCheckoutEventDateId,
+} from "@/lib/checkout/seat-hold-day"
+import {
   cartLineQuantity,
   sumCartQuantities,
   toCartNumber,
@@ -2264,22 +2269,25 @@ export function CheckoutTunnel({
         dayTiers,
       )
       const result = useStorefrontSeatStore.getState().upsertSelectedItem(
-        {
-          ...(fromZone ?? {
-            id: zone.id,
-            name: zone.name,
-            type: "zone" as const,
+        withCheckoutEventDateId(
+          {
+            ...(fromZone ?? {
+              id: zone.id,
+              name: zone.name,
+              type: "zone" as const,
+              price: catalogPrice,
+              sectorId: zone.id,
+              color: zone.color,
+              sellMode: zone.sellMode,
+              priceMode: zone.priceMode ?? venuePriceModeFromSellMode(zone.sellMode),
+              inventoryType: "GENERAL_ADMISSION" as const,
+            }),
+            ticketTierId: resolvedZoneTierId ?? previous?.ticketTierId,
             price: catalogPrice,
-            sectorId: zone.id,
-            color: zone.color,
-            sellMode: zone.sellMode,
-            priceMode: zone.priceMode ?? venuePriceModeFromSellMode(zone.sellMode),
-            inventoryType: "GENERAL_ADMISSION" as const,
-          }),
-          ticketTierId: resolvedZoneTierId ?? previous?.ticketTierId,
-          price: catalogPrice,
-          capacity: Math.max(1, quantity),
-        },
+            capacity: Math.max(1, quantity),
+          },
+          selectedDateId,
+        ),
         selectionCapForItem({
           id: zone.id,
           name: zone.name,
@@ -2398,11 +2406,14 @@ export function CheckoutTunnel({
       if (!item) continue
       const tierId = resolveItemTierId(item)
       const result = store.upsertSelectedItem(
-        {
-          ...item,
-          ticketTierId: tierId ?? item.ticketTierId,
-          price: mapSelectionUnitPrice(item.price, tierId, dayTiers),
-        },
+        withCheckoutEventDateId(
+          {
+            ...item,
+            ticketTierId: tierId ?? item.ticketTierId,
+            price: mapSelectionUnitPrice(item.price, tierId, dayTiers),
+          },
+          selectedDateId,
+        ),
         selectionCapForItem(item),
       )
       if (!result.ok) {
@@ -2681,16 +2692,19 @@ export function CheckoutTunnel({
       })
       const store = useStorefrontSeatStore.getState()
       const upserted = store.upsertSelectedItem(
-        {
-          id: unit.layoutItemId || unit.id,
-          name: unit.label || "Ubicación numerada",
-          type: unit.layoutType === "table_combo" ? "table" : "seat",
-          price: selectionPayload.unitPrice,
-          capacity: Math.max(1, unit.capacityPerUnit || 1),
-          sectorId: unit.sectorId,
-          sectorName: unit.sectorName,
-          color: unit.color,
-        },
+        withCheckoutEventDateId(
+          {
+            id: unit.layoutItemId || unit.id,
+            name: unit.label || "Ubicación numerada",
+            type: unit.layoutType === "table_combo" ? "table" : "seat",
+            price: selectionPayload.unitPrice,
+            capacity: Math.max(1, unit.capacityPerUnit || 1),
+            sectorId: unit.sectorId,
+            sectorName: unit.sectorName,
+            color: unit.color,
+          },
+          selectedDateId,
+        ),
         mapPlaceSelectionCap({
           layoutType: unit.layoutType,
           fallbackMax: maxTicketsPerUser,
@@ -2726,8 +2740,13 @@ export function CheckoutTunnel({
           selectionPayload.sectorId,
           seat.id,
           previewKey,
+          selectedDateId,
         )
         if (!hold.success) {
+          if (hold.error === MISSING_EVENT_DATE_ID) {
+            toast.error(MISSING_EVENT_DATE_ID_MESSAGE)
+            return
+          }
           if (hold.error === HIGH_DEMAND_LOCK_TIMEOUT) {
             toast.error(HIGH_DEMAND_LOCK_MESSAGE)
             return

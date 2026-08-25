@@ -1,7 +1,11 @@
+import { seatingUnitMatchesEventDate } from "@/lib/checkout/seat-hold-day"
+
 export type LayoutHoldUnitRow = {
   id: string
   status: string
   sector_id: string
+  event_date_id?: string | null
+  day_id?: string | null
 }
 
 export function layoutHoldSectorCandidates(
@@ -23,12 +27,16 @@ export function layoutHoldSectorCandidates(
 export function pickSeatingUnitForLayoutHold(
   units: LayoutHoldUnitRow[],
   sectorId: string,
+  eventDateId: string | null = null,
 ): LayoutHoldUnitRow | null {
-  if (units.length === 0) return null
+  const scoped = units.filter((unit) =>
+    seatingUnitMatchesEventDate(unit, eventDateId),
+  )
+  if (scoped.length === 0) return null
   const wanted = sectorId.trim()
-  const holdable = units.filter(
+  const holdable = scoped.filter(
     (unit) => unit.status === "available" || unit.status === "reserved",
   )
-  const pool = holdable.length > 0 ? holdable : units
+  const pool = holdable.length > 0 ? holdable : scoped
   return pool.find((unit) => unit.sector_id === wanted) ?? pool[0] ?? null
 }

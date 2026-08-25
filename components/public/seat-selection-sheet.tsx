@@ -44,6 +44,11 @@ import {
   flattenSeatsForAvailability,
 } from "@/lib/seating/venue-map-geometry"
 import {
+  asHoldEventDateId,
+  withCheckoutEventDateId,
+} from "@/lib/checkout/seat-hold-day"
+import { useCheckoutStore } from "@/lib/stores/checkout-store"
+import {
   storefrontSelectionCount,
   storefrontSelectionTotal,
   useStorefrontSeatStore,
@@ -453,7 +458,13 @@ function SeatSelectionModalInner({
         context.map,
       )
       if (!item) return
-      const result = store.toggleSelectedItem(item, placeSelectionCap)
+      const result = store.toggleSelectedItem(
+        withCheckoutEventDateId(
+          item,
+          useCheckoutStore.getState().selectedScheduleId,
+        ),
+        placeSelectionCap,
+      )
       if (!result.ok) {
         toast.error(storefrontLimitMessage(result.reason))
         return
@@ -468,7 +479,13 @@ function SeatSelectionModalInner({
         context.map,
       )
       if (!item) return
-      const result = store.toggleSelectedItem(item, placeSelectionCap)
+      const result = store.toggleSelectedItem(
+        withCheckoutEventDateId(
+          item,
+          useCheckoutStore.getState().selectedScheduleId,
+        ),
+        placeSelectionCap,
+      )
       if (!result.ok) {
         toast.error(storefrontLimitMessage(result.reason))
         return
@@ -481,7 +498,13 @@ function SeatSelectionModalInner({
     if (zone) {
       const item = storefrontItemFromZone(zone, context.priceBySectorId)
       if (!item) return
-      const result = store.toggleSelectedItem(item, placeSelectionCap)
+      const result = store.toggleSelectedItem(
+        withCheckoutEventDateId(
+          item,
+          useCheckoutStore.getState().selectedScheduleId,
+        ),
+        placeSelectionCap,
+      )
       if (!result.ok) {
         toast.error(storefrontLimitMessage(result.reason))
         return
@@ -502,6 +525,10 @@ function SeatSelectionModalInner({
         price: source.price,
         color: source.color,
         label: source.label,
+        eventDateId:
+          asHoldEventDateId(
+            useCheckoutStore.getState().selectedScheduleId,
+          ) ?? undefined,
       },
       placeSelectionCap,
     )

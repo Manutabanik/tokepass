@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  CheckoutLayoutHoldSchema,
   CheckoutPayloadSchema,
   CheckoutSeatHoldSchema,
   PublicTicketPriceSchema,
@@ -260,6 +261,32 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
       items: [{ tierId: generalId, quantity: 1 }],
     })
     assert.equal(longDni.success, false)
+  })
+})
+
+describe("CheckoutLayoutHoldSchema", () => {
+  it("accepts a jornada uuid as eventDateId or dateId", () => {
+    const dayId = "550e8400-e29b-41d4-a716-446655440001"
+    const parsed = CheckoutLayoutHoldSchema.safeParse({
+      eventId,
+      sectorId: "platea",
+      layoutItemId: "s1",
+      eventDateId: dayId,
+    })
+    assert.equal(parsed.success, true)
+    if (parsed.success) {
+      assert.equal(parsed.data.eventDateId, dayId)
+    }
+    const alias = CheckoutLayoutHoldSchema.safeParse({
+      eventId,
+      sectorId: "platea",
+      layoutItemId: "s1",
+      dateId: dayId,
+    })
+    assert.equal(alias.success, true)
+    if (alias.success) {
+      assert.equal(alias.data.dateId, dayId)
+    }
   })
 })
 

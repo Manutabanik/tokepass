@@ -18,6 +18,11 @@ import {
   isSectorNotConfiguredError,
 } from "@/lib/checkout/revalidate-seat-holds"
 import { minReservedUntil } from "@/lib/checkout-hold"
+import {
+  MISSING_EVENT_DATE_ID,
+  MISSING_EVENT_DATE_ID_MESSAGE,
+  asHoldEventDateId,
+} from "@/lib/checkout/seat-hold-day"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import {
@@ -26,6 +31,9 @@ import {
 } from "@/lib/stores/storefront-seat-store"
 
 function optimisticHoldErrorMessage(error: string): string {
+  if (error === MISSING_EVENT_DATE_ID) {
+    return MISSING_EVENT_DATE_ID_MESSAGE
+  }
   if (error === "not_materialized") {
     return "El sector o asiento no está disponible para la venta (no materializado)."
   }
@@ -79,11 +87,16 @@ export function useOptimisticSeatHolds({
         if (held.has(item.id) || inFlightRef.current.has(item.id)) continue
         applyOccupancyPatch({ [item.id]: "occupied" })
 
+        const eventDateId =
+          asHoldEventDateId(item.eventDateId) ??
+          asHoldEventDateId(item.dateId) ??
+          asHoldEventDateId(useCheckoutStore.getState().selectedScheduleId)
         const request = holdSeatingUnitForCartByLayoutItem(
           eventId,
           item.sectorId ?? item.id,
           item.id,
           previewKey,
+          eventDateId,
         )
           .then((hold) => {
             if (!hold.success || !hold.seatingUnitId) {
@@ -102,6 +115,7 @@ export function useOptimisticSeatHolds({
                 console.error("[optimistic-seat-hold] reserva rechazada", {
                   layoutItemId: item.id,
                   sectorId: item.sectorId ?? item.id,
+                  eventDateId,
                   error: hold.error,
                 })
                 toast.error(optimisticHoldErrorMessage(hold.error), {

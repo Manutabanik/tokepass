@@ -961,6 +961,7 @@ export type EventSeatingUnit = {
   reserved_order_id: string | null
   reserved_until: string | null
   sold_order_id: string | null
+  event_date_id: string | null
   created_at: string
   updated_at: string
 }
@@ -1544,6 +1545,7 @@ type EventSeatingUnitInsert = Omit<
   | "reserved_order_id"
   | "reserved_until"
   | "sold_order_id"
+  | "event_date_id"
   | "created_at"
   | "updated_at"
 > & {
@@ -1553,6 +1555,7 @@ type EventSeatingUnitInsert = Omit<
   reserved_order_id?: string | null
   reserved_until?: string | null
   sold_order_id?: string | null
+  event_date_id?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -3259,6 +3262,19 @@ export type Database = {
           p_event_id: string
           p_owner_id: string
           p_seating_unit_id: string
+        }
+        Returns: {
+          seating_unit_id: string
+          reserved_until: string
+        }[]
+      }
+      hold_seating_unit_for_cart_by_layout: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+          p_sector_id: string
+          p_layout_item_id: string
+          p_event_date_id?: string | null
         }
         Returns: {
           seating_unit_id: string

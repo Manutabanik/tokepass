@@ -41,4 +41,15 @@ describe("layout-hold-unit", () => {
     ]
     assert.equal(pickSeatingUnitForLayoutHold(units, "grupo-mesas")?.id, "free")
   })
+
+  it("does not pick a seat from another jornada", () => {
+    const dayA = "550e8400-e29b-41d4-a716-446655440001"
+    const dayB = "550e8400-e29b-41d4-a716-446655440002"
+    const units = [
+      { id: "u-a", status: "available", sector_id: "platea", event_date_id: dayA },
+      { id: "u-b", status: "available", sector_id: "platea", event_date_id: dayB },
+    ]
+    assert.equal(pickSeatingUnitForLayoutHold(units, "platea", dayB)?.id, "u-b")
+    assert.equal(pickSeatingUnitForLayoutHold(units, "platea", dayA)?.id, "u-a")
+  })
 })
