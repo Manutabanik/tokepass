@@ -36,7 +36,7 @@ import {
   toEventDraftV2Payload,
 } from "@/lib/validations/event-draft-v2"
 import { MAX_EVENT_FLYER_BYTES } from "@/lib/validations/event-form"
-import type { Json } from "@/types/database"
+import type { Json, TicketTier } from "@/types/database"
 
 export type SaveEventDraftV2Result =
   | { success: true; eventId: string; draftState: Json }
@@ -337,6 +337,27 @@ function isMissingPublishRpc(error: { code?: string; message?: string } | null) 
   return code === "PGRST202" || code === "42883"
 }
 
+function isCategoryEnumMismatch(error: {
+  code?: string
+  message?: string
+  details?: string
+  hint?: string
+} | null) {
+  if (!error) return false
+  const code = String(error.code ?? "")
+  const text = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase()
+  return code === "42804" && text.includes("category")
+}
+
+function shouldFallbackPublishRpc(error: {
+  code?: string
+  message?: string
+  details?: string
+  hint?: string
+} | null) {
+  return isMissingPublishRpc(error) || isCategoryEnumMismatch(error)
+}
+
 async function upsertPublishedVenue(input: {
   organizerId: string
   existingVenueId: string | null
@@ -426,9 +447,8 @@ function relationalTierRow(
     total_capacity: capacity,
     min_purchase_limit: ticket.min_purchase_limit,
     max_purchase_limit: ticket.max_purchase_limit,
-    tier_type: ticket.tier_type,
-    category: ticket.category,
-    layout_type: ticket.layout_type,
+    tier_type: ticket.tier_type as TicketTier["tier_type"],
+    layout_type: ticket.layout_type as TicketTier["layout_type"],
     seating_sector_id: ticket.seating_sector_id,
     visibility: "public" as const,
     capacity_per_unit: 1,
@@ -652,7 +672,7 @@ export async function publishEventV2(
   })
 
   let slug = event.slug
-  if (rpc.error && !isMissingPublishRpc(rpc.error)) {
+  if (rpc.error && !shouldFallbackPublishRpc(rpc.error)) {
     return { success: false, error: formatSupabaseError(rpc.error) }
   }
 
