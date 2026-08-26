@@ -22,6 +22,7 @@ import {
   MISSING_EVENT_DATE_ID,
   MISSING_EVENT_DATE_ID_MESSAGE,
   asHoldEventDateId,
+  storefrontSelectionKey,
 } from "@/lib/checkout/seat-hold-day"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
@@ -68,12 +69,13 @@ export function useOptimisticSeatHolds({
 
   useEffect(() => {
     const holdable = holdableStorefrontItems(selectedItems)
-    const nextIds = new Set(holdable.map((item) => item.id))
+    const nextIds = new Set(holdable.map((item) => storefrontSelectionKey(item)))
     const held = heldByLayoutIdRef.current
 
-    for (const [layoutId, unitId] of [...held.entries()]) {
-      if (nextIds.has(layoutId)) continue
-      held.delete(layoutId)
+    for (const [selectionKey, unitId] of [...held.entries()]) {
+      if (nextIds.has(selectionKey)) continue
+      const layoutId = selectionKey.split("::")[0] ?? selectionKey
+      held.delete(selectionKey)
       applyOccupancyPatch({ [layoutId]: "available" })
       void releaseSeatingUnitCartHold(eventId, unitId)
     }
@@ -84,7 +86,8 @@ export function useOptimisticSeatHolds({
       if (!(await hasCheckoutAuthSession())) return
 
       for (const item of holdable) {
-        if (held.has(item.id) || inFlightRef.current.has(item.id)) continue
+        const selectionKey = storefrontSelectionKey(item)
+        if (held.has(selectionKey) || inFlightRef.current.has(selectionKey)) continue
         applyOccupancyPatch({ [item.id]: "occupied" })
 
         const eventDateId =
@@ -109,9 +112,9 @@ export function useOptimisticSeatHolds({
                   ? "occupied"
                   : "available",
               })
-              useStorefrontSeatStore.getState().removeSelectedItem(item.id)
+              useStorefrontSeatStore.getState().removeSelectedItem(selectionKey)
               if (hold.success === false && hold.error !== "auth_required") {
-                useCheckoutStore.getState().removeItem(item.id)
+                useCheckoutStore.getState().removeItem(selectionKey)
                 console.error("[optimistic-seat-hold] reserva rechazada", {
                   layoutItemId: item.id,
                   sectorId: item.sectorId ?? item.id,
@@ -127,14 +130,16 @@ export function useOptimisticSeatHolds({
 
             const stillSelected = useStorefrontSeatStore
               .getState()
-              .selectedItems.some((entry) => entry.id === item.id)
+              .selectedItems.some(
+                (entry) => storefrontSelectionKey(entry) === selectionKey,
+              )
             if (!stillSelected) {
               void releaseSeatingUnitCartHold(eventId, hold.seatingUnitId)
               applyOccupancyPatch({ [item.id]: "available" })
               return null
             }
 
-            held.set(item.id, hold.seatingUnitId)
+            held.set(selectionKey, hold.seatingUnitId)
             applyOccupancyPatch({ [item.id]: "occupied" })
             const next = minReservedUntil(
               useCheckoutStore.getState().holdExpiresAt,
@@ -144,10 +149,10 @@ export function useOptimisticSeatHolds({
             return hold.seatingUnitId
           })
           .finally(() => {
-            inFlightRef.current.delete(item.id)
+            inFlightRef.current.delete(selectionKey)
           })
 
-        inFlightRef.current.set(item.id, request)
+        inFlightRef.current.set(selectionKey, request)
       }
     })()
   }, [applyOccupancyPatch, eventId, previewKey, selectedItems])
@@ -157,7 +162,8 @@ export function useOptimisticSeatHolds({
     if (previousEventId === eventId) return
     eventIdRef.current = eventId
     const held = heldByLayoutIdRef.current
-    for (const [layoutId, unitId] of held.entries()) {
+    for (const [selectionKey, unitId] of held.entries()) {
+      const layoutId = selectionKey.split("::")[0] ?? selectionKey
       applyOccupancyPatch({ [layoutId]: "available" })
       void releaseSeatingUnitCartHold(previousEventId, unitId)
     }

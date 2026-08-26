@@ -3,6 +3,7 @@
 import { create } from "zustand"
 import { createJSONStorage, persist } from "zustand/middleware"
 
+import { storefrontSelectionKey } from "@/lib/checkout/seat-hold-day"
 import {
   evaluateStorefrontSelectionLimit,
   type StorefrontLimitReason,
@@ -154,9 +155,10 @@ function deriveLayoutSeats(items: StorefrontSelectedItem[]): StorefrontLayoutSea
       row: item.row ?? "",
       number: item.number ?? 0,
       sectorId: item.sectorId ?? item.id,
-      sectorName: item.name,
+      sectorName: item.sectorName ?? item.name,
       price: item.price,
       color: item.color ?? "#34d399",
+      eventDateId: item.eventDateId ?? item.dateId,
     }))
 }
 
@@ -164,9 +166,9 @@ function uniqueItemsById(items: StorefrontSelectedItem[]) {
   const seen = new Set<string>()
   const next: StorefrontSelectedItem[] = []
   for (const item of items) {
-    const id = item.id?.trim()
-    if (!id || seen.has(id)) continue
-    seen.add(id)
+    const key = storefrontSelectionKey(item)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
     next.push(item)
   }
   return next
@@ -228,8 +230,13 @@ export const useStorefrontSeatStore = create<StorefrontSeatState>()(
 
   toggleSelectedItem: (item, maxCount) => {
     const current = get().selectedItems
-    if (current.some((entry) => entry.id === item.id)) {
-      set(withDerived(current.filter((entry) => entry.id !== item.id)))
+    const key = storefrontSelectionKey(item)
+    if (current.some((entry) => storefrontSelectionKey(entry) === key)) {
+      set(
+        withDerived(
+          current.filter((entry) => storefrontSelectionKey(entry) !== key),
+        ),
+      )
       return { ok: true, added: false }
     }
     const nextItem = { ...item, capacity: itemCapacity(item) }
@@ -251,20 +258,29 @@ export const useStorefrontSeatStore = create<StorefrontSeatState>()(
     const allowed = evaluateStorefrontSelectionLimit({
       current,
       next: nextItem,
-      replacingId: item.id,
+      replacingId: storefrontSelectionKey(nextItem),
       maxTicketsPerUser: maxCount,
     })
     if (!allowed.ok) {
       return { ok: false, reason: allowed.reason }
     }
-    const without = current.filter((entry) => entry.id !== item.id)
+    const key = storefrontSelectionKey(nextItem)
+    const without = current.filter(
+      (entry) => storefrontSelectionKey(entry) !== key,
+    )
     set(withDerived([...without, nextItem]))
-    return { ok: true, added: !current.some((entry) => entry.id === item.id) }
+    return {
+      ok: true,
+      added: !current.some((entry) => storefrontSelectionKey(entry) === key),
+    }
   },
 
   incrementSelectedItem: (item, maxCount) => {
     const current = get().selectedItems
-    const existing = current.find((entry) => entry.id === item.id)
+    const key = storefrontSelectionKey(item)
+    const existing = current.find(
+      (entry) => storefrontSelectionKey(entry) === key,
+    )
     return get().upsertSelectedItem(
       {
         ...existing,
@@ -277,17 +293,38 @@ export const useStorefrontSeatStore = create<StorefrontSeatState>()(
 
   removeSelectedItem: (id) => {
     const current = get().selectedItems
-    if (!current.some((entry) => entry.id === id)) return
-    set(withDerived(current.filter((entry) => entry.id !== id)))
+    const next = current.filter((entry) => {
+      const key = storefrontSelectionKey(entry)
+      if (key === id) return false
+      if (!id.includes("::") && entry.id === id && key === entry.id) return false
+      return true
+    })
+    if (next.length === current.length) return
+    set(withDerived(next))
   },
 
   patchSelectedItem: (id, patch) => {
     const current = get().selectedItems
-    if (!current.some((entry) => entry.id === id)) return
+    if (
+      !current.some(
+        (entry) =>
+          storefrontSelectionKey(entry) === id ||
+          (!id.includes("::") &&
+            entry.id === id &&
+            storefrontSelectionKey(entry) === entry.id),
+      )
+    ) {
+      return
+    }
     set(
       withDerived(
         current.map((entry) =>
-          entry.id === id ? { ...entry, ...patch } : entry,
+          storefrontSelectionKey(entry) === id ||
+          (!id.includes("::") &&
+            entry.id === id &&
+            storefrontSelectionKey(entry) === entry.id)
+            ? { ...entry, ...patch }
+            : entry,
         ),
       ),
     )
@@ -312,7 +349,14 @@ export const useStorefrontSeatStore = create<StorefrontSeatState>()(
   },
 
   setLayoutSeats: (seats, maxCount) => {
-    const others = get().selectedItems.filter((item) => item.type !== "seat")
+    const incomingDate = seats
+      .map((seat) => seat.eventDateId)
+      .find((id) => Boolean(id))
+    const others = get().selectedItems.filter((item) => {
+      if (item.type !== "seat") return true
+      if (!incomingDate) return false
+      return (item.eventDateId ?? item.dateId) !== incomingDate
+    })
     const seen = new Set<string>()
     const nextSeats = seats
       .filter((seat) => {

@@ -118,6 +118,17 @@ export function formatEventTime(value: string | Date): string {
   )
 }
 
+export function formatEventWeekdayLong(value: string | Date): string {
+  return formatOrEmpty(value, (date) =>
+    titleCaseShortToken(
+      new Intl.DateTimeFormat("es-AR", {
+        weekday: "long",
+        timeZone: EVENT_TIME_ZONE,
+      }).format(date),
+    ),
+  )
+}
+
 export function formatEventWeekdayShort(value: string | Date): string {
   return formatOrEmpty(value, (date) =>
     new Intl.DateTimeFormat("es-AR", {
@@ -177,6 +188,14 @@ function titleCaseShortToken(value: string): string {
 /** Carrito y confirmación: "Jue 12 Nov" */
 export function formatEventCartDate(value: string | Date): string {
   const weekday = titleCaseShortToken(formatEventWeekdayShort(value))
+  const day = formatEventDayNumber(value)
+  const month = titleCaseShortToken(formatEventMonthShort(value))
+  return [weekday, day, month].filter(Boolean).join(" ")
+}
+
+/** Desglose enriquecido: "Viernes 13 Nov" */
+export function formatEventCartDateLong(value: string | Date): string {
+  const weekday = formatEventWeekdayLong(value)
   const day = formatEventDayNumber(value)
   const month = titleCaseShortToken(formatEventMonthShort(value))
   return [weekday, day, month].filter(Boolean).join(" ")

@@ -155,6 +155,10 @@ export function toPublicTicketSelectorTier(
     bonusReward: tier.bonus_reward,
     dayId: tier.day_id,
     dateId: normalizeDayId(tier.day_id),
+    validDayIds: (() => {
+      const dateId = normalizeDayId(tier.day_id)
+      return dateId ? [dateId] : []
+    })(),
     isFullPass:
       publicTicketOfferKind({
         name: tier.name,

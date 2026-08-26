@@ -53,7 +53,7 @@ import {
   formatSelectionChargeDetail,
   storefrontLineSkuQuantity,
 } from "@/lib/checkout/charge-unit"
-import { cartTicketLineId } from "@/lib/checkout/cart-lines"
+import { cartPlaceLabel, cartTicketLineId } from "@/lib/checkout/cart-lines"
 import { CheckoutUpsellStep } from "@/components/public/checkout-upsell-step"
 import {
   resolveCheckoutPaymentProvider,
@@ -89,6 +89,8 @@ import {
 import {
   MISSING_EVENT_DATE_ID,
   MISSING_EVENT_DATE_ID_MESSAGE,
+  storefrontItemMatchesSchedule,
+  storefrontSelectionKey,
   withCheckoutEventDateId,
 } from "@/lib/checkout/seat-hold-day"
 import {
@@ -626,9 +628,6 @@ export function CheckoutTunnel({
   function handleSelectedDateIdChange(dateId: string) {
     const store = useCheckoutStore.getState()
     if (store.selectedScheduleId === dateId) return
-    const seat = store.selectedSeat
-    void releaseGaCartHolds(eventId)
-    if (seat) void releaseSeatingUnitCartHold(eventId, seat.seatingUnitId)
     store.setSelectedScheduleId(dateId)
   }
   const funnelTiers = displayTiers
@@ -725,7 +724,7 @@ export function CheckoutTunnel({
   const resolveItemTierId = useCallback(
     (item: StorefrontSelectedItem) => {
       const preferred = item.ticketTierId?.trim()
-      if (preferred && checkoutTierInput.some((tier) => tier.id === preferred)) {
+      if (preferred && displayTiers.some((tier) => tier.id === preferred)) {
         return preferred
       }
       const sectorName = item.sectorName?.trim() || item.name.split(" · ")[0] || item.name
@@ -750,7 +749,7 @@ export function CheckoutTunnel({
       }
       return null
     },
-    [checkoutTierInput, zoneTierPricing],
+    [checkoutTierInput, displayTiers, zoneTierPricing],
   )
 
   useEffect(() => {
@@ -1040,17 +1039,25 @@ export function CheckoutTunnel({
 
     function applyHydratedItems(items: StorefrontSelectedItem[]) {
       const seatStore = useStorefrontSeatStore.getState()
-      const hydrated = hydrateStorefrontItemsFromMap(
-        items,
-        liveMap,
-        priceBySectorId,
+      const scheduleId = useCheckoutStore.getState().selectedScheduleId
+      const keep = items.filter(
+        (item) => !storefrontItemMatchesSchedule(item, scheduleId),
       )
+      const refresh = items.filter((item) =>
+        storefrontItemMatchesSchedule(item, scheduleId),
+      )
+      const hydrated = [
+        ...keep,
+        ...hydrateStorefrontItemsFromMap(refresh, liveMap, priceBySectorId),
+      ]
       const same =
         hydrated.length === seatStore.selectedItems.length &&
         hydrated.every((item, index) => {
           const current = seatStore.selectedItems[index]
           return (
             current?.id === item.id &&
+            current.eventDateId === item.eventDateId &&
+            current.dateId === item.dateId &&
             current.name === item.name &&
             current.price === item.price &&
             current.capacity === item.capacity &&
@@ -1136,10 +1143,20 @@ export function CheckoutTunnel({
   const heldSeatIds = useMemo(() => {
     const ids = new Set<string>()
     for (const item of selectedItems) {
-      if (item.id) ids.add(item.id)
+      if (
+        item.id &&
+        storefrontItemMatchesSchedule(item, selectedDateId)
+      ) {
+        ids.add(item.id)
+      }
     }
     for (const seat of layoutSeats) {
-      if (seat.id) ids.add(seat.id)
+      if (
+        seat.id &&
+        storefrontItemMatchesSchedule(seat, selectedDateId)
+      ) {
+        ids.add(seat.id)
+      }
     }
     if (selectedSeat) {
       ids.add(selectedSeat.seatingUnitId)
@@ -1149,7 +1166,7 @@ export function CheckoutTunnel({
       if (unit?.layoutItemId) ids.add(unit.layoutItemId)
     }
     return [...ids]
-  }, [layoutSeats, mergedSeatingUnits, selectedItems, selectedSeat])
+  }, [layoutSeats, mergedSeatingUnits, selectedDateId, selectedItems, selectedSeat])
 
   const universalPayload = useMemo(() => {
     if (!hasSeatingFlow) return null
@@ -1311,8 +1328,12 @@ export function CheckoutTunnel({
           (tier.seatingSectorId === item.sectorId ||
             tier.seatingSectorId === item.id),
       )
-      const datedMatch = selectedDateId
-        ? matched.filter((tier) => ticketMatchesTab(tier, selectedDateId))
+      const itemDateId =
+        item.eventDateId ??
+        item.dateId ??
+        (byId ? resolveTicketDateMeta(byId).dateId : null)
+      const datedMatch = itemDateId
+        ? matched.filter((tier) => ticketMatchesTab(tier, itemDateId))
         : []
       const dateSource =
         byId ??
@@ -1321,26 +1342,36 @@ export function CheckoutTunnel({
           : matched.length === 1
             ? matched[0]
             : null)
-      const dateId = dateSource
-        ? resolveTicketDateMeta(dateSource).dateId
-        : selectedDateId
+      const dateId =
+        itemDateId ??
+        (dateSource ? resolveTicketDateMeta(dateSource).dateId : selectedDateId)
       const dateLabel = dateSource
         ? ticketDateCartLabel(dateSource, scheduleDays)
         : scheduleDayCartLabel(dateId, scheduleDays)
       const isTableSku =
         item.type === "table" || item.inventoryType === "TABLES"
       const skuQuantity = Math.max(1, storefrontLineSkuQuantity(item))
+      const pricedTiers = dateId
+        ? displayTiers.filter((tier) =>
+            ticketVisibleOnCheckoutDay(tier, dateId, scheduleDays),
+          )
+        : displayTiers
       const unitPrice = mapSelectionUnitPrice(
         item.price,
         dateSource?.id ?? preferredId,
-        dayTiers,
+        pricedTiers,
       )
-      const tableName = `Mesa completa (Incluye ${Math.max(1, Math.floor(item.capacity) || 1)} accesos)`
+      const sectorName =
+        item.sectorName?.trim() ||
+        dateSource?.name ||
+        item.displayName?.trim() ||
+        item.name
+      const placeLabel = cartPlaceLabel(item)
       const lineName = isTableSku
-        ? tableName
+        ? sectorName
         : dateSource?.name || item.displayName?.trim() || item.name
       return {
-        id: item.id,
+        id: storefrontSelectionKey(item),
         ticketTierId: dateSource?.id ?? preferredId ?? null,
         name: lineName,
         displayName: lineName,
@@ -1360,6 +1391,8 @@ export function CheckoutTunnel({
         seatId: item.type === "seat" ? item.id : null,
         elementId: item.type === "seat" ? null : item.id,
         sectorId: item.sectorId ?? item.id,
+        sectorName,
+        placeLabel,
         isMappedSelection: item.isMappedSelection !== false,
       }
     })
@@ -1381,7 +1414,6 @@ export function CheckoutTunnel({
       })
     return [...seatLines, ...ticketLines]
   }, [
-    dayTiers,
     displayTiers,
     liveSelectedItems,
     mapTierIds,
@@ -1509,7 +1541,9 @@ export function CheckoutTunnel({
                 item.type !== "seat" && resolveItemTierId(item) === tierId,
             )
           for (const item of related) {
-            useStorefrontSeatStore.getState().removeSelectedItem(item.id)
+            useStorefrontSeatStore
+              .getState()
+              .removeSelectedItem(storefrontSelectionKey(item))
           }
         }
       }
@@ -1571,11 +1605,13 @@ export function CheckoutTunnel({
     )
     const store = useStorefrontSeatStore.getState()
     if (clamped === 0) {
-      for (const item of related) store.removeSelectedItem(item.id)
+      for (const item of related) store.removeSelectedItem(storefrontSelectionKey(item))
       return
     }
     if (related.length === 1) {
-      store.patchSelectedItem(related[0]!.id, { capacity: Math.max(1, clamped) })
+      store.patchSelectedItem(storefrontSelectionKey(related[0]!), {
+        capacity: Math.max(1, clamped),
+      })
     }
   }
 
@@ -2229,7 +2265,11 @@ export function CheckoutTunnel({
     focusSelectedZone(zone)
     useCheckoutStore.getState().setSeatSheetOpen(true)
     if (classifyZoneClick(zone, liveMap) === "SECTOR_NUMERADO") return
-    const previous = selectedItems.find((item) => item.id === zone.id)
+    const previous = selectedItems.find(
+      (item) =>
+        item.id === zone.id &&
+        storefrontItemMatchesSchedule(item, selectedDateId),
+    )
     const previousQty = previous ? Math.max(0, previous.capacity || 0) : 0
     if (previousQty <= 0) {
       applyZoneQuantity(zone.id, 1)
@@ -2237,10 +2277,22 @@ export function CheckoutTunnel({
   }
 
   function applyZoneQuantity(sectorId: string, quantity: number) {
-    const previous = selectedItems.find((item) => item.id === sectorId)
+    const previous = selectedItems.find(
+      (item) =>
+        item.id === sectorId &&
+        storefrontItemMatchesSchedule(item, selectedDateId),
+    )
     const previousQty = previous ? Math.max(1, previous.capacity || 1) : 0
     if (quantity <= 0) {
-      useStorefrontSeatStore.getState().removeSelectedItem(sectorId)
+      useStorefrontSeatStore.getState().removeSelectedItem(
+        previous
+          ? storefrontSelectionKey(previous)
+          : storefrontSelectionKey({
+              id: sectorId,
+              eventDateId: selectedDateId,
+              dateId: selectedDateId,
+            }),
+      )
       const clearedTierId = resolveTierIdForUniversalSector(
         sectorId,
         (liveMap?.zones ?? []).find((item) => item.id === sectorId)?.name ??
@@ -2362,7 +2414,11 @@ export function CheckoutTunnel({
       return
     }
     const store = useStorefrontSeatStore.getState()
-    const result = store.setLayoutSeats(seats, maxTicketsPerUser)
+    const datedSeats = seats.map((seat) => ({
+      ...seat,
+      eventDateId: seat.eventDateId ?? selectedDateId ?? undefined,
+    }))
+    const result = store.setLayoutSeats(datedSeats, maxTicketsPerUser)
     if (!result.ok) {
       toast.error(storefrontLimitMessage(result.reason))
       return
@@ -2820,7 +2876,6 @@ export function CheckoutTunnel({
     showSeatFlow && !hasInteractiveMap ? (
       <AppTakeover className="z-[100] overscroll-none">
         <AdaptiveSeatingFlow
-          key={selectedDateId ?? "all"}
           takeover
           pending={controlsLocked}
           maxSelectable={mapSelectionCap}
@@ -2963,7 +3018,6 @@ export function CheckoutTunnel({
               transition={{ duration: 0.28, ease: "easeInOut" }}
             >
               <motion.div
-                key={selectedDateId ?? "ticket-list"}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.22, ease: "easeInOut" }}

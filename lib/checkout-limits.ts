@@ -1,3 +1,5 @@
+import { storefrontSelectionKey } from "@/lib/checkout/seat-hold-day"
+
 /** Fallback histórico de entradas individuales cuando el evento no define tope. */
 export const MAX_TICKETS_PER_PURCHASE = 10
 
@@ -31,6 +33,8 @@ type StorefrontLimitItem = {
   type: string
   capacity: number
   sectorId?: string
+  eventDateId?: string | null
+  dateId?: string | null
 }
 
 export function isTableLikeSelection(type: string | null | undefined): boolean {
@@ -161,11 +165,14 @@ export function evaluateStorefrontSelectionLimit(input: {
   })
   if (limit == null) return { ok: true }
 
-  const replacing = input.replacingId?.trim() || input.next.id
+  const replacing =
+    input.replacingId?.trim() || storefrontSelectionKey(input.next)
   const nextKey = skuSelectionKey(input.next)
-  const currentCount = input.current.filter(
-    (item) => item.id !== replacing && skuSelectionKey(item) === nextKey,
-  ).length
+  const currentCount = input.current.filter((item) => {
+    const itemKey = storefrontSelectionKey(item)
+    if (itemKey === replacing || item.id === replacing) return false
+    return skuSelectionKey(item) === nextKey
+  }).length
 
   if (currentCount + 1 > limit) {
     return {

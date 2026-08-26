@@ -11,6 +11,7 @@ import { venuePriceModeFromSellMode } from "@/types/venue-map"
 import { elementBelongsToZone } from "@/lib/seating/venue-map-lod"
 import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
 import { isValidPublicPrice } from "@/lib/checkout/public-price"
+import { storefrontSelectionKey } from "@/lib/checkout/seat-hold-day"
 import {
   getSeatDisplayName,
   getVenueElementDisplayName,
@@ -367,25 +368,32 @@ export function hydrateStorefrontItemsFromMap(
     const ticketTierId = item.ticketTierId ?? live.ticketTierId
     const livePrice = Number(live.price)
     const keepGratis = isValidPublicPrice(livePrice) && livePrice === 0
+    const keepStampedPrice =
+      Boolean(item.eventDateId || item.dateId) && isValidPublicPrice(item.price)
     return {
       ...item,
       ...live,
       ticketTierId,
+      eventDateId: item.eventDateId,
+      dateId: item.dateId ?? item.eventDateId,
       name: live.name,
       displayName: live.displayName ?? live.name,
       price: keepGratis
         ? 0
-        : resolveVenueUnitPrice(
-            [ticketTierId],
-            livePrice,
-            priceBySectorId,
-          ),
+        : keepStampedPrice
+          ? Number(item.price)
+          : resolveVenueUnitPrice(
+              [ticketTierId],
+              livePrice,
+              priceBySectorId,
+            ),
       capacity: isQuantityZone
         ? Math.max(1, selectedCapacity, liveCapacity)
         : liveCapacity || selectedCapacity || 1,
       color: live.color ?? item.color,
       type: live.type,
       sectorId: live.sectorId ?? item.sectorId,
+      sectorName: item.sectorName ?? live.sectorName,
       row: live.row ?? item.row,
       number: live.number ?? item.number,
       sellMode: live.sellMode ?? item.sellMode,
@@ -401,9 +409,9 @@ export function dedupeStorefrontItemsById(
   const seen = new Set<string>()
   const next: StorefrontSelectedItem[] = []
   for (const item of items) {
-    const id = item.id?.trim()
-    if (!id || seen.has(id)) continue
-    seen.add(id)
+    const key = storefrontSelectionKey(item)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
     next.push(item)
   }
   return next

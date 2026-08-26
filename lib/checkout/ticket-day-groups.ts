@@ -3,6 +3,7 @@ import { isComboOrPassOffer } from "@/lib/checkout/ticket-offer-kind"
 import { isDaySpecificTicket } from "@/lib/inventory/day-ticket-coverage"
 import {
   formatEventCartDate,
+  formatEventCartDateLong,
   formatEventDay,
   formatEventDayNumber,
   formatEventMonthShort,
@@ -20,6 +21,20 @@ export type TicketDayGroup = {
   dateId: string
   dateLabel: string
   tickets: TicketSelectorTier[]
+}
+
+export function ticketValidDayIds(tier: {
+  dayId?: string | null
+  dateId?: string | null
+  isFullPass?: boolean
+  validDayIds?: string[] | null
+}): string[] {
+  const explicit = (tier.validDayIds ?? [])
+    .map((id) => normalizeDayId(id) ?? id.trim())
+    .filter((id) => id.length > 0 && !isFullPassDayId(id))
+  if (explicit.length > 0) return [...new Set(explicit)]
+  const bound = resolveTicketDateMeta(tier).dateId
+  return bound ? [bound] : []
 }
 
 export function resolveTicketDateMeta(tier: {
@@ -81,7 +96,7 @@ export function ticketDayBadgeLabel(
   return label || null
 }
 
-/** Etiqueta corta para carrito y checkout: "Jue 12 Nov". */
+/** Etiqueta de carrito: "Viernes 13 Nov". */
 export function ticketDateCartLabel(
   tier: {
     dayId?: string | null
@@ -93,7 +108,7 @@ export function ticketDateCartLabel(
   const meta = resolveTicketDateMeta(tier)
   if (meta.isFullPass) return "Todos los días"
   const day = scheduleDays.find((item) => item.id === meta.dateId)
-  if (day) return formatEventCartDate(day.start_time)
+  if (day) return formatEventCartDateLong(day.start_time)
   return ticketDateLabel(tier, scheduleDays)
 }
 
@@ -103,7 +118,7 @@ export function scheduleDayCartLabel(
 ): string {
   if (!dateId) return ""
   const day = scheduleDays.find((item) => item.id === dateId)
-  return day ? formatEventCartDate(day.start_time) : ""
+  return day ? formatEventCartDateLong(day.start_time) : ""
 }
 
 export const FULL_PASS_TAB_ID = "full_pass"
@@ -196,22 +211,18 @@ export function ticketMatchesTab(
   return resolveTicketDateMeta(tier).dateId === activeTabId
 }
 
-/** Tickets of the selected jornada, plus unbound SKUs that are not combos. */
+/** Only tickets whose validDayIds / day_id match the selected jornada. */
 export function ticketVisibleOnCheckoutDay(
   tier: TicketSelectorTier,
   dateId: string | null | undefined,
   scheduleDays: ScheduleDay[] = [],
 ): boolean {
-  if (!dateId) return !isComboOrPassOffer(tier)
-  if (ticketMatchesTab(tier, dateId)) return true
   if (isComboOrPassOffer(tier)) return false
-  const bound = resolveTicketDateMeta(tier).dateId
-  if (bound == null) return true
-  // day_id huérfano (jornada publicada distinta) no debe vaciar el picker.
-  return (
-    scheduleDays.length > 0 &&
-    !scheduleDays.some((day) => day.id === bound)
-  )
+  if (!dateId) return true
+  const days = ticketValidDayIds(tier)
+  if (days.includes(dateId)) return true
+  if (days.length > 0) return false
+  return scheduleDays.length <= 1
 }
 
 export function listCheckoutDayTabs(

@@ -32,6 +32,8 @@ import { storefrontLimitMessage } from "@/lib/checkout-limits"
 import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
 import {
   asHoldEventDateId,
+  storefrontItemMatchesSchedule,
+  storefrontSelectionKey,
   withCheckoutEventDateId,
 } from "@/lib/checkout/seat-hold-day"
 import { formatCurrency } from "@/lib/format"
@@ -213,6 +215,21 @@ export function InteractiveSeatingCanvas({
   const [revealedZoneId, setRevealedZoneId] = useState<string | null>(null)
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const selectedSeats = useStorefrontSeatStore((state) => state.layoutSeats)
+  const activeScheduleId = useCheckoutStore((state) => state.selectedScheduleId)
+  const daySelectedItems = useMemo(
+    () =>
+      selectedItems.filter((item) =>
+        storefrontItemMatchesSchedule(item, activeScheduleId),
+      ),
+    [activeScheduleId, selectedItems],
+  )
+  const daySelectedSeats = useMemo(
+    () =>
+      selectedSeats.filter((seat) =>
+        storefrontItemMatchesSchedule(seat, activeScheduleId),
+      ),
+    [activeScheduleId, selectedSeats],
+  )
   const focusedMapIds = useStorefrontSeatStore((state) => state.focusedMapIds)
   const focusTick = useStorefrontSeatStore((state) => state.focusTick)
   const toggleSelectedItem = useStorefrontSeatStore(
@@ -229,8 +246,8 @@ export function InteractiveSeatingCanvas({
     )
   }, [map])
   const liveSelectedItems = useMemo(
-    () => hydrateStorefrontItemsFromMap(selectedItems, map, priceBySectorId),
-    [map, priceBySectorId, selectedItems],
+    () => hydrateStorefrontItemsFromMap(daySelectedItems, map, priceBySectorId),
+    [daySelectedItems, map, priceBySectorId],
   )
   const [liveOccupancy, setLiveOccupancy] = useState<Record<string, SeatStatus>>(
     {},
@@ -254,7 +271,7 @@ export function InteractiveSeatingCanvas({
   )
   const heldSet = useMemo(() => new Set(heldSeatIds), [heldSeatIds])
   const selectedIds = useMemo(() => {
-    const ids = new Set(selectedSeats.map((seat) => seat.id))
+    const ids = new Set(daySelectedSeats.map((seat) => seat.id))
     for (const item of liveSelectedItems) {
       if (item.type !== "table") continue
       ids.add(item.id)
@@ -264,7 +281,7 @@ export function InteractiveSeatingCanvas({
       }
     }
     return ids
-  }, [liveSelectedItems, map.elements, selectedSeats])
+  }, [daySelectedSeats, liveSelectedItems, map.elements])
   const hoverSeats = useMemo(() => flattenVenueMapSeats(map), [map])
   const buyerOccupancy = !posStatusColors
   const selectedElementIds = useMemo(
@@ -414,7 +431,7 @@ export function InteractiveSeatingCanvas({
   }, [focusTick])
 
   useEffect(() => {
-    if (disableIdlePrompt || selectedSeats.length === 0) {
+    if (disableIdlePrompt || daySelectedSeats.length === 0) {
       return
     }
     lastActivity.current = Date.now()
@@ -424,7 +441,7 @@ export function InteractiveSeatingCanvas({
       }
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [selectedSeats.length, disableIdlePrompt])
+  }, [daySelectedSeats.length, disableIdlePrompt])
 
   function markActivity() {
     stampActivity(lastActivity)
@@ -906,7 +923,7 @@ export function InteractiveSeatingCanvas({
         ) : (
           liveSelectedItems.map((item) => (
             <div
-              key={item.id}
+              key={storefrontSelectionKey(item)}
               className="flex items-center gap-2 rounded-xl border border-border bg-secondary/40 px-3 py-3"
             >
               <span
@@ -931,7 +948,7 @@ export function InteractiveSeatingCanvas({
                 className="size-11 text-muted-foreground hover:text-foreground"
                 onClick={() => {
                   vibrateTap()
-                  removeSelectedItem(item.id)
+                  removeSelectedItem(storefrontSelectionKey(item))
                   markActivity()
                 }}
                 aria-label={`Quitar ${item.name}`}
@@ -954,7 +971,7 @@ export function InteractiveSeatingCanvas({
           type="button"
           size="lg"
           disabled={!canContinue}
-          onClick={() => onContinue(selectedSeats)}
+          onClick={() => onContinue(daySelectedSeats)}
           className="h-12 w-full rounded-2xl bg-primary py-6 text-base font-black text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90"
         >
           {continueLabel}
@@ -1401,7 +1418,7 @@ export function InteractiveSeatingCanvas({
             type="button"
             size="lg"
             disabled={!canContinue}
-            onClick={() => onContinue(selectedSeats)}
+            onClick={() => onContinue(daySelectedSeats)}
             className="h-11 shrink-0 rounded-2xl bg-primary px-4 text-sm font-black text-primary-foreground hover:bg-primary/90"
           >
             <ArrowRight className="size-4" aria-hidden="true" />
@@ -1424,7 +1441,7 @@ export function InteractiveSeatingCanvas({
     <>
       {shell}
       <Dialog
-        open={idleOpen && selectedSeats.length > 0 && !disableIdlePrompt}
+        open={idleOpen && daySelectedSeats.length > 0 && !disableIdlePrompt}
         onOpenChange={(open) => {
           setIdleOpen(open)
           if (!open) markActivity()
@@ -1460,7 +1477,7 @@ export function InteractiveSeatingCanvas({
               onClick={() => {
                 markActivity()
                 setIdleOpen(false)
-                onContinue(selectedSeats)
+                onContinue(daySelectedSeats)
               }}
             >
               Continuar

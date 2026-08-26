@@ -62,6 +62,7 @@ import {
   partitionCheckoutTickets,
   resolveTicketCommerceType,
 } from "@/lib/events/ticket-commerce-type"
+import { storefrontItemMatchesSchedule } from "@/lib/checkout/seat-hold-day"
 import { ticketUsesMapSelector } from "@/lib/checkout/public-ticket-view"
 import { flattenSeatsForAvailability } from "@/lib/seating/venue-map-geometry"
 import { classifyZoneClick } from "@/lib/seating/map-click-target"
@@ -334,7 +335,6 @@ export function EventCheckoutSelector({
 
       {hasInteractiveMap && mapSeatSelection ? (
         <SeatSelectionSheet
-          key={selectedDateId ?? "map"}
           open={isSeatSelectionOpen}
           onOpenChange={(open) => {
             setIsSeatSelectionOpen(open)
@@ -463,6 +463,13 @@ function TicketSelectionList({
   }
 
   const showDateCards = accessTab === "entradas" && dateCards.length > 1
+  const daySelectedItems = useMemo(
+    () =>
+      selectedItems.filter((item) =>
+        storefrontItemMatchesSchedule(item, activeDateId),
+      ),
+    [activeDateId, selectedItems],
+  )
 
   const displayedTickets = useMemo(() => {
     if (accessTab === "combos") {
@@ -524,7 +531,7 @@ function TicketSelectionList({
   function renderTierCard(tier: TicketSelectorTier) {
     const requiresMap = ticketNeedsSeatModal(tier)
     const selectedPlaces = requiresMap
-      ? selectedPlacesForCategory(selectedItems, tier.seatingSectorId)
+      ? selectedPlacesForCategory(daySelectedItems, tier.seatingSectorId)
       : []
     return (
       <UnifiedTicketCard
@@ -557,7 +564,7 @@ function TicketSelectionList({
     )
   }
 
-  const syntheticSelected = selectedPlacesForCategory(selectedItems)
+  const syntheticSelected = selectedPlacesForCategory(daySelectedItems)
   const syntheticRow = showSyntheticMapRow ? (
     <div className="flex w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/60 px-5 py-3.5 transition-all hover:border-white/20">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">

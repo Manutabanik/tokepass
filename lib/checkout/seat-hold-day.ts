@@ -16,6 +16,28 @@ export function asHoldEventDateId(value: unknown): string | null {
   return UUID_RE.test(id) ? id : null
 }
 
+export function storefrontSelectionKey(item: {
+  id?: string | null
+  eventDateId?: string | null
+  dateId?: string | null
+}): string {
+  const id = item.id?.trim() ?? ""
+  const date =
+    asHoldEventDateId(item.eventDateId) ?? asHoldEventDateId(item.dateId) ?? ""
+  return date ? `${id}::${date}` : id
+}
+
+export function storefrontItemMatchesSchedule(
+  item: { eventDateId?: string | null; dateId?: string | null },
+  scheduleId?: string | null,
+): boolean {
+  const itemDate =
+    asHoldEventDateId(item.eventDateId) ?? asHoldEventDateId(item.dateId)
+  const active = asHoldEventDateId(scheduleId)
+  if (!active || !itemDate) return true
+  return itemDate === active
+}
+
 export function withCheckoutEventDateId(
   item: StorefrontSelectedItem,
   eventDateId?: string | null,

@@ -5,6 +5,7 @@ import { Trash2, X } from "lucide-react"
 import {
   CART_TICKET_LINE_PREFIX,
   cartLineAmount,
+  cartLineBreakdownLabel,
   cartLineDisplayName,
   cartLineUnitPrice,
   cartTicketLineId,
@@ -82,10 +83,14 @@ export function CartSummary({
             ...item,
             name: catalog?.name ?? item.name,
           })
-          const dateLabel = item.dateLabel?.trim() || ""
           const unit = cartLineUnitPrice(item, catalog)
           const unitPrice = formatTicketPrice(unit)
-          const qtyLabel = `${item.quantity}x ${displayName} — ${unitPrice}`
+          const breakdown = cartLineBreakdownLabel({
+            ...item,
+            name: catalog?.name ?? item.name,
+            sectorName: item.sectorName ?? catalog?.name ?? item.name,
+          })
+          const qtyLabel = `${breakdown} — ${unitPrice}`
           const rowKey = item.ticketTierId
             ? `${item.ticketTierId}:${item.id}`
             : item.id
@@ -108,17 +113,8 @@ export function CartSummary({
               ) : (
                 <div className="min-w-0">
                   <p className="line-clamp-2 break-words text-sm font-semibold text-foreground">
-                    {displayName}
+                    {qtyLabel}
                   </p>
-                  {dateLabel ? (
-                    <p className="mt-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                      {dateLabel}
-                    </p>
-                  ) : item.quantity > 1 ? (
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {item.quantity} unidades
-                    </p>
-                  ) : null}
                 </div>
               )}
               <div className="flex shrink-0 items-center gap-1.5">

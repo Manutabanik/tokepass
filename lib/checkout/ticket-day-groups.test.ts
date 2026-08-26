@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
 import {
   formatEventCartDate,
+  formatEventCartDateLong,
   formatEventDay,
   formatEventDayNumber,
   formatEventMonthShort,
@@ -83,31 +84,35 @@ describe("isSamePriceAnyDay", () => {
 })
 
 describe("ticketVisibleOnCheckoutDay", () => {
-  it("shows only the selected day's tickets and unbound SKUs", () => {
+  it("shows only tickets whose validDayIds include the selected jornada", () => {
     const friday = tier({
       id: "vie",
       name: "Viernes",
       isFullPass: false,
       dayId: "d1",
+      validDayIds: ["d1"],
     })
     const saturday = tier({
       id: "sab",
       name: "Sabado",
       isFullPass: false,
       dayId: "d2",
+      validDayIds: ["d2"],
     })
     const unbound = tier({
       id: "gen",
       name: "General",
       isFullPass: false,
       dayId: null,
+      validDayIds: [],
       tierType: "general",
     })
     const pass = tier({ id: "abono", name: "Abono", isFullPass: true })
-    assert.equal(ticketVisibleOnCheckoutDay(friday, "d2"), false)
-    assert.equal(ticketVisibleOnCheckoutDay(saturday, "d2"), true)
-    assert.equal(ticketVisibleOnCheckoutDay(unbound, "d2"), true)
-    assert.equal(ticketVisibleOnCheckoutDay(pass, "d2"), false)
+    assert.equal(ticketVisibleOnCheckoutDay(friday, "d2", days), false)
+    assert.equal(ticketVisibleOnCheckoutDay(saturday, "d2", days), true)
+    assert.equal(ticketVisibleOnCheckoutDay(unbound, "d2", days), false)
+    assert.equal(ticketVisibleOnCheckoutDay(unbound, "d1", [days[0]!]), true)
+    assert.equal(ticketVisibleOnCheckoutDay(pass, "d2", days), false)
     const stale = tier({
       id: "stale",
       name: "General",
@@ -115,7 +120,7 @@ describe("ticketVisibleOnCheckoutDay", () => {
       dayId: "draft-day-old",
       tierType: "general",
     })
-    assert.equal(ticketVisibleOnCheckoutDay(stale, "d2", days), true)
+    assert.equal(ticketVisibleOnCheckoutDay(stale, "d2", days), false)
   })
 })
 
@@ -249,7 +254,7 @@ describe("groupTicketsByDate", () => {
 })
 
 describe("ticketDateCartLabel", () => {
-  it("uses a compact weekday-day-month label for day tickets", () => {
+  it("uses a long weekday-day-month label for day tickets", () => {
     const dayTicket = tier({
       id: "vie",
       name: "Viernes",
@@ -258,7 +263,7 @@ describe("ticketDateCartLabel", () => {
     })
     assert.equal(
       ticketDateCartLabel(dayTicket, days),
-      formatEventCartDate(days[0].start_time),
+      formatEventCartDateLong(days[0].start_time),
     )
   })
 

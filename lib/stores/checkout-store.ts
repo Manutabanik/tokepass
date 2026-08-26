@@ -55,6 +55,8 @@ export type StorefrontCartLine = {
   seatId?: string | null
   elementId?: string | null
   sectorId?: string | null
+  sectorName?: string | null
+  placeLabel?: string | null
   isMappedSelection?: boolean
 }
 
@@ -630,16 +632,7 @@ export const useCheckoutStore = create<CheckoutState>()(
 
       setSelectedScheduleId: (scheduleId) => {
         const next = scheduleId?.trim() || null
-        const current = get().selectedScheduleId
-        if (current === next) return
-        const hasCart =
-          get().lines.length > 0 ||
-          get().itemsCount > 0 ||
-          get().selectedSeat != null ||
-          Object.values(get().quantities).some((qty) => qty > 0)
-        if (current != null && next != null && hasCart) {
-          get().clearCart()
-        }
+        if (get().selectedScheduleId === next) return
         set({ selectedScheduleId: next })
       },
 

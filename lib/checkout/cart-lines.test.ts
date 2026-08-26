@@ -3,8 +3,10 @@ import { describe, it } from "node:test"
 
 import {
   cartLineAmount,
+  cartLineBreakdownLabel,
   cartLineDisplayName,
   cartLineUnitPrice,
+  cartPlaceLabel,
   cartTicketLineId,
 } from "./cart-lines"
 
@@ -43,6 +45,44 @@ describe("cartLineDisplayName", () => {
         dateLabel: "Vie 21 Ago",
       }),
       "General (Vie 21 Ago)",
+    )
+  })
+})
+
+describe("cartPlaceLabel", () => {
+  it("formats numbered seats and tables", () => {
+    assert.equal(
+      cartPlaceLabel({ type: "seat", row: "A", number: 4 }),
+      "Fila A - Asiento 4",
+    )
+    assert.equal(
+      cartPlaceLabel({ type: "table", number: 2 }),
+      "Mesa 02",
+    )
+  })
+})
+
+describe("cartLineBreakdownLabel", () => {
+  it("renders quantity, sector, place and day", () => {
+    assert.equal(
+      cartLineBreakdownLabel({
+        quantity: 1,
+        name: "Grada Amarilla",
+        sectorName: "Grada Amarilla",
+        placeLabel: "Fila A - Asiento 4",
+        dateLabel: "Viernes 13 Nov",
+      }),
+      "1x Grada Amarilla (Fila A - Asiento 4) - Viernes 13 Nov",
+    )
+    assert.equal(
+      cartLineBreakdownLabel({
+        quantity: 1,
+        name: "Grada Naranja",
+        sectorName: "Grada Naranja",
+        placeLabel: "Mesa 02",
+        dateLabel: "Viernes 13 Nov",
+      }),
+      "1x Grada Naranja (Mesa 02) - Viernes 13 Nov",
     )
   })
 })

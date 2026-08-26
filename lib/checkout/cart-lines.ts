@@ -15,6 +15,56 @@ export function cartLineQuantity(quantity: unknown): number {
   return Math.max(0, Math.floor(toCartNumber(quantity)))
 }
 
+export function cartPlaceLabel(item: {
+  type?: string | null
+  inventoryType?: string | null
+  name?: string | null
+  displayName?: string | null
+  row?: string | null
+  number?: number | null
+}): string {
+  const isTable =
+    item.type === "table" || item.inventoryType === "TABLES"
+  if (isTable) {
+    const n =
+      typeof item.number === "number" && Number.isFinite(item.number)
+        ? Math.floor(item.number)
+        : null
+    if (n && n > 0) return `Mesa ${String(n).padStart(2, "0")}`
+    const match = `${item.displayName ?? ""} ${item.name ?? ""}`.match(
+      /mesa\s*0*(\d+)/i,
+    )
+    if (match?.[1]) return `Mesa ${match[1].padStart(2, "0")}`
+    return ""
+  }
+  const row = item.row?.trim() ?? ""
+  const n =
+    typeof item.number === "number" && Number.isFinite(item.number)
+      ? Math.floor(item.number)
+      : null
+  if (row && n && n > 0) return `Fila ${row} - Asiento ${n}`
+  if (n && n > 0) return `Asiento ${n}`
+  return ""
+}
+
+export function cartLineBreakdownLabel(line: {
+  quantity?: number
+  name: string
+  displayName?: string | null
+  sectorName?: string | null
+  placeLabel?: string | null
+  dateLabel?: string | null
+}): string {
+  const qty = Math.max(1, Math.floor(Number(line.quantity) || 1))
+  const sector =
+    line.sectorName?.trim() || line.displayName?.trim() || line.name.trim()
+  const place = line.placeLabel?.trim()
+  const date = line.dateLabel?.trim()
+  const title = place ? `${sector} (${place})` : sector
+  const withDate = date ? `${title} - ${date}` : title
+  return `${qty}x ${withDate}`
+}
+
 export function cartLineDisplayName(line: {
   name: string
   displayName?: string | null

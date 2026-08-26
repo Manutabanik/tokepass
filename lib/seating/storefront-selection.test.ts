@@ -387,6 +387,77 @@ describe("storefront-selection", () => {
     assert.deepEqual(next.map((item) => item.id), ["s-1", "s-2"])
   })
 
+  it("keeps the same layout id on two jornadas and the stamped day price", () => {
+    const dayA = "550e8400-e29b-41d4-a716-446655440001"
+    const dayB = "550e8400-e29b-41d4-a716-446655440002"
+    const next = dedupeStorefrontItemsById([
+      {
+        id: "s-1",
+        name: "A",
+        type: "seat",
+        price: 40000,
+        capacity: 1,
+        eventDateId: dayA,
+        dateId: dayA,
+      },
+      {
+        id: "s-1",
+        name: "A",
+        type: "seat",
+        price: 50000,
+        capacity: 1,
+        eventDateId: dayB,
+        dateId: dayB,
+      },
+    ])
+    assert.equal(next.length, 2)
+    assert.equal(next[0]?.price, 40000)
+    assert.equal(next[1]?.price, 50000)
+
+    const map = emptyVenueMap()
+    map.elements = [
+      {
+        id: "tbl-18",
+        type: "round_table",
+        label: "Mesa 18",
+        category: "commercial",
+        sectorName: "Platea",
+        groupName: "Platea",
+        x: 10,
+        y: 10,
+        width: 28,
+        height: 28,
+        rotation: 0,
+        price: 8000,
+        color: "#22d3ee",
+        opacity: 1,
+        chairCount: 4,
+        sideA: 0,
+        sideB: 0,
+        sellMode: "group",
+        capacity: 4,
+        seats: [],
+      },
+    ]
+    const hydrated = hydrateStorefrontItemsFromMap(
+      [
+        {
+          id: "tbl-18",
+          name: "Platea",
+          type: "table",
+          price: 40000,
+          capacity: 1,
+          eventDateId: dayA,
+          dateId: dayA,
+        },
+      ],
+      map,
+      { "tier-padre": 155000 },
+    )
+    assert.equal(hydrated[0]?.price, 40000)
+    assert.equal(hydrated[0]?.eventDateId, dayA)
+  })
+
   it("agrupa asientos por sector y fila sin repetir numeros", () => {
     const groups = formatStorefrontSelectionGroups([
       {

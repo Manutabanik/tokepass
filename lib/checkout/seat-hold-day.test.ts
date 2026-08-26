@@ -6,6 +6,8 @@ import {
   asHoldEventDateId,
   requireHoldEventDateId,
   seatingUnitMatchesEventDate,
+  storefrontItemMatchesSchedule,
+  storefrontSelectionKey,
 } from "./seat-hold-day"
 
 const dayA = "550e8400-e29b-41d4-a716-446655440001"
@@ -51,6 +53,34 @@ describe("requireHoldEventDateId", () => {
       scheduleDayIds: [dayA, dayB],
     })
     assert.deepEqual(result, { ok: false, error: MISSING_EVENT_DATE_ID })
+  })
+})
+
+describe("storefrontSelectionKey", () => {
+  it("keeps the same layout item unique per jornada", () => {
+    assert.equal(
+      storefrontSelectionKey({ id: "seat-1", eventDateId: dayA }),
+      `seat-1::${dayA}`,
+    )
+    assert.equal(
+      storefrontSelectionKey({ id: "seat-1", eventDateId: dayB }),
+      `seat-1::${dayB}`,
+    )
+    assert.equal(storefrontSelectionKey({ id: "seat-1" }), "seat-1")
+  })
+})
+
+describe("storefrontItemMatchesSchedule", () => {
+  it("isolates dated items to their jornada", () => {
+    assert.equal(
+      storefrontItemMatchesSchedule({ eventDateId: dayA }, dayA),
+      true,
+    )
+    assert.equal(
+      storefrontItemMatchesSchedule({ eventDateId: dayA }, dayB),
+      false,
+    )
+    assert.equal(storefrontItemMatchesSchedule({ id: "seat-1" }, dayA), true)
   })
 })
 

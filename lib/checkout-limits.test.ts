@@ -84,6 +84,65 @@ describe("tier purchase limits", () => {
     assert.equal(third.ok, false)
   })
 
+  it("counts the same layout item on two jornadas as two units", () => {
+    const dayA = "550e8400-e29b-41d4-a716-446655440001"
+    const dayB = "550e8400-e29b-41d4-a716-446655440002"
+    const second = evaluateStorefrontSelectionLimit({
+      current: [
+        {
+          id: "seat-1",
+          type: "seat",
+          capacity: 1,
+          sectorId: "grada",
+          eventDateId: dayA,
+          dateId: dayA,
+        },
+      ],
+      next: {
+        id: "seat-1",
+        type: "seat",
+        capacity: 1,
+        sectorId: "grada",
+        eventDateId: dayB,
+        dateId: dayB,
+      },
+      maxTicketsPerUser: 2,
+      maxPurchaseLimit: 2,
+    })
+    assert.equal(second.ok, true)
+    const third = evaluateStorefrontSelectionLimit({
+      current: [
+        {
+          id: "seat-1",
+          type: "seat",
+          capacity: 1,
+          sectorId: "grada",
+          eventDateId: dayA,
+          dateId: dayA,
+        },
+        {
+          id: "seat-1",
+          type: "seat",
+          capacity: 1,
+          sectorId: "grada",
+          eventDateId: dayB,
+          dateId: dayB,
+        },
+      ],
+      next: {
+        id: "seat-2",
+        type: "seat",
+        capacity: 1,
+        sectorId: "grada",
+        eventDateId: dayB,
+        dateId: dayB,
+      },
+      maxTicketsPerUser: 2,
+      maxPurchaseLimit: 2,
+    })
+    assert.equal(third.ok, false)
+  })
+
   it("uses layout fallback only when no SKU or event max exists", () => {
     assert.equal(
       purchaseCapForTier({
