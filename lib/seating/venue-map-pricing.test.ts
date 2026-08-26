@@ -328,6 +328,76 @@ describe("venue-map-pricing", () => {
     assert.equal(next[0]?.seatingSectorId, null)
   })
 
+  it("conserva entradas generales y extras aunque tengan sectorId residual", () => {
+    const next = consolidateEventTicketsForPersist({
+      basics: {
+        hasSeatingPlan: false,
+        scheduleDays: [],
+      },
+      venue: { includesSeatingMap: false },
+      tickets: [
+        {
+          name: "Entrada General",
+          price: 5000,
+          capacity: 40,
+          timeLimit: "",
+          saleStartsAt: "",
+          saleEndsAt: "",
+          bonusReward: "",
+          dayId: null,
+          visibility: "public",
+          layoutType: "general",
+          seatingSectorId: null,
+          seating_sector_id: null,
+          sectorId: "sector-residual",
+          source: "general",
+          capacityPerUnit: 1,
+          admitCount: 1,
+          tierType: "general",
+          listPrice: null,
+          bundleItems: [],
+          bundleType: null,
+          promoDiscountType: null,
+          promoDiscountValue: 0,
+          promoRequiredQty: 1,
+          promoPayQty: 1,
+          description: "",
+          highlightBadge: null,
+        },
+        {
+          name: "Estacionamiento",
+          price: 2000,
+          capacity: 20,
+          timeLimit: "",
+          saleStartsAt: "",
+          saleEndsAt: "",
+          bonusReward: "",
+          dayId: null,
+          visibility: "public",
+          layoutType: "general",
+          seatingSectorId: undefined,
+          seating_sector_id: undefined,
+          sectorId: "sector-residual",
+          capacityPerUnit: 1,
+          admitCount: 1,
+          tierType: "general",
+          listPrice: null,
+          bundleItems: [],
+          bundleType: null,
+          promoDiscountType: null,
+          promoDiscountValue: 0,
+          promoRequiredQty: 1,
+          promoPayQty: 1,
+          description: "",
+          highlightBadge: null,
+        },
+      ],
+    } as Parameters<typeof consolidateEventTicketsForPersist>[0])
+    assert.equal(next.some((tier) => tier.name === "Entrada General"), true)
+    assert.equal(next.some((tier) => tier.name === "Estacionamiento"), true)
+    assert.equal(next.every((tier) => tier.seatingSectorId == null), true)
+  })
+
   it("consolida inventario libre con entradas ya ligadas al mapa", () => {
     const map = emptyVenueMap()
     map.zones = [

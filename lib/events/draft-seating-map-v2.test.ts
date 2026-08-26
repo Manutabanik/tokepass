@@ -132,6 +132,41 @@ describe("draft seating map isolation", () => {
     )
   })
 
+  it("never deletes general or extra tickets without seating_sector_id", () => {
+    const general = {
+      ...emptyEventDraftV2LineItem("vip-1"),
+      name: "Entrada General",
+      source: "general",
+      sectorId: "sector-residual",
+      seatingSectorId: null,
+      seating_sector_id: null,
+    }
+    const extra = {
+      ...emptyEventDraftV2LineItem("extra-1"),
+      name: "Estacionamiento",
+      source: "",
+      ticketType: "extra",
+      sectorId: "sector-residual",
+      seatingSectorId: undefined,
+      seating_sector_id: undefined,
+    }
+    const untitled = {
+      ...emptyEventDraftV2LineItem("free-1"),
+      name: "Sin mapa",
+      source: undefined,
+      sectorId: "",
+    }
+    assert.equal(isOrphanMapTicket(general, []), false)
+    assert.equal(isOrphanMapTicket(extra, []), false)
+    assert.equal(isOrphanMapTicket(untitled, []), false)
+    assert.deepEqual(
+      garbageCollectDraftTickets([general, extra, untitled], []).map(
+        (ticket) => ticket.id,
+      ),
+      ["vip-1", "extra-1", "free-1"],
+    )
+  })
+
   it("keeps the live ticket id when rematching the same sector", () => {
     const existing = {
       ...emptyEventDraftV2LineItem("550e8400-e29b-41d4-a716-446655440099"),

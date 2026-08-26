@@ -393,18 +393,22 @@ export function syncMapBackedTickets(
 
 /** Combina inventario libre + entradas derivadas de sectores del mapa. */
 function persistableTicketSectorId(tier: {
+  source?: string | null
   seatingSectorId?: string | null
   seating_sector_id?: string | null
   sectorId?: string | null
 }): string {
-  return (
-    tier.seatingSectorId?.trim() ||
+  if (tier.source === "general") return ""
+  const persistId =
     (typeof tier.seating_sector_id === "string"
       ? tier.seating_sector_id.trim()
       : "") ||
-    (typeof tier.sectorId === "string" ? tier.sectorId.trim() : "") ||
-    ""
-  )
+    (typeof tier.seatingSectorId === "string" ? tier.seatingSectorId.trim() : "")
+  if (persistId) return persistId
+  if (tier.source === "map" && typeof tier.sectorId === "string") {
+    return tier.sectorId.trim()
+  }
+  return ""
 }
 
 function liveVenueSectorIds(venueMap: unknown): Set<string> {
@@ -423,15 +427,16 @@ function liveVenueSectorIds(venueMap: unknown): Set<string> {
 
 function keepTicketWithLiveSector<
   T extends {
+    source?: string | null
     seatingSectorId?: string | null
     seating_sector_id?: string | null
     sectorId?: string | null
     sold?: number | null
   },
->(tier: T, liveSectorIds: Set<string>): boolean {
-  const sectorId = persistableTicketSectorId(tier)
-  if (!sectorId) return true
-  if (liveSectorIds.has(sectorId)) return true
+>(tier: T, validSectorIds: Set<string>): boolean {
+  if (tier.source === "general") return true
+  const seating_sector_id = persistableTicketSectorId(tier)
+  if (!seating_sector_id || validSectorIds.has(seating_sector_id)) return true
   return (Number(tier.sold) || 0) > 0
 }
 
@@ -447,14 +452,15 @@ export function consolidateEventTicketsForPersist(
       venueMap: data.venue.venueMap,
     })
   ) {
-    return customTickets
-      .filter((tier) => keepTicketWithLiveSector(tier, new Set()))
-      .map((tier) => ({
-        ...tier,
-        seatingSectorId: null,
-        seating_sector_id: null,
-        sectorId: "",
-      }))
+    const ticketsToKeep = customTickets.filter((tier) =>
+      keepTicketWithLiveSector(tier, new Set()),
+    )
+    return ticketsToKeep.map((tier) => ({
+      ...tier,
+      seatingSectorId: null,
+      seating_sector_id: null,
+      sectorId: "",
+    }))
   }
   const next =
     !ticketsReferenceMapSectors(customTickets)
@@ -467,7 +473,10 @@ export function consolidateEventTicketsForPersist(
             dayIds: (data.basics.scheduleDays ?? []).map((day) => day.id),
           },
         )
-  return next.filter((tier) => keepTicketWithLiveSector(tier, liveSectorIds))
+  const ticketsToKeep = next.filter((tier) =>
+    keepTicketWithLiveSector(tier, liveSectorIds),
+  )
+  return ticketsToKeep
 }
 
 export function applyMapCapacityToTickets<

@@ -283,16 +283,29 @@ type SanitizableDraftTicket = {
   layoutType?: string
 }
 
+function firstNonEmptySectorId(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value !== "string") continue
+    const id = value.trim()
+    if (id) return id
+  }
+  return ""
+}
+
 export function ticketSeatingSectorRef(ticket: {
+  source?: unknown
   sectorId?: unknown
   seatingSectorId?: unknown
   seating_sector_id?: unknown
 }): string {
-  const candidates = [ticket.sectorId, ticket.seatingSectorId, ticket.seating_sector_id]
-  for (const value of candidates) {
-    if (typeof value !== "string") continue
-    const id = value.trim()
-    if (id) return id
+  if (ticket.source === "general") return ""
+  const persistId = firstNonEmptySectorId(
+    ticket.seating_sector_id,
+    ticket.seatingSectorId,
+  )
+  if (persistId) return persistId
+  if (ticket.source === "map") {
+    return firstNonEmptySectorId(ticket.sectorId)
   }
   return ""
 }
@@ -306,22 +319,27 @@ export function isOrphanMapTicket(
   },
   liveSectorIds: Iterable<string>,
 ): boolean {
-  const sectorId = ticketSeatingSectorRef(ticket)
-  if (!sectorId || ticket.source === "general") return false
-  const live = liveSectorIds instanceof Set
-    ? liveSectorIds
-    : new Set([...liveSectorIds].filter((id) => id.trim().length > 0))
-  return !live.has(sectorId)
+  const seatingSectorId = ticketSeatingSectorRef(ticket)
+  if (seatingSectorId == null || seatingSectorId === "") return false
+  if (ticket.source === "general") return false
+  const live =
+    liveSectorIds instanceof Set
+      ? liveSectorIds
+      : new Set([...liveSectorIds].filter((id) => id.trim().length > 0))
+  return !live.has(seatingSectorId)
 }
 
 export function garbageCollectDraftTickets<T extends SanitizableDraftTicket>(
   tickets: T[],
   liveSectorIds: Iterable<string>,
 ): T[] {
-  const live = new Set(
+  const validSectorIds = new Set(
     [...liveSectorIds].filter((id) => id.trim().length > 0),
   )
-  return tickets.filter((ticket) => !isOrphanMapTicket(ticket, live))
+  return tickets.filter((ticket) => {
+    const seating_sector_id = ticketSeatingSectorRef(ticket)
+    return !seating_sector_id || validSectorIds.has(seating_sector_id)
+  })
 }
 
 export function sanitizeDraftTicketsForPersist<T extends SanitizableDraftTicket>(
