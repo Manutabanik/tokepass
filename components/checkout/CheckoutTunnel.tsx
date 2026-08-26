@@ -607,9 +607,9 @@ export function CheckoutTunnel({
   const dayTiers = useMemo(() => {
     if (!selectedDateId) return admissionTiers
     return admissionTiers.filter((tier) =>
-      ticketVisibleOnCheckoutDay(tier, selectedDateId),
+      ticketVisibleOnCheckoutDay(tier, selectedDateId, scheduleDays),
     )
-  }, [admissionTiers, selectedDateId])
+  }, [admissionTiers, scheduleDays, selectedDateId])
 
   useEffect(() => {
     const store = useCheckoutStore.getState()

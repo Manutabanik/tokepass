@@ -475,11 +475,11 @@ function TicketSelectionList({
     )
     if (activeDateId) {
       return entradas.filter((tier) =>
-        ticketVisibleOnCheckoutDay(tier, activeDateId),
+        ticketVisibleOnCheckoutDay(tier, activeDateId, scheduleDays),
       )
     }
     return entradas.filter((tier) => !ticketMatchesTab(tier, FULL_PASS_TAB_ID))
-  }, [accessTab, activeDateId, listTiers])
+  }, [accessTab, activeDateId, listTiers, scheduleDays])
   const showBundles =
     bundleTiers.length > 0 && (accessTab === "combos" || !showAccessTabs)
   const ticketGroups = useMemo<TicketDayGroup[]>(() => {

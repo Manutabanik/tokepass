@@ -481,10 +481,13 @@ function shouldFallbackPublishRpc(error: {
   details?: string
   hint?: string
 } | null) {
+  if (!error) return false
+  const text = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`
   return (
     isMissingPublishRpc(error) ||
     isPublishEnumMismatch(error) ||
-    isPublishScheduleForeignKeyError(error)
+    isPublishScheduleForeignKeyError(error) ||
+    /ticket_type|schema cache|PGRST204|42703/i.test(text)
   )
 }
 
@@ -590,6 +593,71 @@ function relationalTierRow(
   }
 }
 
+type PublishedTicketWriteRow = ReturnType<typeof relationalTierRow> & {
+  sold?: number
+}
+
+async function writePublishedTicketRow(
+  admin: ReturnType<typeof createAdminClient>,
+  input: {
+    mode: "insert" | "update"
+    eventId: string
+    ticketId: string | null
+    row: PublishedTicketWriteRow
+    ticketName: string
+  },
+): Promise<{ id: string }> {
+  const insertPayload = input.ticketId
+    ? { id: input.ticketId, ...input.row }
+    : input.row
+  const first =
+    input.mode === "update"
+      ? await admin
+          .from("ticket_tiers")
+          .update(input.row)
+          .eq("id", input.ticketId ?? "")
+          .eq("event_id", input.eventId)
+          .select("id")
+          .maybeSingle()
+      : await admin
+          .from("ticket_tiers")
+          .insert(insertPayload)
+          .select("id")
+          .maybeSingle()
+  let written = first
+  if (
+    written.error &&
+    /ticket_type|schema cache|PGRST204|42703/i.test(written.error.message)
+  ) {
+    const { ticket_type: _ticketType, ...withoutType } = input.row
+    void _ticketType
+    const fallbackInsert = input.ticketId
+      ? { id: input.ticketId, ...withoutType }
+      : withoutType
+    written =
+      input.mode === "update"
+        ? await admin
+            .from("ticket_tiers")
+            .update(withoutType)
+            .eq("id", input.ticketId ?? "")
+            .eq("event_id", input.eventId)
+            .select("id")
+            .maybeSingle()
+        : await admin
+            .from("ticket_tiers")
+            .insert(fallbackInsert)
+            .select("id")
+            .maybeSingle()
+  }
+  if (written.error) throw new Error(formatSupabaseError(written.error))
+  if (!written.data?.id) {
+    throw new Error(
+      `ticket_tiers.${input.mode} no devolvió fila (${input.ticketName})`,
+    )
+  }
+  return { id: written.data.id }
+}
+
 async function unlinkPublishedTicketDays(eventId: string) {
   const admin = createAdminClient()
   const written = await admin
@@ -627,33 +695,27 @@ async function syncPublishedTickets(
     }
     const row = relationalTierRow(eventId, ticket, sold)
     if (current) {
-      const written = await admin
-        .from("ticket_tiers")
-        .update(row)
-        .eq("id", current.id)
-        .eq("event_id", eventId)
-        .select("id")
-        .maybeSingle()
-      if (written.error) throw new Error(formatSupabaseError(written.error))
-      if (!written.data?.id) {
-        throw new Error(`ticket_tiers.update no devolvió fila (${ticket.name})`)
-      }
-      seen.add(written.data.id)
-      binds.push({ id: written.data.id, day_id: ticket.day_id })
+      const written = await writePublishedTicketRow(admin, {
+        mode: "update",
+        eventId,
+        ticketId: current.id,
+        row,
+        ticketName: ticket.name,
+      })
+      seen.add(written.id)
+      binds.push({ id: written.id, day_id: ticket.day_id })
       continue
     }
 
-    const inserted = await admin
-      .from("ticket_tiers")
-      .insert(ticket.id ? { id: ticket.id, ...row, sold: 0 } : { ...row, sold: 0 })
-      .select("id")
-      .maybeSingle()
-    if (inserted.error) throw new Error(formatSupabaseError(inserted.error))
-    if (!inserted.data?.id) {
-      throw new Error(`ticket_tiers.insert no devolvió fila (${ticket.name})`)
-    }
-    seen.add(inserted.data.id)
-    binds.push({ id: inserted.data.id, day_id: ticket.day_id })
+    const inserted = await writePublishedTicketRow(admin, {
+      mode: "insert",
+      eventId,
+      ticketId: ticket.id,
+      row: { ...row, sold: 0 },
+      ticketName: ticket.name,
+    })
+    seen.add(inserted.id)
+    binds.push({ id: inserted.id, day_id: ticket.day_id })
   }
 
   const leftovers = (existing.data ?? []).filter(

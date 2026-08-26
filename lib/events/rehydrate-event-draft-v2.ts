@@ -236,6 +236,7 @@ function liveTierToDraftItem(
     sectorId: isMap ? sectorId : "",
     layoutType,
     slotId: (tier.day_id ?? "").trim(),
+    validDayIds: (tier.day_id ?? "").trim() ? [(tier.day_id ?? "").trim()] : [],
     ticketType: asTicketCommerceType(
       tier.ticket_type,
       resolveTicketCommerceType({

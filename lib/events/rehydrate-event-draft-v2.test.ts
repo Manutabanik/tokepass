@@ -93,6 +93,7 @@ describe("rehydrateEventDraftV2", () => {
           category: "standard",
           layout_type: "general",
           seating_sector_id: null,
+          day_id: "550e8400-e29b-41d4-a716-446655440001",
         },
         {
           id: "550e8400-e29b-41d4-a716-446655440099",
@@ -132,6 +133,9 @@ describe("rehydrateEventDraftV2", () => {
     assert.equal(draft.tickets.length, 2)
     assert.equal(draft.tickets[0]?.name, "VIP")
     assert.equal(draft.tickets[0]?.ticketType, "standard")
+    assert.deepEqual(draft.tickets[0]?.validDayIds, [
+      "550e8400-e29b-41d4-a716-446655440001",
+    ])
     assert.equal(draft.tickets[0]?.source, "general")
     assert.equal(draft.tickets[1]?.source, "map")
     assert.equal(draft.tickets[1]?.sectorId, "sector-platea")

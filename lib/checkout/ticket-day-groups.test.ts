@@ -108,6 +108,14 @@ describe("ticketVisibleOnCheckoutDay", () => {
     assert.equal(ticketVisibleOnCheckoutDay(saturday, "d2"), true)
     assert.equal(ticketVisibleOnCheckoutDay(unbound, "d2"), true)
     assert.equal(ticketVisibleOnCheckoutDay(pass, "d2"), false)
+    const stale = tier({
+      id: "stale",
+      name: "General",
+      isFullPass: false,
+      dayId: "draft-day-old",
+      tierType: "general",
+    })
+    assert.equal(ticketVisibleOnCheckoutDay(stale, "d2", days), true)
   })
 })
 

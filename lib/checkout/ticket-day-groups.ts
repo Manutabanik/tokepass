@@ -200,11 +200,18 @@ export function ticketMatchesTab(
 export function ticketVisibleOnCheckoutDay(
   tier: TicketSelectorTier,
   dateId: string | null | undefined,
+  scheduleDays: ScheduleDay[] = [],
 ): boolean {
   if (!dateId) return !isComboOrPassOffer(tier)
   if (ticketMatchesTab(tier, dateId)) return true
   if (isComboOrPassOffer(tier)) return false
-  return resolveTicketDateMeta(tier).dateId == null
+  const bound = resolveTicketDateMeta(tier).dateId
+  if (bound == null) return true
+  // day_id huérfano (jornada publicada distinta) no debe vaciar el picker.
+  return (
+    scheduleDays.length > 0 &&
+    !scheduleDays.some((day) => day.id === bound)
+  )
 }
 
 export function listCheckoutDayTabs(
