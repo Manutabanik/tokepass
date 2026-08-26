@@ -2,6 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 
+import { EDITOR_V2_AUTOSAVE_MS } from "@/lib/events/editor-v2-ux"
+
 export type DebouncedAutosaveStatus =
   | "idle"
   | "dirty"
@@ -15,7 +17,7 @@ export function useDebouncedAutosave<T>(options: {
   enabled?: boolean
   onSave?: (value: T) => void | Promise<void>
 }): DebouncedAutosaveStatus {
-  const { value, delayMs = 3000, enabled = true, onSave } = options
+  const { value, delayMs = EDITOR_V2_AUTOSAVE_MS, enabled = true, onSave } = options
   const [status, setStatus] = useState<DebouncedAutosaveStatus>("idle")
   const skipFirst = useRef(true)
   const generation = useRef(0)

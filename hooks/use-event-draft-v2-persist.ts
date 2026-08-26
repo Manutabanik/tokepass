@@ -4,13 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import type { UseFormGetValues } from "react-hook-form"
 
 import { saveEventDraftV2 } from "@/app/actions/events-v2"
-import type { DraftSaveStatus } from "@/lib/events/editor-v2-ux"
+import {
+  EDITOR_V2_AUTOSAVE_MS,
+  type DraftSaveStatus,
+} from "@/lib/events/editor-v2-ux"
 import {
   toEventDraftV2Payload,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
 
-const AUTOSAVE_MS = 1500
 
 export type PersistDraftResult =
   | { success: true }
@@ -95,7 +97,7 @@ export function useEventDraftV2Persist(
     const timer = window.setTimeout(() => {
       if (paused.current) return
       void persistDraft()
-    }, AUTOSAVE_MS)
+    }, EDITOR_V2_AUTOSAVE_MS)
     return () => {
       window.clearTimeout(timer)
     }

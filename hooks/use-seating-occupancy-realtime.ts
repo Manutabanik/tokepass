@@ -51,6 +51,7 @@ export function useSeatingOccupancyRealtime(
   useEffect(() => {
     const cleanEventId = eventId?.trim()
     if (!cleanEventId) return
+    const resolvedEventId: string = cleanEventId
 
     const supabase = createClient()
     const topic = `public:event_seating_occupancy:${cleanEventId}:${channelKey}:${++occupancyChannelSeq}`
@@ -63,7 +64,7 @@ export function useSeatingOccupancyRealtime(
     }
 
     function pollAvailability() {
-      void fetchOccupancySnapshot(cleanEventId).then(applySnapshot)
+      void fetchOccupancySnapshot(resolvedEventId).then(applySnapshot)
     }
 
     pollAvailability()

@@ -36,6 +36,7 @@ export function useSeatHoldsRealtime(
   useEffect(() => {
     const cleanEventId = eventId?.trim()
     if (!cleanEventId) return
+    const resolvedEventId: string = cleanEventId
 
     const supabase = createClient()
     const dateId = eventDateId?.trim() || null
@@ -47,7 +48,7 @@ export function useSeatHoldsRealtime(
       void supabase
         .from("seat_holds")
         .select("layout_item_id, event_date_id, expires_at")
-        .eq("event_id", cleanEventId)
+        .eq("event_id", resolvedEventId)
         .gt("expires_at", new Date().toISOString())
         .then(({ data, error }) => {
           if (cancelled || error || !data) return

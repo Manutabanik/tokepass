@@ -1,3 +1,8 @@
+/** Idle window before Editor V2 writes `draft_state` to Supabase. */
+export const EDITOR_V2_AUTOSAVE_MS = 1500
+export const EDITOR_V2_AUTOSAVE_MIN_MS = 1500
+export const EDITOR_V2_AUTOSAVE_MAX_MS = 2000
+
 export const DRAFT_LEAVE_GUARD_MESSAGE =
   "Hay un guardado en curso. Si salís ahora podés perder cambios del borrador."
 

@@ -3,6 +3,9 @@ import { describe, it } from "node:test"
 
 import {
   DRAFT_LEAVE_GUARD_MESSAGE,
+  EDITOR_V2_AUTOSAVE_MAX_MS,
+  EDITOR_V2_AUTOSAVE_MIN_MS,
+  EDITOR_V2_AUTOSAVE_MS,
   OFFLINE_SAVE_LABEL,
   draftSaveBadge,
   isInAppLeaveNavigation,
@@ -10,6 +13,13 @@ import {
   salesDashboardPath,
   shouldBlockDraftLeave,
 } from "./editor-v2-ux"
+
+describe("editor v2 autosave window", () => {
+  it("keeps the draft JSON debounce inside 1500-2000ms", () => {
+    assert.ok(EDITOR_V2_AUTOSAVE_MS >= EDITOR_V2_AUTOSAVE_MIN_MS)
+    assert.ok(EDITOR_V2_AUTOSAVE_MS <= EDITOR_V2_AUTOSAVE_MAX_MS)
+  })
+})
 
 describe("shouldBlockDraftLeave", () => {
   it("blocks only while the draft JSON is syncing or publishing", () => {

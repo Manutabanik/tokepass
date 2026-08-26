@@ -48,6 +48,77 @@ function asPaymentProvider(
   return provider
 }
 
+async function applyPaidOrderFollowThrough(
+  admin: ReturnType<typeof createAdminClient>,
+  orderId: string,
+  provider: PaymentProvider,
+  transactionId: string,
+): Promise<void> {
+  try {
+    const { error: leftoverError } = await admin.rpc(
+      "release_leftover_cart_holds_for_order",
+      { p_order_id: orderId },
+    )
+    if (leftoverError) {
+      logger.error({
+        context: "payments/confirm-order",
+        message: "leftover_holds_release_failed",
+        orderId,
+        provider,
+        transactionId,
+        error: leftoverError.message,
+      })
+    }
+  } catch (error) {
+    logger.error({
+      context: "payments/confirm-order",
+      message: "leftover_holds_release_failed",
+      orderId,
+      provider,
+      transactionId,
+      error,
+    })
+  }
+
+  try {
+    const { issueGuestReceiptAccess } = await import(
+      "@/app/actions/guest-ticket-access"
+    )
+    await issueGuestReceiptAccess(orderId)
+  } catch (error) {
+    logger.error({
+      context: "payments/confirm-order",
+      message: "guest_access_issue_failed",
+      orderId,
+      error,
+    })
+  }
+
+  try {
+    await expandIndividualAccessTickets(admin, orderId)
+  } catch (error) {
+    logger.error({
+      context: "payments/confirm-order",
+      message: "expand_access_tickets_failed",
+      orderId,
+      provider,
+      transactionId,
+      error,
+    })
+  }
+
+  void ensurePaidOrderDynamicQrs(orderId).catch((error) => {
+    logger.error({
+      context: "payments/confirm-order",
+      message: "dynamic_qr_generate_failed",
+      orderId,
+      provider,
+      transactionId,
+      error,
+    })
+  })
+}
+
 async function ensurePaidOrderDynamicQrs(orderId: string): Promise<void> {
   const admin = createAdminClient()
   const { data, error } = await admin
@@ -109,6 +180,17 @@ export async function processPaidOrderNotification(
     .maybeSingle()
 
   if (seen?.status === "processed") {
+    const { data: paidOrder } = await admin
+      .from("orders")
+      .select("id, provider_transaction_id, mp_payment_id")
+      .eq("id", orderId)
+      .maybeSingle()
+    const sameTransaction =
+      paidOrder?.provider_transaction_id === transactionId ||
+      paidOrder?.mp_payment_id === transactionId
+    if (sameTransaction) {
+      await applyPaidOrderFollowThrough(admin, orderId, provider, transactionId)
+    }
     return { ok: true, code: "already_processed", idempotent: true }
   }
 
@@ -179,72 +261,7 @@ export async function processPaidOrderNotification(
     }
   }
 
-  try {
-    const { error: leftoverError } = await admin.rpc(
-      "release_leftover_cart_holds_for_order",
-      { p_order_id: orderId },
-    )
-    if (leftoverError) {
-      logger.error({
-        context: "payments/confirm-order",
-        message: "leftover_holds_release_failed",
-        orderId,
-        provider,
-        transactionId,
-        error: leftoverError.message,
-      })
-    }
-  } catch (error) {
-    logger.error({
-      context: "payments/confirm-order",
-      message: "leftover_holds_release_failed",
-      orderId,
-      provider,
-      transactionId,
-      error,
-    })
-  }
-
-  if (!finalize.idempotent) {
-    try {
-      const { issueGuestReceiptAccess } = await import(
-        "@/app/actions/guest-ticket-access"
-      )
-      await issueGuestReceiptAccess(orderId)
-    } catch (error) {
-      logger.error({
-        context: "payments/confirm-order",
-        message: "guest_access_issue_failed",
-        orderId,
-        error,
-      })
-    }
-
-    try {
-      await expandIndividualAccessTickets(admin, orderId)
-    } catch (error) {
-      logger.error({
-        context: "payments/confirm-order",
-        message: "expand_access_tickets_failed",
-        orderId,
-        provider,
-        transactionId,
-        error,
-      })
-    }
-
-    void ensurePaidOrderDynamicQrs(orderId).catch((error) => {
-      logger.error({
-        context: "payments/confirm-order",
-        message: "dynamic_qr_generate_failed",
-        orderId,
-        provider,
-        transactionId,
-        error,
-      })
-    })
-  }
-
+  await applyPaidOrderFollowThrough(admin, orderId, provider, transactionId)
   scheduleNotificationOutboxDrain()
 
   return {
