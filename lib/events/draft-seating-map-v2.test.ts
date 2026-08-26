@@ -86,6 +86,15 @@ describe("draft seating map isolation", () => {
       isMapDraftTicket({ source: "general", sectorId: "gone" }),
       false,
     )
+    assert.equal(
+      isMapDraftTicket({
+        source: "",
+        sectorId: "leftover",
+        seatingSectorId: null,
+        seating_sector_id: null,
+      }),
+      false,
+    )
   })
 
   it("clears leftover sector ids on general tickets and drops orphan map tickets", () => {

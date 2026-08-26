@@ -100,6 +100,8 @@ const draftLineItemSchema = z.object({
   endDate: z.string().optional().default(""),
   source: z.string().optional().default(""),
   sectorId: z.string().optional().default(""),
+  seatingSectorId: z.string().nullable().optional(),
+  seating_sector_id: z.string().nullable().optional(),
   layoutType: z.string().optional().default("general"),
   slotId: z.string().optional().default(""),
   validDayIds: z.array(z.string()).default([]),
@@ -247,6 +249,8 @@ const publishLineItemSchema = z
     endDate: z.string().optional(),
     source: z.string().optional(),
     sectorId: z.string().optional(),
+    seatingSectorId: z.string().nullable().optional(),
+    seating_sector_id: z.string().nullable().optional(),
     layoutType: z.string().optional(),
     slotId: z.string().optional(),
     validDayIds: z.array(z.string()).optional().default([]),
@@ -459,6 +463,8 @@ export function emptyEventDraftV2LineItem(
     endDate: "",
     source: "general",
     sectorId: "",
+    seatingSectorId: null,
+    seating_sector_id: null,
     layoutType: "general",
     slotId: "",
     validDayIds: [],
@@ -675,7 +681,15 @@ function parseDraftLineItems(
       startDate: asOptionalString(record.startDate ?? record.saleStartsAt),
       endDate: asOptionalString(record.endDate ?? record.saleEndsAt),
       source: asOptionalString(record.source),
-      sectorId: asOptionalString(record.sectorId ?? record.seatingSectorId),
+      sectorId: asOptionalString(
+        record.sectorId ?? record.seatingSectorId ?? record.seating_sector_id,
+      ),
+      seatingSectorId:
+        asOptionalString(record.seatingSectorId ?? record.seating_sector_id) ||
+        null,
+      seating_sector_id:
+        asOptionalString(record.seating_sector_id ?? record.seatingSectorId) ||
+        null,
       layoutType: asOptionalString(record.layoutType) || "general",
       slotId: asOptionalString(record.slotId ?? record.dayId ?? record.day_id),
       validDayIds: parseDraftValidDayIds(record.validDayIds),

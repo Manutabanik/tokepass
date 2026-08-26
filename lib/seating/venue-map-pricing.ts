@@ -3,7 +3,6 @@ import {
   eventHasActiveSeatingMap,
   ticketsReferenceMapSectors,
 } from "@/lib/inventory/map-enablement"
-import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
 import { parametricZoneCapacity } from "@/lib/seating/adaptive-seating"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 import {
@@ -54,6 +53,9 @@ export function isLogicalGeneralSectorId(sectorId?: string | null): boolean {
 }
 
 export function isMapBackedTicket(tier: {
+  source?: string | null
+  ticketType?: string | null
+  ticket_type?: string | null
   seatingSectorId?: string | null
   seating_sector_id?: string | null
   tierType?: string | null
@@ -63,17 +65,11 @@ export function isMapBackedTicket(tier: {
   category?: string | null
   bundleItems?: EventFormValues["tickets"][number]["bundleItems"]
 }): boolean {
+  if (tier.source === "general") return false
+  if (tier.ticketType === "extra" || tier.ticket_type === "extra") return false
   const sectorId = (tier.seatingSectorId ?? tier.seating_sector_id ?? "").trim()
-  if (isLogicalGeneralSectorId(sectorId)) return false
-  if (sectorId) return true
-  return (
-    inferInventoryTierType({
-      tierType: tier.tierType ?? tier.tier_type,
-      layoutType: tier.layoutType ?? tier.layout_type,
-      category: tier.category,
-      bundleItems: tier.bundleItems,
-    }) === "seated"
-  )
+  if (!sectorId || isLogicalGeneralSectorId(sectorId)) return false
+  return true
 }
 
 export function ticketRequiresInteractiveMap(
@@ -406,7 +402,7 @@ export function syncMapBackedTickets(
       !liveSectorIds.has(tier.seatingSectorId as string),
   )
 
-  return [...nextMap, ...orphanSold, ...commercial]
+  return [...commercial, ...nextMap, ...orphanSold]
 }
 
 /** Combina inventario libre + entradas derivadas de sectores del mapa. */
@@ -452,9 +448,9 @@ function keepTicketWithLiveSector<
     sold?: number | null
   },
 >(tier: T, validSectorIds: Set<string>): boolean {
-  if (tier.source === "general") return true
   const seating_sector_id = persistableTicketSectorId(tier)
-  if (!seating_sector_id || validSectorIds.has(seating_sector_id)) return true
+  if (!seating_sector_id || tier.source === "general") return true
+  if (validSectorIds.has(seating_sector_id)) return true
   return (Number(tier.sold) || 0) > 0
 }
 

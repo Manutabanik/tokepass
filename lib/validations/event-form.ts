@@ -203,6 +203,7 @@ export const ticketTierSchema = z.preprocess(
   visibility: z.enum(TICKET_TIER_VISIBILITY_VALUES),
   layoutType: z.enum(["general", "table_combo", "numbered_seat"]),
   seatingSectorId: optionalSectorKey,
+  seating_sector_id: optionalSectorKey,
   capacityPerUnit: z.number().int().min(1).max(100),
   minPurchaseLimit: z.number().int().min(1).max(200).optional().default(1),
   maxPurchaseLimit: z
@@ -367,21 +368,6 @@ const eventFormObject = z
         })
       }
 
-      const usesMap =
-        Boolean(data.basics.hasSeatingPlan) &&
-        Boolean(data.venue.includesSeatingMap)
-      if (
-        data.basics.hasSeatingPlan &&
-        tier.layoutType !== "general" &&
-        !tier.seatingSectorId &&
-        !usesMap
-      ) {
-        context.addIssue({
-          code: "custom",
-          path: ["tickets", index, "seatingSectorId"],
-          message: "Seleccioná la zona numerada de esta entrada.",
-        })
-      }
     }
 
     if (data.basics.isMultiDay) {
@@ -680,6 +666,7 @@ const draftTicketSchema = z.preprocess(
     .optional()
     .default("general"),
   seatingSectorId: optionalSectorKey,
+  seating_sector_id: optionalSectorKey,
   capacityPerUnit: z.number().int().min(1).max(100).optional().default(1),
   minPurchaseLimit: z.number().int().min(1).max(200).optional().default(1),
   maxPurchaseLimit: z

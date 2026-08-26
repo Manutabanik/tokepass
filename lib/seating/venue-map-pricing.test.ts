@@ -132,16 +132,18 @@ describe("venue-map-pricing", () => {
     )
 
     assert.equal(next.length, 2)
-    assert.equal(next[0]?.seatingSectorId, "zone-naranja")
-    assert.equal(next[0]?.id, undefined)
-    assert.equal(next[0]?.isNew, true)
-    assert.equal(next[0]?.price, 12000)
-    assert.equal(next[0]?.tierType, "seated")
-    assert.equal(next[0]?.layoutType, "table_combo")
-    assert.equal(next[0]?.capacity, 48)
-    assert.equal(next[0]?.capacityPerUnit, 8)
-    assert.equal(next[1]?.name, "Estacionamiento")
-    assert.equal(isMapBackedTicket(next[1]!), false)
+    const parking = next.find((tier) => tier.name === "Estacionamiento")
+    const mapped = next.find((tier) => tier.seatingSectorId === "zone-naranja")
+    assert.equal(parking?.name, "Estacionamiento")
+    assert.equal(isMapBackedTicket(parking!), false)
+    assert.equal(mapped?.id, undefined)
+    assert.equal(mapped?.isNew, true)
+    assert.equal(mapped?.price, 12000)
+    assert.equal(mapped?.tierType, "seated")
+    assert.equal(mapped?.layoutType, "table_combo")
+    assert.equal(mapped?.capacity, 48)
+    assert.equal(mapped?.capacityPerUnit, 8)
+    assert.equal(next[0]?.name, "Estacionamiento")
   })
 
   it("conserva el precio cargado en la tarjeta al re-guardar el mapa", () => {
@@ -544,6 +546,96 @@ describe("venue-map-pricing", () => {
     assert.equal(next.some((tier) => tier.name === "Estacionamiento"), true)
   })
 
+  it("conserva entradas generales sin seating_sector_id junto al mapa", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "zone-campo",
+        name: "Campo",
+        color: "#22d3ee",
+        price: 8000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 8, y: 0 },
+          { x: 8, y: 8 },
+        ],
+        layoutType: "general",
+        sellMode: "group",
+        rows: 1,
+        itemsPerRow: 1,
+        capacityPerUnit: 1,
+        capacity: 100,
+        labelPrefix: "",
+      },
+    ]
+    const next = consolidateEventTicketsForPersist({
+      basics: {
+        hasSeatingPlan: true,
+        scheduleDays: [],
+      },
+      venue: { venueMap: map, includesSeatingMap: true },
+      tickets: [
+        {
+          name: "Campo mapa",
+          price: 8000,
+          capacity: 100,
+          timeLimit: "",
+          saleStartsAt: "",
+          saleEndsAt: "",
+          bonusReward: "",
+          dayId: null,
+          visibility: "public",
+          layoutType: "general",
+          seatingSectorId: "zone-campo",
+          capacityPerUnit: 1,
+          admitCount: 1,
+          tierType: "general",
+          listPrice: null,
+          bundleItems: [],
+          bundleType: null,
+          promoDiscountType: null,
+          promoDiscountValue: 0,
+          promoRequiredQty: 1,
+          promoPayQty: 1,
+          description: "",
+          highlightBadge: null,
+        },
+        {
+          name: "Entrada General",
+          price: 4000,
+          capacity: 50,
+          timeLimit: "",
+          saleStartsAt: "",
+          saleEndsAt: "",
+          bonusReward: "",
+          dayId: null,
+          visibility: "public",
+          layoutType: "general",
+          seatingSectorId: null,
+          source: "general",
+          capacityPerUnit: 1,
+          admitCount: 1,
+          tierType: "general",
+          listPrice: null,
+          bundleItems: [],
+          bundleType: null,
+          promoDiscountType: null,
+          promoDiscountValue: 0,
+          promoRequiredQty: 1,
+          promoPayQty: 1,
+          description: "",
+          highlightBadge: null,
+        },
+      ],
+    } as Parameters<typeof consolidateEventTicketsForPersist>[0])
+    assert.equal(next.some((tier) => tier.name === "Entrada General"), true)
+    assert.equal(
+      next.find((tier) => tier.name === "Entrada General")?.seatingSectorId,
+      null,
+    )
+    assert.equal(next.some((tier) => tier.seatingSectorId === "zone-campo"), true)
+  })
+
   it("elimina tiers de mapa sin ventas cuando el sector desaparece", () => {
     const map = emptyVenueMap()
     map.zones = [
@@ -790,6 +882,23 @@ describe("venue-map-pricing", () => {
   })
 
   it("nunca trata un sector general: como map-backed", () => {
+    assert.equal(
+      isMapBackedTicket({
+        seatingSectorId: null,
+        layoutType: "numbered_seat",
+        tierType: "seated",
+      }),
+      false,
+    )
+    assert.equal(
+      isMapBackedTicket({
+        source: "general",
+        seatingSectorId: "sector-residual",
+        layoutType: "general",
+        tierType: "general",
+      }),
+      false,
+    )
     assert.equal(
       isMapBackedTicket({
         seatingSectorId: "general:pista",

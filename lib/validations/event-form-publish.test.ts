@@ -172,6 +172,65 @@ describe("publishEventSchema completeness", () => {
     assert.equal(parsed.success, true)
   })
 
+  it("publishes mixed inventory: map tickets plus unbound generals", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "zone-mesas",
+        name: "Salon",
+        color: "#22d3ee",
+        price: 10000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 10, y: 10 },
+        ],
+        layoutType: "numbered_seat",
+        sellMode: "group",
+        rows: 2,
+        itemsPerRow: 3,
+        capacityPerUnit: 8,
+        capacity: 48,
+        labelPrefix: "Mesa ",
+      },
+    ]
+    const parsed = publishEventSchema.safeParse(
+      publishPayload({
+        basics: { hasSeatingPlan: true },
+        venue: {
+          includesSeatingMap: true,
+          venueMap: map,
+          capacity: 48,
+        },
+        tickets: [
+          {
+            name: "Mesa",
+            price: 10000,
+            capacity: 48,
+            visibility: "public",
+            layoutType: "table_combo",
+            seatingSectorId: "zone-mesas",
+            capacityPerUnit: 8,
+            admitCount: 1,
+            tierType: "seated",
+          },
+          {
+            name: "Campo",
+            price: 5000,
+            capacity: 100,
+            visibility: "public",
+            layoutType: "general",
+            seatingSectorId: null,
+            capacityPerUnit: 1,
+            admitCount: 1,
+            tierType: "general",
+          },
+        ],
+      }),
+    )
+    assert.equal(parsed.success, true)
+  })
+
   it("rejects ticket stock above the venue capacity", () => {
     const parsed = publishEventSchema.safeParse(
       publishPayload({

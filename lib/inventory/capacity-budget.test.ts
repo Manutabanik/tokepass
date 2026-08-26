@@ -232,6 +232,29 @@ describe("capacity-budget", () => {
     assert.equal(snap.exceeded, false)
   })
 
+  it("permite inventario mixto: generales fuera del aforo del mapa", () => {
+    const mapTicket = ticket({
+      tierType: "seated",
+      layoutType: "numbered_seat",
+      seatingSectorId: "zona-vip",
+      capacity: 376,
+    })
+    const general = ticket({
+      tierType: "general",
+      capacity: 80,
+      seatingSectorId: null,
+    })
+    const snap = computeEventCapacity({
+      tickets: [mapTicket, general],
+      venueMap: standingMap(376),
+      baseVenueCapacity: 376,
+    })
+    assert.equal(snap.mapAllocatedCapacity, 376)
+    assert.equal(snap.generalAllocatedCapacity, 80)
+    assert.equal(snap.totalAllocated, 456)
+    assert.equal(snap.exceeded, false)
+  })
+
   it("marca overflow solo si el stock supera el aforo del recinto", () => {
     const general = ticket({
       tierType: "general",

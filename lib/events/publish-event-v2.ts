@@ -232,7 +232,12 @@ function mapLineItemToTier(
   const isExtra = ticketType === "extra"
   const isMap =
     !isExtra && item.source !== "general" && isMapDraftTicket(item)
-  const sectorId = String(item.sectorId ?? "").trim()
+  const sectorId = String(
+    item.sectorId ??
+      (item as { seating_sector_id?: string | null }).seating_sector_id ??
+      (item as { seatingSectorId?: string | null }).seatingSectorId ??
+      "",
+  ).trim()
 
   return {
     id: asPublishUuid(item.id),

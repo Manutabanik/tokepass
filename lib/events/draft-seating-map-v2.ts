@@ -41,10 +41,12 @@ export type DraftMapTicket = {
 export function isMapDraftTicket(ticket: {
   source?: unknown
   sectorId?: unknown
+  seatingSectorId?: unknown
+  seating_sector_id?: unknown
 }): boolean {
   if (ticket.source === "general") return false
   if (ticket.source === "map") return true
-  return typeof ticket.sectorId === "string" && ticket.sectorId.trim().length > 0
+  return ticketSeatingSectorRef(ticket).length > 0
 }
 
 export function draftSeatingMapToVenueMap(raw: unknown): InteractiveVenueMap {

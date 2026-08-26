@@ -204,7 +204,9 @@ export function computeEventCapacity(
   const totalAllocated = mapAllocatedCapacity + generalAllocatedCapacity
   const totalCapacity = venueCeiling > 0 ? venueCeiling : derivedCapacity
   const venueOverflow =
-    venueCeiling > 0 ? Math.max(0, totalAllocated - venueCeiling) : 0
+    venueCeiling > 0 && mapAllocatedCapacity === 0
+      ? Math.max(0, generalAllocatedCapacity - venueCeiling)
+      : 0
   const overflow = Math.max(sectorOverflow, venueOverflow)
   const remaining = Math.max(0, totalCapacity - totalAllocated)
 

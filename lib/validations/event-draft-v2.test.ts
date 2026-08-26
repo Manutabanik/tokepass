@@ -608,6 +608,53 @@ describe("draftCapacityThermometer", () => {
     assert.equal(snap.used, 20)
   })
 
+  it("publishes mixed inventory without requiring sector on generals", () => {
+    const draft = publishableDraft()
+    draft.tickets = [
+      {
+        id: "t-general",
+        name: "Campo",
+        description: "",
+        price: 8000,
+        stock: 100,
+        minOrder: 1,
+        maxOrder: 6,
+        source: "general",
+        sectorId: "",
+        seating_sector_id: null,
+      },
+      {
+        id: "t-map",
+        name: "Platea",
+        description: "",
+        price: 18000,
+        stock: 24,
+        minOrder: 1,
+        maxOrder: 4,
+        source: "map",
+        sectorId: "sector-platea",
+        seating_sector_id: "sector-platea",
+      },
+    ]
+    draft.seatingMap = {
+      version: 1,
+      url: "",
+      sectors: [
+        {
+          id: "sector-platea",
+          name: "Platea",
+        },
+      ],
+    }
+    const parsed = eventPublishSchema.safeParse(draft)
+    assert.equal(parsed.success, true)
+    if (!parsed.success) return
+    const general = parsed.data.tickets.find((ticket) => ticket.name === "Campo")
+    const seated = parsed.data.tickets.find((ticket) => ticket.name === "Platea")
+    assert.equal(general?.seating_sector_id ?? null, null)
+    assert.equal(seated?.sectorId, "sector-platea")
+  })
+
   it("never counts map-backed tickets toward the thermometer", () => {
     const snap = draftCapacityThermometer({
       tickets: [
