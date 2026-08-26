@@ -3,15 +3,20 @@ import { describe, it } from "node:test"
 
 import {
   DRAFT_LEAVE_GUARD_MESSAGE,
+  DRAFT_SAVE_TIMEOUT_MESSAGE,
+  DraftPersistTimeoutError,
   EDITOR_V2_AUTOSAVE_MAX_MS,
   EDITOR_V2_AUTOSAVE_MIN_MS,
   EDITOR_V2_AUTOSAVE_MS,
+  EDITOR_V2_AUTOSAVE_TIMEOUT_MS,
   OFFLINE_SAVE_LABEL,
   draftSaveBadge,
+  isDraftPersistTimeoutError,
   isInAppLeaveNavigation,
   publishedEventPublicPath,
   salesDashboardPath,
   shouldBlockDraftLeave,
+  withDraftPersistTimeout,
 } from "./editor-v2-ux"
 
 describe("editor v2 autosave window", () => {
@@ -19,15 +24,57 @@ describe("editor v2 autosave window", () => {
     assert.ok(EDITOR_V2_AUTOSAVE_MS >= EDITOR_V2_AUTOSAVE_MIN_MS)
     assert.ok(EDITOR_V2_AUTOSAVE_MS <= EDITOR_V2_AUTOSAVE_MAX_MS)
   })
+
+  it("caps a hung persist at 10 seconds", () => {
+    assert.equal(EDITOR_V2_AUTOSAVE_TIMEOUT_MS, 10_000)
+  })
+})
+
+describe("withDraftPersistTimeout", () => {
+  it("rejects a promise that never settles", async () => {
+    await assert.rejects(
+      () => withDraftPersistTimeout(new Promise(() => {}), 20),
+      (error: unknown) => {
+        assert.equal(isDraftPersistTimeoutError(error), true)
+        assert.equal(
+          error instanceof DraftPersistTimeoutError && error.message,
+          DRAFT_SAVE_TIMEOUT_MESSAGE,
+        )
+        return true
+      },
+    )
+  })
+
+  it("returns the persist result when it finishes in time", async () => {
+    const result = await withDraftPersistTimeout(
+      Promise.resolve({ success: true as const }),
+      50,
+    )
+    assert.deepEqual(result, { success: true })
+  })
 })
 
 describe("shouldBlockDraftLeave", () => {
-  it("blocks only while the draft JSON is syncing or publishing", () => {
+  it("blocks only dirty or in-flight autosave, never an intentional submit", () => {
     assert.equal(shouldBlockDraftLeave("saving"), true)
-    assert.equal(shouldBlockDraftLeave("saved", true), true)
+    assert.equal(
+      shouldBlockDraftLeave("saving", { isSubmitting: true }),
+      false,
+    )
+    assert.equal(shouldBlockDraftLeave("saved", { isDirty: true }), true)
+    assert.equal(
+      shouldBlockDraftLeave("saved", { isDirty: true, isSubmitting: true }),
+      false,
+    )
+    assert.equal(
+      shouldBlockDraftLeave("saved", { isDirty: true, allowLeave: true }),
+      false,
+    )
     assert.equal(shouldBlockDraftLeave("saved"), false)
     assert.equal(shouldBlockDraftLeave("offline"), false)
     assert.equal(shouldBlockDraftLeave("idle"), false)
+    assert.equal(shouldBlockDraftLeave("error"), false)
+    assert.equal(shouldBlockDraftLeave("error", { isDirty: true }), true)
   })
 })
 
@@ -39,6 +86,7 @@ describe("draftSaveBadge", () => {
     })
     assert.equal(draftSaveBadge(true, "saving").label, "Guardando...")
     assert.equal(draftSaveBadge(true, "saved").label, "Guardado")
+    assert.equal(draftSaveBadge(true, "error").label, "Error al guardar")
   })
 })
 

@@ -37,6 +37,7 @@ export function EventEditorV2StickyHeader({
   previewAction,
   primaryAction,
   onStep,
+  onRetrySave,
 }: {
   step: EditorV2StepId
   ticketsLabel: string
@@ -44,6 +45,7 @@ export function EventEditorV2StickyHeader({
   previewAction?: ReactNode
   primaryAction?: ReactNode
   onStep: (step: EditorV2StepId) => void
+  onRetrySave?: () => void
 }) {
   return (
     <header className="sticky top-0 z-50 border-b border-border/70 bg-background/80 backdrop-blur-md">
@@ -87,6 +89,7 @@ export function EventEditorV2StickyHeader({
         <EventEditorV2SaveBadge
           label={badge.label}
           tone={badge.tone}
+          onRetry={badge.tone === "error" ? onRetrySave : undefined}
           className="hidden shrink-0 md:inline-flex"
         />
         {previewAction}
@@ -100,28 +103,50 @@ export function EventEditorV2SaveBadge({
   label,
   tone,
   className,
+  onRetry,
 }: {
   label: string
   tone: DraftSaveBadgeTone
   className?: string
+  onRetry?: () => void
 }) {
-  return (
-    <p
-      className={cn(
-        "inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium",
-        tone === "saving" && "bg-amber-500/10 text-amber-700 dark:text-amber-300",
-        tone === "saved" &&
-          "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-        tone === "error" && "bg-red-500/10 text-red-700 dark:text-red-400",
-        tone === "offline" &&
-          "bg-amber-500/15 text-amber-800 dark:text-amber-200",
-        tone === "idle" && "text-muted-foreground",
-        className,
-      )}
-      aria-live="polite"
-    >
+  const canRetry = tone === "error" && Boolean(onRetry)
+  const classes = cn(
+    "inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium",
+    tone === "saving" && "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+    tone === "saved" &&
+      "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+    tone === "error" && "bg-red-500/10 text-red-700 dark:text-red-400",
+    tone === "offline" &&
+      "bg-amber-500/15 text-amber-800 dark:text-amber-200",
+    tone === "idle" && "text-muted-foreground",
+    canRetry && "cursor-pointer hover:bg-red-500/15",
+    className,
+  )
+  const body = (
+    <>
       {tone === "offline" ? <WifiOff className="size-3.5" aria-hidden /> : null}
       {label}
+      {canRetry ? (
+        <span className="underline underline-offset-2">Reintentar</span>
+      ) : null}
+    </>
+  )
+  if (canRetry && onRetry) {
+    return (
+      <button
+        type="button"
+        onClick={onRetry}
+        className={classes}
+        aria-live="polite"
+      >
+        {body}
+      </button>
+    )
+  }
+  return (
+    <p className={classes} aria-live="polite">
+      {body}
     </p>
   )
 }

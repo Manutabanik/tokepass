@@ -2,9 +2,47 @@
 export const EDITOR_V2_AUTOSAVE_MS = 1500
 export const EDITOR_V2_AUTOSAVE_MIN_MS = 1500
 export const EDITOR_V2_AUTOSAVE_MAX_MS = 2000
+/** Abort a hung Server Action so the UI never stays on "Guardando...". */
+export const EDITOR_V2_AUTOSAVE_TIMEOUT_MS = 10_000
 
 export const DRAFT_LEAVE_GUARD_MESSAGE =
   "Hay un guardado en curso. Si salís ahora podés perder cambios del borrador."
+
+export const DRAFT_SAVE_TIMEOUT_MESSAGE =
+  "Error al guardar. El servidor no respondió a tiempo. Reintentá."
+
+export class DraftPersistTimeoutError extends Error {
+  constructor(message = DRAFT_SAVE_TIMEOUT_MESSAGE) {
+    super(message)
+    this.name = "DraftPersistTimeoutError"
+  }
+}
+
+export function isDraftPersistTimeoutError(error: unknown): boolean {
+  return (
+    error instanceof DraftPersistTimeoutError ||
+    (error instanceof Error && error.name === "DraftPersistTimeoutError")
+  )
+}
+
+export async function withDraftPersistTimeout<T>(
+  promise: Promise<T>,
+  ms = EDITOR_V2_AUTOSAVE_TIMEOUT_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new DraftPersistTimeoutError())
+        }, ms)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
 
 export const OFFLINE_SAVE_LABEL = "Sin conexión (Cambios locales)"
 
@@ -14,9 +52,15 @@ export type DraftSaveBadgeTone = "idle" | "saving" | "saved" | "error" | "offlin
 
 export function shouldBlockDraftLeave(
   saveStatus: DraftSaveStatus,
-  publishing = false,
+  flags: {
+    isDirty?: boolean
+    isSubmitting?: boolean
+    allowLeave?: boolean
+  } = {},
 ): boolean {
-  return publishing || saveStatus === "saving"
+  if (flags.allowLeave || flags.isSubmitting) return false
+  if (saveStatus === "saving") return true
+  return flags.isDirty === true
 }
 
 export function draftSaveBadge(online: boolean, saveStatus: DraftSaveStatus): {

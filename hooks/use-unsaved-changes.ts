@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, type RefObject } from "react"
 
 import { isInAppLeaveNavigation } from "@/lib/events/editor-v2-ux"
 
@@ -10,14 +10,22 @@ export const UNSAVED_MAP_CHANGES_MESSAGE =
 export function useUnsavedChanges(
   isDirty: boolean,
   message = UNSAVED_MAP_CHANGES_MESSAGE,
-  options?: { interceptLinks?: boolean },
+  options?: {
+    interceptLinks?: boolean
+    isSubmitting?: boolean
+    allowLeaveRef?: RefObject<boolean>
+  },
 ) {
   const interceptLinks = options?.interceptLinks === true
+  const isSubmitting = options?.isSubmitting === true
+  const allowLeaveRef = options?.allowLeaveRef
+  const shouldGuard = isDirty && !isSubmitting
 
   useEffect(() => {
-    if (!isDirty) return
+    if (!shouldGuard) return
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (allowLeaveRef?.current) return
       event.preventDefault()
       event.returnValue = message
       return event.returnValue
@@ -25,12 +33,13 @@ export function useUnsavedChanges(
 
     window.addEventListener("beforeunload", handleBeforeUnload)
     return () => window.removeEventListener("beforeunload", handleBeforeUnload)
-  }, [isDirty, message])
+  }, [allowLeaveRef, message, shouldGuard])
 
   useEffect(() => {
-    if (!isDirty || !interceptLinks) return
+    if (!shouldGuard || !interceptLinks) return
 
     const handleClick = (event: MouseEvent) => {
+      if (allowLeaveRef?.current) return
       if (event.defaultPrevented) return
       const target = event.target
       if (!(target instanceof Element)) return
@@ -59,5 +68,5 @@ export function useUnsavedChanges(
 
     document.addEventListener("click", handleClick, true)
     return () => document.removeEventListener("click", handleClick, true)
-  }, [interceptLinks, isDirty, message])
+  }, [allowLeaveRef, interceptLinks, message, shouldGuard])
 }

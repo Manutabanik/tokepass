@@ -1,5 +1,9 @@
 import { ZodError } from "zod"
 
+import {
+  DRAFT_SAVE_TIMEOUT_MESSAGE,
+  isDraftPersistTimeoutError,
+} from "@/lib/events/editor-v2-ux"
 import { seatingPersistUserMessage } from "@/lib/events/sanitize-ticket-tiers"
 import { containsInternalErrorCode } from "@/lib/errors/error-handler"
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
@@ -17,7 +21,7 @@ export const NETWORK_SAVE_MESSAGE =
   "No pudimos conectar con el servidor. Recargá la página e intentá de nuevo."
 
 const NETWORK_RE =
-  /failed to fetch|networkerror|err_network|err_name_not_resolved|econnrefused|etimedout|enotfound|fetch failed|load failed|network request failed|the internet connection appears|sin conexi[oó]n/i
+  /failed to fetch|networkerror|err_network|err_name_not_resolved|econnrefused|etimedout|enotfound|fetch failed|load failed|network request failed|the internet connection appears|sin conexi[oó]n|abort(?:ed)?|the operation was aborted/i
 const SQL_RE =
   /\b(PGRST\d+|22P02|23503|23505|23514|23P01|40001|42501|42703|42P01|P0001)\b|column ["']|violates (unique|foreign|check|not-null)|relation ["']|schema cache|SQLSTATE|duplicate key|postgrest|postgres(?:ql)?/i
 
@@ -76,6 +80,9 @@ export function persistErrorUserMessage(
   error: unknown,
   fallback = "No se pudieron guardar los cambios.",
 ): string {
+  if (isDraftPersistTimeoutError(error)) {
+    return DRAFT_SAVE_TIMEOUT_MESSAGE
+  }
   if (isZodLikeError(error)) {
     const first = error.issues[0]?.message?.trim()
     if (first) return first

@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import { ZodError } from "zod"
 
 import { ORPHAN_SEATING_SECTOR_MESSAGE } from "@/lib/events/sanitize-ticket-tiers"
+import { DraftPersistTimeoutError } from "@/lib/events/editor-v2-ux"
 import {
   classifyPersistError,
   persistErrorUserMessage,
@@ -63,6 +64,13 @@ describe("classifyPersistError", () => {
     assert.equal(
       persistErrorUserMessage(new TypeError("Failed to fetch")),
       "No pudimos conectar con el servidor. Recargá la página e intentá de nuevo.",
+    )
+  })
+
+  it("keeps a hung draft persist as a retryable save error", () => {
+    assert.equal(
+      persistErrorUserMessage(new DraftPersistTimeoutError()),
+      "Error al guardar. El servidor no respondió a tiempo. Reintentá.",
     )
   })
 })

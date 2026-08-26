@@ -1,7 +1,7 @@
 "use client"
 
 import { Eye, Rocket } from "lucide-react"
-import { useRef, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { FormProvider, useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 
@@ -51,6 +51,7 @@ export function EventEditorV2({
   const [step, setStep] = useState<EditorV2StepId>(1)
   const [busy, setBusy] = useState<"idle" | "preview" | "publish">("idle")
   const actionBusyRef = useRef(false)
+  const allowLeaveRef = useRef(false)
   const [nowPublished, setNowPublished] = useState(isPublished)
   const [allowLeave, setAllowLeave] = useState(false)
   const [successOpen, setSuccessOpen] = useState(false)
@@ -62,16 +63,29 @@ export function EventEditorV2({
     mode: "onTouched",
     shouldUnregister: false,
   })
-  const { control, getValues } = form
+  const { control, getValues, formState, reset } = form
+  const { isDirty } = formState
   const watched = useWatch({ control })
-  const { saveStatus, saveError, online, flushAndPause, resume } =
-    useEventDraftV2Persist(eventId, getValues, watched)
+  const markDraftClean = useCallback(
+    (saved?: EventDraftV2) => {
+      reset(saved ?? getValues(), { keepValues: true })
+    },
+    [getValues, reset],
+  )
+  const { saveStatus, saveError, online, persistDraft, flushAndPause, resume } =
+    useEventDraftV2Persist(eventId, getValues, watched, {
+      onSaved: markDraftClean,
+    })
   const title = watched?.basicInfo?.name
   const labels = getArchetypeConfig(resolveDraftArchetype(watched?.archetype)).labels
   const launchReady = isDraftLaunchReady(getValues())
   const badge = draftSaveBadge(online, saveStatus)
   const working = busy !== "idle"
-  const leaveBlocked = shouldBlockDraftLeave(saveStatus, working) && !allowLeave
+  const leaveBlocked = shouldBlockDraftLeave(saveStatus, {
+    isDirty,
+    isSubmitting: working,
+    allowLeave,
+  })
   const actionsDisabled = !launchReady || working
   const launchBlockedReason = launchReady
     ? ""
@@ -91,6 +105,8 @@ export function EventEditorV2({
 
   useUnsavedChanges(leaveBlocked, DRAFT_LEAVE_GUARD_MESSAGE, {
     interceptLinks: true,
+    isSubmitting: working,
+    allowLeaveRef,
   })
 
   async function handlePreviewDraft() {
@@ -114,8 +130,10 @@ export function EventEditorV2({
         toast.error(result.error)
         return
       }
-      redirected = true
+      markDraftClean()
+      allowLeaveRef.current = true
       setAllowLeave(true)
+      redirected = true
       window.location.assign(result.previewPath)
     } catch (error) {
       toast.error(persistErrorUserMessage(error))
@@ -144,6 +162,9 @@ export function EventEditorV2({
         toast.error(result.error)
         return
       }
+      markDraftClean()
+      allowLeaveRef.current = true
+      setAllowLeave(true)
       setNowPublished(true)
       setSuccessUpdated(wasPublished)
       setSuccessUrl(result.publicUrl)
@@ -202,6 +223,9 @@ export function EventEditorV2({
           previewAction={previewAction}
           primaryAction={primaryAction}
           onStep={setStep}
+          onRetrySave={
+            saveStatus === "error" ? () => void persistDraft() : undefined
+          }
         />
 
         <div className="mx-auto max-w-5xl px-4 py-8 pb-20 sm:px-6 md:pb-8">
@@ -234,10 +258,21 @@ export function EventEditorV2({
               ) : null}
             </div>
 
-            {saveStatus === "error" && saveError ? (
-              <pre className="mt-6 overflow-auto whitespace-pre-wrap rounded-lg border border-red-500/40 bg-red-50 p-3 text-xs text-red-900 dark:bg-red-950/40 dark:text-red-100">
-                {saveError}
-              </pre>
+            {saveStatus === "error" ? (
+              <div className="mt-6 space-y-3">
+                {saveError ? (
+                  <pre className="overflow-auto whitespace-pre-wrap rounded-lg border border-red-500/40 bg-red-50 p-3 text-xs text-red-900 dark:bg-red-950/40 dark:text-red-100">
+                    {saveError}
+                  </pre>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void persistDraft()}
+                >
+                  Reintentar guardado
+                </Button>
+              </div>
             ) : null}
           </section>
         </div>
