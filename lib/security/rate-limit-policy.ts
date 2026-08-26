@@ -9,6 +9,9 @@ export const RATE_LIMITS = {
   publicStockIp: { limit: 30, windowSeconds: 60 },
   /** POST de Server Actions en checkout + /api/scanner/scan (Edge). */
   checkoutEdgeIp: { limit: 80, windowSeconds: 60 },
+  /** Fuerza bruta de cupones: pocos intentos por IP. */
+  promoValidateIp: { limit: 8, windowSeconds: 60 },
+  promoValidateUser: { limit: 12, windowSeconds: 60 },
 } as const
 
 export const RATE_LIMIT_BUSY_ERROR =
@@ -16,3 +19,6 @@ export const RATE_LIMIT_BUSY_ERROR =
 
 export const AUTH_RATE_LIMIT_ERROR =
   "Demasiados intentos. Esperá un minuto e intentá de nuevo."
+
+export const PROMO_RATE_LIMIT_ERROR =
+  "Demasiados intentos de cupón. Esperá un minuto e intentá de nuevo."

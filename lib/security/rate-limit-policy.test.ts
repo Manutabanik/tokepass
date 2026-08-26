@@ -11,5 +11,7 @@ describe("checkout rate-limit policy", () => {
     assert.equal(RATE_LIMITS.cartHoldIp.windowSeconds, 60)
     assert.equal(RATE_LIMITS.checkoutIp.limit, 8)
     assert.equal(RATE_LIMITS.checkoutEdgeIp.limit, 80)
+    assert.equal(RATE_LIMITS.promoValidateIp.limit, 8)
+    assert.equal(RATE_LIMITS.promoValidateUser.limit, 12)
   })
 })

@@ -5,6 +5,7 @@ import {
   GA_CHECKOUT_HOLD_INTERVAL,
 } from "@/lib/checkout-hold"
 import { logger } from "@/lib/logger"
+import { reconcileOrphanPaymentHolds } from "@/lib/payments/reconcile-orphans"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
@@ -39,6 +40,8 @@ export async function GET(request: NextRequest) {
   try {
     const admin = createAdminClient()
     const batch = { p_batch_size: EXPIRE_HOLD_BATCH_SIZE }
+
+    const reconciled = await reconcileOrphanPaymentHolds()
 
     const abandoned = await admin.rpc("expire_abandoned_orders", {
       p_older_than: GA_CHECKOUT_HOLD_INTERVAL,
@@ -91,6 +94,7 @@ export async function GET(request: NextRequest) {
       expiredSeatHoldCount: Number(seatHolds.data ?? 0),
       expiredResaleHoldCount: Number(resaleHolds.data ?? 0),
       expiredTransferHoldCount: Number(transfers.data ?? 0),
+      reconciled,
       holdInterval: GA_CHECKOUT_HOLD_INTERVAL,
       batchSize: EXPIRE_HOLD_BATCH_SIZE,
     }

@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache"
 
 import { centsToMoney, moneyToCents } from "@/lib/money/cents"
+import { getRequestIp, isRateLimitableIp } from "@/lib/request-ip"
+import { consumeNamedRateLimit } from "@/lib/security/distributed-rate-limit"
+import { PROMO_RATE_LIMIT_ERROR } from "@/lib/security/rate-limit-policy"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { PromoCode, PromoDiscountType } from "@/types/database"
@@ -299,6 +302,23 @@ export async function validatePromoCode(
 ): Promise<ActionResult<ValidatedPromo>> {
   try {
     const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    const ip = await getRequestIp()
+    if (
+      isRateLimitableIp(ip) &&
+      !(await consumeNamedRateLimit("promoValidateIp", ip))
+    ) {
+      return { success: false, error: PROMO_RATE_LIMIT_ERROR }
+    }
+    if (
+      user?.id &&
+      !(await consumeNamedRateLimit("promoValidateUser", user.id))
+    ) {
+      return { success: false, error: PROMO_RATE_LIMIT_ERROR }
+    }
+
     const cleanCode = normalizeCode(code)
     if (!cleanCode || !eventId) {
       return { success: false, error: "Ingresá un código válido." }

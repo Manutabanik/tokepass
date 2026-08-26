@@ -3,6 +3,7 @@ import { cookies } from "next/headers"
 
 import type { Database } from "@/types/database"
 
+/** HTTP a PostgREST. SQL directo: `resolveServerDatabaseUrl()` (pooler 6543). */
 export async function createClient() {
   const cookieStore = await cookies()
 

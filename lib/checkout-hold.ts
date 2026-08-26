@@ -1,3 +1,5 @@
+import { serverUtcMs } from "@/lib/time/server-now"
+
 /**
  * Política de holds de checkout / stock (TokePass).
  *
@@ -43,7 +45,7 @@ export function minReservedUntil(
 /** Fin del hold: seating usa reserved_until; GA/tienda = ahora + 15m. */
 export function resolveCheckoutExpiresAt(
   reservedUntil?: string | null,
-  nowMs: number = Date.now(),
+  nowMs: number = serverUtcMs(),
 ): Date {
   if (reservedUntil) {
     const seatingMs = new Date(reservedUntil).getTime()
@@ -62,7 +64,7 @@ export function resolveOrderHoldExpiresAt(
   const createdMs = new Date(createdAt).getTime()
   const fromCreated = Number.isFinite(createdMs)
     ? createdMs + GA_CHECKOUT_HOLD_MS
-    : Date.now() + GA_CHECKOUT_HOLD_MS
+    : serverUtcMs() + GA_CHECKOUT_HOLD_MS
 
   if (reservedUntil) {
     const seatingMs = new Date(reservedUntil).getTime()

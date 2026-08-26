@@ -310,6 +310,16 @@ function stripCheckoutClientMoneyFields(raw: unknown) {
   delete value.price
   delete value.clientTotal
   delete value.client_total
+  delete value.now
+  delete value.nowMs
+  delete value.clientNow
+  delete value.client_now
+  delete value.expiresAt
+  delete value.expires_at
+  delete value.saleStartsAt
+  delete value.sale_starts_at
+  delete value.saleEndsAt
+  delete value.sale_ends_at
   return value
 }
 

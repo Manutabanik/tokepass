@@ -121,6 +121,7 @@ import {
 import { normalizePreviewKey } from "@/lib/preview/sandbox"
 import { createAdminClient, tryCreateAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { serverUtcMs } from "@/lib/time/server-now"
 import type { PaymentProvider } from "@/types/database"
 import {
   amountsMatch,
@@ -684,7 +685,7 @@ async function evaluateCartSaleWindows(
     }
   }
 
-  const now = Date.now()
+  const now = serverUtcMs()
   for (const item of items) {
     const tierId = checkoutItemTierId(item)
     const row = (data ?? []).find((tier) => tier.id === tierId)

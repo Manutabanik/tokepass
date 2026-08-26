@@ -256,6 +256,24 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
     assert.equal(parsed.data.idempotencyKey, eventId)
   })
 
+  it("drops client clocks so sale windows and holds use server UTC", () => {
+    const parsed = CheckoutPayloadSchema.safeParse({
+      eventId,
+      buyer,
+      items: [{ tierId: generalId, quantity: 1 }],
+      now: "1999-01-01T00:00:00.000Z",
+      nowMs: 1,
+      expiresAt: "1999-01-01T00:00:00.000Z",
+      saleStartsAt: "1999-01-01T00:00:00.000Z",
+    })
+    assert.equal(parsed.success, true)
+    if (!parsed.success) return
+    assert.equal("now" in parsed.data, false)
+    assert.equal("nowMs" in parsed.data, false)
+    assert.equal("expiresAt" in parsed.data, false)
+    assert.equal("saleStartsAt" in parsed.data, false)
+  })
+
   it("rejects a 9-digit DNI", () => {
     const longDni = CheckoutPayloadSchema.safeParse({
       eventId,
