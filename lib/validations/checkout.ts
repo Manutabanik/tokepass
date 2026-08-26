@@ -451,6 +451,15 @@ export type CheckoutAddonItem = CheckoutPayload["addons"][number]
 
 export const CHECKOUT_INVALID_PAYLOAD_ERROR = "Datos de compra inválidos."
 
+export function checkoutTermsAreAccepted(input: {
+  termsAccepted?: boolean | null
+  isFreeOrder?: boolean
+  sandbox?: boolean
+}): boolean {
+  if (input.isFreeOrder || input.sandbox) return true
+  return input.termsAccepted === true
+}
+
 export function formatCheckoutPayloadError(
   error: z.ZodError,
 ): string {

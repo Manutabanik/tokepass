@@ -32,6 +32,7 @@ export function EventEditorV2LaunchStep({
   publishing,
   previewing,
   launchReady,
+  launchBlockedReason,
   onPreview,
   onLaunch,
 }: {
@@ -39,6 +40,7 @@ export function EventEditorV2LaunchStep({
   publishing: boolean
   previewing: boolean
   launchReady: boolean
+  launchBlockedReason?: string
   onPreview: () => void
   onLaunch: () => void
 }) {
@@ -209,7 +211,8 @@ export function EventEditorV2LaunchStep({
             ? isPublished
               ? "El evento ya está en el catálogo. Podés probarlo como comprador o actualizarlo."
               : "Probá el borrador como comprador. Subilo al catálogo cuando esté listo."
-            : "Completá el checklist para habilitar el envío."}
+            : launchBlockedReason ||
+              "Completá el checklist para habilitar el envío."}
         </p>
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
           <Button

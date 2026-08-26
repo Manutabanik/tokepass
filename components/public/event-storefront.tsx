@@ -40,6 +40,7 @@ import { SponsorGrid } from "@/components/public/sponsor-grid"
 import { OrganizerAvatar } from "@/components/public/organizer-avatar"
 import { ProducerFollowButton } from "@/components/public/producer-follow-button"
 import { SandboxBanner } from "@/components/public/sandbox-banner"
+import { ClientErrorBoundary } from "@/components/errors/client-error-boundary"
 import {
   Accordion,
   AccordionContent,
@@ -656,6 +657,7 @@ export function EventStorefront({
           value={startingPrice ?? undefined}
         />
         <div className="min-h-0 flex-1 overflow-hidden">
+          <ClientErrorBoundary homeHref="/" homeLabel="Volver al inicio">
           <TicketSelector
             eventId={event.id}
             eventSlug={event.slug}
@@ -691,6 +693,7 @@ export function EventStorefront({
             onLeaveCheckout={requestLeaveCheckout}
             renderLayout={({ panel }) => panel}
           />
+          </ClientErrorBoundary>
         </div>
         <Dialog open={exitDialogOpen} onOpenChange={setExitDialogOpen}>
           <DialogContent

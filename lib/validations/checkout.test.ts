@@ -6,6 +6,7 @@ import {
   CheckoutPayloadSchema,
   CheckoutSeatHoldSchema,
   PublicTicketPriceSchema,
+  checkoutTermsAreAccepted,
 } from "@/lib/validations/checkout"
 
 const buyer = {
@@ -305,6 +306,22 @@ describe("CheckoutSeatHoldSchema", () => {
       seatingUnitId: seatId,
     })
     assert.equal(parsed.success, true)
+  })
+})
+
+describe("checkoutTermsAreAccepted", () => {
+  it("requires an explicit true on paid live checkout", () => {
+    assert.equal(checkoutTermsAreAccepted({}), false)
+    assert.equal(checkoutTermsAreAccepted({ termsAccepted: false }), false)
+    assert.equal(checkoutTermsAreAccepted({ termsAccepted: true }), true)
+    assert.equal(
+      checkoutTermsAreAccepted({ isFreeOrder: true, termsAccepted: false }),
+      true,
+    )
+    assert.equal(
+      checkoutTermsAreAccepted({ sandbox: true, termsAccepted: false }),
+      true,
+    )
   })
 })
 

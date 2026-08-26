@@ -88,6 +88,12 @@ describe("draftLaunchChecklist", () => {
         endDate: "2026-09-02T04:00",
         locationName: "Niceto",
       },
+      location: {
+        venueName: "Niceto",
+        address: "Av. Córdoba 1234, CABA",
+        province: "CABA",
+        city: "CABA",
+      },
       schedule: [
         {
           id: "day-1",
@@ -97,7 +103,7 @@ describe("draftLaunchChecklist", () => {
         },
       ],
       venueCapacity: 200,
-      tickets: [{ price: 10000 }],
+      tickets: [{ id: "t1", name: "General", price: 10000, stock: 80 }],
     }
     assert.equal(isDraftLaunchReady(ready), true)
     assert.equal(

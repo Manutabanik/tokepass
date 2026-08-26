@@ -38,11 +38,24 @@ export {
   type EventDraftV2ScheduleSlot,
 } from "@/lib/events/draft-schedule-slots-v2"
 
+export const EVENT_DRAFT_NAME_MAX = 120
+export const EVENT_DRAFT_TEXT_MAX = 2000
+export const EVENT_DRAFT_TICKET_DESCRIPTION_MAX = 180
+
+export function sanitizeDraftText(value: string, maxLen: number): string {
+  return value
+    .replace(/<[^>]*>/g, " ")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLen)
+}
+
 const draftScheduleSlotSchema = z.object({
   id: z.string().optional().default(""),
   startTime: z.string().optional().default(""),
   endTime: z.string().optional().default(""),
-  capacity: z.coerce.number().optional(),
+  capacity: z.coerce.number().min(0).optional(),
 })
 
 const draftScheduleDaySchema = z.object({
@@ -79,10 +92,10 @@ const draftLineItemSchema = z.object({
   id: z.string().optional().default(""),
   name: z.string().optional().default(""),
   description: z.string().optional().default(""),
-  price: z.coerce.number().optional().default(0),
-  stock: z.coerce.number().optional().default(0),
-  minOrder: z.coerce.number().optional().default(1),
-  maxOrder: z.coerce.number().optional().default(10),
+  price: z.coerce.number().min(0).optional().default(0),
+  stock: z.coerce.number().min(0).optional().default(0),
+  minOrder: z.coerce.number().min(1).optional().default(1),
+  maxOrder: z.coerce.number().min(1).optional().default(10),
   startDate: z.string().optional().default(""),
   endDate: z.string().optional().default(""),
   source: z.string().optional().default(""),
@@ -171,7 +184,7 @@ const eventDraftFieldsSchema = z.object({
   galleryUrls: z.array(z.string().url()).default([]),
   restrictions: z.string().optional().default(""),
   whatToBring: z.string().optional().default(""),
-  venueCapacity: z.coerce.number().optional().default(0),
+  venueCapacity: z.coerce.number().min(0).optional().default(0),
   schedule: z.array(draftScheduleDaySchema).default([]),
   lineup: z.array(draftLineupItemSchema).default([]),
   tickets: z.array(draftLineItemSchema).default([]),
@@ -183,23 +196,65 @@ const eventDraftFieldsSchema = z.object({
 
 export const eventDraftSchema = eventDraftFieldsSchema.passthrough()
 
-const publishLineItemSchema = z.object({
-  id: z.string(),
-  name: z.string().min(1, "Requerido"),
-  description: z.string().optional(),
-  price: z.coerce.number().min(0),
-  stock: z.coerce.number().min(1, "El stock debe ser mayor a 0"),
-  minOrder: z.coerce.number().optional(),
-  maxOrder: z.coerce.number().optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-  source: z.string().optional(),
-  sectorId: z.string().optional(),
-  layoutType: z.string().optional(),
-  slotId: z.string().optional(),
-  validDayIds: z.array(z.string()).optional().default([]),
-  ticketType: z.enum(TICKET_COMMERCE_TYPES).optional().default("standard"),
-})
+function refineLineItemWindowAndLimits(
+  item: {
+    startDate?: string
+    endDate?: string
+    minOrder?: number
+    maxOrder?: number
+  },
+  ctx: z.RefinementCtx,
+  pathPrefix: Array<string | number>,
+) {
+  const start = item.startDate?.trim() ?? ""
+  const end = item.endDate?.trim() ?? ""
+  if (start && end) {
+    const startMs = Date.parse(start)
+    const endMs = Date.parse(end)
+    if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs <= startMs) {
+      ctx.addIssue({
+        code: "custom",
+        path: [...pathPrefix, "endDate"],
+        message: "La venta debe terminar después de iniciar",
+      })
+    }
+  }
+  if (
+    item.minOrder != null &&
+    item.maxOrder != null &&
+    Number.isFinite(item.minOrder) &&
+    Number.isFinite(item.maxOrder) &&
+    item.maxOrder < item.minOrder
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: [...pathPrefix, "maxOrder"],
+      message: "El máximo por compra no puede ser menor al mínimo",
+    })
+  }
+}
+
+const publishLineItemSchema = z
+  .object({
+    id: z.string(),
+    name: z.string().min(1, "Requerido").max(EVENT_DRAFT_NAME_MAX),
+    description: z.string().max(EVENT_DRAFT_TICKET_DESCRIPTION_MAX).optional(),
+    price: z.coerce.number().min(0),
+    stock: z.coerce.number().min(1, "El stock debe ser mayor a 0"),
+    minOrder: z.coerce.number().min(1).optional(),
+    maxOrder: z.coerce.number().min(1).optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+    source: z.string().optional(),
+    sectorId: z.string().optional(),
+    layoutType: z.string().optional(),
+    slotId: z.string().optional(),
+    validDayIds: z.array(z.string()).optional().default([]),
+    ticketType: z.enum(TICKET_COMMERCE_TYPES).optional().default("standard"),
+  })
+  .superRefine((item, ctx) => {
+    refineLineItemWindowAndLimits(item, ctx, [])
+  })
 
 export const eventPublishSchema = z
   .object({
@@ -207,7 +262,10 @@ export const eventPublishSchema = z
     isVirtual: z.boolean().optional(),
     virtualLink: z.string().optional(),
     basicInfo: z.object({
-      name: z.string().min(1, "El nombre es obligatorio"),
+      name: z
+        .string()
+        .min(1, "El nombre es obligatorio")
+        .max(EVENT_DRAFT_NAME_MAX),
       startDate: z.string().optional(),
       endDate: z.string().optional(),
       locationName: z.string().optional(),
@@ -244,8 +302,8 @@ export const eventPublishSchema = z
     lineup: z.array(draftLineupItemSchema).optional(),
     promoVideoUrl: z.string().url().optional().or(z.literal("")),
     galleryUrls: z.array(z.string().url()).optional().default([]),
-    restrictions: z.string().optional(),
-    whatToBring: z.string().optional(),
+    restrictions: z.string().max(EVENT_DRAFT_TEXT_MAX).optional(),
+    whatToBring: z.string().max(EVENT_DRAFT_TEXT_MAX).optional(),
     seatingMap: z
       .object({
         url: z.string().optional(),
@@ -312,6 +370,35 @@ export const eventPublishSchema = z
           })
         }
       }
+    }
+
+    for (const [index, extra] of (data.extras ?? []).entries()) {
+      const named = extra.name?.trim() ?? ""
+      const stock = extra.stock ?? 0
+      const price = extra.price ?? 0
+      if (!named && stock <= 0 && price <= 0) continue
+      if (!named) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["extras", index, "name"],
+          message: "Requerido",
+        })
+      }
+      if (stock < 1) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["extras", index, "stock"],
+          message: "El stock debe ser mayor a 0",
+        })
+      }
+      if (price < 0) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["extras", index, "price"],
+          message: "El precio no puede ser negativo",
+        })
+      }
+      refineLineItemWindowAndLimits(extra, ctx, ["extras", index])
     }
 
     if (data.isVirtual === true || data.settings?.deliveryMode === "ONLINE") {
@@ -447,9 +534,9 @@ export function createDraftLineupItem(
     : "custom"
   return {
     id: input.id?.trim() || crypto.randomUUID(),
-    name: input.name?.trim() || "",
+    name: sanitizeDraftText(input.name?.trim() || "", EVENT_DRAFT_NAME_MAX),
     avatarUrl: input.avatarUrl?.trim() || "",
-    role: input.role ?? "",
+    role: sanitizeDraftText(input.role ?? "", EVENT_DRAFT_NAME_MAX),
     source,
     dayIds: Array.isArray(input.dayIds)
       ? input.dayIds.filter((id) => typeof id === "string" && id.trim())
@@ -570,18 +657,21 @@ function parseDraftLineItems(
         : `item-${index}`
     return {
       id,
-      name: asOptionalString(record.name),
-      description: asOptionalString(record.description),
-      price: asFiniteNumber(record.price),
-      stock: asFiniteNumber(record.stock),
+      name: sanitizeDraftText(asOptionalString(record.name), EVENT_DRAFT_NAME_MAX),
+      description: sanitizeDraftText(
+        asOptionalString(record.description),
+        EVENT_DRAFT_TICKET_DESCRIPTION_MAX,
+      ),
+      price: Math.max(0, asFiniteNumber(record.price)),
+      stock: Math.max(0, asFiniteNumber(record.stock)),
       minOrder:
         record.minOrder == null || record.minOrder === ""
           ? 1
-          : asFiniteNumber(record.minOrder, 1),
+          : Math.max(1, asFiniteNumber(record.minOrder, 1)),
       maxOrder:
         record.maxOrder == null || record.maxOrder === ""
           ? 10
-          : asFiniteNumber(record.maxOrder, 10),
+          : Math.max(1, asFiniteNumber(record.maxOrder, 10)),
       startDate: asOptionalString(record.startDate ?? record.saleStartsAt),
       endDate: asOptionalString(record.endDate ?? record.saleEndsAt),
       source: asOptionalString(record.source),
@@ -754,19 +844,27 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
     isVirtual,
     virtualLink: asOptionalString(record.virtualLink),
     basicInfo: {
-      name,
+      name: sanitizeDraftText(name, EVENT_DRAFT_NAME_MAX),
       startDate: primary?.startDate || startDate,
       endDate: primary?.endDate || endDate,
-      locationName: venueName,
+      locationName: sanitizeDraftText(venueName, EVENT_DRAFT_NAME_MAX),
     },
     schedule,
     location: {
-      venueName,
-      address: asOptionalString(locationRaw.address),
-      province: asOptionalString(locationRaw.province),
-      city:
+      venueName: sanitizeDraftText(venueName, EVENT_DRAFT_NAME_MAX),
+      address: sanitizeDraftText(
+        asOptionalString(locationRaw.address),
+        EVENT_DRAFT_TEXT_MAX,
+      ),
+      province: sanitizeDraftText(
+        asOptionalString(locationRaw.province),
+        EVENT_DRAFT_NAME_MAX,
+      ),
+      city: sanitizeDraftText(
         asOptionalString(locationRaw.city) ||
-        asOptionalString(locationRaw.department),
+          asOptionalString(locationRaw.department),
+        EVENT_DRAFT_NAME_MAX,
+      ),
       ...(lat != null ? { lat } : {}),
       ...(lng != null ? { lng } : {}),
     },
@@ -776,9 +874,15 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
     galleryUrls: parseDraftGalleryUrls(
       record.galleryUrls ?? record.gallery_urls,
     ),
-    restrictions: asOptionalString(record.restrictions),
-    whatToBring: asOptionalString(record.whatToBring ?? record.what_to_bring),
-    venueCapacity: asFiniteNumber(record.venueCapacity),
+    restrictions: sanitizeDraftText(
+      asOptionalString(record.restrictions),
+      EVENT_DRAFT_TEXT_MAX,
+    ),
+    whatToBring: sanitizeDraftText(
+      asOptionalString(record.whatToBring ?? record.what_to_bring),
+      EVENT_DRAFT_TEXT_MAX,
+    ),
+    venueCapacity: Math.max(0, asFiniteNumber(record.venueCapacity)),
     lineup: parseDraftLineup(record.lineup),
     tickets: parseDraftLineItems(record.tickets).map((ticket) =>
       withResolvedTicketValidDays(ticket, schedule),
@@ -794,8 +898,14 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
     settings: {
       isPublic: settingsRaw.isPublic !== false,
       absorbFees: settingsRaw.absorbFees === true,
-      refundPolicy: asOptionalString(settingsRaw.refundPolicy),
-      checkoutMessage: asOptionalString(settingsRaw.checkoutMessage),
+      refundPolicy: sanitizeDraftText(
+        asOptionalString(settingsRaw.refundPolicy),
+        EVENT_DRAFT_TEXT_MAX,
+      ),
+      checkoutMessage: sanitizeDraftText(
+        asOptionalString(settingsRaw.checkoutMessage),
+        EVENT_DRAFT_TEXT_MAX,
+      ),
       deliveryMode: isVirtual ? "ONLINE" : "PRESENCIAL",
     },
   }

@@ -324,7 +324,9 @@ export async function saveEventDraftV2(
     return { success: false, error: "No tenés permiso para editar este evento." }
   }
 
-  const draftState = (rawData ?? {}) as Json
+  const draftState = toEventDraftV2Payload(
+    parseEventDraftV2(rawData),
+  ) as unknown as Json
   const { data, error } = await gate.supabase
     .from("events")
     .update({
@@ -332,6 +334,7 @@ export async function saveEventDraftV2(
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)
+    .eq("organizer_id", event.organizer_id)
     .select("id, draft_state")
     .maybeSingle()
 
@@ -759,6 +762,7 @@ async function bindPublishedTicketDays(
 
 async function ensurePublishedCatalogListing(
   eventId: string,
+  organizerId: string,
   payload: PublishEventV2Payload,
 ) {
   const admin = createAdminClient()
@@ -772,6 +776,7 @@ async function ensurePublishedCatalogListing(
       updated_at: new Date().toISOString(),
     } as never)
     .eq("id", eventId)
+    .eq("organizer_id", organizerId)
   if (written.error) throw new Error(formatSupabaseError(written.error))
 }
 
@@ -875,6 +880,7 @@ async function unpackPublishEventV2Sequential(input: {
       updated_at: new Date().toISOString(),
     } as never)
     .eq("id", input.eventId)
+    .eq("organizer_id", input.organizerId)
     .select("id, slug")
     .maybeSingle()
   if (written.error) throw new Error(formatSupabaseError(written.error))
@@ -1022,9 +1028,8 @@ export async function publishEventV2(
       }
     } else {
       try {
-        await unlinkPublishedTicketDays(id)
-        await unpackPublishedSchedule(id, payload)
-        await bindPublishedTicketDays(id, payload.tickets)
+        // publish_event_v2 already wrote tickets, schedule and day binds
+        // atomically. Only persist relations the RPC does not cover.
         await hardReplacePublishedSeatingMaps({
           eventId: id,
           maps: payload.seating_maps,
@@ -1042,7 +1047,7 @@ export async function publishEventV2(
 
   if (targetStatus === "published") {
     try {
-      await ensurePublishedCatalogListing(id, payload)
+      await ensurePublishedCatalogListing(id, event.organizer_id, payload)
     } catch (error) {
       return {
         success: false,

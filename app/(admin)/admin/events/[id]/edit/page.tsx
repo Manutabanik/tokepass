@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation"
 
 import { EventEditorV2 } from "./event-editor-v2"
 import { getEventDraftV2 } from "@/app/actions/events-v2"
+import { ClientErrorBoundary } from "@/components/errors/client-error-boundary"
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import { parseEventDraftV2 } from "@/lib/validations/event-draft-v2"
 
@@ -36,10 +37,12 @@ export default async function EditEventPage({
   }
 
   return (
-    <EventEditorV2
-      eventId={result.eventId}
-      initialDraft={parseEventDraftV2(result.draftState)}
-      isPublished={result.isPublished}
-    />
+    <ClientErrorBoundary homeHref="/admin/events" homeLabel="Volver a eventos">
+      <EventEditorV2
+        eventId={result.eventId}
+        initialDraft={parseEventDraftV2(result.draftState)}
+        isPublished={result.isPublished}
+      />
+    </ClientErrorBoundary>
   )
 }

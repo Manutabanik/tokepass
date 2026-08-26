@@ -36,7 +36,13 @@ export type CheckoutBuyerValidationOptions = {
 const buyerNameSchema = z
   .string()
   .trim()
-  .transform((value) => value.replace(/\s+/g, " "))
+  .transform((value) =>
+    value
+      .normalize("NFC")
+      .replace(/[^\p{L}\s'-]/gu, "")
+      .replace(/\s+/g, " ")
+      .trim(),
+  )
   .pipe(
     z
       .string()

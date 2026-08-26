@@ -114,6 +114,22 @@ describe("eventPublishSchema", () => {
     assert.equal(eventPublishSchema.safeParse(draft).success, false)
   })
 
+  it("rejects negative prices and inverted sale windows", () => {
+    const negative = publishableDraft()
+    negative.tickets[0]!.price = -1
+    assert.equal(eventPublishSchema.safeParse(negative).success, false)
+
+    const window = publishableDraft()
+    window.tickets[0]!.startDate = "2026-09-10T10:00"
+    window.tickets[0]!.endDate = "2026-09-01T10:00"
+    assert.equal(eventPublishSchema.safeParse(window).success, false)
+
+    const limits = publishableDraft()
+    limits.tickets[0]!.minOrder = 5
+    limits.tickets[0]!.maxOrder = 2
+    assert.equal(eventPublishSchema.safeParse(limits).success, false)
+  })
+
   it("requires endDate to be after startDate", () => {
     const draft = publishableDraft()
     draft.basicInfo.endDate = "2026-08-01T22:00"
@@ -252,6 +268,17 @@ describe("parseEventDraftV2", () => {
     assert.equal(sport.archetype, "sport")
     assert.equal(sport.isVirtual, false)
     assert.equal(sport.settings.deliveryMode, "PRESENCIAL")
+  })
+
+  it("strips markup and clamps negative money fields", () => {
+    const parsed = parseEventDraftV2({
+      basicInfo: { name: "<script>x</script>After" },
+      tickets: [{ name: "<b>General</b>", price: -20, stock: -4 }],
+    })
+    assert.equal(parsed.basicInfo.name, "x After")
+    assert.equal(parsed.tickets[0]?.name, "General")
+    assert.equal(parsed.tickets[0]?.price, 0)
+    assert.equal(parsed.tickets[0]?.stock, 0)
   })
 
   it("hydrates draft_state without inventing tickets or dropping extra keys", () => {

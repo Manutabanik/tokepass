@@ -136,6 +136,7 @@ import {
   CheckoutPayloadSchema,
   CheckoutSeatHoldSchema,
   buyerToHolderFields,
+  checkoutTermsAreAccepted,
   formatCheckoutPayloadError,
   type CheckoutAddonItem,
   type CheckoutCartItem,
@@ -1869,6 +1870,8 @@ async function executeLockTickets(
   let error = mixedMissing ? null : mixed.error
 
   if (mixedMissing) {
+    let gaHeld = false
+    const heldSeatIds: string[] = []
     if (zoneGeneralItems.length > 0) {
       const gaPayload = zoneGeneralItems
         .map((item) => ({
@@ -1885,13 +1888,24 @@ async function executeLockTickets(
         })
         data = ga.data
         error = ga.error
+        gaHeld = !ga.error
       }
     }
     if (!error) {
       for (const item of numberedMapItems) {
         const seatId = checkoutItemSeatId(item)
         if (!seatId) {
-          return { success: false, error: SEAT_SELECTION_REQUIRED }
+          if (gaHeld) {
+            await access.db.rpc("release_ga_cart_holds", {
+              p_event_id: eventId,
+              p_owner_id: user.id,
+            })
+          }
+          return checkoutActionFailure(
+            "ERR_SEAT_REQUIRED",
+            SEAT_SELECTION_REQUIRED,
+            checkoutItemTierId(item),
+          )
         }
         const held = await access.db.rpc("hold_seating_unit_for_cart", {
           p_event_id: eventId,
@@ -1902,9 +1916,42 @@ async function executeLockTickets(
           error = held.error
           break
         }
+        heldSeatIds.push(seatId)
         const heldRow = Array.isArray(held.data) ? held.data[0] : held.data
         if (heldRow?.reserved_until && !data) {
           data = [{ reserved_until: heldRow.reserved_until }]
+        }
+      }
+    }
+    if (error && (gaHeld || heldSeatIds.length > 0)) {
+      if (gaHeld) {
+        const released = await access.db.rpc("release_ga_cart_holds", {
+          p_event_id: eventId,
+          p_owner_id: user.id,
+        })
+        if (released.error) {
+          logger.error({
+            context: "checkout/mixed-hold",
+            message: "release_ga_cart_holds_after_partial_failed",
+            eventId,
+            error: released.error.message,
+          })
+        }
+      }
+      for (const seatId of heldSeatIds) {
+        const released = await access.db.rpc("release_seating_unit_cart_hold", {
+          p_event_id: eventId,
+          p_owner_id: user.id,
+          p_seating_unit_id: seatId,
+        })
+        if (released.error) {
+          logger.error({
+            context: "checkout/mixed-hold",
+            message: "release_seating_unit_after_partial_failed",
+            eventId,
+            seatingUnitId: seatId,
+            error: released.error.message,
+          })
         }
       }
     }
@@ -2385,7 +2432,11 @@ export async function reserveSeatAtomic(
   )
   const unit = Array.isArray(unitRows) ? unitRows[0] : unitRows
 
-  if (unitError || !unit || unit.status !== "available") {
+  if (
+    unitError ||
+    !unit ||
+    (unit.status !== "available" && unit.status !== "reserved")
+  ) {
     return { success: false, error: SEATING_COLLISION_MESSAGE }
   }
 
@@ -2793,6 +2844,16 @@ export async function startCheckoutWithPayment(
     await recordCheckoutFailure(ctx)
     return { success: false, error: PHONE_ERROR }
   }
+  if (
+    !checkoutTermsAreAccepted({
+      termsAccepted: payload.termsAccepted,
+      isFreeOrder,
+      sandbox: useSandbox,
+    })
+  ) {
+    await recordCheckoutFailure(ctx)
+    return { success: false, error: LEGAL_CONSENT_REQUIRED_ERROR }
+  }
 
   let captchaProvider: string | null = "none"
   let captchaScore: number | null = null
@@ -3192,7 +3253,11 @@ export async function startCheckoutWithPayment(
       eventId: payload.eventId,
       buyerId: user.id,
       sandbox: useSandbox,
-      termsAccepted: isFreeOrder ? true : payload.termsAccepted !== false,
+      termsAccepted: checkoutTermsAreAccepted({
+        termsAccepted: payload.termsAccepted,
+        isFreeOrder,
+        sandbox: useSandbox,
+      }),
     })
     if (!legalGate.ok) {
       await cleanupPendingOrder(orderId)
@@ -3578,7 +3643,10 @@ export async function startSandboxCheckout(
     {
       sandbox: true,
       previewKey: parsed.data.previewKey,
-      termsAccepted: parsed.data.termsAccepted !== false,
+      termsAccepted: checkoutTermsAreAccepted({
+        termsAccepted: parsed.data.termsAccepted,
+        sandbox: true,
+      }),
       captchaToken,
       displayedTotal: parsed.data.displayedTotal ?? guard?.displayedTotal,
       idempotencyKey: parsed.data.idempotencyKey ?? guard?.idempotencyKey,

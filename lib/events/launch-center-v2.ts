@@ -1,4 +1,8 @@
-import { draftNumberValue, resolveDraftSchedule } from "@/lib/validations/event-draft-v2"
+import {
+  draftNumberValue,
+  isEventDraftPublishable,
+  resolveDraftSchedule,
+} from "@/lib/validations/event-draft-v2"
 
 export const DRAFT_LAUNCH_PLATFORM_FEE = 0.1
 
@@ -13,7 +17,9 @@ export type DraftLaunchValues = {
     venueName?: string | null
   } | null
   schedule?: unknown
-  tickets?: Array<{ price?: unknown } | null | undefined> | null
+  tickets?: Array<
+    { price?: unknown; name?: unknown; stock?: unknown } | null | undefined
+  > | null
   flyerUrl?: string | null
   bannerUrl?: string | null
   venueCapacity?: unknown
@@ -92,7 +98,12 @@ export function draftLaunchChecklist(values: DraftLaunchValues): DraftLaunchChec
     {
       id: "tickets",
       label: "Al menos una entrada",
-      ok: tickets.length > 0,
+      ok: tickets.some((ticket) => {
+        if (!ticket || typeof ticket !== "object") return false
+        const name =
+          typeof ticket.name === "string" ? ticket.name.trim() : ""
+        return Boolean(name) && draftNumberValue(ticket.stock) >= 1
+      }),
     },
     {
       id: "capacity",
@@ -103,7 +114,7 @@ export function draftLaunchChecklist(values: DraftLaunchValues): DraftLaunchChec
 }
 
 export function isDraftLaunchReady(values: DraftLaunchValues): boolean {
-  return draftLaunchChecklist(values).every((item) => item.ok)
+  return isEventDraftPublishable(values)
 }
 
 export function draftLaunchPreview(values: DraftLaunchValues): DraftLaunchPreview {

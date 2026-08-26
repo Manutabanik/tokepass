@@ -1,7 +1,7 @@
 "use client"
 
 import { Eye, Rocket } from "lucide-react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { FormProvider, useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 
@@ -30,7 +30,10 @@ import {
   isDraftLaunchReady,
 } from "@/lib/events/launch-center-v2"
 import { cn } from "@/lib/utils"
-import { type EventDraftV2 } from "@/lib/validations/event-draft-v2"
+import {
+  eventPublishDisabledReason,
+  type EventDraftV2,
+} from "@/lib/validations/event-draft-v2"
 
 type EventEditorV2Props = {
   eventId: string
@@ -45,6 +48,7 @@ export function EventEditorV2({
 }: EventEditorV2Props) {
   const [step, setStep] = useState<EditorV2StepId>(1)
   const [busy, setBusy] = useState<"idle" | "preview" | "publish">("idle")
+  const actionBusyRef = useRef(false)
   const [nowPublished, setNowPublished] = useState(isPublished)
   const [allowLeave, setAllowLeave] = useState(false)
   const [successOpen, setSuccessOpen] = useState(false)
@@ -67,16 +71,19 @@ export function EventEditorV2({
   const working = busy !== "idle"
   const leaveBlocked = shouldBlockDraftLeave(saveStatus, working) && !allowLeave
   const actionsDisabled = !launchReady || working
+  const launchBlockedReason = launchReady
+    ? ""
+    : eventPublishDisabledReason(getValues())
   const publishTitle = launchReady
     ? nowPublished
       ? "Actualizar el evento publicado"
       : "Subir el evento al catálogo"
-    : "Completá el checklist del paso 3 para continuar."
+    : launchBlockedReason || "Completá el checklist del paso 3 para continuar."
   const previewTitle = launchReady
     ? nowPublished
       ? "Abrir la ficha como la ve un comprador"
       : "Guardar el borrador y probar la compra sin publicarlo"
-    : "Completá el checklist del paso 3 para continuar."
+    : launchBlockedReason || "Completá el checklist del paso 3 para continuar."
   const publishLabel = draftLaunchSubmitLabel(nowPublished, busy === "publish")
   const previewLabel = draftLaunchPreviewLabel(nowPublished, busy === "preview")
 
@@ -85,8 +92,10 @@ export function EventEditorV2({
   })
 
   async function handlePreviewDraft() {
-    if (!launchReady || working) return
+    if (!launchReady || working || actionBusyRef.current) return
+    actionBusyRef.current = true
     if (nowPublished) {
+      actionBusyRef.current = false
       window.open(eventPreviewPath(eventId), "_blank", "noopener,noreferrer")
       return
     }
@@ -107,6 +116,7 @@ export function EventEditorV2({
       setAllowLeave(true)
       window.location.assign(result.previewPath)
     } finally {
+      actionBusyRef.current = false
       if (!redirected) {
         resume()
         setBusy("idle")
@@ -115,7 +125,8 @@ export function EventEditorV2({
   }
 
   async function handlePublish() {
-    if (!launchReady || working) return
+    if (!launchReady || working || actionBusyRef.current) return
+    actionBusyRef.current = true
     const wasPublished = nowPublished
     setBusy("publish")
     try {
@@ -134,6 +145,7 @@ export function EventEditorV2({
       setSuccessUrl(result.publicUrl)
       setSuccessOpen(true)
     } finally {
+      actionBusyRef.current = false
       resume()
       setBusy("idle")
     }
@@ -204,6 +216,7 @@ export function EventEditorV2({
                   publishing={busy === "publish"}
                   previewing={busy === "preview"}
                   launchReady={launchReady}
+                  launchBlockedReason={launchBlockedReason}
                   onPreview={() => void handlePreviewDraft()}
                   onLaunch={() => void handlePublish()}
                 />
