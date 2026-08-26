@@ -416,6 +416,133 @@ describe("buildPublishEventV2Payload", () => {
     )
   })
 
+  it("heals a map ticket whose seating_sector_id changed but the name still matches", () => {
+    const draft = publishableDraft()
+    draft.tickets.push({
+      id: "map-platea",
+      name: "Platea",
+      description: "",
+      price: 18000,
+      stock: 24,
+      minOrder: 1,
+      maxOrder: 4,
+      source: "map",
+      sectorId: "sec-viejo",
+      layoutType: "numbered_seat",
+    })
+    draft.seatingMap = {
+      ...draft.seatingMap,
+      version: 1,
+      url: "",
+      sectors: [
+        {
+          id: "sector-platea",
+          name: "Platea",
+          color: "#f97316",
+          price: 18000,
+          x: 0,
+          y: 0,
+          rows: 1,
+          seatsPerRow: 2,
+          curvature: 0,
+          aisle: false,
+          seats: [
+            { id: "s1", row: "1", number: 1, x: 0, y: 0, status: "available" },
+            { id: "s2", row: "1", number: 2, x: 10, y: 0, status: "available" },
+          ],
+        },
+      ],
+    }
+    const payload = buildPublishEventV2Payload(draft)
+    const platea = payload.tickets.find((ticket) => ticket.name === "Platea")
+    assert.equal(platea?.seating_sector_id, "sector-platea")
+    assert.equal(platea?.tier_type, "seated")
+  })
+
+  it("allows two day-bound map tickets to share the same seating_sector_id", () => {
+    const dayA = "550e8400-e29b-41d4-a716-446655440001"
+    const dayB = "550e8400-e29b-41d4-a716-446655440002"
+    const draft = publishableDraft()
+    draft.schedule = [
+      {
+        id: dayA,
+        name: "Viernes",
+        date: "2026-09-04",
+        startDate: "2026-09-04T18:00",
+        endDate: "2026-09-04T23:00",
+        slots: [],
+      },
+      {
+        id: dayB,
+        name: "Sábado",
+        date: "2026-09-05",
+        startDate: "2026-09-05T18:00",
+        endDate: "2026-09-05T23:00",
+        slots: [],
+      },
+    ]
+    draft.tickets.push(
+      {
+        id: "map-viernes",
+        name: "Grada Naranja",
+        description: "",
+        price: 15000,
+        stock: 40,
+        minOrder: 1,
+        maxOrder: 4,
+        source: "map",
+        sectorId: "sector-grada",
+        layoutType: "numbered_seat",
+        validDayIds: [dayA],
+      },
+      {
+        id: "map-sabado",
+        name: "Grada Naranja",
+        description: "",
+        price: 15000,
+        stock: 40,
+        minOrder: 1,
+        maxOrder: 4,
+        source: "map",
+        sectorId: "sector-grada",
+        layoutType: "numbered_seat",
+        validDayIds: [dayB],
+      },
+    )
+    draft.seatingMap = {
+      ...draft.seatingMap,
+      version: 1,
+      url: "",
+      sectors: [
+        {
+          id: "sector-grada",
+          name: "Grada Naranja",
+          color: "#f97316",
+          price: 15000,
+          x: 0,
+          y: 0,
+          rows: 1,
+          seatsPerRow: 2,
+          curvature: 0,
+          aisle: false,
+          seats: [
+            { id: "s1", row: "1", number: 1, x: 0, y: 0, status: "available" },
+            { id: "s2", row: "1", number: 2, x: 10, y: 0, status: "available" },
+          ],
+        },
+      ],
+    }
+    const payload = buildPublishEventV2Payload(draft)
+    const mapTickets = payload.tickets.filter(
+      (ticket) => ticket.seating_sector_id === "sector-grada",
+    )
+    assert.equal(mapTickets.length, 2)
+    assert.deepEqual(
+      mapTickets.map((ticket) => ticket.day_id).sort(),
+      [dayA, dayB],
+    )
+  })
+
   it("lists the event in the public catalog unless the organizer opts out", () => {
     const listed = buildPublishEventV2Payload({
       ...publishableDraft(),

@@ -3,6 +3,12 @@ import {
   sanitizeEventDraftForPersist,
 } from "@/lib/events/draft-seating-map-v2"
 import { collectLiveSeatingSectorIds } from "@/lib/events/sanitize-ticket-tiers"
+import {
+  collectNamedMapSectorIds,
+  healTicketSeatingSector,
+  type NamedMapSector,
+} from "@/lib/seating/stabilize-venue-map-ids"
+import { parseVenueMap } from "@/types/venue-map"
 import { parsePromoVideoUrl } from "@/lib/promo-video"
 import { calculateTierPricing } from "@/lib/pricing/flexible-pricing"
 import {
@@ -315,30 +321,31 @@ export function publishedExperienceColumns(payload: PublishEventV2Payload) {
   }
 }
 
-function collectPublishedLiveSectorIds(input: {
+function collectPublishedLiveSectors(input: {
   venue_map?: unknown
   seating_maps?: Array<{ map_config?: unknown }>
-}): Set<string> {
-  const ids = new Set<string>()
+}): NamedMapSector[] {
+  const byId = new Map<string, string>()
   for (const raw of [
     input.venue_map,
     ...(input.seating_maps ?? []).map((item) => item.map_config),
   ]) {
+    for (const sector of collectNamedMapSectorIds(parseVenueMap(raw))) {
+      if (!byId.has(sector.id)) byId.set(sector.id, sector.name)
+    }
     for (const id of collectLiveSeatingSectorIds({ venueMap: raw })) {
-      ids.add(id)
+      if (!byId.has(id)) byId.set(id, "")
     }
   }
-  return ids
+  return [...byId.entries()].map(([id, name]) => ({ id, name }))
 }
 
 function sanitizePublishedTicketSectors(
   tickets: PublishEventV2TierPayload[],
   hasSeatingPlan: boolean,
-  liveSectorIds: Iterable<string>,
+  liveSectors: readonly NamedMapSector[],
 ): PublishEventV2TierPayload[] {
-  const live = new Set(
-    [...liveSectorIds].filter((id) => id.trim().length > 0),
-  )
+  const live = new Set(liveSectors.map((sector) => sector.id).filter(Boolean))
   return tickets.map((ticket) => {
     if (
       !hasSeatingPlan ||
@@ -348,7 +355,14 @@ function sanitizePublishedTicketSectors(
     ) {
       return { ...ticket, seating_sector_id: null }
     }
-    const sectorId = ticket.seating_sector_id?.trim() || ""
+    const healed = healTicketSeatingSector(
+      {
+        name: ticket.name,
+        seating_sector_id: ticket.seating_sector_id,
+      },
+      liveSectors,
+    )
+    const sectorId = healed.seating_sector_id?.trim() || ""
     if (!sectorId || !live.has(sectorId)) {
       return {
         ...ticket,
@@ -357,7 +371,7 @@ function sanitizePublishedTicketSectors(
         layout_type: "general",
       }
     }
-    return ticket
+    return { ...ticket, seating_sector_id: sectorId }
   })
 }
 
@@ -472,7 +486,7 @@ export function buildPublishEventV2Payload(
     tickets: sanitizePublishedTicketSectors(
       [...tickets, ...extras],
       publishedMaps.has_seating_plan,
-      collectPublishedLiveSectorIds(publishedMaps),
+      collectPublishedLiveSectors(publishedMaps),
     ),
   }
 }

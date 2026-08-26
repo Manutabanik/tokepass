@@ -9,6 +9,7 @@ import {
   isOrphanMapTicket,
   mergeDraftTicketsWithDayMap,
   mergeDraftTicketsWithMap,
+  mergeDraftTicketsWithScheduleMaps,
   parseDraftSeatingMaps,
   sanitizeDraftTicketsForPersist,
   ticketsFromVenueMap,
@@ -272,5 +273,75 @@ describe("draft seating map isolation", () => {
     if (clonedSectors[0]) clonedSectors[0].price = 1
     const sourceSectors = source.mapConfig.sectors as Array<{ price?: number }>
     assert.equal(sourceSectors[0]?.price, 18000)
+    assert.equal(
+      (cloned.mapConfig.sectors as Array<{ id?: string }>)[0]?.id,
+      "sector-platea",
+    )
+  })
+
+  it("preserves sector ids when the editor resaves the same named sector", () => {
+    const first = upsertDraftSeatingMapInstance([], "day-a", plateaMap())
+    const renamedId = {
+      ...plateaMap(),
+      sectors: plateaMap().sectors.map((sector) => ({
+        ...sector,
+        id: "sec-regenerado",
+        seats: sector.seats.map((seat, index) => ({
+          ...seat,
+          id: `sec-regenerado-S${index + 1}`,
+        })),
+      })),
+    }
+    const next = upsertDraftSeatingMapInstance(first, "day-a", renamedId)
+    assert.equal(
+      (next[0]?.mapConfig.sectors as Array<{ id?: string }>)[0]?.id,
+      "sector-platea",
+    )
+  })
+
+  it("rebinds a map ticket by sector name when the id changed", () => {
+    const stale = {
+      ...emptyEventDraftV2LineItem("map-old"),
+      name: "Platea",
+      source: "map",
+      sectorId: "sec-viejo",
+    }
+    const merged = mergeDraftTicketsWithDayMap([stale], plateaMap(), "day-a")
+    assert.equal(merged.length, 1)
+    assert.equal(merged[0]?.sectorId, "sector-platea")
+    assert.equal(merged[0]?.id, "map-old")
+  })
+
+  it("creates one map ticket per schedule day for the same sector", () => {
+    const merged = mergeDraftTicketsWithScheduleMaps(
+      [],
+      plateaMap(),
+      "day-a",
+      ["day-a", "day-b"],
+      [],
+    )
+    const platea = merged.filter((ticket) => ticket.sectorId === "sector-platea")
+    assert.equal(platea.length, 2)
+    assert.deepEqual(
+      platea.map((ticket) => ticket.validDayIds?.[0]).sort(),
+      ["day-a", "day-b"],
+    )
+  })
+
+  it("heals a stale seating_sector_id by name before garbage collection", () => {
+    const stale = {
+      ...emptyEventDraftV2LineItem("map-old"),
+      name: "Platea",
+      source: "map",
+      sectorId: "sec-viejo",
+      seating_sector_id: "sec-viejo",
+    }
+    const kept = sanitizeDraftTicketsForPersist([stale], {
+      mapActive: true,
+      liveSectorIds: ["sector-platea"],
+      liveSectors: [{ id: "sector-platea", name: "Platea" }],
+    })
+    assert.equal(kept.length, 1)
+    assert.equal(kept[0]?.sectorId, "sector-platea")
   })
 })

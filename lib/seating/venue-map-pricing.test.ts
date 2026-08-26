@@ -398,6 +398,67 @@ describe("venue-map-pricing", () => {
     assert.equal(next.every((tier) => tier.seatingSectorId == null), true)
   })
 
+  it("re-vincula un ticket de mapa por nombre si el seating_sector_id cambio", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "zone-campo",
+        name: "Campo",
+        color: "#22d3ee",
+        price: 8000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 8, y: 0 },
+          { x: 8, y: 8 },
+        ],
+        layoutType: "general",
+        sellMode: "group",
+        rows: 1,
+        itemsPerRow: 1,
+        capacityPerUnit: 1,
+        capacity: 100,
+        labelPrefix: "",
+      },
+    ]
+    const next = consolidateEventTicketsForPersist({
+      basics: {
+        hasSeatingPlan: true,
+        scheduleDays: [],
+      },
+      venue: { venueMap: map, includesSeatingMap: true },
+      tickets: [
+        {
+          name: "Campo",
+          price: 8000,
+          capacity: 100,
+          timeLimit: "",
+          saleStartsAt: "",
+          saleEndsAt: "",
+          bonusReward: "",
+          dayId: null,
+          visibility: "public",
+          layoutType: "general",
+          seatingSectorId: "zone-viejo",
+          seating_sector_id: "zone-viejo",
+          capacityPerUnit: 1,
+          admitCount: 1,
+          tierType: "general",
+          listPrice: null,
+          bundleItems: [],
+          bundleType: null,
+          promoDiscountType: null,
+          promoDiscountValue: 0,
+          promoRequiredQty: 1,
+          promoPayQty: 1,
+          description: "",
+          highlightBadge: null,
+        },
+      ],
+    } as Parameters<typeof consolidateEventTicketsForPersist>[0])
+    assert.equal(next.some((tier) => tier.seatingSectorId === "zone-campo"), true)
+    assert.equal(next.some((tier) => tier.seatingSectorId === "zone-viejo"), false)
+  })
+
   it("consolida inventario libre con entradas ya ligadas al mapa", () => {
     const map = emptyVenueMap()
     map.zones = [

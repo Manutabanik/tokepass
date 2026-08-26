@@ -433,7 +433,22 @@ function resolveSectorName(
   return textOrUndefined(item.groupName ?? item.group_name) ?? "General"
 }
 
-function parseElement(raw: unknown): VenueMapElement | null {
+function stableFallbackEntityId(
+  kind: "sector" | "zone" | "el",
+  name: string,
+  index: number,
+): string {
+  const slug = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24)
+  return `${kind}-${slug || "item"}-${index + 1}`
+}
+
+function parseElement(raw: unknown, index = 0): VenueMapElement | null {
   if (!raw || typeof raw !== "object") return null
   const item = raw as Partial<VenueMapElement> & Record<string, unknown>
   const type = item.type
@@ -448,6 +463,13 @@ function parseElement(raw: unknown): VenueMapElement | null {
     return null
   }
   const layer = resolveLayer(type, item.category)
+  const id =
+    String(item.id ?? "").trim() ||
+    stableFallbackEntityId(
+      "el",
+      String(item.label ?? item.sectorName ?? item.sector_name ?? ""),
+      index,
+    )
   const seats =
     layer === "infrastructure"
       ? []
@@ -457,7 +479,7 @@ function parseElement(raw: unknown): VenueMapElement | null {
             const price = parseOptionalSeatNumber(raw.price)
             const rotation = parseOptionalSeatNumber(raw.rotation)
             return {
-              id: String(raw.id ?? `${item.id}-S${index + 1}`),
+              id: String(raw.id ?? `${id}-S${index + 1}`),
               number: asNumber(raw.number, index + 1),
               x: asNumber(raw.x, 0),
               y: asNumber(raw.y, 0),
@@ -480,7 +502,7 @@ function parseElement(raw: unknown): VenueMapElement | null {
           })
         : []
   return {
-    id: String(item.id ?? `el-${Math.random().toString(36).slice(2, 8)}`),
+    id,
     type: layer === "infrastructure" ? "infrastructure" : type,
     subtype: item.subtype,
     label: String(item.label ?? "Elemento"),
@@ -594,7 +616,7 @@ function rectToPolygon(item: Record<string, unknown>): VenueMapPoint[] {
   ]
 }
 
-function parseVenueZone(raw: unknown): VenueMapZone | null {
+function parseVenueZone(raw: unknown, index = 0): VenueMapZone | null {
   if (!raw || typeof raw !== "object") return null
   const item = raw as Record<string, unknown>
   const rawPoints = Array.isArray(item.polygon)
@@ -649,7 +671,9 @@ function parseVenueZone(raw: unknown): VenueMapZone | null {
           fallback: layoutType === "table_combo" ? "group" : "per_seat",
         })
   return {
-    id: String(item.id ?? `zone-${Math.random().toString(36).slice(2, 8)}`),
+    id:
+      String(item.id ?? "").trim() ||
+      stableFallbackEntityId("zone", String(item.name ?? "Zona"), index),
     name: String(item.name ?? "Zona").slice(0, 80),
     color: String(item.color ?? "#22d3ee"),
     price: Math.max(0, asNumber(item.price, 0)),
@@ -694,14 +718,14 @@ export function mapIncludesGeneralAccess(
   return zones.some(zoneIncludesGeneralAccess)
 }
 
-function parsePolygonSector(raw: unknown): VenueMapSector | null {
+function parsePolygonSector(raw: unknown, index = 0): VenueMapSector | null {
   if (!raw || typeof raw !== "object") return null
   const item = raw as Record<string, unknown>
   if (!Array.isArray(item.seats)) return null
+  const name = String(item.name ?? "").trim() || "Sector"
   const id =
     String(item.id ?? "").trim() ||
-    `sector-${Math.random().toString(36).slice(2, 10)}`
-  const name = String(item.name ?? "").trim() || "Sector"
+    stableFallbackEntityId("sector", name, index)
   const seats = item.seats.map((seat, index) => {
     const row = seat && typeof seat === "object" ? (seat as Record<string, unknown>) : {}
     const price = parseOptionalSeatNumber(row.price)
@@ -754,7 +778,7 @@ function flattenNestedSectorElements(raw: unknown): VenueMapElement[] {
     const color =
       typeof record.color === "string" ? record.color : undefined
     for (const nested of record.elements) {
-      const parsed = parseElement(nested)
+      const parsed = parseElement(nested, out.length)
       if (!parsed) continue
       out.push({
         ...parsed,
@@ -820,7 +844,7 @@ export function parseVenueMap(raw: unknown): InteractiveVenueMap {
 
   const topElements = Array.isArray(record.elements)
     ? record.elements
-        .map((element) => parseElement(element))
+        .map((element, index) => parseElement(element, index))
         .filter((element): element is VenueMapElement => Boolean(element))
     : []
   const nested = flattenNestedSectorElements(record.sectors)
@@ -847,13 +871,13 @@ export function parseVenueMap(raw: unknown): InteractiveVenueMap {
       : [],
     sectors: Array.isArray(record.sectors)
       ? record.sectors
-          .map((sector) => parsePolygonSector(sector))
+          .map((sector, index) => parsePolygonSector(sector, index))
           .filter((sector): sector is VenueMapSector => Boolean(sector))
       : [],
     elements,
     zones: Array.isArray(record.zones)
       ? record.zones
-          .map((zone) => parseVenueZone(zone))
+          .map((zone, index) => parseVenueZone(zone, index))
           .filter((zone): zone is VenueMapZone => Boolean(zone))
       : [],
     backgroundImage:

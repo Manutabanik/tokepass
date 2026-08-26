@@ -1,5 +1,12 @@
 import { collectLiveSeatingSectorIds } from "@/lib/events/sanitize-ticket-tiers"
 import {
+  collectNamedMapSectorIds,
+  healTicketsSeatingSectors,
+  normalizeMapSectorLabel,
+  stabilizeVenueMapIds,
+  type NamedMapSector,
+} from "@/lib/seating/stabilize-venue-map-ids"
+import {
   layoutTypeForMapSectorId,
   priceGroupSectorId,
 } from "@/lib/seating/venue-map-pricing"
@@ -87,6 +94,28 @@ export function ticketsFromVenueMap(map: InteractiveVenueMap): DraftMapTicket[] 
   })
 }
 
+function claimPreviousMapTicket<T extends DraftMapTicketLike>(
+  ticket: DraftMapTicketLike,
+  existingBySector: Map<string, T>,
+  existingByName: Map<string, T>,
+): T | undefined {
+  const sectorId = String(ticket.sectorId ?? "").trim()
+  const byId = sectorId ? existingBySector.get(sectorId) : undefined
+  if (byId) {
+    existingBySector.delete(sectorId)
+    const name = normalizeMapSectorLabel(byId.name)
+    if (name) existingByName.delete(name)
+    return byId
+  }
+  const name = normalizeMapSectorLabel(ticket.name)
+  const byName = name ? existingByName.get(name) : undefined
+  if (!byName) return undefined
+  existingByName.delete(name)
+  const previousId = String(byName.sectorId ?? "").trim()
+  if (previousId) existingBySector.delete(previousId)
+  return byName
+}
+
 export function mergeDraftTicketsWithMap<T extends DraftMapTicketLike>(
   current: T[],
   map: InteractiveVenueMap,
@@ -95,14 +124,21 @@ export function mergeDraftTicketsWithMap<T extends DraftMapTicketLike>(
   if (!venueMapHasInventory(map)) return generals
 
   const existingBySector = new Map<string, T>()
+  const existingByName = new Map<string, T>()
   for (const ticket of current) {
     if (!isMapDraftTicket(ticket)) continue
     const sectorId = String(ticket.sectorId ?? "").trim()
     if (sectorId) existingBySector.set(sectorId, ticket)
+    const name = normalizeMapSectorLabel(ticket.name)
+    if (name && !existingByName.has(name)) existingByName.set(name, ticket)
   }
 
   const fromMap = ticketsFromVenueMap(map).map((ticket) => {
-    const previous = existingBySector.get(ticket.sectorId)
+    const previous = claimPreviousMapTicket(
+      ticket,
+      existingBySector,
+      existingByName,
+    )
     const id = previous?.id?.trim()
     return {
       ...ticket,
@@ -150,6 +186,7 @@ type DraftMapTicketLike = {
   sectorId?: string
   layoutType?: string
   validDayIds?: string[]
+  slotId?: string
 }
 
 export type DraftMapPricing = {
@@ -259,20 +296,30 @@ export function draftHasActiveSeatingMap(draft: {
   )
 }
 
-export function collectDraftLiveSectorIds(draft: {
+export function collectDraftLiveSectors(draft: {
   seatingMaps?: Array<{ mapConfig?: unknown }> | null
   seatingMap?: unknown
-}): Set<string> {
-  const ids = new Set<string>()
+}): NamedMapSector[] {
+  const byId = new Map<string, string>()
   for (const raw of [
     ...(draft.seatingMaps ?? []).map((item) => item.mapConfig),
     draft.seatingMap,
   ]) {
+    for (const sector of collectNamedMapSectorIds(parseVenueMap(raw))) {
+      if (!byId.has(sector.id)) byId.set(sector.id, sector.name)
+    }
     for (const id of collectLiveSeatingSectorIds({ venueMap: raw })) {
-      ids.add(id)
+      if (!byId.has(id)) byId.set(id, "")
     }
   }
-  return ids
+  return [...byId.entries()].map(([id, name]) => ({ id, name }))
+}
+
+export function collectDraftLiveSectorIds(draft: {
+  seatingMaps?: Array<{ mapConfig?: unknown }> | null
+  seatingMap?: unknown
+}): Set<string> {
+  return new Set(collectDraftLiveSectors(draft).map((sector) => sector.id))
 }
 
 type SanitizableDraftTicket = {
@@ -344,13 +391,20 @@ export function garbageCollectDraftTickets<T extends SanitizableDraftTicket>(
 
 export function sanitizeDraftTicketsForPersist<T extends SanitizableDraftTicket>(
   tickets: T[],
-  options: { mapActive: boolean; liveSectorIds: Iterable<string> },
+  options: {
+    mapActive: boolean
+    liveSectorIds: Iterable<string>
+    liveSectors?: readonly NamedMapSector[]
+  },
 ): T[] {
   const live = new Set(
     [...options.liveSectorIds].filter((id) => id.trim().length > 0),
   )
+  const healed = options.mapActive
+    ? healTicketsSeatingSectors(tickets, options.liveSectors ?? [])
+    : tickets
   const collected = garbageCollectDraftTickets(
-    tickets,
+    healed,
     options.mapActive ? live : [],
   )
   return collected.map((ticket) => {
@@ -377,12 +431,14 @@ export function sanitizeEventDraftForPersist<
   },
 >(draft: T): T {
   const mapActive = draftHasActiveSeatingMap(draft)
-  const liveSectorIds = collectDraftLiveSectorIds(draft)
+  const liveSectors = collectDraftLiveSectors(draft)
+  const liveSectorIds = liveSectors.map((sector) => sector.id)
   return {
     ...draft,
     tickets: sanitizeDraftTicketsForPersist(draft.tickets ?? [], {
       mapActive,
       liveSectorIds,
+      liveSectors,
     }),
     extras: sanitizeDraftTicketsForPersist(draft.extras ?? [], {
       mapActive: false,
@@ -465,15 +521,51 @@ export function parseDraftSeatingMaps(
   ]
 }
 
+export function mergeDraftTicketsWithScheduleMaps<T extends DraftMapTicketLike>(
+  current: T[],
+  currentMap: InteractiveVenueMap,
+  currentDateId: string,
+  scheduleDayIds: readonly string[],
+  maps: Array<{ dateId?: string; mapConfig?: unknown }> = [],
+): T[] {
+  const dayIds = scheduleDayIds.map((id) => id.trim()).filter(Boolean)
+  const otherConfigured = maps.some(
+    (item) =>
+      item.dateId &&
+      item.dateId !== currentDateId &&
+      hasDraftSeatingMapContent(item.mapConfig),
+  )
+  if (dayIds.length >= 2 && !otherConfigured) {
+    let next = current
+    for (const dayId of dayIds) {
+      next = mergeDraftTicketsWithDayMap(next, currentMap, dayId)
+    }
+    return next
+  }
+  return mergeDraftTicketsWithDayMap(current, currentMap, currentDateId)
+}
+
 export function upsertDraftSeatingMapInstance(
   current: DraftSeatingMapInstance[],
   dateId: string,
   map: InteractiveVenueMap,
 ): DraftSeatingMapInstance[] {
+  const previous = current.find((item) => item.dateId === dateId)
+  const aliases = current
+    .filter(
+      (item) =>
+        item.dateId !== dateId && hasDraftSeatingMapContent(item.mapConfig),
+    )
+    .map((item) => draftSeatingMapToVenueMap(item.mapConfig))
+  const stable = stabilizeVenueMapIds(
+    previous ? draftSeatingMapToVenueMap(previous.mapConfig) : null,
+    map,
+    aliases,
+  )
   const instance: DraftSeatingMapInstance = {
     dateId,
-    mapConfig: toDraftSeatingMap(map),
-    pricing: extractDraftMapPricing(map),
+    mapConfig: toDraftSeatingMap(stable),
+    pricing: extractDraftMapPricing(stable),
   }
   const index = current.findIndex((item) => item.dateId === dateId)
   if (index < 0) return [...current, instance]
@@ -533,15 +625,22 @@ export function mergeDraftTicketsWithDayMap<T extends DraftMapTicketLike>(
   if (!venueMapHasInventory(map)) return [...generals, ...otherDays]
 
   const existingBySector = new Map<string, T>()
+  const existingByName = new Map<string, T>()
   for (const ticket of current) {
     if (!isMapDraftTicket(ticket)) continue
     if (dateId && !mapTicketBelongsToDay(ticket, dateId)) continue
     const sectorId = String(ticket.sectorId ?? "").trim()
     if (sectorId) existingBySector.set(sectorId, ticket)
+    const name = normalizeMapSectorLabel(ticket.name)
+    if (name && !existingByName.has(name)) existingByName.set(name, ticket)
   }
 
   const fromMap = ticketsFromVenueMap(map).map((ticket) => {
-    const previous = existingBySector.get(ticket.sectorId)
+    const previous = claimPreviousMapTicket(
+      ticket,
+      existingBySector,
+      existingByName,
+    )
     const liveId = previous?.id?.trim()
     const keepLive = Boolean(liveId && !liveId.startsWith("map:"))
     return {
@@ -557,6 +656,7 @@ export function mergeDraftTicketsWithDayMap<T extends DraftMapTicketLike>(
       maxOrder: previous?.maxOrder ?? ticket.maxOrder,
       startDate: previous?.startDate ?? "",
       endDate: previous?.endDate ?? "",
+      slotId: dateId || previous?.slotId || "",
       validDayIds: dateId ? [dateId] : (previous?.validDayIds ?? []),
       description: previous?.description?.trim()
         ? previous.description

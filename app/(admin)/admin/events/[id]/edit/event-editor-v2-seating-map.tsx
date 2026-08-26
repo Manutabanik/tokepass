@@ -11,12 +11,14 @@ import { Button } from "@/components/ui/button"
 import { datePartFromDateTime } from "@/lib/events/draft-schedule-slots-v2"
 import {
   cloneDraftSeatingMapInstance,
+  collectDraftLiveSectors,
   collectDraftLiveSectorIds,
   configuredDraftSeatingMapDateIds,
   draftHasActiveSeatingMap,
   emptyDraftSeatingMap,
   hasDraftSeatingMapContent,
   mergeDraftTicketsWithDayMap,
+  mergeDraftTicketsWithScheduleMaps,
   parseDraftSeatingMaps,
   sanitizeDraftTicketsForPersist,
   seatingInstanceToVenueMap,
@@ -66,10 +68,27 @@ export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
       next,
     )
     writeSeatingMaps(nextMaps)
+    const stableMap =
+      seatingInstanceToVenueMap(
+        nextMaps.find((item) => item.dateId === dateId),
+      ) || next
+    const scheduleDayIds = (getValues("schedule") ?? [])
+      .map((day) => day.id)
+      .filter(Boolean)
+    const liveSectors = collectDraftLiveSectors({
+      seatingMaps: nextMaps,
+      seatingMap: nextMaps[0]?.mapConfig,
+    })
     setValue(
       "tickets",
       sanitizeDraftTicketsForPersist(
-        mergeDraftTicketsWithDayMap(getValues("tickets") ?? [], next, dateId),
+        mergeDraftTicketsWithScheduleMaps(
+          getValues("tickets") ?? [],
+          stableMap,
+          dateId,
+          scheduleDayIds,
+          nextMaps,
+        ),
         {
           mapActive: draftHasActiveSeatingMap({
             seatingMaps: nextMaps,
@@ -79,6 +98,7 @@ export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
             seatingMaps: nextMaps,
             seatingMap: nextMaps[0]?.mapConfig,
           }),
+          liveSectors,
         },
       ),
       { shouldDirty: true, shouldTouch: true },
@@ -110,6 +130,10 @@ export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
       ? maps.map((item) => (item.dateId === targetDateId ? cloned : item))
       : [...maps, cloned]
     writeSeatingMaps(nextMaps)
+    const liveSectors = collectDraftLiveSectors({
+      seatingMaps: nextMaps,
+      seatingMap: nextMaps[0]?.mapConfig,
+    })
     setValue(
       "tickets",
       sanitizeDraftTicketsForPersist(
@@ -127,6 +151,7 @@ export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
             seatingMaps: nextMaps,
             seatingMap: nextMaps[0]?.mapConfig,
           }),
+          liveSectors,
         },
       ),
       { shouldDirty: true, shouldTouch: true },

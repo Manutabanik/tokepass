@@ -19,6 +19,11 @@ import {
   resolveEffectiveSeatingType,
   resolveSeatingType,
 } from "@/lib/seating/seating-type"
+import {
+  collectNamedMapSectorIds,
+  healTicketsSeatingSectors,
+  normalizeMapSectorLabel,
+} from "@/lib/seating/stabilize-venue-map-ids"
 import { parseVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
 
 export function priceGroupSectorId(group: VenuePriceGroup): string {
@@ -325,9 +330,19 @@ export function syncMapBackedTickets(
   const daySlots: Array<string | null> = expandDays ? dayIds : [defaultDayId]
   const claimed = new Set<number>()
 
-  function takeExisting(sectorId: string, dayId: string | null, slotIndex: number) {
+  function takeExisting(
+    sectorId: string,
+    dayId: string | null,
+    slotIndex: number,
+    groupName: string,
+  ) {
+    const name = normalizeMapSectorLabel(groupName)
     const exact = existingMap.findIndex((tier, index) => {
-      if (claimed.has(index) || tier.seatingSectorId !== sectorId) return false
+      if (claimed.has(index)) return false
+      const sameSector =
+        tier.seatingSectorId === sectorId ||
+        (name && normalizeMapSectorLabel(tier.name) === name)
+      if (!sameSector) return false
       if (!dayId) return true
       return normalizeDayId(tier.dayId) === dayId
     })
@@ -336,10 +351,13 @@ export function syncMapBackedTickets(
       return existingMap[exact]
     }
     if (slotIndex === 0 || !expandDays) {
-      const any = existingMap.findIndex(
-        (tier, index) =>
-          !claimed.has(index) && tier.seatingSectorId === sectorId,
-      )
+      const any = existingMap.findIndex((tier, index) => {
+        if (claimed.has(index)) return false
+        return (
+          tier.seatingSectorId === sectorId ||
+          Boolean(name && normalizeMapSectorLabel(tier.name) === name)
+        )
+      })
       if (any >= 0) {
         claimed.add(any)
         return existingMap[any]
@@ -351,7 +369,7 @@ export function syncMapBackedTickets(
   const nextMap = groups.flatMap((group) => {
     const sectorId = priceGroupSectorId(group)
     return daySlots.map((dayId, slotIndex) => {
-      const existing = takeExisting(sectorId, dayId, slotIndex)
+      const existing = takeExisting(sectorId, dayId, slotIndex, group.name)
       const inheritedId =
         existing?.id && existing.isNew !== true ? existing.id : undefined
       const base = existing ?? blankMapTicket(dayId ?? defaultDayId)
@@ -443,15 +461,18 @@ function keepTicketWithLiveSector<
 export function consolidateEventTicketsForPersist(
   data: Pick<EventFormValues, "tickets" | "basics" | "venue">,
 ): EventFormValues["tickets"] {
-  const customTickets = data.tickets ?? []
+  const venueMap = parseVenueMap(data.venue.venueMap)
+  const liveSectors = collectNamedMapSectorIds(venueMap)
+  const mapActive = eventHasActiveSeatingMap({
+    hasSeatingPlan: data.basics.hasSeatingPlan,
+    includesSeatingMap: data.venue.includesSeatingMap,
+    venueMap: data.venue.venueMap,
+  })
+  const customTickets = mapActive
+    ? healTicketsSeatingSectors(data.tickets ?? [], liveSectors)
+    : (data.tickets ?? [])
   const liveSectorIds = liveVenueSectorIds(data.venue.venueMap)
-  if (
-    !eventHasActiveSeatingMap({
-      hasSeatingPlan: data.basics.hasSeatingPlan,
-      includesSeatingMap: data.venue.includesSeatingMap,
-      venueMap: data.venue.venueMap,
-    })
-  ) {
+  if (!mapActive) {
     const ticketsToKeep = customTickets.filter((tier) =>
       keepTicketWithLiveSector(tier, new Set()),
     )

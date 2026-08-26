@@ -306,9 +306,10 @@ async function syncMapBackedTiersAfterMapSave(
   if (error) return formatSupabaseError(error)
 
   const groups = listVenuePriceGroups(map)
+  const liveIds = new Set(groups.map((group) => priceGroupSectorId(group)))
   const linked = (tiers ?? []).map((tier) => {
     const existing = (tier.seating_sector_id ?? "").trim()
-    if (existing) {
+    if (existing && liveIds.has(existing)) {
       return { ...tier, seatingSectorId: existing }
     }
     const name = normalizeSectorLabel(tier.name)
@@ -317,7 +318,7 @@ async function syncMapBackedTiersAfterMapSave(
     )
     return {
       ...tier,
-      seatingSectorId: group ? priceGroupSectorId(group) : null,
+      seatingSectorId: group ? priceGroupSectorId(group) : existing || null,
     }
   })
 
