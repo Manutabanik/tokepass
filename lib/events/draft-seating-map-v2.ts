@@ -278,7 +278,50 @@ export function collectDraftLiveSectorIds(draft: {
 type SanitizableDraftTicket = {
   source?: string
   sectorId?: string
+  seatingSectorId?: string | null
+  seating_sector_id?: string | null
   layoutType?: string
+}
+
+export function ticketSeatingSectorRef(ticket: {
+  sectorId?: unknown
+  seatingSectorId?: unknown
+  seating_sector_id?: unknown
+}): string {
+  const candidates = [ticket.sectorId, ticket.seatingSectorId, ticket.seating_sector_id]
+  for (const value of candidates) {
+    if (typeof value !== "string") continue
+    const id = value.trim()
+    if (id) return id
+  }
+  return ""
+}
+
+export function isOrphanMapTicket(
+  ticket: {
+    source?: unknown
+    sectorId?: unknown
+    seatingSectorId?: unknown
+    seating_sector_id?: unknown
+  },
+  liveSectorIds: Iterable<string>,
+): boolean {
+  const sectorId = ticketSeatingSectorRef(ticket)
+  if (!sectorId || ticket.source === "general") return false
+  const live = liveSectorIds instanceof Set
+    ? liveSectorIds
+    : new Set([...liveSectorIds].filter((id) => id.trim().length > 0))
+  return !live.has(sectorId)
+}
+
+export function garbageCollectDraftTickets<T extends SanitizableDraftTicket>(
+  tickets: T[],
+  liveSectorIds: Iterable<string>,
+): T[] {
+  const live = new Set(
+    [...liveSectorIds].filter((id) => id.trim().length > 0),
+  )
+  return tickets.filter((ticket) => !isOrphanMapTicket(ticket, live))
 }
 
 export function sanitizeDraftTicketsForPersist<T extends SanitizableDraftTicket>(
@@ -288,22 +331,19 @@ export function sanitizeDraftTicketsForPersist<T extends SanitizableDraftTicket>
   const live = new Set(
     [...options.liveSectorIds].filter((id) => id.trim().length > 0),
   )
-  return tickets.map((ticket) => {
+  const collected = garbageCollectDraftTickets(
+    tickets,
+    options.mapActive ? live : [],
+  )
+  return collected.map((ticket) => {
     const explicitGeneral = ticket.source === "general"
-    const sectorId = String(ticket.sectorId ?? "").trim()
     if (!options.mapActive || explicitGeneral) {
       return {
         ...ticket,
         source: ticket.source === "map" ? "general" : ticket.source || "general",
         sectorId: "",
-      }
-    }
-    if (!sectorId || !live.has(sectorId)) {
-      return {
-        ...ticket,
-        source: ticket.source === "map" ? "general" : ticket.source || "general",
-        sectorId: "",
-        layoutType: ticket.source === "map" ? "general" : ticket.layoutType,
+        seatingSectorId: null,
+        seating_sector_id: null,
       }
     }
     return ticket

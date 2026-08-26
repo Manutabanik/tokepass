@@ -342,21 +342,33 @@ describe("buildPublishEventV2Payload", () => {
     assert.equal(payload.tickets[0]?.seating_sector_id, null)
   })
 
-  it("nulls seating_sector_id when the map is off", () => {
+  it("drops map tickets when the map is off", () => {
     const draft = publishableDraft()
-    draft.tickets[0] = {
-      ...draft.tickets[0]!,
+    draft.tickets.push({
+      id: "map-platea",
+      name: "Platea",
+      description: "",
+      price: 18000,
+      stock: 24,
+      minOrder: 1,
+      maxOrder: 4,
       source: "map",
       sectorId: "sector-platea",
       layoutType: "numbered_seat",
-    }
+    })
     const payload = buildPublishEventV2Payload(draft)
     assert.equal(payload.has_seating_plan, false)
-    assert.equal(payload.tickets[0]?.seating_sector_id, null)
-    assert.equal(payload.tickets[0]?.tier_type, "general")
+    assert.equal(
+      payload.tickets.some((ticket) => ticket.seating_sector_id === "sector-platea"),
+      false,
+    )
+    assert.equal(
+      payload.tickets.every((ticket) => ticket.seating_sector_id == null),
+      true,
+    )
   })
 
-  it("nulls orphan map sectors that are no longer in the venue map", () => {
+  it("drops orphan map tickets that are no longer in the venue map", () => {
     const draft = publishableDraft()
     draft.tickets.push({
       id: "map-gone",
@@ -394,9 +406,14 @@ describe("buildPublishEventV2Payload", () => {
       ],
     }
     const payload = buildPublishEventV2Payload(draft)
-    const orphan = payload.tickets.find((ticket) => ticket.name === "Viejo")
-    assert.equal(orphan?.seating_sector_id, null)
-    assert.equal(orphan?.tier_type, "general")
+    assert.equal(
+      payload.tickets.some((ticket) => ticket.name === "Viejo"),
+      false,
+    )
+    assert.equal(
+      payload.tickets.some((ticket) => ticket.seating_sector_id === "sector-borrado"),
+      false,
+    )
   })
 
   it("lists the event in the public catalog unless the organizer opts out", () => {

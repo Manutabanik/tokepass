@@ -4,7 +4,9 @@ import { describe, it } from "node:test"
 import {
   cloneDraftSeatingMapInstance,
   configuredDraftSeatingMapDateIds,
+  garbageCollectDraftTickets,
   isMapDraftTicket,
+  isOrphanMapTicket,
   mergeDraftTicketsWithDayMap,
   mergeDraftTicketsWithMap,
   parseDraftSeatingMaps,
@@ -85,7 +87,7 @@ describe("draft seating map isolation", () => {
     )
   })
 
-  it("clears leftover sector ids on general tickets and empty maps", () => {
+  it("clears leftover sector ids on general tickets and drops orphan map tickets", () => {
     const leftover = {
       ...emptyEventDraftV2LineItem("vip-1"),
       name: "VIP",
@@ -106,12 +108,28 @@ describe("draft seating map isolation", () => {
       sectorId: "sector-borrado",
       layoutType: "numbered_seat",
     }
-    const detached = sanitizeDraftTicketsForPersist([orphanMap], {
+    const live = {
+      ...emptyEventDraftV2LineItem("map-2"),
+      name: "Platea",
+      source: "map",
+      sectorId: "sector-platea",
+    }
+    const detached = sanitizeDraftTicketsForPersist([orphanMap, live], {
       mapActive: true,
       liveSectorIds: ["sector-platea"],
     })
-    assert.equal(detached[0]?.sectorId, "")
-    assert.equal(detached[0]?.source, "general")
+    assert.equal(detached.length, 1)
+    assert.equal(detached[0]?.sectorId, "sector-platea")
+    assert.equal(
+      isOrphanMapTicket(orphanMap, ["sector-platea"]),
+      true,
+    )
+    assert.deepEqual(
+      garbageCollectDraftTickets([orphanMap, live], ["sector-platea"]).map(
+        (ticket) => ticket.id,
+      ),
+      ["map-2"],
+    )
   })
 
   it("keeps the live ticket id when rematching the same sector", () => {

@@ -263,7 +263,7 @@ describe("venue-map-pricing", () => {
     assert.equal(next.some((tier) => tier.name === "Estacionamiento"), true)
   })
 
-  it("anula seatingSectorId si el evento ya no usa mapa", () => {
+  it("elimina tickets con seating_sector_id huerfano si el evento ya no usa mapa", () => {
     const next = consolidateEventTicketsForPersist({
       basics: {
         hasSeatingPlan: false,
@@ -272,7 +272,7 @@ describe("venue-map-pricing", () => {
       venue: { includesSeatingMap: false },
       tickets: [
         {
-          name: "General",
+          name: "Fantasma",
           price: 5000,
           capacity: 80,
           timeLimit: "",
@@ -296,8 +296,35 @@ describe("venue-map-pricing", () => {
           description: "",
           highlightBadge: null,
         },
+        {
+          name: "General",
+          price: 5000,
+          capacity: 40,
+          timeLimit: "",
+          saleStartsAt: "",
+          saleEndsAt: "",
+          bonusReward: "",
+          dayId: null,
+          visibility: "public",
+          layoutType: "general",
+          seatingSectorId: null,
+          capacityPerUnit: 1,
+          admitCount: 1,
+          tierType: "general",
+          listPrice: null,
+          bundleItems: [],
+          bundleType: null,
+          promoDiscountType: null,
+          promoDiscountValue: 0,
+          promoRequiredQty: 1,
+          promoPayQty: 1,
+          description: "",
+          highlightBadge: null,
+        },
       ],
     } as Parameters<typeof consolidateEventTicketsForPersist>[0])
+    assert.equal(next.some((tier) => tier.name === "Fantasma"), false)
+    assert.equal(next[0]?.name, "General")
     assert.equal(next[0]?.seatingSectorId, null)
   })
 

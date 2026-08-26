@@ -1,6 +1,6 @@
 "use client"
 
-import { Clock, LayoutList, Pencil } from "lucide-react"
+import { Clock, LayoutList, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { useFormContext, useWatch } from "react-hook-form"
 
 import { useDraftArchetype } from "./event-editor-v2-archetype"
@@ -12,6 +12,12 @@ import {
   type InventorySummaryKind,
   type InventorySummaryRow,
 } from "@/lib/events/inventory-summary-v2"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
@@ -176,6 +182,55 @@ export function InventorySummaryTable() {
     })
   }
 
+  function removeLedgerRow(row: InventorySummaryRow) {
+    const source = row.source
+    const ticketIndex =
+      source.field === "tickets"
+        ? source.index
+        : source.field === "seatingMaps" || source.field === "seatingMap.sectors"
+          ? source.ticketIndex
+          : null
+    if (ticketIndex != null) {
+      const current = getValues("tickets") ?? []
+      setValue(
+        "tickets",
+        current.filter((_, index) => index !== ticketIndex),
+        { shouldDirty: true, shouldTouch: true },
+      )
+    }
+    if (source.field === "seatingMaps") {
+      const maps = [...(getValues("seatingMaps") ?? [])]
+      const instance = maps[source.mapIndex]
+      if (!instance || typeof instance !== "object") return
+      const mapConfig =
+        instance.mapConfig &&
+        typeof instance.mapConfig === "object" &&
+        !Array.isArray(instance.mapConfig)
+          ? { ...(instance.mapConfig as Record<string, unknown>) }
+          : {}
+      const sectors = Array.isArray(mapConfig.sectors)
+        ? mapConfig.sectors.filter((_, index) => index !== source.sectorIndex)
+        : []
+      maps[source.mapIndex] = {
+        ...instance,
+        mapConfig: { ...mapConfig, sectors },
+      }
+      setValue("seatingMaps", maps, { shouldDirty: true, shouldTouch: true })
+      return
+    }
+    if (source.field === "seatingMap.sectors") {
+      const seatingMap = getValues("seatingMap")
+      const sectors = Array.isArray(seatingMap.sectors)
+        ? seatingMap.sectors.filter((_, index) => index !== source.index)
+        : []
+      setValue(
+        "seatingMap",
+        { ...seatingMap, sectors },
+        { shouldDirty: true, shouldTouch: true },
+      )
+    }
+  }
+
   return (
     <DraftCard className="min-w-0 md:col-span-8">
       <div className="mb-4 flex items-center gap-2">
@@ -259,9 +314,17 @@ export function InventorySummaryTable() {
                       />
                     </label>
                   </div>
-                  <p className="text-right text-sm tabular-nums text-slate-700 dark:text-zinc-200">
-                    Recaudación {formatCurrency(row.price * row.stock)}
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm tabular-nums text-slate-700 dark:text-zinc-200">
+                      Recaudación {formatCurrency(row.price * row.stock)}
+                    </p>
+                    {row.type === "mapa" ? (
+                      <LedgerMapRowMenu
+                        name={row.name}
+                        onRemove={() => removeLedgerRow(row)}
+                      />
+                    ) : null}
+                  </div>
                 </li>
               )
             })}
@@ -286,6 +349,9 @@ export function InventorySummaryTable() {
                   <th className="pb-2 pr-3 font-semibold">Precio</th>
                   <th className="pb-2 pr-3 font-semibold">Stock</th>
                   <th className="pb-2 text-right font-semibold">Recaudación</th>
+                  <th className="pb-2 pl-2 text-right font-semibold">
+                    <span className="sr-only">Acciones</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -353,6 +419,14 @@ export function InventorySummaryTable() {
                       <td className="py-2.5 text-right tabular-nums text-slate-700 dark:text-zinc-200">
                         {formatCurrency(row.price * row.stock)}
                       </td>
+                      <td className="py-2.5 pl-2 text-right">
+                        {row.type === "mapa" ? (
+                          <LedgerMapRowMenu
+                            name={row.name}
+                            onRemove={() => removeLedgerRow(row)}
+                          />
+                        ) : null}
+                      </td>
                     </tr>
                   )
                 })}
@@ -371,6 +445,7 @@ export function InventorySummaryTable() {
                   <td className="pt-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
                     {formatCurrency(totals.revenue)}
                   </td>
+                  <td className="pt-3" />
                 </tr>
               </tfoot>
             </table>
@@ -378,6 +453,35 @@ export function InventorySummaryTable() {
         </>
       )}
     </DraftCard>
+  )
+}
+
+function LedgerMapRowMenu({
+  name,
+  onRemove,
+}: {
+  name: string
+  onRemove: () => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        type="button"
+        aria-label={`Acciones de ${name}`}
+        className="inline-flex size-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      >
+        <MoreHorizontal className="size-4" aria-hidden />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-40">
+        <DropdownMenuItem
+          className="text-red-600 dark:text-red-400"
+          onClick={onRemove}
+        >
+          <Trash2 className="size-4" aria-hidden />
+          Eliminar
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

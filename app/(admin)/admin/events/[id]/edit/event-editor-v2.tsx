@@ -16,6 +16,7 @@ import { EventEditorV2SuccessDialog } from "./event-editor-v2-success"
 import { publishEventV2 } from "@/app/actions/events-v2"
 import { Button } from "@/components/ui/button"
 import { useEventDraftV2Persist } from "@/hooks/use-event-draft-v2-persist"
+import { useOrphanMapTicketGarbageCollector } from "@/hooks/use-orphan-map-ticket-gc"
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
 import { getArchetypeConfig, resolveDraftArchetype } from "@/lib/events/archetypes.config"
 import {
@@ -187,6 +188,7 @@ export function EventEditorV2({
 
   return (
     <FormProvider {...form}>
+      <OrphanMapTicketGarbageCollector />
       <div className="w-full flex-1 overflow-x-hidden bg-background pb-20 text-foreground md:pb-0">
         <EventEditorV2StickyHeader
           step={step}
@@ -244,4 +246,9 @@ export function EventEditorV2({
       />
     </FormProvider>
   )
+}
+
+function OrphanMapTicketGarbageCollector() {
+  useOrphanMapTicketGarbageCollector()
+  return null
 }

@@ -392,10 +392,54 @@ export function syncMapBackedTickets(
 }
 
 /** Combina inventario libre + entradas derivadas de sectores del mapa. */
+function persistableTicketSectorId(tier: {
+  seatingSectorId?: string | null
+  seating_sector_id?: string | null
+  sectorId?: string | null
+}): string {
+  return (
+    tier.seatingSectorId?.trim() ||
+    (typeof tier.seating_sector_id === "string"
+      ? tier.seating_sector_id.trim()
+      : "") ||
+    (typeof tier.sectorId === "string" ? tier.sectorId.trim() : "") ||
+    ""
+  )
+}
+
+function liveVenueSectorIds(venueMap: unknown): Set<string> {
+  const map = parseVenueMap(venueMap)
+  const ids = new Set<string>()
+  for (const sector of map.sectors) {
+    const id = sector.id?.trim()
+    if (id) ids.add(id)
+  }
+  for (const zone of map.zones ?? []) {
+    const id = zone.id?.trim()
+    if (id) ids.add(id)
+  }
+  return ids
+}
+
+function keepTicketWithLiveSector<
+  T extends {
+    seatingSectorId?: string | null
+    seating_sector_id?: string | null
+    sectorId?: string | null
+    sold?: number | null
+  },
+>(tier: T, liveSectorIds: Set<string>): boolean {
+  const sectorId = persistableTicketSectorId(tier)
+  if (!sectorId) return true
+  if (liveSectorIds.has(sectorId)) return true
+  return (Number(tier.sold) || 0) > 0
+}
+
 export function consolidateEventTicketsForPersist(
   data: Pick<EventFormValues, "tickets" | "basics" | "venue">,
 ): EventFormValues["tickets"] {
   const customTickets = data.tickets ?? []
+  const liveSectorIds = liveVenueSectorIds(data.venue.venueMap)
   if (
     !eventHasActiveSeatingMap({
       hasSeatingPlan: data.basics.hasSeatingPlan,
@@ -403,24 +447,27 @@ export function consolidateEventTicketsForPersist(
       venueMap: data.venue.venueMap,
     })
   ) {
-    return customTickets.map((tier) => ({
-      ...tier,
-      seatingSectorId: null,
-      seating_sector_id: null,
-      sectorId: "",
-    }))
-  }
-  if (!ticketsReferenceMapSectors(customTickets)) {
     return customTickets
+      .filter((tier) => keepTicketWithLiveSector(tier, new Set()))
+      .map((tier) => ({
+        ...tier,
+        seatingSectorId: null,
+        seating_sector_id: null,
+        sectorId: "",
+      }))
   }
-  return syncMapBackedTickets(
-    customTickets,
-    parseVenueMap(data.venue.venueMap),
-    {
-      defaultDayId: defaultInventoryDayId(data.basics.scheduleDays),
-      dayIds: (data.basics.scheduleDays ?? []).map((day) => day.id),
-    },
-  )
+  const next =
+    !ticketsReferenceMapSectors(customTickets)
+      ? customTickets
+      : syncMapBackedTickets(
+          customTickets,
+          parseVenueMap(data.venue.venueMap),
+          {
+            defaultDayId: defaultInventoryDayId(data.basics.scheduleDays),
+            dayIds: (data.basics.scheduleDays ?? []).map((day) => day.id),
+          },
+        )
+  return next.filter((tier) => keepTicketWithLiveSector(tier, liveSectorIds))
 }
 
 export function applyMapCapacityToTickets<
