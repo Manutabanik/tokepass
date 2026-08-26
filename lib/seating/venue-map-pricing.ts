@@ -401,9 +401,16 @@ export function consolidateEventTicketsForPersist(
       hasSeatingPlan: data.basics.hasSeatingPlan,
       includesSeatingMap: data.venue.includesSeatingMap,
       venueMap: data.venue.venueMap,
-    }) ||
-    !ticketsReferenceMapSectors(customTickets)
+    })
   ) {
+    return customTickets.map((tier) => ({
+      ...tier,
+      seatingSectorId: null,
+      seating_sector_id: null,
+      sectorId: "",
+    }))
+  }
+  if (!ticketsReferenceMapSectors(customTickets)) {
     return customTickets
   }
   return syncMapBackedTickets(

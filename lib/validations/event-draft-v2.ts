@@ -457,7 +457,7 @@ export function emptyEventDraftV2LineItem(
     maxOrder: 10,
     startDate: "",
     endDate: "",
-    source: "",
+    source: "general",
     sectorId: "",
     layoutType: "general",
     slotId: "",

@@ -22,6 +22,12 @@ describe("toUserFacingError", () => {
     )
     assert.equal(
       toUserFacingError(
+        "[SUPABASE ERROR - Code: 23514]: SEATING_SECTOR_NOT_FOUND. Details: N/A",
+      ),
+      APP_ERRORS.SEATING_SECTOR_MISMATCH.message,
+    )
+    assert.equal(
+      toUserFacingError(
         "update_complete_event_with_seating_tx: SEATING_SECTOR_NOT_FOUND",
       ),
       APP_ERRORS.SEATING_SECTOR_MISMATCH.message,

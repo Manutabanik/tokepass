@@ -1,5 +1,6 @@
 import { ZodError } from "zod"
 
+import { seatingPersistUserMessage } from "@/lib/events/sanitize-ticket-tiers"
 import { containsInternalErrorCode } from "@/lib/errors/error-handler"
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
 
@@ -76,6 +77,8 @@ export function persistErrorUserMessage(
     const first = error.issues[0]?.message?.trim()
     if (first) return first
   }
+  const seatingMessage = seatingPersistUserMessage(error)
+  if (seatingMessage) return seatingMessage
   const formatted = formatSupabaseError(error)
   return formatted || fallback
 }

@@ -8,6 +8,7 @@ import {
   mergeDraftTicketsWithDayMap,
   mergeDraftTicketsWithMap,
   parseDraftSeatingMaps,
+  sanitizeDraftTicketsForPersist,
   ticketsFromVenueMap,
   toDraftSeatingMap,
   upsertDraftSeatingMapInstance,
@@ -78,6 +79,39 @@ describe("draft seating map isolation", () => {
     assert.equal(merged.some((ticket) => ticket.sectorId === "gone"), false)
     assert.equal(merged.some((ticket) => ticket.sectorId === "sector-platea"), true)
     assert.equal(isMapDraftTicket(vip), false)
+    assert.equal(
+      isMapDraftTicket({ source: "general", sectorId: "gone" }),
+      false,
+    )
+  })
+
+  it("clears leftover sector ids on general tickets and empty maps", () => {
+    const leftover = {
+      ...emptyEventDraftV2LineItem("vip-1"),
+      name: "VIP",
+      source: "general",
+      sectorId: "sector-borrado",
+    }
+    const cleared = sanitizeDraftTicketsForPersist([leftover], {
+      mapActive: false,
+      liveSectorIds: [],
+    })
+    assert.equal(cleared[0]?.sectorId, "")
+    assert.equal(cleared[0]?.source, "general")
+
+    const orphanMap = {
+      ...emptyEventDraftV2LineItem("map-1"),
+      name: "Viejo",
+      source: "map",
+      sectorId: "sector-borrado",
+      layoutType: "numbered_seat",
+    }
+    const detached = sanitizeDraftTicketsForPersist([orphanMap], {
+      mapActive: true,
+      liveSectorIds: ["sector-platea"],
+    })
+    assert.equal(detached[0]?.sectorId, "")
+    assert.equal(detached[0]?.source, "general")
   })
 
   it("keeps the live ticket id when rematching the same sector", () => {

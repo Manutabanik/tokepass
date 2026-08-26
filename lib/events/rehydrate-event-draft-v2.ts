@@ -212,7 +212,7 @@ function liveTierToDraftItem(
     category: tier.category,
   })
   const sectorId = (tier.seating_sector_id ?? "").trim()
-  const isMap = kind === "seated" || Boolean(sectorId)
+  const isMap = kind === "seated"
   const layoutType =
     tier.layout_type === "table_combo" || tier.layout_type === "numbered_seat"
       ? tier.layout_type

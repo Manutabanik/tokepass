@@ -263,6 +263,44 @@ describe("venue-map-pricing", () => {
     assert.equal(next.some((tier) => tier.name === "Estacionamiento"), true)
   })
 
+  it("anula seatingSectorId si el evento ya no usa mapa", () => {
+    const next = consolidateEventTicketsForPersist({
+      basics: {
+        hasSeatingPlan: false,
+        scheduleDays: [],
+      },
+      venue: { includesSeatingMap: false },
+      tickets: [
+        {
+          name: "General",
+          price: 5000,
+          capacity: 80,
+          timeLimit: "",
+          saleStartsAt: "",
+          saleEndsAt: "",
+          bonusReward: "",
+          dayId: null,
+          visibility: "public",
+          layoutType: "general",
+          seatingSectorId: "sector-borrado",
+          capacityPerUnit: 1,
+          admitCount: 1,
+          tierType: "general",
+          listPrice: null,
+          bundleItems: [],
+          bundleType: null,
+          promoDiscountType: null,
+          promoDiscountValue: 0,
+          promoRequiredQty: 1,
+          promoPayQty: 1,
+          description: "",
+          highlightBadge: null,
+        },
+      ],
+    } as Parameters<typeof consolidateEventTicketsForPersist>[0])
+    assert.equal(next[0]?.seatingSectorId, null)
+  })
+
   it("consolida inventario libre con entradas ya ligadas al mapa", () => {
     const map = emptyVenueMap()
     map.zones = [

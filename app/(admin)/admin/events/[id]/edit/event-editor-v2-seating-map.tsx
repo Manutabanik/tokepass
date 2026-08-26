@@ -11,11 +11,14 @@ import { Button } from "@/components/ui/button"
 import { datePartFromDateTime } from "@/lib/events/draft-schedule-slots-v2"
 import {
   cloneDraftSeatingMapInstance,
+  collectDraftLiveSectorIds,
   configuredDraftSeatingMapDateIds,
+  draftHasActiveSeatingMap,
   emptyDraftSeatingMap,
   hasDraftSeatingMapContent,
   mergeDraftTicketsWithDayMap,
   parseDraftSeatingMaps,
+  sanitizeDraftTicketsForPersist,
   seatingInstanceToVenueMap,
   toDraftSeatingMap,
   upsertDraftSeatingMapInstance,
@@ -65,7 +68,19 @@ export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
     writeSeatingMaps(nextMaps)
     setValue(
       "tickets",
-      mergeDraftTicketsWithDayMap(getValues("tickets") ?? [], next, dateId),
+      sanitizeDraftTicketsForPersist(
+        mergeDraftTicketsWithDayMap(getValues("tickets") ?? [], next, dateId),
+        {
+          mapActive: draftHasActiveSeatingMap({
+            seatingMaps: nextMaps,
+            seatingMap: nextMaps[0]?.mapConfig,
+          }),
+          liveSectorIds: collectDraftLiveSectorIds({
+            seatingMaps: nextMaps,
+            seatingMap: nextMaps[0]?.mapConfig,
+          }),
+        },
+      ),
       { shouldDirty: true, shouldTouch: true },
     )
   }
@@ -97,10 +112,22 @@ export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
     writeSeatingMaps(nextMaps)
     setValue(
       "tickets",
-      mergeDraftTicketsWithDayMap(
-        getValues("tickets") ?? [],
-        seatingInstanceToVenueMap(cloned),
-        targetDateId,
+      sanitizeDraftTicketsForPersist(
+        mergeDraftTicketsWithDayMap(
+          getValues("tickets") ?? [],
+          seatingInstanceToVenueMap(cloned),
+          targetDateId,
+        ),
+        {
+          mapActive: draftHasActiveSeatingMap({
+            seatingMaps: nextMaps,
+            seatingMap: nextMaps[0]?.mapConfig,
+          }),
+          liveSectorIds: collectDraftLiveSectorIds({
+            seatingMaps: nextMaps,
+            seatingMap: nextMaps[0]?.mapConfig,
+          }),
+        },
       ),
       { shouldDirty: true, shouldTouch: true },
     )

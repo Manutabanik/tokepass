@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import type { UseFormGetValues } from "react-hook-form"
 
 import { saveEventDraftV2 } from "@/app/actions/events-v2"
+import { sanitizeEventDraftForPersist } from "@/lib/events/draft-seating-map-v2"
 import {
   EDITOR_V2_AUTOSAVE_MS,
   type DraftSaveStatus,
@@ -40,7 +41,7 @@ export function useEventDraftV2Persist(
     setSaveError("")
     const result = await saveEventDraftV2(
       eventId,
-      toEventDraftV2Payload(getValues()),
+      toEventDraftV2Payload(sanitizeEventDraftForPersist(getValues())),
     )
     if (current !== generation.current) {
       return result.success

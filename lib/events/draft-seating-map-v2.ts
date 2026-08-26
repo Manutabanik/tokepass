@@ -1,3 +1,4 @@
+import { collectLiveSeatingSectorIds } from "@/lib/events/sanitize-ticket-tiers"
 import {
   layoutTypeForMapSectorId,
   priceGroupSectorId,
@@ -34,6 +35,7 @@ export function isMapDraftTicket(ticket: {
   source?: unknown
   sectorId?: unknown
 }): boolean {
+  if (ticket.source === "general") return false
   if (ticket.source === "map") return true
   return typeof ticket.sectorId === "string" && ticket.sectorId.trim().length > 0
 }
@@ -245,6 +247,90 @@ export function seatingInstanceToVenueMap(
 export function hasDraftSeatingMapContent(raw: unknown): boolean {
   const map = draftSeatingMapToVenueMap(raw)
   return hasInteractiveVenueMap(map) || venueMapHasInventory(map)
+}
+
+export function draftHasActiveSeatingMap(draft: {
+  seatingMaps?: Array<{ mapConfig?: unknown }> | null
+  seatingMap?: unknown
+}): boolean {
+  if (hasDraftSeatingMapContent(draft.seatingMap)) return true
+  return (draft.seatingMaps ?? []).some((item) =>
+    hasDraftSeatingMapContent(item.mapConfig),
+  )
+}
+
+export function collectDraftLiveSectorIds(draft: {
+  seatingMaps?: Array<{ mapConfig?: unknown }> | null
+  seatingMap?: unknown
+}): Set<string> {
+  const ids = new Set<string>()
+  for (const raw of [
+    ...(draft.seatingMaps ?? []).map((item) => item.mapConfig),
+    draft.seatingMap,
+  ]) {
+    for (const id of collectLiveSeatingSectorIds({ venueMap: raw })) {
+      ids.add(id)
+    }
+  }
+  return ids
+}
+
+type SanitizableDraftTicket = {
+  source?: string
+  sectorId?: string
+  layoutType?: string
+}
+
+export function sanitizeDraftTicketsForPersist<T extends SanitizableDraftTicket>(
+  tickets: T[],
+  options: { mapActive: boolean; liveSectorIds: Iterable<string> },
+): T[] {
+  const live = new Set(
+    [...options.liveSectorIds].filter((id) => id.trim().length > 0),
+  )
+  return tickets.map((ticket) => {
+    const explicitGeneral = ticket.source === "general"
+    const sectorId = String(ticket.sectorId ?? "").trim()
+    if (!options.mapActive || explicitGeneral) {
+      return {
+        ...ticket,
+        source: ticket.source === "map" ? "general" : ticket.source || "general",
+        sectorId: "",
+      }
+    }
+    if (!sectorId || !live.has(sectorId)) {
+      return {
+        ...ticket,
+        source: ticket.source === "map" ? "general" : ticket.source || "general",
+        sectorId: "",
+        layoutType: ticket.source === "map" ? "general" : ticket.layoutType,
+      }
+    }
+    return ticket
+  })
+}
+
+export function sanitizeEventDraftForPersist<
+  T extends {
+    tickets?: SanitizableDraftTicket[]
+    extras?: SanitizableDraftTicket[]
+    seatingMaps?: Array<{ mapConfig?: unknown }> | null
+    seatingMap?: unknown
+  },
+>(draft: T): T {
+  const mapActive = draftHasActiveSeatingMap(draft)
+  const liveSectorIds = collectDraftLiveSectorIds(draft)
+  return {
+    ...draft,
+    tickets: sanitizeDraftTicketsForPersist(draft.tickets ?? [], {
+      mapActive,
+      liveSectorIds,
+    }),
+    extras: sanitizeDraftTicketsForPersist(draft.extras ?? [], {
+      mapActive: false,
+      liveSectorIds: [],
+    }),
+  }
 }
 
 function hasDraftMapContent(raw: unknown): boolean {

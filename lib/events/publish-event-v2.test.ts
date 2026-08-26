@@ -306,6 +306,99 @@ describe("buildPublishEventV2Payload", () => {
     assert.equal(general?.seating_sector_id, null)
   })
 
+  it("nulls leftover seating_sector_id on general tickets", () => {
+    const draft = publishableDraft()
+    draft.tickets[0] = {
+      ...draft.tickets[0]!,
+      source: "general",
+      sectorId: "sector-borrado",
+      layoutType: "general",
+    }
+    draft.seatingMap = {
+      ...draft.seatingMap,
+      version: 1,
+      url: "",
+      sectors: [
+        {
+          id: "sector-platea",
+          name: "Platea",
+          color: "#f97316",
+          price: 18000,
+          x: 0,
+          y: 0,
+          rows: 1,
+          seatsPerRow: 2,
+          curvature: 0,
+          aisle: false,
+          seats: [
+            { id: "s1", row: "1", number: 1, x: 0, y: 0, status: "available" },
+            { id: "s2", row: "1", number: 2, x: 10, y: 0, status: "available" },
+          ],
+        },
+      ],
+    }
+    const payload = buildPublishEventV2Payload(draft)
+    assert.equal(payload.tickets[0]?.tier_type, "general")
+    assert.equal(payload.tickets[0]?.seating_sector_id, null)
+  })
+
+  it("nulls seating_sector_id when the map is off", () => {
+    const draft = publishableDraft()
+    draft.tickets[0] = {
+      ...draft.tickets[0]!,
+      source: "map",
+      sectorId: "sector-platea",
+      layoutType: "numbered_seat",
+    }
+    const payload = buildPublishEventV2Payload(draft)
+    assert.equal(payload.has_seating_plan, false)
+    assert.equal(payload.tickets[0]?.seating_sector_id, null)
+    assert.equal(payload.tickets[0]?.tier_type, "general")
+  })
+
+  it("nulls orphan map sectors that are no longer in the venue map", () => {
+    const draft = publishableDraft()
+    draft.tickets.push({
+      id: "map-gone",
+      name: "Viejo",
+      description: "",
+      price: 12000,
+      stock: 10,
+      minOrder: 1,
+      maxOrder: 4,
+      source: "map",
+      sectorId: "sector-borrado",
+      layoutType: "numbered_seat",
+    })
+    draft.seatingMap = {
+      ...draft.seatingMap,
+      version: 1,
+      url: "",
+      sectors: [
+        {
+          id: "sector-platea",
+          name: "Platea",
+          color: "#f97316",
+          price: 18000,
+          x: 0,
+          y: 0,
+          rows: 1,
+          seatsPerRow: 2,
+          curvature: 0,
+          aisle: false,
+          seats: [
+            { id: "s1", row: "1", number: 1, x: 0, y: 0, status: "available" },
+            { id: "s2", row: "1", number: 2, x: 10, y: 0, status: "available" },
+          ],
+        },
+      ],
+    }
+    const payload = buildPublishEventV2Payload(draft)
+    const orphan = payload.tickets.find((ticket) => ticket.name === "Viejo")
+    assert.equal(orphan?.seating_sector_id, null)
+    assert.equal(orphan?.tier_type, "general")
+  })
+
   it("lists the event in the public catalog unless the organizer opts out", () => {
     const listed = buildPublishEventV2Payload({
       ...publishableDraft(),

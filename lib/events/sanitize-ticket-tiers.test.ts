@@ -4,11 +4,14 @@ import { describe, it } from "node:test"
 import {
   collectLiveSeatingSectorIds,
   isRelationalIntegrityError,
+  isSeatingSectorRpcError,
+  ORPHAN_SEATING_SECTOR_MESSAGE,
   reconcileTicketTierIds,
   sanitizeDeepSeatingRefs,
   sanitizeEventSubmitPayload,
   sanitizeSeatingSectorIds,
   sanitizeTicketTiersForPersist,
+  seatingPersistUserMessage,
 } from "@/lib/events/sanitize-ticket-tiers"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { emptyVenueMap } from "@/types/venue-map"
@@ -506,5 +509,25 @@ describe("isRelationalIntegrityError", () => {
     )
     assert.equal(isRelationalIntegrityError("23503"), true)
     assert.equal(isRelationalIntegrityError("Completá el título."), false)
+  })
+})
+
+describe("seatingPersistUserMessage", () => {
+  it("traduce 23514 de sectores huérfanos a un mensaje legible", () => {
+    assert.equal(isSeatingSectorRpcError("SEATING_SECTOR_NOT_FOUND"), true)
+    assert.equal(
+      seatingPersistUserMessage({
+        code: "23514",
+        message: "SEATING_SECTOR_NOT_FOUND",
+      }),
+      ORPHAN_SEATING_SECTOR_MESSAGE,
+    )
+    assert.equal(
+      seatingPersistUserMessage(
+        "[SUPABASE ERROR - Code: 23514]: SEATING_SECTOR_NOT_FOUND. Details: N/A",
+      ),
+      ORPHAN_SEATING_SECTOR_MESSAGE,
+    )
+    assert.equal(seatingPersistUserMessage("PGRST204"), null)
   })
 })

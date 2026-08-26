@@ -84,7 +84,7 @@ const ERROR_RULES: ErrorRule[] = [
   {
     code: "SEATING_SECTOR_MISMATCH",
     match:
-      /SEATING_SECTOR_NOT_FOUND|SEATING_TIER_CONFIG_AMBIGUOUS|mapa y las entradas no coinciden|mapa y los tickets no coinciden|sillas del mapa|Revisá el mapa|sector general .+ necesita precio|sector reservado .+ necesita al menos una mesa/i,
+      /SEATING_SECTOR_NOT_FOUND|SEATING_TIER_CONFIG_AMBIGUOUS|sectores asignados que ya no existen|mapa y las entradas no coinciden|mapa y los tickets no coinciden|sillas del mapa|Revisá el mapa|sector general .+ necesita precio|sector reservado .+ necesita al menos una mesa/i,
   },
   {
     code: "CAPACITY_OVERFLOW",

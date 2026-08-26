@@ -1,3 +1,4 @@
+import { seatingPersistUserMessage } from "@/lib/events/sanitize-ticket-tiers"
 import {
   APP_ERRORS,
   containsInternalErrorCode,
@@ -17,6 +18,8 @@ export function toUserFacingError(
   text: unknown,
   fallback = INVENTORY_SYNC_MESSAGE,
 ): string {
+  const seatingMessage = seatingPersistUserMessage(text)
+  if (seatingMessage) return seatingMessage
   if (isUnmaskedSupabaseError(text)) return text
   const safeFallback = isSafeUserFacingCopy(fallback)
     ? fallback

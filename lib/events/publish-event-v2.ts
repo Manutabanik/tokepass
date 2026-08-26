@@ -1,4 +1,8 @@
-import { publishVenueMapFromDraft } from "@/lib/events/draft-seating-map-v2"
+import {
+  publishVenueMapFromDraft,
+  sanitizeEventDraftForPersist,
+} from "@/lib/events/draft-seating-map-v2"
+import { collectLiveSeatingSectorIds } from "@/lib/events/sanitize-ticket-tiers"
 import { parsePromoVideoUrl } from "@/lib/promo-video"
 import { calculateTierPricing } from "@/lib/pricing/flexible-pricing"
 import {
@@ -216,7 +220,8 @@ function mapLineItemToTier(
         : "extra"
       : (explicitType ?? "standard")
   const isExtra = ticketType === "extra"
-  const isMap = !isExtra && isMapDraftTicket(item)
+  const isMap =
+    !isExtra && item.source !== "general" && isMapDraftTicket(item)
   const sectorId = String(item.sectorId ?? "").trim()
 
   return {
@@ -310,11 +315,57 @@ export function publishedExperienceColumns(payload: PublishEventV2Payload) {
   }
 }
 
+function collectPublishedLiveSectorIds(input: {
+  venue_map?: unknown
+  seating_maps?: Array<{ map_config?: unknown }>
+}): Set<string> {
+  const ids = new Set<string>()
+  for (const raw of [
+    input.venue_map,
+    ...(input.seating_maps ?? []).map((item) => item.map_config),
+  ]) {
+    for (const id of collectLiveSeatingSectorIds({ venueMap: raw })) {
+      ids.add(id)
+    }
+  }
+  return ids
+}
+
+function sanitizePublishedTicketSectors(
+  tickets: PublishEventV2TierPayload[],
+  hasSeatingPlan: boolean,
+  liveSectorIds: Iterable<string>,
+): PublishEventV2TierPayload[] {
+  const live = new Set(
+    [...liveSectorIds].filter((id) => id.trim().length > 0),
+  )
+  return tickets.map((ticket) => {
+    if (
+      !hasSeatingPlan ||
+      ticket.tier_type === "general" ||
+      ticket.tier_type === "addon" ||
+      ticket.ticket_type === "extra"
+    ) {
+      return { ...ticket, seating_sector_id: null }
+    }
+    const sectorId = ticket.seating_sector_id?.trim() || ""
+    if (!sectorId || !live.has(sectorId)) {
+      return {
+        ...ticket,
+        seating_sector_id: null,
+        tier_type: "general",
+        layout_type: "general",
+      }
+    }
+    return ticket
+  })
+}
+
 export function buildPublishEventV2Payload(
   draft: unknown,
   fee: EventFeeConfig = defaultEventFeeConfig(),
 ): PublishEventV2Payload {
-  const parsed = eventPublishSchema.parse(draft)
+  const parsed = sanitizeEventDraftForPersist(eventPublishSchema.parse(draft))
   const title = parsed.basicInfo.name.trim()
   const isOnline = isEventDraftOnline(parsed)
   const venueName = (
@@ -418,7 +469,11 @@ export function buildPublishEventV2Payload(
     has_seating_plan: publishedMaps.has_seating_plan,
     ...(publishedMaps.venue_map ? { venue_map: publishedMaps.venue_map } : {}),
     seating_maps: publishedMaps.seating_maps,
-    tickets: [...tickets, ...extras],
+    tickets: sanitizePublishedTicketSectors(
+      [...tickets, ...extras],
+      publishedMaps.has_seating_plan,
+      collectPublishedLiveSectorIds(publishedMaps),
+    ),
   }
 }
 

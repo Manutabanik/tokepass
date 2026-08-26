@@ -101,7 +101,8 @@ export const APP_ERRORS: Record<AppErrorCode, AppError> = {
   SEATING_SECTOR_MISMATCH: {
     code: "SEATING_SECTOR_MISMATCH",
     title: "Error en mapa y tarifas",
-    message: "El mapa y las entradas no coinciden. Revisá sectores y precios.",
+    message:
+      "Se detectaron sectores asignados que ya no existen en el mapa. Por favor, revisa tus entradas.",
     field: "venue.venueMap",
     action: { step: 1, label: "Corregir campo", field: "venue.venueMap" },
     retryable: true,

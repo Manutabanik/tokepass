@@ -1,9 +1,13 @@
+import { APP_ERRORS } from "@/lib/errors/app-error"
 import { assignableLogicalSectorIds } from "@/lib/inventory/logical-sectors"
 import { eventHasActiveSeatingMap } from "@/lib/inventory/map-enablement"
 import { listVenuePriceGroups } from "@/lib/seating/venue-price-groups"
 import { layoutTypeForMapSectorId } from "@/lib/seating/venue-map-pricing"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { parseVenueMap } from "@/types/venue-map"
+
+export const ORPHAN_SEATING_SECTOR_MESSAGE =
+  APP_ERRORS.SEATING_SECTOR_MISMATCH.message
 
 type TicketDraft = EventFormValues["tickets"][number]
 
@@ -125,11 +129,22 @@ export function collectLiveSeatingSectorIds(input: {
   return ids
 }
 
+type DetachableTicket = {
+  seatingSectorId?: string | null
+  seating_sector_id?: string | null
+  sectorId?: string | null
+}
+
 /** Eventos sin mapa: las entradas generales no se atan a un sector. */
-export function detachTicketsFromSeatingPlan(
-  tickets: TicketDraft[],
-): TicketDraft[] {
-  return tickets.map((tier) => ({ ...tier, seatingSectorId: null }))
+export function detachTicketsFromSeatingPlan<T extends DetachableTicket>(
+  tickets: T[],
+): T[] {
+  return tickets.map((tier) => ({
+    ...tier,
+    seatingSectorId: null,
+    seating_sector_id: null,
+    sectorId: "",
+  }))
 }
 
 /**
@@ -167,19 +182,36 @@ export function resolvePersistableTicketSectorId(input: {
 }
 
 /** Anula seatingSectorId que no existen en el plano vivo. */
-export function sanitizeSeatingSectorIds(
-  tickets: TicketDraft[],
+export function sanitizeSeatingSectorIds<T extends DetachableTicket>(
+  tickets: T[],
   liveSectorIds: Iterable<string>,
-): TicketDraft[] {
+): T[] {
   const live = new Set(
     [...liveSectorIds].filter((id) => id.trim().length > 0),
   )
   return tickets.map((tier) => {
-    const sectorId = tier.seatingSectorId?.trim() || null
-    if (!sectorId || live.has(sectorId)) {
-      return { ...tier, seatingSectorId: sectorId }
+    const camel = tier.seatingSectorId?.trim() || ""
+    const snake =
+      typeof tier.seating_sector_id === "string"
+        ? tier.seating_sector_id.trim()
+        : ""
+    const legacy =
+      typeof tier.sectorId === "string" ? tier.sectorId.trim() : ""
+    const sectorId = camel || snake || legacy || null
+    if (sectorId && live.has(sectorId)) {
+      return {
+        ...tier,
+        seatingSectorId: sectorId,
+        seating_sector_id: sectorId,
+        sectorId,
+      }
     }
-    return { ...tier, seatingSectorId: null }
+    return {
+      ...tier,
+      seatingSectorId: null,
+      seating_sector_id: null,
+      sectorId: "",
+    }
   })
 }
 
@@ -193,6 +225,7 @@ const LIVE_MAP_KEYS = new Set([
 const SECTOR_FK_KEYS = new Set([
   "seatingsectorid",
   "seating_sector_id",
+  "sectorid",
   "sectorkey",
 ])
 
@@ -282,6 +315,35 @@ export function isSeatingSectorRpcError(message: string) {
   return /SEATING_SECTOR_NOT_FOUND|SEATING_LAYOUT_NOT_FOUND|SEATING_LAYOUT_TYPE_MISMATCH|SEATING_SECTOR_EMPTY/i.test(
     message,
   )
+}
+
+function seatingErrorText(error: unknown): string {
+  if (error == null) return ""
+  if (typeof error === "string") return error
+  if (error instanceof Error) return error.message
+  if (typeof error === "object") {
+    const row = error as {
+      code?: unknown
+      message?: unknown
+      details?: unknown
+      hint?: unknown
+      error?: unknown
+    }
+    return [row.code, row.message, row.details, row.hint, row.error]
+      .filter((part) => part != null && String(part).trim())
+      .join(" ")
+  }
+  return String(error)
+}
+
+export function seatingPersistUserMessage(error: unknown): string | null {
+  const text = seatingErrorText(error)
+  if (!text) return null
+  if (isSeatingSectorRpcError(text)) return ORPHAN_SEATING_SECTOR_MESSAGE
+  if (/23514/i.test(text) && /seating|sector/i.test(text)) {
+    return ORPHAN_SEATING_SECTOR_MESSAGE
+  }
+  return null
 }
 
 export function isRelationalIntegrityError(message: string) {

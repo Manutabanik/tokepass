@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import { ZodError } from "zod"
 
+import { ORPHAN_SEATING_SECTOR_MESSAGE } from "@/lib/events/sanitize-ticket-tiers"
 import {
   classifyPersistError,
   persistErrorUserMessage,
@@ -39,6 +40,16 @@ describe("classifyPersistError", () => {
         details: "schema cache",
       }),
       "[SUPABASE ERROR - Code: PGRST204]: Could not find the 'capacity' column. Details: schema cache",
+    )
+  })
+
+  it("maps seating check violations to a readable persist message", () => {
+    assert.equal(
+      persistErrorUserMessage({
+        code: "23514",
+        message: "SEATING_SECTOR_NOT_FOUND",
+      }),
+      ORPHAN_SEATING_SECTOR_MESSAGE,
     )
   })
 

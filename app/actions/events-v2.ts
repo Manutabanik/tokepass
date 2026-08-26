@@ -2,9 +2,11 @@
 
 import { revalidatePath } from "next/cache"
 
+import { seatingPersistUserMessage } from "@/lib/events/sanitize-ticket-tiers"
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
 import { assertDraftMapLayoutImmutable } from "@/lib/events/assert-draft-map-immutability"
+import { sanitizeEventDraftForPersist } from "@/lib/events/draft-seating-map-v2"
 import { hardReplacePublishedEventArtists } from "@/lib/events/hard-replace-event-artists-v2"
 import { hardReplacePublishedSeatingMaps } from "@/lib/events/hard-replace-seating-maps-v2"
 import { eventArtistRowsToDraftLineup } from "@/lib/events/publish-event-v2-lineup"
@@ -62,6 +64,13 @@ export type GetEventDraftV2Result =
       isPublished: boolean
     }
   | { success: false; error: string; code?: string }
+
+function publishActionError(error: unknown): string {
+  return (
+    seatingPersistUserMessage(error) ??
+    (error instanceof Error ? error.message : formatSupabaseError(error))
+  )
+}
 
 async function requireDraftWriter() {
   const supabase = await createClient()
@@ -325,7 +334,7 @@ export async function saveEventDraftV2(
     return { success: false, error: "No tenés permiso para editar este evento." }
   }
 
-  const parsed = parseEventDraftV2(rawData)
+  const parsed = sanitizeEventDraftForPersist(parseEventDraftV2(rawData))
   const locked = await assertDraftMapLayoutImmutable({
     eventId: id,
     draft: parsed,
@@ -936,7 +945,7 @@ export async function publishEventV2(
   }
 
   const parsed = eventPublishSchema.safeParse(
-    parseEventDraftV2(event.draft_state),
+    sanitizeEventDraftForPersist(parseEventDraftV2(event.draft_state)),
   )
   if (!parsed.success) {
     const issues = formatEventPublishIssues(parsed.error.issues)
@@ -1000,7 +1009,7 @@ export async function publishEventV2(
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : formatSupabaseError(error),
+        error: publishActionError(error),
       }
     }
   } else {
@@ -1010,7 +1019,7 @@ export async function publishEventV2(
     })
 
     if (rpc.error && !shouldFallbackPublishRpc(rpc.error)) {
-      return { success: false, error: formatSupabaseError(rpc.error) }
+      return { success: false, error: publishActionError(rpc.error) }
     }
 
     if (rpc.error) {
@@ -1029,7 +1038,7 @@ export async function publishEventV2(
       } catch (error) {
         return {
           success: false,
-          error: error instanceof Error ? error.message : formatSupabaseError(error),
+          error: publishActionError(error),
         }
       }
     } else {
@@ -1045,7 +1054,7 @@ export async function publishEventV2(
       } catch (error) {
         return {
           success: false,
-          error: error instanceof Error ? error.message : formatSupabaseError(error),
+          error: publishActionError(error),
         }
       }
     }
@@ -1057,7 +1066,7 @@ export async function publishEventV2(
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : formatSupabaseError(error),
+        error: publishActionError(error),
       }
     }
   }
