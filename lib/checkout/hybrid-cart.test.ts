@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
+import { CHECKOUT_PRICES_CHANGED_ERROR } from "./price-guard"
 import {
   amountsMatch,
   quoteHybridCartTotal,
@@ -39,6 +40,17 @@ describe("hybrid cart quote", () => {
     assert.equal(quoted.ok, true)
     if (quoted.ok) assert.equal(quoted.total, 55000)
     assert.equal(amountsMatch(55000, 55000), true)
+  })
+
+  it("rejects a cart whose live ticket_tiers price is gone", () => {
+    const quoted = quoteHybridCartTotal({
+      items: [general],
+      unitPriceByTier: new Map(),
+    })
+    assert.equal(quoted.ok, false)
+    if (!quoted.ok) {
+      assert.equal(quoted.error, CHECKOUT_PRICES_CHANGED_ERROR)
+    }
   })
 
   it("does not send a client sector when the line already has a seating unit", () => {

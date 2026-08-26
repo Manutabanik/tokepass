@@ -5,22 +5,18 @@ import { Redis } from "@upstash/redis"
 
 import { MemoryRateLimiter } from "@/lib/checkout/memory-rate-limit"
 import { logger } from "@/lib/logger"
+import {
+  AUTH_RATE_LIMIT_ERROR,
+  RATE_LIMITS,
+  RATE_LIMIT_BUSY_ERROR,
+} from "@/lib/security/rate-limit-policy"
 import { hasUpstashRedis } from "@/lib/waiting-room/config"
 
-export const RATE_LIMITS = {
-  checkoutIp: { limit: 8, windowSeconds: 60 },
-  checkoutUser: { limit: 8, windowSeconds: 10 * 60 },
-  cartHoldUser: { limit: 20, windowSeconds: 60 },
-  paymentPreferenceUser: { limit: 5, windowSeconds: 60 },
-  authIp: { limit: 3, windowSeconds: 60 },
-  publicStockIp: { limit: 30, windowSeconds: 60 },
-} as const
-
-export const RATE_LIMIT_BUSY_ERROR =
-  "Estamos procesando muchas solicitudes. Esperá un minuto e intentá de nuevo."
-
-export const AUTH_RATE_LIMIT_ERROR =
-  "Demasiados intentos. Esperá un minuto e intentá de nuevo."
+export {
+  AUTH_RATE_LIMIT_ERROR,
+  RATE_LIMITS,
+  RATE_LIMIT_BUSY_ERROR,
+}
 
 const ephemeralCache = new Map()
 const redisLimiters = new Map<string, Ratelimit>()

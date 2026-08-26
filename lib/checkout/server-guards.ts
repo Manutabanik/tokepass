@@ -10,19 +10,34 @@ import {
   uniqueTicketCount,
 } from "@/lib/checkout/guest-token"
 import {
+  getCheckoutRequestContext,
   sanitizeDeviceHash,
   sanitizeDwellMs,
   type CheckoutRequestContext,
 } from "@/lib/checkout/request-context"
+import { isRateLimitableIp } from "@/lib/request-ip"
 import { consumeNamedRateLimit } from "@/lib/security/distributed-rate-limit"
 import { logger } from "@/lib/logger"
 import { resolvePurchaseLimit } from "@/lib/checkout-limits"
 import { createAdminClient } from "@/lib/supabase/admin"
 
+export const CART_HOLD_RATE_LIMIT_ERROR =
+  "Demasiados intentos. Esperá un momento y volvé a elegir."
+
 export async function checkoutIpBurstBlocked(
   ctx: CheckoutRequestContext,
 ): Promise<boolean> {
   return !(await consumeNamedRateLimit("checkoutIp", ctx.ip))
+}
+
+/** Usuario + IP. Corta scalping por rotación de cuentas en la misma red. */
+export async function cartHoldRateLimited(userId: string): Promise<boolean> {
+  const userAllowed = await consumeNamedRateLimit("cartHoldUser", userId)
+  if (!userAllowed) return true
+
+  const ctx = await getCheckoutRequestContext()
+  if (!isRateLimitableIp(ctx.ip)) return false
+  return !(await consumeNamedRateLimit("cartHoldIp", ctx.ip))
 }
 
 export async function checkoutFailuresBlocked(

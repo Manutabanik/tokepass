@@ -78,7 +78,9 @@ export function resolveCheckoutFeedback(
   if (
     explicit === CHECKOUT_FEEDBACK_CODE.ERR_PRICE_CHANGED ||
     error === CHECKOUT_PRICES_CHANGED_ERROR ||
-    /total de la orden no coincide con el precio vigente/i.test(error)
+    /total de la orden no coincide con el precio vigente/i.test(error) ||
+    /no se pudo cotizar el precio vigente/i.test(error) ||
+    /precios o el inventario han sido actualizados/i.test(error)
   ) {
     return {
       code: CHECKOUT_FEEDBACK_CODE.ERR_PRICE_CHANGED,

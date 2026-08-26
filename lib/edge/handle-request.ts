@@ -6,6 +6,10 @@ import {
   createCspNonce,
 } from "@/lib/security/csp"
 import {
+  EDGE_CHECKOUT_RATE_LIMIT_ERROR,
+  edgeCheckoutIpBlocked,
+} from "@/lib/security/edge-checkout-rate-limit"
+import {
   applyVipCookie,
   evaluateWaitingRoomGate,
 } from "@/lib/waiting-room/gate"
@@ -27,6 +31,13 @@ export async function handleEdgeRequest(request: NextRequest) {
 
   if (isAuthRefreshBypassPath(pathname)) {
     return passthroughWithCsp(request)
+  }
+
+  if (await edgeCheckoutIpBlocked(request)) {
+    return NextResponse.json(
+      { success: false, error: EDGE_CHECKOUT_RATE_LIMIT_ERROR },
+      { status: 429 },
+    )
   }
 
   const gate = await evaluateWaitingRoomGate(request)

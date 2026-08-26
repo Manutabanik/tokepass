@@ -1,3 +1,4 @@
+import { CHECKOUT_PRICES_CHANGED_ERROR } from "@/lib/checkout/price-guard"
 import { decidePhaseCart, type PublicTicketPhase } from "@/lib/inventory/active-phase"
 import { centsToMoney, moneyAmountsEqual, moneyToCents } from "@/lib/money/cents"
 import type { CheckoutCartItem } from "@/lib/validations/checkout"
@@ -119,7 +120,7 @@ export function quoteHybridCartTotal(input: {
       decision.kind === "ok" ? Number(decision.phase.price) : null
     const unit = phasePrice ?? input.unitPriceByTier.get(tierId)
     if (unit == null || !Number.isFinite(unit) || unit < 0) {
-      return { ok: false, error: "No se pudo cotizar el precio vigente." }
+      return { ok: false, error: CHECKOUT_PRICES_CHANGED_ERROR }
     }
     const quantity = isMappedCheckoutItem(item) ? 1 : item.quantity
     totalCents += moneyToCents(unit) * quantity

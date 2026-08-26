@@ -63,6 +63,7 @@ import {
 import {
   CHECKOUT_PRICES_CHANGED_ERROR,
   displayedTotalMatchesServer,
+  liveCheckoutTiersCoverCart,
 } from "@/lib/checkout/price-guard"
 import {
   ERR_NO_STOCK,
@@ -102,7 +103,9 @@ import { getCheckoutRequestContext } from "@/lib/checkout/request-context"
 import { consumeNamedRateLimit } from "@/lib/security/distributed-rate-limit"
 import { assertWaitingRoomCheckoutPass } from "@/lib/waiting-room/assert-checkout-pass"
 import {
+  CART_HOLD_RATE_LIMIT_ERROR,
   CHECKOUT_BUSY_ERROR,
+  cartHoldRateLimited,
   checkoutFailuresBlocked,
   persistCheckoutSecurityEvent,
   persistOrderCustomerPhone,
@@ -807,9 +810,12 @@ async function quoteCheckoutFromDatabase(
   const tierIds = [...new Set(items.map((item) => checkoutItemTierId(item)))]
   const { data: tierRows } = await supabase
     .from("ticket_tiers")
-    .select("id, price")
+    .select("id, price, visibility")
     .eq("event_id", eventId)
     .in("id", tierIds)
+
+  const liveTiers = liveCheckoutTiersCoverCart(tierIds, tierRows ?? [])
+  if (!liveTiers.ok) return liveTiers
 
   const unitPriceByTier = new Map<string, number>()
   for (const row of tierRows ?? []) {
@@ -862,7 +868,7 @@ async function quoteCheckoutFromDatabase(
   }
 
   if (unitPriceByTier.size < tierIds.length) {
-    return { ok: false, error: "No se pudo cotizar el precio vigente." }
+    return { ok: false, error: CHECKOUT_PRICES_CHANGED_ERROR }
   }
 
   return quoteHybridCartTotal({
@@ -1137,11 +1143,11 @@ export async function holdSeatingUnitForCart(
     return { success: false, error: room.error }
   }
 
-  const allowed = await consumeNamedRateLimit("cartHoldUser", user.id)
+  const allowed = !(await cartHoldRateLimited(user.id))
   if (!allowed) {
     return {
       success: false,
-      error: "Demasiados intentos. Esperá un momento y volvé a elegir.",
+      error: CART_HOLD_RATE_LIMIT_ERROR,
     }
   }
 
@@ -1222,11 +1228,11 @@ export async function holdSeat(
     return { success: false, error: "auth_required" }
   }
 
-  const allowed = await consumeNamedRateLimit("cartHoldUser", user.id)
+  const allowed = !(await cartHoldRateLimited(user.id))
   if (!allowed) {
     return {
       success: false,
-      error: "Demasiados intentos. Esperá un momento y volvé a elegir.",
+      error: CART_HOLD_RATE_LIMIT_ERROR,
     }
   }
 
@@ -1521,11 +1527,11 @@ export async function holdSeatingUnitForCartByLayoutItem(
     return { success: false, error: room.error }
   }
 
-  const allowed = await consumeNamedRateLimit("cartHoldUser", user.id)
+  const allowed = !(await cartHoldRateLimited(user.id))
   if (!allowed) {
     return {
       success: false,
-      error: "Demasiados intentos. Esperá un momento y volvé a elegir.",
+      error: CART_HOLD_RATE_LIMIT_ERROR,
     }
   }
 
@@ -1855,11 +1861,11 @@ async function executeLockTickets(
     return { success: false, error: room.error }
   }
 
-  const allowed = await consumeNamedRateLimit("cartHoldUser", user.id)
+  const allowed = !(await cartHoldRateLimited(user.id))
   if (!allowed) {
     return {
       success: false,
-      error: "Demasiados intentos. Esperá un momento y volvé a elegir.",
+      error: CART_HOLD_RATE_LIMIT_ERROR,
     }
   }
 
@@ -2974,7 +2980,10 @@ export async function startCheckoutWithPayment(
   )
   if (!quoted.ok) {
     await recordCheckoutFailure(ctx)
-    return { success: false, error: quoted.error }
+    return checkoutActionFailure(
+      CHECKOUT_FEEDBACK_CODE.ERR_PRICE_CHANGED,
+      CHECKOUT_PRICES_CHANGED_ERROR,
+    )
   }
 
   const displayedTotal = payload.displayedTotal ?? options?.displayedTotal

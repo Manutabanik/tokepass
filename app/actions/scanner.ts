@@ -10,6 +10,7 @@ import {
 import { listOperableEvents } from "@/lib/event-ops-access"
 import { readValidDoorGuestSession } from "@/lib/scanner/door-guest-session"
 import { isTerminalOfflineSyncConflict } from "@/lib/scanner/offline-sync-conflicts"
+import { SCAN_REPLAY_HTTP_STATUS } from "@/lib/scanner/scan-replay"
 import { isScannerBlacklistTicketStatus } from "@/lib/scanner/ticket-blacklist"
 import { resolveScannerActor } from "@/lib/scanner/resolve-scanner-access"
 import { hashTotpSecretSha256 } from "@/lib/scanner/totp-secret-hash"
@@ -85,6 +86,7 @@ export type ScanTicketResult =
         | "transfer_pending"
         | "listed_for_resale"
       message: string
+      httpStatus?: typeof SCAN_REPLAY_HTTP_STATUS
       scannedAt?: string | null
       redirectSector?: string
       gateName?: string | null
@@ -571,6 +573,7 @@ export async function scanAndValidateTicket(
     return {
       success: false,
       status: "already_used",
+      httpStatus: SCAN_REPLAY_HTTP_STATUS,
       message: "Ticket ya escaneado",
       scannedAt: row.scanned_at,
       gateName:
@@ -602,6 +605,7 @@ export async function scanAndValidateTicket(
     return {
       success: false,
       status: "already_used",
+      httpStatus: SCAN_REPLAY_HTTP_STATUS,
       message: "Ticket no válido para ingreso",
       scannedAt: row.scanned_at,
     }
@@ -709,6 +713,7 @@ export async function scanAndValidateTicket(
       return {
         success: false,
         status: "already_used",
+        httpStatus: SCAN_REPLAY_HTTP_STATUS,
         message: "Este abono ya fue utilizado en la jornada actual",
         scannedAt: row.scanned_at,
       }
@@ -724,6 +729,7 @@ export async function scanAndValidateTicket(
     return {
       success: false,
       status: "already_used",
+      httpStatus: SCAN_REPLAY_HTTP_STATUS,
       message: "Ticket ya escaneado o sin ingresos disponibles",
       scannedAt: row.scanned_at,
     }
@@ -1245,12 +1251,6 @@ export async function syncOfflineScansBatch(
         break
       }
       if (!result.ok) {
-        if (
-          result.code === "already_used" ||
-          result.code === "already_used_today"
-        ) {
-          break
-        }
         syncError = result.code ?? "sync_failed"
         break
       }

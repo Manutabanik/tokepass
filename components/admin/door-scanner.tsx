@@ -27,7 +27,6 @@ import {
   getScannerEvents,
   getScannerGates,
   getScannerOperatorLabel,
-  scanAndValidateTicket,
   syncOfflineScansBatch,
   type ScannerEventOption,
   type ScanTicketResult,
@@ -729,8 +728,25 @@ export function DoorScanner({
         try {
           if (typeof navigator !== "undefined" && navigator.onLine) {
             startTransition(async () => {
-              const result = await scanAndValidateTicket(raw, eventId, gateId)
-              applyServerResult(result)
+              try {
+                const response = await fetch("/api/scanner/scan", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    payload: raw,
+                    eventId,
+                    gateId,
+                  }),
+                })
+                const result = (await response.json()) as ScanTicketResult
+                if (typeof result?.success !== "boolean") {
+                  showOverlay({ kind: "invalid" })
+                  return
+                }
+                applyServerResult(result)
+              } catch {
+                showOverlay({ kind: "invalid" })
+              }
             })
             return
           }
