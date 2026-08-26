@@ -34,75 +34,63 @@ export function EventEditorV2StickyHeader({
   step,
   ticketsLabel,
   badge,
-  actions,
+  previewAction,
+  primaryAction,
   onStep,
 }: {
   step: EditorV2StepId
   ticketsLabel: string
   badge: { label: string; tone: DraftSaveBadgeTone }
-  actions?: ReactNode
+  previewAction?: ReactNode
+  primaryAction?: ReactNode
   onStep: (step: EditorV2StepId) => void
 }) {
   return (
     <header className="sticky top-0 z-50 border-b border-border/70 bg-background/80 backdrop-blur-md">
-      <div className="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-3 sm:px-6">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/admin/events"
-            aria-label="Volver al panel"
-            className="grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
-          >
-            <ArrowLeft className="size-5" />
-          </Link>
+      <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3 sm:px-6">
+        <Link
+          href="/admin/events"
+          aria-label="Volver al panel"
+          className="grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+        >
+          <ArrowLeft className="size-5" />
+        </Link>
 
-          <nav
-            className="flex min-w-0 flex-1 items-center gap-1.5"
-            aria-label="Pasos del editor"
-          >
-            {EDITOR_V2_STEPS.map((item) => {
-              const current = item.id === step
-              const label = item.id === 2 ? ticketsLabel : item.label
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onStep(item.id)}
-                  aria-current={current ? "step" : undefined}
-                  aria-label={label}
-                  className={cn(
-                    "inline-flex h-11 min-h-11 items-center gap-2 rounded-full border px-3 text-sm font-semibold transition-all duration-200",
-                    current
-                      ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-400"
-                      : "border-transparent text-muted-foreground hover:border-border hover:bg-white/5 hover:text-foreground",
-                  )}
-                >
-                  <item.icon className="size-4 shrink-0" aria-hidden />
-                  <span className="hidden truncate sm:inline">{label}</span>
-                </button>
-              )
-            })}
-          </nav>
+        <nav
+          className="no-scrollbar flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto"
+          aria-label="Pasos del editor"
+        >
+          {EDITOR_V2_STEPS.map((item) => {
+            const current = item.id === step
+            const label = item.id === 2 ? ticketsLabel : item.label
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onStep(item.id)}
+                aria-current={current ? "step" : undefined}
+                aria-label={label}
+                className={cn(
+                  "inline-flex h-11 min-h-11 shrink-0 items-center gap-2 rounded-full border px-3 text-sm font-semibold transition-all duration-200",
+                  current
+                    ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-400"
+                    : "border-transparent text-muted-foreground hover:border-border hover:bg-white/5 hover:text-foreground",
+                )}
+              >
+                <item.icon className="size-4 shrink-0" aria-hidden />
+                <span className="truncate">{label}</span>
+              </button>
+            )
+          })}
+        </nav>
 
-          <EventEditorV2SaveBadge
-            label={badge.label}
-            tone={badge.tone}
-            className="hidden shrink-0 md:inline-flex"
-          />
-          <div className="hidden shrink-0 items-center gap-2 lg:flex">{actions}</div>
-        </div>
-
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between lg:hidden">
-          <EventEditorV2SaveBadge
-            label={badge.label}
-            tone={badge.tone}
-            className="self-start md:hidden"
-          />
-          {actions ? (
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              {actions}
-            </div>
-          ) : null}
-        </div>
+        <EventEditorV2SaveBadge
+          label={badge.label}
+          tone={badge.tone}
+          className="hidden shrink-0 md:inline-flex"
+        />
+        {previewAction}
+        {primaryAction}
       </div>
     </header>
   )

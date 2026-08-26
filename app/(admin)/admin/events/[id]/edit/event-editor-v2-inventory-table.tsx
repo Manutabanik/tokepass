@@ -177,8 +177,8 @@ export function InventorySummaryTable() {
   }
 
   return (
-    <DraftCard className="min-w-0 lg:col-span-8">
-      <div className="mb-3 flex items-center gap-2">
+    <DraftCard className="min-w-0 md:col-span-8">
+      <div className="mb-4 flex items-center gap-2">
         <LayoutList className="size-4 text-emerald-400" aria-hidden />
         <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
           Resumen general
@@ -190,7 +190,7 @@ export function InventorySummaryTable() {
       </DraftHint>
 
       {rows.length === 0 ? (
-        <p className="mt-5 rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-gray-500 dark:border-gray-800">
+        <p className="mt-5 flex-grow rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-gray-500 dark:border-gray-800">
           Todavía no hay {labels.tickets.toLowerCase()}, extras ni sectores para
           resumir.
         </p>

@@ -53,12 +53,12 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
 
   return (
     <div className={BENTO_GRID_CLASS}>
-      <div className="md:col-span-6">
+      <div className="h-full md:col-span-6">
         <EventEditorV2ArchetypePicker />
       </div>
         {supportsVirtual ? (
-          <DraftCard className="flex h-full flex-col items-start justify-between gap-4 md:col-span-6 sm:flex-row sm:items-center">
-            <div className="min-w-0">
+          <DraftCard className="h-full flex-col items-start justify-between gap-4 md:col-span-6 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-grow">
               <div className="flex items-center gap-2">
                 <MonitorPlay className="size-4 text-emerald-400" aria-hidden />
                 <Label
@@ -83,7 +83,7 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
             />
           </DraftCard>
         ) : (
-          <DraftCard className="flex h-full items-center md:col-span-6">
+          <DraftCard className="h-full items-center md:col-span-6">
             <p className="text-sm text-muted-foreground">
               Este tipo de evento es presencial. El lugar se completa al lado de
               las fechas.
@@ -152,7 +152,7 @@ export function EventEditorV2InfoStep({ eventId }: { eventId: string }) {
             Imágenes
           </h2>
         </div>
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
           <EventEditorV2MediaField
             eventId={eventId}
             name="flyerUrl"

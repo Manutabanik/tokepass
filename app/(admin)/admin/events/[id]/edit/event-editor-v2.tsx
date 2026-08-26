@@ -151,25 +151,28 @@ export function EventEditorV2({
     }
   }
 
-  const actions = (
-    <>
-      <Button
-        type="button"
-        variant="outline"
-        disabled={actionsDisabled}
-        title={previewTitle}
-        className="h-12 min-h-12"
-        onClick={() => void handlePreviewDraft()}
-      >
-        <Eye className="size-4" aria-hidden />
-        {previewLabel}
-      </Button>
+  const previewAction = (
+    <Button
+      type="button"
+      variant="outline"
+      disabled={actionsDisabled}
+      title={previewTitle}
+      className="hidden h-12 min-h-12 shrink-0 md:inline-flex"
+      onClick={() => void handlePreviewDraft()}
+    >
+      <Eye className="size-4" aria-hidden />
+      {previewLabel}
+    </Button>
+  )
+
+  const primaryAction = (
+    <div className="fixed bottom-0 left-0 z-50 w-full border-t border-border bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:relative md:w-auto md:border-0 md:bg-transparent md:p-0">
       <Button
         type="button"
         disabled={actionsDisabled}
         title={publishTitle}
         className={cn(
-          "h-12 min-h-12 transition-all duration-200",
+          "h-12 min-h-12 w-full transition-all duration-200 md:w-auto",
           launchReady
             ? "bg-emerald-500 text-black hover:bg-emerald-400"
             : "cursor-not-allowed opacity-50",
@@ -179,21 +182,22 @@ export function EventEditorV2({
         <Rocket className="size-4" aria-hidden />
         {publishLabel}
       </Button>
-    </>
+    </div>
   )
 
   return (
     <FormProvider {...form}>
-      <div className="w-full flex-1 overflow-x-hidden bg-background text-foreground">
+      <div className="w-full flex-1 overflow-x-hidden bg-background pb-20 text-foreground md:pb-0">
         <EventEditorV2StickyHeader
           step={step}
           ticketsLabel={labels.tickets}
           badge={badge}
-          actions={actions}
+          previewAction={previewAction}
+          primaryAction={primaryAction}
           onStep={setStep}
         />
 
-        <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+        <div className="mx-auto max-w-5xl px-4 py-8 pb-20 sm:px-6 md:pb-8">
           <div className="mb-8 min-w-0">
             <p className="text-xs font-bold tracking-[0.18em] text-emerald-400 uppercase">
               Editor

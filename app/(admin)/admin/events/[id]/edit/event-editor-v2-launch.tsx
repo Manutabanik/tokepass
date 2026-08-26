@@ -94,8 +94,8 @@ export function EventEditorV2LaunchStep({
 
       <CatalogPreviewCard preview={preview} />
 
-      <DraftCard className="md:col-span-8">
-          <div className="mb-4 flex flex-col items-start justify-between gap-3 sm:flex-row sm:gap-4">
+      <DraftCard className="h-full md:col-span-8">
+          <div className="mb-4 flex flex-col items-start justify-between gap-4 sm:flex-row">
             <div className="min-w-0">
               <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
                 Estrategia de Venta
@@ -129,7 +129,7 @@ export function EventEditorV2LaunchStep({
           </div>
 
           {sale ? (
-            <div className="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/80 p-4 dark:border-gray-800 dark:bg-gray-900/50">
+            <div className="flex-grow space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/80 p-4 dark:border-gray-800 dark:bg-gray-900/50">
               <p className="text-sm text-slate-700 dark:text-zinc-200">
                 {absorbFees ? (
                   <>
@@ -160,7 +160,7 @@ export function EventEditorV2LaunchStep({
               </dl>
             </div>
           ) : (
-            <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-muted-foreground dark:border-gray-700">
+            <p className="flex-grow rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-muted-foreground dark:border-gray-700">
               Agregá una entrada en el paso 2 para simular el cobro con la
               comisión del 10%.
             </p>
@@ -205,7 +205,7 @@ export function EventEditorV2LaunchStep({
 
       <EventEditorV2SettingsStep />
 
-      <div className="flex flex-col gap-3 border-t border-border/60 pt-6 md:col-span-12 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-4 border-t border-border/60 pt-6 md:col-span-12 md:flex-row md:items-center md:justify-between">
         <p className="text-sm text-muted-foreground">
           {launchReady
             ? isPublished
@@ -229,7 +229,7 @@ export function EventEditorV2LaunchStep({
             type="button"
             disabled={!launchReady || publishing || previewing}
             className={cn(
-              "h-12 min-h-12 min-w-52 transition-all duration-200",
+              "hidden h-12 min-h-12 min-w-52 transition-all duration-200 md:inline-flex",
               launchReady
                 ? "bg-emerald-500 text-black hover:bg-emerald-400"
                 : "cursor-not-allowed opacity-50",
@@ -287,10 +287,11 @@ function CatalogPreviewCard({
         : `Desde ${formatTicketPrice(preview.minPrice)}`
 
   return (
-    <DraftCard className="overflow-hidden p-4 md:col-span-4">
+    <DraftCard className="h-full overflow-hidden p-4 md:col-span-4">
       <p className="mb-3 text-[10px] font-bold tracking-[0.18em] text-muted-foreground uppercase">
         Vista previa del catálogo
       </p>
+      <div className="flex flex-grow items-center justify-center">
       <article
         aria-label="Vista previa del evento en el catálogo"
         className="pointer-events-none relative mx-auto aspect-[3/4] w-full max-w-[280px] overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 shadow-xl select-none"
@@ -337,6 +338,7 @@ function CatalogPreviewCard({
           </div>
         </div>
       </article>
+      </div>
     </DraftCard>
   )
 }

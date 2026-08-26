@@ -134,7 +134,7 @@ export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
   }
 
   return (
-    <DraftCard className="lg:col-span-12">
+    <DraftCard className="md:col-span-12">
       <div className="mb-4">
         <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-zinc-100">
           <MapPinned className="size-4 text-emerald-400" aria-hidden />

@@ -48,7 +48,7 @@ export function EventEditorV2ArchetypePicker() {
   }
 
   return (
-    <DraftCard>
+    <DraftCard className="h-full">
       <div className="mb-4">
         <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
           ¿Qué tipo de evento es?
@@ -60,7 +60,7 @@ export function EventEditorV2ArchetypePicker() {
       <div
         role="radiogroup"
         aria-label="Arquetipo del evento"
-        className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+        className="grid flex-grow grid-cols-1 content-start gap-3 sm:grid-cols-2 lg:grid-cols-4"
       >
         {EVENT_DRAFT_ARCHETYPES.map((id) => {
           const item = ARCHETYPES[id]

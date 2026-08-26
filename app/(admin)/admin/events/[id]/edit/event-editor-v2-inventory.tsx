@@ -47,14 +47,14 @@ export function EventEditorV2InventoryStep({ eventId }: { eventId: string }) {
 
   return (
     <div className={BENTO_INVENTORY_GRID_CLASS}>
-      <DraftCard className="lg:col-span-4">
+      <DraftCard className="h-full md:col-span-4">
         <div className="mb-4 flex items-center gap-2">
           <Users className="size-4 text-emerald-400" aria-hidden />
           <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
             {labels.capacity}
           </h2>
         </div>
-        <div className="grid gap-3">
+        <div className="grid flex-grow gap-4">
           <DraftFieldLabel
             htmlFor="event-v2-venue-capacity"
             required
@@ -220,7 +220,7 @@ function DraftLineItemList({
       : fields.length
 
   return (
-    <DraftCard className="space-y-3 lg:col-span-12">
+    <DraftCard className="space-y-4 md:col-span-12">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-zinc-200">

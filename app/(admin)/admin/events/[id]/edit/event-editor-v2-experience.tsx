@@ -30,7 +30,7 @@ export function EventEditorV2MultimediaCard({ eventId }: { eventId: string }) {
           Multimedia
         </h2>
       </div>
-      <div className="grid gap-5">
+      <div className="grid flex-grow gap-4">
         <div className="grid gap-2">
           <DraftFieldLabel htmlFor="event-v2-promo-video" optional className="text-sm">
             Video promo
@@ -64,7 +64,7 @@ export function EventEditorV2UsefulInfoCard() {
           Información útil
         </h2>
       </div>
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+      <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
         <div className="grid gap-2">
           <DraftFieldLabel htmlFor="event-v2-restrictions" optional className="text-sm">
             Restricciones y edad

@@ -14,12 +14,14 @@ export const DRAFT_TEXTAREA_CLASS =
 export const DRAFT_TICKET_CARD_CLASS =
   "relative rounded-xl border border-slate-200 bg-white/80 p-4 pt-12 transition-all duration-200 hover:border-slate-300 dark:border-gray-700/50 dark:bg-gray-800/50 dark:hover:border-gray-600"
 
-export const BENTO_GRID_CLASS = "grid grid-cols-1 md:grid-cols-12 gap-6"
+export const BENTO_GRID_CLASS =
+  "grid grid-cols-1 items-stretch gap-6 md:grid-cols-12"
 
-export const BENTO_INVENTORY_GRID_CLASS = "grid grid-cols-1 lg:grid-cols-12 gap-6"
+export const BENTO_INVENTORY_GRID_CLASS =
+  "grid grid-cols-1 items-stretch gap-6 md:grid-cols-12"
 
 export const BENTO_CARD_CLASS =
-  "bg-card border border-border/50 rounded-2xl p-6 shadow-sm"
+  "flex h-full flex-col rounded-2xl border border-border/50 bg-card p-6 shadow-sm"
 
 export function DraftCard({
   children,
