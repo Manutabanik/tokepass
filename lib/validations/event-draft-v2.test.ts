@@ -79,6 +79,19 @@ describe("eventDraftSchema", () => {
     assert.deepEqual(draft.lineup, [])
   })
 
+  it("defaults ticketType to standard on tickets and extra on parsed extras", () => {
+    assert.equal(
+      eventDraftSchema.parse({ tickets: [{}] }).tickets[0]?.ticketType,
+      "standard",
+    )
+    assert.equal(parseEventDraftV2({ extras: [{}] }).extras[0]?.ticketType, "extra")
+    assert.equal(
+      eventDraftSchema.parse({ tickets: [{ ticketType: "combo" }] }).tickets[0]
+        ?.ticketType,
+      "combo",
+    )
+  })
+
   it("still accepts over-capacity stock without failing", () => {
     const parsed = eventDraftSchema.safeParse({
       venueCapacity: 10,

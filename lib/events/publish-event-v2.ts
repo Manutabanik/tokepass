@@ -10,6 +10,7 @@ import {
   flattenDraftScheduleOccurrences,
   type DraftScheduleOccurrence,
 } from "@/lib/events/draft-schedule-slots-v2"
+import { parseTicketCommerceType } from "@/lib/events/ticket-commerce-type"
 import {
   EVENT_DRAFT_GALLERY_MAX,
   eventPublishSchema,
@@ -48,6 +49,7 @@ export type PublishEventV2TierPayload = {
   layout_type: "general" | "numbered_seat" | "table_combo"
   seating_sector_id: string | null
   day_id: string | null
+  ticket_type: "standard" | "combo" | "extra"
 }
 
 export type PublishEventV2ScheduleDay = {
@@ -205,7 +207,14 @@ function mapLineItemToTier(
     sponsored: fee.isSponsoredByTokePass,
   })
   const minPurchase = clampLimit(item.minOrder, 1)
-  const isExtra = kind === "extra"
+  const explicitType = parseTicketCommerceType(item.ticketType)
+  const ticketType =
+    kind === "extra"
+      ? explicitType === "combo"
+        ? "combo"
+        : "extra"
+      : (explicitType ?? "standard")
+  const isExtra = ticketType === "extra"
   const isMap = !isExtra && isMapDraftTicket(item)
   const sectorId = String(item.sectorId ?? "").trim()
 
@@ -224,6 +233,7 @@ function mapLineItemToTier(
     layout_type: isExtra ? "general" : publishLayoutType(item, isMap),
     seating_sector_id: isMap && sectorId ? sectorId : null,
     day_id: asPublishUuid((item as { slotId?: string }).slotId),
+    ticket_type: ticketType,
   }
 }
 

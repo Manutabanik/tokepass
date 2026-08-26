@@ -239,13 +239,25 @@ async function persistRehydratedPublishedDraft(input: {
         .eq("id", input.event.venue_id)
         .maybeSingle()
     : { data: null, error: null }
-  const ticketsQuery = await input.supabase
+  const ticketSelect =
+    "id, name, description, price, capacity, min_purchase_limit, max_purchase_limit, tier_type, category, layout_type, seating_sector_id, day_id, ticket_type"
+  let ticketsQuery = await input.supabase
     .from("ticket_tiers")
-    .select(
-      "id, name, description, price, capacity, min_purchase_limit, max_purchase_limit, tier_type, category, layout_type, seating_sector_id, day_id",
-    )
+    .select(ticketSelect)
     .eq("event_id", input.event.id)
     .order("created_at", { ascending: true })
+  if (
+    ticketsQuery.error &&
+    /ticket_type|schema cache|PGRST204|42703/i.test(ticketsQuery.error.message)
+  ) {
+    ticketsQuery = await input.supabase
+      .from("ticket_tiers")
+      .select(
+        "id, name, description, price, capacity, min_purchase_limit, max_purchase_limit, tier_type, category, layout_type, seating_sector_id, day_id",
+      )
+      .eq("event_id", input.event.id)
+      .order("created_at", { ascending: true })
+  }
   const schedulesQuery = await input.supabase
     .from("event_schedules")
     .select("id, title, start_time, end_time")
@@ -569,6 +581,7 @@ function relationalTierRow(
     capacity_per_unit: 1,
     admit_count: 1,
     bundle_items: [] as Json,
+    ticket_type: ticket.ticket_type,
     updated_at: new Date().toISOString(),
   }
 }

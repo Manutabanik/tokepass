@@ -50,17 +50,18 @@ import { resolveSectorAssignMeta } from "@/lib/seating/assign-best-seats"
 import {
   FULL_PASS_TAB_ID,
   defaultCheckoutDateId,
-  defaultCheckoutKindTab,
   groupTicketsByDate,
   isSamePriceAnyDay,
   listCheckoutDateCards,
-  shouldShowCheckoutKindTabs,
   ticketDateSectionLabel,
   ticketMatchesTab,
   ticketVisibleOnCheckoutDay,
-  type CheckoutKindTab,
   type TicketDayGroup,
 } from "@/lib/checkout/ticket-day-groups"
+import {
+  partitionCheckoutTickets,
+  resolveTicketCommerceType,
+} from "@/lib/events/ticket-commerce-type"
 import { ticketUsesMapSelector } from "@/lib/checkout/public-ticket-view"
 import { flattenSeatsForAvailability } from "@/lib/seating/venue-map-geometry"
 import { classifyZoneClick } from "@/lib/seating/map-click-target"
@@ -144,7 +145,12 @@ export function EventCheckoutSelector({
   const [seatSheetMode, setSeatSheetMode] = useState<"map" | "counter">("map")
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const grouped = groupCheckoutTiers(tiers)
+  const { standardTickets, comboTickets } = useMemo(
+    () => partitionCheckoutTickets(tiers),
+    [tiers],
+  )
   const listTiers = tiers.filter((tier) => {
+    if (resolveTicketCommerceType(tier) === "extra") return false
     const type = inferInventoryTierType({
       tierType: tier.tierType,
       layoutType: tier.layoutType,
@@ -303,6 +309,8 @@ export function EventCheckoutSelector({
         <TicketSelectionList
             listTiers={listTiers}
             allTiers={tiers}
+            standardTickets={standardTickets}
+            comboTickets={comboTickets}
             bundleTiers={grouped.bundle}
             quantities={quantities}
             isPending={isPending}
@@ -366,6 +374,8 @@ export function EventCheckoutSelector({
 function TicketSelectionList({
   listTiers,
   allTiers,
+  standardTickets,
+  comboTickets,
   bundleTiers,
   quantities,
   isPending,
@@ -387,6 +397,8 @@ function TicketSelectionList({
 }: {
   listTiers: TicketSelectorTier[]
   allTiers: TicketSelectorTier[]
+  standardTickets: TicketSelectorTier[]
+  comboTickets: TicketSelectorTier[]
   bundleTiers: TicketSelectorTier[]
   quantities: Record<string, number>
   isPending: boolean
@@ -410,27 +422,27 @@ function TicketSelectionList({
     sectorId?: string | null
   }) => void
 }) {
+  const admissionTiers = useMemo(
+    () =>
+      allTiers.filter((tier) => resolveTicketCommerceType(tier) !== "extra"),
+    [allTiers],
+  )
   const dateCards = useMemo(
-    () => listCheckoutDateCards(scheduleDays, allTiers),
-    [allTiers, scheduleDays],
+    () => listCheckoutDateCards(scheduleDays, admissionTiers),
+    [admissionTiers, scheduleDays],
   )
-  const showKindTabs = shouldShowCheckoutKindTabs(allTiers, scheduleDays)
+  const showAccessTabs = comboTickets.length > 0
   const samePriceAnyDay = useMemo(
-    () => isSamePriceAnyDay(listTiers, scheduleDays),
-    [listTiers, scheduleDays],
+    () => isSamePriceAnyDay(standardTickets, scheduleDays),
+    [scheduleDays, standardTickets],
   )
-  const initialKind = defaultCheckoutKindTab(allTiers)
-  const initialDateId = defaultCheckoutDateId(dateCards, allTiers)
-  const [kindTab, setKindTab] = useState<CheckoutKindTab>(initialKind)
+  const initialDateId = defaultCheckoutDateId(dateCards, standardTickets)
+  const [accessTab, setAccessTab] = useState<"entradas" | "combos">("entradas")
   const [uncontrolledDateId, setUncontrolledDateId] = useState<string | null>(
     initialDateId,
   )
   const reduceMotion = useReducedMotion()
-  const defaultKind = defaultCheckoutKindTab(allTiers)
-  if (!showKindTabs && kindTab !== defaultKind) {
-    setKindTab(defaultKind)
-  }
-  const nextDate = defaultCheckoutDateId(dateCards, allTiers)
+  const nextDate = defaultCheckoutDateId(dateCards, standardTickets)
   const dateIsControlled = typeof onSelectedDateIdChange === "function"
   const activeDateId = dateIsControlled
     ? (selectedDateId ?? nextDate)
@@ -450,28 +462,33 @@ function TicketSelectionList({
     setUncontrolledDateId(dateId)
   }
 
-  const showDateCards = kindTab === "days" && dateCards.length > 1
+  const showDateCards = accessTab === "entradas" && dateCards.length > 1
 
   const displayedTickets = useMemo(() => {
-    if (kindTab === "passes") {
-      return listTiers.filter((tier) => ticketMatchesTab(tier, FULL_PASS_TAB_ID))
+    if (accessTab === "combos") {
+      return listTiers.filter(
+        (tier) => resolveTicketCommerceType(tier) === "combo",
+      )
     }
+    const entradas = listTiers.filter(
+      (tier) => resolveTicketCommerceType(tier) === "standard",
+    )
     if (activeDateId) {
-      return listTiers.filter((tier) =>
+      return entradas.filter((tier) =>
         ticketVisibleOnCheckoutDay(tier, activeDateId),
       )
     }
-    return listTiers.filter((tier) => !ticketMatchesTab(tier, FULL_PASS_TAB_ID))
-  }, [activeDateId, kindTab, listTiers])
+    return entradas.filter((tier) => !ticketMatchesTab(tier, FULL_PASS_TAB_ID))
+  }, [accessTab, activeDateId, listTiers])
   const showBundles =
-    bundleTiers.length > 0 && (kindTab === "passes" || !showKindTabs)
+    bundleTiers.length > 0 && (accessTab === "combos" || !showAccessTabs)
   const ticketGroups = useMemo<TicketDayGroup[]>(() => {
-    if (kindTab === "passes") {
+    if (accessTab === "combos") {
       return displayedTickets.length > 0
         ? [
             {
               dateId: FULL_PASS_TAB_ID,
-              dateLabel: "Combos y Promos",
+              dateLabel: "Combos",
               tickets: displayedTickets,
             },
           ]
@@ -483,15 +500,15 @@ function TicketSelectionList({
       dateLabel:
         ticketDateSectionLabel(group.dateId, scheduleDays) || group.dateLabel,
     }))
-  }, [displayedTickets, kindTab, scheduleDays])
-  const showDateHeaders = kindTab === "days" && ticketGroups.length > 1
+  }, [accessTab, displayedTickets, scheduleDays])
+  const showDateHeaders = accessTab === "entradas" && ticketGroups.length > 1
 
   const selectorTitle =
-    kindTab === "passes"
-      ? "Combos y Promos"
+    accessTab === "combos"
+      ? "Combos"
       : ticketDateSectionLabel(activeDateId, scheduleDays) || "Elegí tu entrada"
   const listKey =
-    kindTab === "passes" ? "passes" : (activeDateId ?? "days")
+    accessTab === "combos" ? "combos" : (activeDateId ?? "entradas")
 
   const seatMap = seatSelection?.map ?? null
   const mapSeats = useMemo(
@@ -580,39 +597,39 @@ function TicketSelectionList({
       <h2 className="mb-3 pt-2 text-lg font-black text-foreground first-letter:uppercase md:mb-4 md:text-xl">
         {selectorTitle}
       </h2>
-      {showKindTabs ? (
+      {showAccessTabs ? (
         <div
-          className="mb-6 grid grid-cols-2 gap-1 rounded-full bg-secondary p-1"
+          className="mb-6 grid grid-cols-2 gap-1 rounded-full bg-muted p-1"
           role="tablist"
-          aria-label="Tipo de entrada"
+          aria-label="Tipo de acceso"
         >
           <button
             type="button"
             role="tab"
-            aria-selected={kindTab === "days"}
-            onClick={() => setKindTab("days")}
+            aria-selected={accessTab === "entradas"}
+            onClick={() => setAccessTab("entradas")}
             className={cn(
               "rounded-full px-3 py-2.5 text-center text-sm font-bold transition-colors",
-              kindTab === "days"
+              accessTab === "entradas"
                 ? "bg-primary text-primary-foreground"
-                : "bg-secondary text-gray-700 dark:text-zinc-300",
+                : "bg-muted text-muted-foreground",
             )}
           >
-            Tickets por Día
+            Entradas
           </button>
           <button
             type="button"
             role="tab"
-            aria-selected={kindTab === "passes"}
-            onClick={() => setKindTab("passes")}
+            aria-selected={accessTab === "combos"}
+            onClick={() => setAccessTab("combos")}
             className={cn(
               "rounded-full px-3 py-2.5 text-center text-sm font-bold transition-colors",
-              kindTab === "passes"
+              accessTab === "combos"
                 ? "bg-primary text-primary-foreground"
-                : "bg-secondary text-gray-700 dark:text-zinc-300",
+                : "bg-muted text-muted-foreground",
             )}
           >
-            Combos y Promos
+            Combos
           </button>
         </div>
       ) : null}
@@ -655,7 +672,7 @@ function TicketSelectionList({
         </p>
       ) : null}
 
-      {kindTab === "passes" || !ticketDateSectionLabel(activeDateId, scheduleDays) ? (
+      {accessTab === "combos" || !ticketDateSectionLabel(activeDateId, scheduleDays) ? (
         <h3 className="mb-3 mt-4 text-sm font-bold text-foreground">
           Seleccioná tus entradas
         </h3>
@@ -717,7 +734,7 @@ function TicketSelectionList({
                   </div>
                 )
               })}
-              {kindTab === "days" || !showKindTabs ? syntheticRow : null}
+              {accessTab === "entradas" ? syntheticRow : null}
               {showBundles ? (
                 <BundleCardSelector
                   bundles={bundleTiers}

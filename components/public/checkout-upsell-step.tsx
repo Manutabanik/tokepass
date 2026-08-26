@@ -19,13 +19,16 @@ export function CheckoutUpsellStep({
   return (
     <section className="space-y-5" aria-label="Extras opcionales">
       <div>
-        <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
+        <h2 className="text-lg font-black text-foreground md:text-xl">
+          ¿Sumás algo más?
+        </h2>
+        <p className="mt-1 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
           <Sparkles className="size-3.5" aria-hidden="true" />
           Opcional (Podés saltearlo si querés)
         </p>
         <p className="mt-1 text-sm leading-6 text-muted-foreground">
-          Extras para tu experiencia: estacionamiento para auto, consumiciones
-          u otros extras. Podés seguir sin sumar nada.
+          Estacionamiento, merch u otros extras. El resumen de tus entradas
+          queda a la derecha. Podés seguir sin sumar nada.
         </p>
       </div>
 

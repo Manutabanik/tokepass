@@ -185,6 +185,7 @@ export type EventDetails = {
       | "category"
       | "list_price"
       | "tier_type"
+      | "ticket_type"
       | "bundle_items"
       | "bundle_type"
       | "description"
@@ -989,9 +990,9 @@ async function loadEventDetails(
   if (!resolvedId) return null
 
   const eventSelectWithPicker =
-    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, social_share_image_url, status, visibility, schedule_days, organizer_id, category_id, delivery_mode, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, restrictions, what_to_bring, lineup, default_ticket_tab, venue_id, has_seating_plan, venue_map, accepts_mercado_pago, accepts_pos_payments, refund_policy, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type, description, highlight_badge, min_purchase_limit, max_purchase_limit, sale_starts_at, sale_ends_at), profiles!events_organizer_id_fkey(full_name)"
+    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, social_share_image_url, status, visibility, schedule_days, organizer_id, category_id, delivery_mode, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, restrictions, what_to_bring, lineup, default_ticket_tab, venue_id, has_seating_plan, venue_map, accepts_mercado_pago, accepts_pos_payments, refund_policy, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, ticket_type, bundle_items, bundle_type, description, highlight_badge, min_purchase_limit, max_purchase_limit, sale_starts_at, sale_ends_at), profiles!events_organizer_id_fkey(full_name)"
   const eventSelectCore =
-    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venue_id, has_seating_plan, venue_map, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type), profiles!events_organizer_id_fkey(full_name)"
+    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venue_id, has_seating_plan, venue_map, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, ticket_type, bundle_items, bundle_type), profiles!events_organizer_id_fkey(full_name)"
 
   let query = supabase
     .from("events")
@@ -1006,7 +1007,7 @@ async function loadEventDetails(
 
   if (
     error &&
-    /default_ticket_tab|highlight_badge|min_purchase_limit|max_purchase_limit|ticket_tiers.*description|sale_starts_at|sale_ends_at|venue_map|lineup|max_capacity|has_seating_plan|social_share_image_url|delivery_mode|access_link|accepts_mercado_pago|accepts_pos_payments|refund_policy|restrictions|what_to_bring|schema cache|PGRST204|42703/i.test(
+    /default_ticket_tab|highlight_badge|min_purchase_limit|max_purchase_limit|ticket_tiers.*description|sale_starts_at|sale_ends_at|venue_map|lineup|max_capacity|has_seating_plan|social_share_image_url|delivery_mode|access_link|accepts_mercado_pago|accepts_pos_payments|refund_policy|restrictions|what_to_bring|ticket_type|schema cache|PGRST204|42703/i.test(
       error.message,
     )
   ) {
@@ -1359,6 +1360,16 @@ async function loadEventDetails(
             : tier.category === "bundle"
               ? "bundle"
               : "general"),
+        ticket_type:
+          (tier as { ticket_type?: TicketTier["ticket_type"] }).ticket_type ??
+          ((tier as { tier_type?: TicketTier["tier_type"] }).tier_type === "addon" ||
+          tier.category === "special"
+            ? "extra"
+            : (tier as { tier_type?: TicketTier["tier_type"] }).tier_type ===
+                  "bundle" ||
+                tier.category === "bundle"
+              ? "combo"
+              : "standard"),
         bundle_items: serializeBundleItems(
           parseBundleItems(
             (tier as { bundle_items?: unknown }).bundle_items,

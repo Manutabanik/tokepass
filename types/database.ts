@@ -543,6 +543,8 @@ export type TicketTier = {
   list_price: number | null
   /** seated | general | addon | bundle */
   tier_type: "seated" | "general" | "addon" | "bundle"
+  /** Clasificación de checkout: standard | combo | extra */
+  ticket_type: "standard" | "combo" | "extra"
   /** Combo: [{ tier_id, quantity }] */
   bundle_items: Json
   /** multi_day_pass | cross_sell_pack | volume_discount */
@@ -1403,6 +1405,7 @@ type TicketTierInsert = Omit<
   | "category"
   | "list_price"
   | "tier_type"
+  | "ticket_type"
   | "bundle_items"
   | "bundle_type"
   | "promo_discount_type"
@@ -1442,6 +1445,7 @@ type TicketTierInsert = Omit<
   category?: TicketTier["category"]
   list_price?: number | null
   tier_type?: TicketTier["tier_type"]
+  ticket_type?: TicketTier["ticket_type"]
   bundle_items?: Json
   bundle_type?: TicketTier["bundle_type"]
   promo_discount_type?: TicketTier["promo_discount_type"]

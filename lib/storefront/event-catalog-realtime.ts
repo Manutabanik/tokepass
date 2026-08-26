@@ -174,6 +174,7 @@ export function applyTicketTierCatalogRow(
       category: "standard" as const,
       list_price: row.list_price ?? null,
       tier_type: "general" as const,
+      ticket_type: "standard" as const,
       bundle_items: [],
       bundle_type: null,
       description: null,

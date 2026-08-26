@@ -28,6 +28,7 @@ import {
 } from "@/lib/inventory/ticket-sale-window"
 import type { TicketHighlightBadge } from "@/lib/checkout/ticket-picker"
 import type { PublicTicketPhase } from "@/lib/inventory/active-phase"
+import type { TicketCommerceType } from "@/lib/events/ticket-commerce-type"
 import type { InventoryTierType } from "@/lib/inventory/unified-inventory"
 import {
   discountPercent,
@@ -58,6 +59,7 @@ export type TicketSelectorTier = {
   minPurchaseLimit?: number | null
   maxPurchaseLimit?: number | null
   category?: TicketTierCategory | string | null
+  ticketType?: TicketCommerceType | string | null
   listPrice?: number | null
   comboItems?: Array<{ name: string; quantity: number }>
   tierType?: InventoryTierType | string | null

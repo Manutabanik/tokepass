@@ -18,6 +18,11 @@ import {
   resolveScheduleDayId,
   type EventDraftV2ScheduleDay,
 } from "@/lib/events/draft-schedule-slots-v2"
+import {
+  TICKET_COMMERCE_TYPES,
+  asTicketCommerceType,
+  type TicketCommerceType,
+} from "@/lib/events/ticket-commerce-type"
 
 export {
   EVENT_DRAFT_ARCHETYPES,
@@ -85,6 +90,7 @@ const draftLineItemSchema = z.object({
   layoutType: z.string().optional().default("general"),
   slotId: z.string().optional().default(""),
   validDayIds: z.array(z.string()).default([]),
+  ticketType: z.enum(TICKET_COMMERCE_TYPES).optional().default("standard"),
 })
 
 export const EVENT_DRAFT_DELIVERY_MODES = ["PRESENCIAL", "ONLINE"] as const
@@ -192,6 +198,7 @@ const publishLineItemSchema = z.object({
   layoutType: z.string().optional(),
   slotId: z.string().optional(),
   validDayIds: z.array(z.string()).optional().default([]),
+  ticketType: z.enum(TICKET_COMMERCE_TYPES).optional().default("standard"),
 })
 
 export const eventPublishSchema = z
@@ -368,6 +375,7 @@ export function emptyEventDraftV2LineItem(
     layoutType: "general",
     slotId: "",
     validDayIds: [],
+    ticketType: "standard",
   }
 }
 
@@ -420,8 +428,13 @@ export function isEventDraftOnline(values: unknown): boolean {
   return record.isVirtual === true || record.settings?.deliveryMode === "ONLINE"
 }
 
-export function createDraftLineItem(): EventDraftV2LineItem {
-  return emptyEventDraftV2LineItem(crypto.randomUUID())
+export function createDraftLineItem(
+  ticketType: TicketCommerceType = "standard",
+): EventDraftV2LineItem {
+  return {
+    ...emptyEventDraftV2LineItem(crypto.randomUUID()),
+    ticketType,
+  }
 }
 
 export function createDraftLineupItem(
@@ -538,11 +551,17 @@ export function parseDraftLineup(raw: unknown): EventDraftV2LineupItem[] {
   })
 }
 
-function parseDraftLineItems(raw: unknown): EventDraftV2LineItem[] {
+function parseDraftLineItems(
+  raw: unknown,
+  fallbackTicketType: TicketCommerceType = "standard",
+): EventDraftV2LineItem[] {
   if (!Array.isArray(raw)) return []
   return raw.map((item, index) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) {
-      return emptyEventDraftV2LineItem(`item-${index}`)
+      return {
+        ...emptyEventDraftV2LineItem(`item-${index}`),
+        ticketType: fallbackTicketType,
+      }
     }
     const record = item as Record<string, unknown>
     const id =
@@ -570,6 +589,10 @@ function parseDraftLineItems(raw: unknown): EventDraftV2LineItem[] {
       layoutType: asOptionalString(record.layoutType) || "general",
       slotId: asOptionalString(record.slotId ?? record.dayId ?? record.day_id),
       validDayIds: parseDraftValidDayIds(record.validDayIds),
+      ticketType: asTicketCommerceType(
+        record.ticketType ?? record.ticket_type,
+        fallbackTicketType,
+      ),
     }
   })
 }
@@ -760,7 +783,7 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
     tickets: parseDraftLineItems(record.tickets).map((ticket) =>
       withResolvedTicketValidDays(ticket, schedule),
     ),
-    extras: parseDraftLineItems(record.extras),
+    extras: parseDraftLineItems(record.extras, "extra"),
     seatingMap: toDraftSeatingMap(
       primaryDraftSeatingMapRaw(seatingMaps, seatingRaw),
     ),

@@ -77,6 +77,7 @@ function sampleEvent(): EventDetails {
         category: "standard",
         list_price: null,
         tier_type: "general",
+        ticket_type: "standard",
         bundle_items: [],
         bundle_type: null,
         description: null,

@@ -29,6 +29,7 @@ export type PublicTicketSource = {
   min_purchase_limit?: number | null
   max_purchase_limit?: number | null
   category?: string | null
+  ticket_type?: string | null
   list_price?: number | null
   tier_type?: string | null
   bundle_type?: string | null
@@ -170,6 +171,7 @@ export function toPublicTicketSelectorTier(
     minPurchaseLimit: tier.min_purchase_limit ?? 1,
     maxPurchaseLimit: tier.max_purchase_limit ?? null,
     category: tier.category,
+    ticketType: tier.ticket_type ?? undefined,
     listPrice: tier.list_price,
     comboItems,
     tierType: tier.tier_type,

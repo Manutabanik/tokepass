@@ -24,6 +24,10 @@ import {
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
+  TICKET_COMMERCE_TYPES,
+  TICKET_COMMERCE_TYPE_LABELS,
+} from "@/lib/events/ticket-commerce-type"
+import {
   draftNumberValue,
   toggleDraftLineupDay,
   type EventDraftV2,
@@ -149,7 +153,7 @@ export function DraftInventoryAccordionCard({
             <p className="text-xs text-muted-foreground tabular-nums sm:hidden">
               Precio: {formatCurrency(priceValue)} | Stock: {formatNumber(stockValue)}
             </p>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_8rem_8rem]">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_11rem_8rem_8rem]">
               <div className="grid gap-1.5">
                 <DraftFieldLabel
                   htmlFor={`event-v2-${name}-${index}-name`}
@@ -164,6 +168,22 @@ export function DraftInventoryAccordionCard({
                   {...register(`${name}.${index}.name`)}
                 />
                 <DraftFieldError message={itemErrors?.name?.message} />
+              </div>
+              <div className="grid gap-1.5">
+                <DraftFieldLabel htmlFor={`event-v2-${name}-${index}-ticketType`}>
+                  Tipo de acceso
+                </DraftFieldLabel>
+                <select
+                  id={`event-v2-${name}-${index}-ticketType`}
+                  className={DRAFT_FIELD_CLASS}
+                  {...register(`${name}.${index}.ticketType`)}
+                >
+                  {TICKET_COMMERCE_TYPES.map((value) => (
+                    <option key={value} value={value}>
+                      {TICKET_COMMERCE_TYPE_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="grid gap-1.5">
                 <DraftFieldLabel

@@ -55,7 +55,6 @@ import {
 } from "@/lib/checkout/charge-unit"
 import { cartTicketLineId } from "@/lib/checkout/cart-lines"
 import { CheckoutUpsellStep } from "@/components/public/checkout-upsell-step"
-import { groupCheckoutTiers } from "@/components/public/event-checkout-selector"
 import {
   resolveCheckoutPaymentProvider,
   type CheckoutPaymentProvider,
@@ -82,6 +81,7 @@ import {
   storefrontLimitMessage,
 } from "@/lib/checkout-limits"
 import { minReservedUntil } from "@/lib/checkout-hold"
+import { partitionCheckoutTickets } from "@/lib/events/ticket-commerce-type"
 import {
   HIGH_DEMAND_LOCK_MESSAGE,
   HIGH_DEMAND_LOCK_TIMEOUT,
@@ -542,6 +542,14 @@ export function CheckoutTunnel({
       })),
     [tierOverrides, tiers],
   )
+  const { standardTickets, comboTickets, extraTickets } = useMemo(
+    () => partitionCheckoutTickets(displayTiers),
+    [displayTiers],
+  )
+  const admissionTiers = useMemo(
+    () => [...standardTickets, ...comboTickets],
+    [comboTickets, standardTickets],
+  )
   useEventCatalogRealtime(
     eventId,
     {
@@ -579,16 +587,16 @@ export function CheckoutTunnel({
     "tunnel",
   )
   const checkoutDateCards = useMemo(
-    () => listCheckoutDateCards(scheduleDays, displayTiers),
-    [displayTiers, scheduleDays],
+    () => listCheckoutDateCards(scheduleDays, admissionTiers),
+    [admissionTiers, scheduleDays],
   )
   const defaultDateId = useMemo(
     () =>
       selectedDayId &&
       checkoutDateCards.some((card) => card.dateId === selectedDayId)
         ? selectedDayId
-        : defaultCheckoutDateId(checkoutDateCards, displayTiers),
-    [checkoutDateCards, displayTiers, selectedDayId],
+        : defaultCheckoutDateId(checkoutDateCards, admissionTiers),
+    [admissionTiers, checkoutDateCards, selectedDayId],
   )
   const storedScheduleId = useCheckoutStore((state) => state.selectedScheduleId)
   const selectedDateId =
@@ -597,11 +605,11 @@ export function CheckoutTunnel({
       ? storedScheduleId
       : defaultDateId
   const dayTiers = useMemo(() => {
-    if (!selectedDateId) return displayTiers
-    return displayTiers.filter((tier) =>
+    if (!selectedDateId) return admissionTiers
+    return admissionTiers.filter((tier) =>
       ticketVisibleOnCheckoutDay(tier, selectedDateId),
     )
-  }, [displayTiers, selectedDateId])
+  }, [admissionTiers, selectedDateId])
 
   useEffect(() => {
     const store = useCheckoutStore.getState()
@@ -1011,13 +1019,7 @@ export function CheckoutTunnel({
 
   const hasSeatingFlow = hasInteractiveMap
 
-  const checkoutGroups = useMemo(
-    () => groupCheckoutTiers(funnelTiers),
-    [funnelTiers],
-  )
-  const availableExtras = checkoutGroups.addon.filter(
-    (tier) => tier.available > 0,
-  )
+  const availableExtras = extraTickets.filter((tier) => tier.available > 0)
 
   const visibleZoneId =
     focusedZoneId && selectedItems.some((item) => item.id === focusedZoneId)
@@ -2858,7 +2860,7 @@ export function CheckoutTunnel({
     visibleStep === "tickets"
       ? "Elegí tu entrada"
       : visibleStep === "upsell"
-        ? "¿Sumás algo más a tu visita?"
+        ? "¿Sumás algo más?"
         : visibleStep === "details"
           ? "Confirmá tus datos"
           : "Confirmá el pago"
@@ -2967,7 +2969,7 @@ export function CheckoutTunnel({
                 transition={{ duration: 0.22, ease: "easeInOut" }}
               >
               <CheckoutTicketList
-                tiers={funnelTiers}
+                tiers={admissionTiers}
                 isPending={controlsLocked}
                 hasSeatingFlow={hasSeatingFlow}
                 hasInteractiveMap={hasInteractiveMap}

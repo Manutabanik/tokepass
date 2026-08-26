@@ -5,6 +5,7 @@ import {
   toDatetimeLocalInput,
 } from "@/lib/event-schedule"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
+import { asTicketCommerceType, resolveTicketCommerceType } from "@/lib/events/ticket-commerce-type"
 import { toDraftSeatingMap } from "@/lib/events/draft-seating-map-v2"
 import { parseEventRefundPolicy } from "@/lib/validations/event-form"
 import {
@@ -30,6 +31,7 @@ export type LiveEventTicketSnapshotV2 = {
   layout_type: string | null
   seating_sector_id: string | null
   day_id?: string | null
+  ticket_type?: string | null
 }
 
 export type LiveEventVenueSnapshotV2 = {
@@ -117,12 +119,7 @@ export function rehydrateEventDraftV2(
   const extras: EventDraftV2LineItem[] = []
   for (const tier of snapshot.tickets) {
     const item = liveTierToDraftItem(tier)
-    const kind = inferInventoryTierType({
-      tierType: tier.tier_type,
-      layoutType: tier.layout_type,
-      category: tier.category,
-    })
-    if (kind === "addon" || kind === "bundle") {
+    if (item.ticketType === "extra") {
       extras.push({ ...item, source: "general", sectorId: "", layoutType: "general" })
       continue
     }
@@ -239,6 +236,17 @@ function liveTierToDraftItem(
     sectorId: isMap ? sectorId : "",
     layoutType,
     slotId: (tier.day_id ?? "").trim(),
+    ticketType: asTicketCommerceType(
+      tier.ticket_type,
+      resolveTicketCommerceType({
+        ticket_type: tier.ticket_type,
+        tierType: tier.tier_type,
+        layoutType: tier.layout_type,
+        category: tier.category,
+        name: tier.name,
+        dayId: tier.day_id,
+      }),
+    ),
   }
 }
 

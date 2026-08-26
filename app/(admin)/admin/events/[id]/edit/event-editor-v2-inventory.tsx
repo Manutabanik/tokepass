@@ -211,7 +211,7 @@ function DraftLineItemList({
   })
 
   function addItem() {
-    append(createDraftLineItem())
+    append(createDraftLineItem(name === "extras" ? "extra" : "standard"))
   }
 
   const visibleCount =
@@ -268,6 +268,7 @@ function DraftLineItemList({
                   <input type="hidden" {...register(`${name}.${index}.startDate`)} />
                   <input type="hidden" {...register(`${name}.${index}.endDate`)} />
                   <input type="hidden" {...register(`${name}.${index}.slotId`)} />
+                  <input type="hidden" {...register(`${name}.${index}.ticketType`)} />
                 </li>
               )
             }
