@@ -2,6 +2,71 @@
 -- P168 · SRE: lock order, promo FOR UPDATE, one-transfer + 24h barrier
 -- =============================================================================
 
+-- Helpers from P94 (CREATE OR REPLACE so this file can apply if P94 never ran).
+create or replace function public.checkout_cart_item_tier_id(p_item jsonb)
+returns uuid
+language plpgsql
+immutable
+set search_path = pg_catalog, public
+as $$
+declare
+  v_raw text;
+begin
+  v_raw := nullif(btrim(coalesce(
+    p_item ->> 'ticket_tier_id',
+    p_item ->> 'tier_id',
+    p_item ->> 'ticketTierId',
+    p_item ->> 'tierId',
+    ''
+  )), '');
+  if v_raw is null then
+    return null;
+  end if;
+  begin
+    return v_raw::uuid;
+  exception
+    when others then
+      return null;
+  end;
+end;
+$$;
+
+create or replace function public.checkout_cart_item_seat_id(p_item jsonb)
+returns uuid
+language plpgsql
+immutable
+set search_path = pg_catalog, public
+as $$
+declare
+  v_raw text;
+begin
+  v_raw := nullif(btrim(coalesce(
+    p_item ->> 'seating_unit_id',
+    p_item ->> 'seat_id',
+    p_item ->> 'seatId',
+    p_item ->> 'seatingUnitId',
+    ''
+  )), '');
+  if v_raw is null then
+    return null;
+  end if;
+  begin
+    return v_raw::uuid;
+  exception
+    when others then
+      return null;
+  end;
+end;
+$$;
+
+revoke all on function public.checkout_cart_item_tier_id(jsonb) from public, anon;
+grant execute on function public.checkout_cart_item_tier_id(jsonb)
+  to authenticated, service_role;
+
+revoke all on function public.checkout_cart_item_seat_id(jsonb) from public, anon;
+grant execute on function public.checkout_cart_item_seat_id(jsonb)
+  to authenticated, service_role;
+
 -- -----------------------------------------------------------------------------
 -- Locks: always request multi-row seat/tier locks in UUID order
 -- -----------------------------------------------------------------------------

@@ -29,7 +29,13 @@ before insert on public.artists
 for each row
 execute function public.artists_set_created_by();
 
-drop policy if exists artists_update_organizer on public.artists;
+do $$
+begin
+  drop policy if exists artists_update_organizer on public.artists;
+  drop policy if exists artists_update_own on public.artists;
+end
+$$;
+
 create policy artists_update_own
   on public.artists
   for update
