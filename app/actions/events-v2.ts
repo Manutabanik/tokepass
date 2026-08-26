@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache"
 
-import { seatingPersistUserMessage } from "@/lib/events/sanitize-ticket-tiers"
+import {
+  collectValidSectorIdsFromVenueMaps,
+  nullifyInvalidTicketSeatingSectors,
+  seatingPersistUserMessage,
+} from "@/lib/events/sanitize-ticket-tiers"
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
 import { assertDraftMapLayoutImmutable } from "@/lib/events/assert-draft-map-immutability"
@@ -22,10 +26,12 @@ import {
   freePublishCapacity,
   isPublishScheduleForeignKeyError,
   publishedExperienceColumns,
+  sanitizePublishPayloadForDatabase,
   type PublishEventV2Issue,
   type PublishEventV2Payload,
   type PublishEventV2TierPayload,
 } from "@/lib/events/publish-event-v2"
+import { venueMapToSeatingLayout } from "@/lib/seating/venue-map-geometry"
 import { eventPreviewPath } from "@/lib/events/editor-v2-ux"
 import { revalidatePublicEventCache } from "@/lib/events/revalidate-public-event"
 import { getSeoOrigin, publicEventPath, publicEventUrl } from "@/lib/seo/site"
@@ -51,6 +57,7 @@ import {
 } from "@/lib/validations/event-draft-v2"
 import { MAX_EVENT_FLYER_BYTES } from "@/lib/validations/event-form"
 import type { EventDeliveryMode, EventStatus, Json, TicketTier } from "@/types/database"
+import { parseVenueMap } from "@/types/venue-map"
 
 export type SaveEventDraftV2Result =
   | { success: true; eventId: string; draftState: Json }
@@ -509,6 +516,19 @@ function shouldFallbackPublishRpc(error: {
   )
 }
 
+function seatingLayoutJsonFromVenueMap(venueMap: Json | undefined): Json | undefined {
+  if (!venueMap) return undefined
+  const map = parseVenueMap(venueMap)
+  if (
+    map.sectors.length === 0 &&
+    (map.zones?.length ?? 0) === 0 &&
+    (map.elements?.length ?? 0) === 0
+  ) {
+    return undefined
+  }
+  return venueMapToSeatingLayout(map) as unknown as Json
+}
+
 async function upsertPublishedVenue(input: {
   organizerId: string
   existingVenueId: string | null
@@ -517,6 +537,7 @@ async function upsertPublishedVenue(input: {
 }): Promise<string> {
   const admin = createAdminClient()
   const now = new Date().toISOString()
+  const seatingLayout = seatingLayoutJsonFromVenueMap(input.venueMap)
   const patch = {
     name: input.venue.name,
     location: input.venue.location,
@@ -528,6 +549,7 @@ async function upsertPublishedVenue(input: {
     max_capacity: input.venue.capacity,
     updated_at: now,
     ...(input.venueMap ? { venue_map: input.venueMap } : {}),
+    ...(seatingLayout ? { seating_layout: seatingLayout } : {}),
   }
 
   if (input.existingVenueId) {
@@ -600,7 +622,7 @@ function relationalTierRow(
     max_purchase_limit: ticket.max_purchase_limit,
     tier_type: ticket.tier_type as TicketTier["tier_type"],
     layout_type: ticket.layout_type as TicketTier["layout_type"],
-    seating_sector_id: ticket.seating_sector_id,
+    seating_sector_id: ticket.seating_sector_id?.trim() || null,
     day_id: null,
     visibility: "public" as const,
     capacity_per_unit: 1,
@@ -688,7 +710,20 @@ async function unlinkPublishedTicketDays(eventId: string) {
 async function syncPublishedTickets(
   eventId: string,
   tickets: PublishEventV2TierPayload[],
+  maps?: {
+    venueMap?: Json
+    seatingMaps?: PublishEventV2Payload["seating_maps"]
+  },
 ): Promise<Array<{ id: string; day_id: string | null }>> {
+  const ticketsToPersist = maps
+    ? nullifyInvalidTicketSeatingSectors(
+        tickets,
+        collectValidSectorIdsFromVenueMaps({
+          venueMap: maps.venueMap,
+          seatingMaps: maps.seatingMaps,
+        }),
+      )
+    : tickets
   const admin = createAdminClient()
   const existing = await admin
     .from("ticket_tiers")
@@ -700,7 +735,7 @@ async function syncPublishedTickets(
   const seen = new Set<string>()
   const binds: Array<{ id: string; day_id: string | null }> = []
 
-  for (const ticket of tickets) {
+  for (const ticket of ticketsToPersist) {
     const current = ticket.id ? byId.get(ticket.id) : undefined
     if (current && current.event_id !== eventId) {
       throw new Error(`El ticket ${ticket.name} pertenece a otro evento.`)
@@ -843,24 +878,25 @@ async function unpackPublishEventV2Sequential(input: {
   targetStatus?: PublishEventV2Mode
   keepDraftState?: boolean
 }) {
+  const payload = sanitizePublishPayloadForDatabase(input.payload)
   const venueId = await upsertPublishedVenue({
     organizerId: input.organizerId,
     existingVenueId: input.existingVenueId,
-    venue: input.payload.venue,
-    venueMap: input.payload.venue_map,
+    venue: payload.venue,
+    venueMap: payload.venue_map,
   })
   // Children first: unlink ticket_tiers.day_id, sync tickets, write
   // event_schedules / schedule_days, then rebind days. Avoids 23503.
   await unlinkPublishedTicketDays(input.eventId)
-  const ticketDays = await syncPublishedTickets(
-    input.eventId,
-    input.payload.tickets,
-  )
-  await unpackPublishedSchedule(input.eventId, input.payload)
+  const ticketDays = await syncPublishedTickets(input.eventId, payload.tickets, {
+    venueMap: payload.venue_map,
+    seatingMaps: payload.seating_maps,
+  })
+  await unpackPublishedSchedule(input.eventId, payload)
   await bindPublishedTicketDays(input.eventId, ticketDays)
   await hardReplacePublishedSeatingMaps({
     eventId: input.eventId,
-    maps: input.payload.seating_maps,
+    maps: payload.seating_maps,
   })
   await hardReplacePublishedEventArtists({
     eventId: input.eventId,
@@ -871,25 +907,25 @@ async function unpackPublishEventV2Sequential(input: {
   const written = await admin
     .from("events")
     .update({
-      title: input.payload.title,
-      description: input.payload.description,
-      date: input.payload.date,
-      ends_at: input.payload.ends_at,
-      location: input.payload.location,
-      province: input.payload.venue.province,
-      department: input.payload.venue.city,
-      delivery_mode: input.payload.delivery_mode as EventDeliveryMode,
+      title: payload.title,
+      description: payload.description,
+      date: payload.date,
+      ends_at: payload.ends_at,
+      location: payload.location,
+      province: payload.venue.province,
+      department: payload.venue.city,
+      delivery_mode: payload.delivery_mode as EventDeliveryMode,
       visibility: input.targetStatus === "draft" ? "private" : "public",
-      flyer_url: input.payload.flyer_url ?? input.existingFlyerUrl,
+      flyer_url: payload.flyer_url ?? input.existingFlyerUrl,
       image_url:
-        input.payload.image_url ??
-        input.payload.flyer_url ??
+        payload.image_url ??
+        payload.flyer_url ??
         input.existingImageUrl,
       social_share_image_url:
-        input.payload.social_share_image_url ?? input.existingShareUrl,
+        payload.social_share_image_url ?? input.existingShareUrl,
       venue_id: venueId,
-      ...(input.payload.venue_map ? { venue_map: input.payload.venue_map } : {}),
-      has_seating_plan: input.payload.has_seating_plan,
+      ...(payload.venue_map ? { venue_map: payload.venue_map } : {}),
+      has_seating_plan: payload.has_seating_plan,
       status: (input.targetStatus ?? "published") as EventStatus,
       ...(input.keepDraftState ? {} : { draft_state: null }),
       updated_at: new Date().toISOString(),
@@ -902,8 +938,8 @@ async function unpackPublishEventV2Sequential(input: {
   if (!written.data?.id) {
     throw new Error("events.update publish no devolvió fila")
   }
-  await unpackPublishedExperience(input.eventId, input.payload)
-  if (input.payload.has_seating_plan) {
+  await unpackPublishedExperience(input.eventId, payload)
+  if (payload.has_seating_plan) {
     const materialized = await admin.rpc("materialize_event_seating_units", {
       p_event_id: input.eventId,
     })
@@ -975,6 +1011,8 @@ export async function publishEventV2(
     }
   }
 
+  payload = sanitizePublishPayloadForDatabase(payload)
+
   if (!gate.isSuperAdmin) {
     const freeCapacity = freePublishCapacity(payload)
     const maxFree = Number(event.max_free_tickets ?? DEFAULT_MAX_FREE_TICKETS)
@@ -1013,6 +1051,30 @@ export async function publishEventV2(
       }
     }
   } else {
+    if (payload.venue_map) {
+      try {
+        const venueId = await upsertPublishedVenue({
+          organizerId: event.organizer_id,
+          existingVenueId: event.venue_id,
+          venue: payload.venue,
+          venueMap: payload.venue_map,
+        })
+        if (venueId !== event.venue_id) {
+          const linked = await createAdminClient()
+            .from("events")
+            .update({
+              venue_id: venueId,
+              updated_at: new Date().toISOString(),
+            } as never)
+            .eq("id", id)
+          if (linked.error) {
+            throw new Error(formatSupabaseError(linked.error))
+          }
+        }
+      } catch (error) {
+        return { success: false, error: publishActionError(error) }
+      }
+    }
     const rpc = await gate.supabase.rpc("publish_event_v2", {
       p_event_id: id,
       p_payload: payload as unknown as Json,

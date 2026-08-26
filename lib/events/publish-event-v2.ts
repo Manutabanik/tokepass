@@ -2,7 +2,11 @@ import {
   publishVenueMapFromDraft,
   sanitizeEventDraftForPersist,
 } from "@/lib/events/draft-seating-map-v2"
-import { collectLiveSeatingSectorIds } from "@/lib/events/sanitize-ticket-tiers"
+import {
+  collectLiveSeatingSectorIds,
+  collectValidSectorIdsFromVenueMaps,
+  nullifyInvalidTicketSeatingSectors,
+} from "@/lib/events/sanitize-ticket-tiers"
 import {
   collectNamedMapSectorIds,
   healTicketSeatingSector,
@@ -488,6 +492,23 @@ export function buildPublishEventV2Payload(
       publishedMaps.has_seating_plan,
       collectPublishedLiveSectors(publishedMaps),
     ),
+  }
+}
+
+/**
+ * Cruza tickets con el venue_map / seating_maps que van a persistirse.
+ * Un seating_sector_id fantasma se anula (general) para no disparar 23514.
+ */
+export function sanitizePublishPayloadForDatabase(
+  payload: PublishEventV2Payload,
+): PublishEventV2Payload {
+  const validSectorIds = collectValidSectorIdsFromVenueMaps({
+    venueMap: payload.venue_map,
+    seatingMaps: payload.seating_maps,
+  })
+  return {
+    ...payload,
+    tickets: nullifyInvalidTicketSeatingSectors(payload.tickets, validSectorIds),
   }
 }
 

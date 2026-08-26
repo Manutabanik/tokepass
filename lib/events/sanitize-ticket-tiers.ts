@@ -129,6 +129,65 @@ export function collectLiveSeatingSectorIds(input: {
   return ids
 }
 
+/** IDs vivos del venue_map que se está persistiendo (y mapas por jornada). */
+export function collectValidSectorIdsFromVenueMaps(input: {
+  venueMap?: unknown
+  seatingMaps?: ReadonlyArray<{
+    map_config?: unknown
+    mapConfig?: unknown
+  }>
+  seatingLayout?: unknown
+}): Set<string> {
+  const extraIds = new Set<string>()
+  for (const item of input.seatingMaps ?? []) {
+    const raw = item.map_config ?? item.mapConfig
+    for (const id of collectLiveSeatingSectorIds({ venueMap: raw })) {
+      extraIds.add(id)
+    }
+  }
+  return collectLiveSeatingSectorIds({
+    venueMap: input.venueMap,
+    seatingLayout: input.seatingLayout,
+    extraIds,
+  })
+}
+
+type NullifiableDbTicket = {
+  seating_sector_id?: string | null
+  layout_type?: string | null
+  tier_type?: string | null
+}
+
+/**
+ * Last-line defense before ticket_tiers writes: ghost seating_sector_id
+ * becomes null (general) instead of failing the transaction with 23514.
+ */
+export function nullifyInvalidTicketSeatingSectors<T extends NullifiableDbTicket>(
+  tickets: T[],
+  validSectorIds: Iterable<string>,
+): T[] {
+  const valid = new Set(
+    [...validSectorIds].filter((id) => id.trim().length > 0),
+  )
+  return tickets.map((ticket) => {
+    const sectorId = ticket.seating_sector_id?.trim() || ""
+    if (sectorId && !valid.has(sectorId)) {
+      return {
+        ...ticket,
+        seating_sector_id: null,
+        layout_type:
+          ticket.layout_type === "numbered_seat" ||
+          ticket.layout_type === "table_combo"
+            ? "general"
+            : ticket.layout_type,
+        tier_type:
+          ticket.tier_type === "seated" ? "general" : ticket.tier_type,
+      }
+    }
+    return ticket
+  })
+}
+
 type DetachableTicket = {
   seatingSectorId?: string | null
   seating_sector_id?: string | null

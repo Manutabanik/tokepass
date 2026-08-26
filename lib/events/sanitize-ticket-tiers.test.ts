@@ -3,8 +3,10 @@ import { describe, it } from "node:test"
 
 import {
   collectLiveSeatingSectorIds,
+  collectValidSectorIdsFromVenueMaps,
   isRelationalIntegrityError,
   isSeatingSectorRpcError,
+  nullifyInvalidTicketSeatingSectors,
   ORPHAN_SEATING_SECTOR_MESSAGE,
   reconcileTicketTierIds,
   sanitizeDeepSeatingRefs,
@@ -164,6 +166,85 @@ describe("sanitizeSeatingSectorIds", () => {
     assert.equal(ids.has("campo"), true)
     assert.equal(ids.has("layout-vip"), true)
     assert.equal(ids.has("mesa-1"), true)
+  })
+})
+
+describe("nullifyInvalidTicketSeatingSectors", () => {
+  it("anula seating_sector_id fantasma y degrada a general", () => {
+    const map = emptyVenueMap()
+    map.sectors = [
+      {
+        id: "grada-naranja",
+        name: "Grada Naranja",
+        color: "#f97316",
+        price: 0,
+        x: 10,
+        y: 10,
+        rows: 1,
+        seatsPerRow: 1,
+        curvature: 0,
+        aisle: false,
+        seats: [],
+      },
+    ]
+    const valid = collectValidSectorIdsFromVenueMaps({ venueMap: map })
+    const next = nullifyInvalidTicketSeatingSectors(
+      [
+        {
+          name: "Viva",
+          seating_sector_id: "grada-naranja",
+          layout_type: "numbered_seat",
+          tier_type: "seated",
+        },
+        {
+          name: "Fantasma",
+          seating_sector_id: "grada-borrada",
+          layout_type: "numbered_seat",
+          tier_type: "seated",
+        },
+        {
+          name: "General",
+          seating_sector_id: null,
+          layout_type: "general",
+          tier_type: "general",
+        },
+      ],
+      valid,
+    )
+    assert.equal(next[0]?.seating_sector_id, "grada-naranja")
+    assert.equal(next[0]?.layout_type, "numbered_seat")
+    assert.equal(next[1]?.seating_sector_id, null)
+    assert.equal(next[1]?.layout_type, "general")
+    assert.equal(next[1]?.tier_type, "general")
+    assert.equal(next[2]?.seating_sector_id, null)
+  })
+
+  it("lee IDs de seating_maps por jornada además del venue_map", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "campo",
+        name: "Campo",
+        color: "#22d3ee",
+        price: 0,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 10, y: 10 },
+        ],
+        layoutType: "general",
+        sellMode: "group",
+        rows: 1,
+        itemsPerRow: 1,
+        capacityPerUnit: 1,
+        capacity: 10,
+        labelPrefix: "",
+      },
+    ]
+    const ids = collectValidSectorIdsFromVenueMaps({
+      seatingMaps: [{ map_config: map }],
+    })
+    assert.equal(ids.has("campo"), true)
   })
 })
 

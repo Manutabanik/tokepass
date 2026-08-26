@@ -9,6 +9,7 @@ import {
   formatEventPublishIssues,
   freePublishCapacity,
   isPublishScheduleForeignKeyError,
+  sanitizePublishPayloadForDatabase,
 } from "@/lib/events/publish-event-v2"
 import { emptyEventDraftV2, eventPublishSchema } from "@/lib/validations/event-draft-v2"
 
@@ -731,6 +732,73 @@ describe("publish helpers", () => {
   it("does not count paid tickets as free capacity", () => {
     const payload = buildPublishEventV2Payload(publishableDraft())
     assert.equal(freePublishCapacity(payload), 0)
+  })
+
+  it("nulls ghost seating_sector_id immediately before the database write", () => {
+    const payload = sanitizePublishPayloadForDatabase({
+      ...buildPublishEventV2Payload(publishableDraft()),
+      has_seating_plan: true,
+      venue_map: {
+        version: 1,
+        sectors: [
+          {
+            id: "grada-naranja",
+            name: "Grada Naranja",
+            color: "#f97316",
+            price: 0,
+            x: 0,
+            y: 0,
+            rows: 1,
+            seatsPerRow: 1,
+            curvature: 0,
+            aisle: false,
+            seats: [],
+          },
+        ],
+      },
+      tickets: [
+        {
+          id: null,
+          name: "Viva",
+          description: null,
+          price: 10000,
+          base_price: 10000,
+          platform_fee: 0,
+          capacity: 10,
+          min_purchase_limit: 1,
+          max_purchase_limit: 4,
+          tier_type: "seated",
+          category: "standard",
+          layout_type: "numbered_seat",
+          seating_sector_id: "grada-naranja",
+          day_id: null,
+          ticket_type: "standard",
+        },
+        {
+          id: null,
+          name: "Fantasma",
+          description: null,
+          price: 8000,
+          base_price: 8000,
+          platform_fee: 0,
+          capacity: 10,
+          min_purchase_limit: 1,
+          max_purchase_limit: 4,
+          tier_type: "seated",
+          category: "standard",
+          layout_type: "numbered_seat",
+          seating_sector_id: "grada-borrada",
+          day_id: null,
+          ticket_type: "standard",
+        },
+      ],
+    })
+    const live = payload.tickets.find((ticket) => ticket.name === "Viva")
+    const ghost = payload.tickets.find((ticket) => ticket.name === "Fantasma")
+    assert.equal(live?.seating_sector_id, "grada-naranja")
+    assert.equal(ghost?.seating_sector_id, null)
+    assert.equal(ghost?.layout_type, "general")
+    assert.equal(ghost?.tier_type, "general")
   })
 
   it("falls back to the title when there is no checkout copy", () => {
