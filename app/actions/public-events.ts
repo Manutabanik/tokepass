@@ -26,6 +26,10 @@ import {
   remapBoundDayId,
   scheduleDaysFromEvent,
 } from "@/lib/event-schedule"
+import {
+  isMissingIsDeletedColumn,
+  withActiveEvents,
+} from "@/lib/events/soft-delete"
 import { resolveTicketCommerceType } from "@/lib/events/ticket-commerce-type"
 import {
   eventArtistsToLineup,
@@ -383,7 +387,7 @@ const EVENT_LIST_SELECT_WITH_DELIVERY = `${EVENT_LIST_SELECT}, delivery_mode`
 function isCatalogListRetryable(message: string): boolean {
   return (
     isMissingArtistSchema(message) ||
-    /lineup|delivery_mode|sale_starts_at|sale_ends_at|schedule_days|schema cache|PGRST204|42703/i.test(
+    /lineup|delivery_mode|sale_starts_at|sale_ends_at|schedule_days|is_deleted|schema cache|PGRST204|42703/i.test(
       message,
     )
   )
@@ -490,27 +494,43 @@ export async function getPublishedEvents(
     const usingArtistJoin = select.includes("event_artists")
     if (filterByArtist && !usingArtistJoin) return []
 
-    let query = supabase
-      .from("events")
-      .select(select)
-      .eq("status", "published")
-      .eq("visibility", "public")
-      .eq("is_deleted", false)
-      .order("date", { ascending: true })
+    let hideDeleted = true
+    let data: unknown[] | null = null
+    let error: { message?: string } | null = null
 
-    if (filterByArtist) {
-      query = query.eq("event_artists.artist_id", artistId)
-    }
-    if (filterByOrganizer) {
-      query = query.eq("organizer_id", organizerId)
-    }
-    if (orFilter) {
-      query = query.or(orFilter)
-    }
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let query = withActiveEvents(
+        supabase
+          .from("events")
+          .select(select)
+          .eq("status", "published")
+          .eq("visibility", "public"),
+        hideDeleted,
+      ).order("date", { ascending: true })
 
-    query = query.range(offset, offset + limit - 1)
+      if (filterByArtist) {
+        query = query.eq("event_artists.artist_id", artistId)
+      }
+      if (filterByOrganizer) {
+        query = query.eq("organizer_id", organizerId)
+      }
+      if (orFilter) {
+        query = query.or(orFilter)
+      }
 
-    const { data, error } = await query
+      const result = await query.range(offset, offset + limit - 1)
+      if (!result.error) {
+        data = result.data
+        error = null
+        break
+      }
+      error = result.error
+      if (hideDeleted && isMissingIsDeletedColumn(result.error.message)) {
+        hideDeleted = false
+        continue
+      }
+      break
+    }
 
     if (!error) {
       const mapped = ((data ?? []) as unknown as EventListRow[])
@@ -519,7 +539,7 @@ export async function getPublishedEvents(
       return sortCatalogForHome(mapped)
     }
 
-    if (index < selects.length - 1 && isCatalogListRetryable(error.message)) {
+    if (index < selects.length - 1 && isCatalogListRetryable(error.message ?? "")) {
       continue
     }
 
@@ -682,13 +702,27 @@ export async function getFeaturedEvents(options?: {
   let error: { message?: string } | null = null
 
   for (const select of selects) {
-    const result = await supabase
-      .from("events")
-      .select(select)
-      .eq("status", "published")
-      .eq("visibility", "public")
-      .eq("is_deleted", false)
-      .or("is_sponsored_by_tokepass.eq.true,is_featured.eq.true")
+    let hideDeleted = true
+    let result = await withActiveEvents(
+      supabase
+        .from("events")
+        .select(select)
+        .eq("status", "published")
+        .eq("visibility", "public"),
+      hideDeleted,
+    ).or("is_sponsored_by_tokepass.eq.true,is_featured.eq.true")
+
+    if (result.error && isMissingIsDeletedColumn(result.error.message)) {
+      hideDeleted = false
+      result = await withActiveEvents(
+        supabase
+          .from("events")
+          .select(select)
+          .eq("status", "published")
+          .eq("visibility", "public"),
+        hideDeleted,
+      ).or("is_sponsored_by_tokepass.eq.true,is_featured.eq.true")
+    }
 
     if (!result.error) {
       data = result.data
@@ -1705,18 +1739,39 @@ export async function getRelatedEvents(input: {
   const limit = Math.min(Math.max(input.limit ?? 4, 1), 6)
   const supabase = createPublicClient()
 
-  const { data, error } = await supabase
-    .from("events")
-    .select(
-      "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, sale_starts_at, sale_ends_at, category, tier_type, layout_type), profiles!events_organizer_id_fkey(full_name)",
-    )
-    .eq("status", "published")
-    .eq("visibility", "public")
-    .eq("is_deleted", false)
+  let hideDeleted = true
+  let related = await withActiveEvents(
+    supabase
+      .from("events")
+      .select(
+        "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, sale_starts_at, sale_ends_at, category, tier_type, layout_type), profiles!events_organizer_id_fkey(full_name)",
+      )
+      .eq("status", "published")
+      .eq("visibility", "public"),
+    hideDeleted,
+  )
     .neq("id", currentEventId)
     .order("date", { ascending: true })
     .limit(RELATED_POOL_LIMIT)
 
+  if (related.error && isMissingIsDeletedColumn(related.error.message)) {
+    hideDeleted = false
+    related = await withActiveEvents(
+      supabase
+        .from("events")
+        .select(
+          "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, sale_starts_at, sale_ends_at, category, tier_type, layout_type), profiles!events_organizer_id_fkey(full_name)",
+        )
+        .eq("status", "published")
+        .eq("visibility", "public"),
+      hideDeleted,
+    )
+      .neq("id", currentEventId)
+      .order("date", { ascending: true })
+      .limit(RELATED_POOL_LIMIT)
+  }
+
+  const { data, error } = related
   if (error || !data) return []
 
   const now = new Date()

@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache"
 import { revalidatePublicEventCache } from "@/lib/events/revalidate-public-event"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import {
+  isMissingIsDeletedColumn,
+  withActiveEvents,
+} from "@/lib/events/soft-delete"
 import { publicEventPreviewPath } from "@/lib/preview/sandbox"
 import { getSeoOrigin } from "@/lib/seo/site"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -143,14 +147,32 @@ async function countPaidOrdersForEvent(eventId: string): Promise<number> {
 
 export async function getOrganizerEvents(): Promise<OrganizerEvent[]> {
   const { supabase, user } = await requireAuthenticatedUser()
-  const { data, error } = await supabase
-    .from("events")
-    .select(
-      "id, title, description, date, location, image_url, status, venue_id, created_at, is_featured, featured_tier, featured_until, review_note, venues(id, name, location)",
-    )
-    .eq("organizer_id", user.id)
-    .eq("is_deleted", false)
-    .order("date", { ascending: true })
+  let organizerQuery = await withActiveEvents(
+    supabase
+      .from("events")
+      .select(
+        "id, title, description, date, location, image_url, status, venue_id, created_at, is_featured, featured_tier, featured_until, review_note, venues(id, name, location)",
+      )
+      .eq("organizer_id", user.id),
+    true,
+  ).order("date", { ascending: true })
+
+  if (
+    organizerQuery.error &&
+    isMissingIsDeletedColumn(organizerQuery.error.message)
+  ) {
+    organizerQuery = await withActiveEvents(
+      supabase
+        .from("events")
+        .select(
+          "id, title, description, date, location, image_url, status, venue_id, created_at, is_featured, featured_tier, featured_until, review_note, venues(id, name, location)",
+        )
+        .eq("organizer_id", user.id),
+      false,
+    ).order("date", { ascending: true })
+  }
+
+  const { data, error } = organizerQuery
 
   if (error) {
     throw new Error(`No se pudieron cargar los eventos: ${error.message}`)

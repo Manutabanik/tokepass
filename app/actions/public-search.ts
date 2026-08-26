@@ -9,6 +9,10 @@ import {
 } from "@/lib/discovery-artists"
 import { logger } from "@/lib/logger"
 import {
+  isMissingIsDeletedColumn,
+  withActiveEvents,
+} from "@/lib/events/soft-delete"
+import {
   OMNI_SEARCH_LIMIT,
   OMNI_SEARCH_MIN_CHARS,
   type OmniEventHit,
@@ -53,17 +57,39 @@ async function searchPublishedEventsLight(
       ]
     }
 
-    const { data, error } = await supabase
-      .from("events")
-      .select(
-        "id, slug, title, date, location, image_url, flyer_url, venues(name, location)",
-      )
-      .eq("status", "published")
-      .eq("visibility", "public")
-      .eq("is_deleted", false)
+    let hideDeleted = true
+    let result = await withActiveEvents(
+      supabase
+        .from("events")
+        .select(
+          "id, slug, title, date, location, image_url, flyer_url, venues(name, location)",
+        )
+        .eq("status", "published")
+        .eq("visibility", "public"),
+      hideDeleted,
+    )
       .or(buildCatalogSearchOr(safeNeedle, artistEventIds))
       .order("date", { ascending: true })
       .limit(OMNI_SEARCH_LIMIT)
+
+    if (result.error && isMissingIsDeletedColumn(result.error.message)) {
+      hideDeleted = false
+      result = await withActiveEvents(
+        supabase
+          .from("events")
+          .select(
+            "id, slug, title, date, location, image_url, flyer_url, venues(name, location)",
+          )
+          .eq("status", "published")
+          .eq("visibility", "public"),
+        hideDeleted,
+      )
+        .or(buildCatalogSearchOr(safeNeedle, artistEventIds))
+        .order("date", { ascending: true })
+        .limit(OMNI_SEARCH_LIMIT)
+    }
+
+    const { data, error } = result
 
     if (error) {
       logger.error({
