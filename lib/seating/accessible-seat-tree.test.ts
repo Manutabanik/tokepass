@@ -138,6 +138,42 @@ describe("buildAccessibleSeatTree", () => {
       "selected",
     )
   })
+
+  it("no marca un sector agotado si los asientos solo estan en hold", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "platea",
+        name: "Platea",
+        color: "#22c55e",
+        price: 10000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 10, y: 10 },
+        ],
+        layoutType: "numbered_seat",
+        sellMode: "per_seat",
+        rows: 1,
+        itemsPerRow: 2,
+        capacityPerUnit: 1,
+        capacity: 2,
+        labelPrefix: "",
+      },
+    ]
+    const open = buildAccessibleSeatTree({ map }).find((item) => item.id === "platea")
+    const seatIds = open?.rows.flatMap((row) => row.seats).map((seat) => seat.id) ?? []
+    assert.ok(seatIds.length > 0)
+    const occupancyBySeatId = Object.fromEntries(
+      seatIds.map((id) => [id, "held" as const]),
+    )
+    const held = buildAccessibleSeatTree({ map, occupancyBySeatId }).find(
+      (item) => item.id === "platea",
+    )
+    assert.equal(held?.soldOut, false)
+    assert.equal(held?.availableCount, 0)
+    assert.ok(held?.rows.flatMap((row) => row.seats).every((seat) => seat.status === "held"))
+  })
 })
 
 describe("assignContiguousSeats", () => {
@@ -173,5 +209,22 @@ describe("assignContiguousSeats", () => {
       occupancyBySeatId: { a2: "occupied" },
     })
     assert.equal(found.length, 0)
+  })
+
+  it("no asigna un asiento en hold de otro comprador", () => {
+    const seats = [
+      seat({ id: "a1", number: 1 }),
+      seat({ id: "a2", number: 2 }),
+    ]
+    const found = assignContiguousSeats({
+      seats,
+      sectorId: "platea",
+      quantity: 1,
+      occupancyBySeatId: { a1: "held" },
+    })
+    assert.deepEqual(
+      found.map((item) => item.id),
+      ["a2"],
+    )
   })
 })

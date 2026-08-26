@@ -236,9 +236,9 @@ function MacroSeatingFlow({
     useState<ParametricInventoryState>("loading")
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
-  const [mapOccupancy, setMapOccupancy] = useState<
-    Record<string, "available" | "occupied" | "blocked">
-  >({})
+  const [mapOccupancy, setMapOccupancy] = useState<Record<string, SeatStatus>>(
+    {},
+  )
   const [mapHydrating, setMapHydrating] = useState(false)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const gesture = useRef({

@@ -2,30 +2,40 @@
 
 import { useEffect, useRef } from "react"
 
-import { createClient } from "@/lib/supabase/client"
+import {
+  isRealtimeChannelDegraded,
+  startRealtimePollFallback,
+} from "@/lib/realtime/channel-fallback"
+import {
+  occupancyPatchFromRealtimePayload,
+  occupancyPatchFromSeatingRow,
+  type OccupancyRealtimeRow,
+} from "@/lib/realtime/occupancy-patches"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
+import { createClient } from "@/lib/supabase/client"
 
-type SeatingUnitRealtimeRow = {
-  event_id?: string
-  layout_item_id?: string
-  status?: string
+export {
+  occupancyPatchFromRealtimePayload,
+  occupancyPatchFromSeatingRow,
 }
 
 let occupancyChannelSeq = 0
 
-function statusToOccupancy(status: string | undefined): SeatStatus {
-  if (status === "available") return "available"
-  if (status === "blocked") return "blocked"
-  return "occupied"
-}
-
-export function occupancyPatchFromSeatingRow(
-  row: SeatingUnitRealtimeRow | null,
-): Record<string, SeatStatus> | null {
-  if (!row) return null
-  const layoutItemId = row.layout_item_id?.trim()
-  if (!layoutItemId) return null
-  return { [layoutItemId]: statusToOccupancy(row.status) }
+async function fetchOccupancySnapshot(
+  eventId: string,
+): Promise<Record<string, SeatStatus> | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from("event_seating_occupancy")
+    .select("layout_item_id, status")
+    .eq("event_id", eventId)
+  if (error || !data?.length) return null
+  const patch: Record<string, SeatStatus> = {}
+  for (const row of data) {
+    const next = occupancyPatchFromSeatingRow(row)
+    if (next) Object.assign(patch, next)
+  }
+  return Object.keys(patch).length > 0 ? patch : null
 }
 
 export function useSeatingOccupancyRealtime(
@@ -45,6 +55,18 @@ export function useSeatingOccupancyRealtime(
     const supabase = createClient()
     const topic = `public:event_seating_occupancy:${cleanEventId}:${channelKey}:${++occupancyChannelSeq}`
     let cancelled = false
+    let poll: { stop: () => void } | null = null
+
+    function applySnapshot(patch: Record<string, SeatStatus> | null) {
+      if (cancelled || !patch) return
+      onPatchRef.current(patch)
+    }
+
+    function pollAvailability() {
+      void fetchOccupancySnapshot(cleanEventId).then(applySnapshot)
+    }
+
+    pollAvailability()
 
     const channel = supabase
       .channel(topic)
@@ -58,16 +80,29 @@ export function useSeatingOccupancyRealtime(
         },
         (payload) => {
           if (cancelled) return
-          const next = occupancyPatchFromSeatingRow(
-            payload.new as SeatingUnitRealtimeRow | null,
-          )
+          const next = occupancyPatchFromRealtimePayload({
+            eventType: payload.eventType,
+            new: payload.new as OccupancyRealtimeRow | null,
+            old: payload.old as OccupancyRealtimeRow | null,
+          })
           if (next) onPatchRef.current(next)
         },
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (cancelled) return
+        if (status === "SUBSCRIBED") {
+          poll?.stop()
+          poll = null
+          return
+        }
+        if (!isRealtimeChannelDegraded(status) || poll) return
+        poll = startRealtimePollFallback({ poll: pollAvailability })
+      })
 
     return () => {
       cancelled = true
+      poll?.stop()
+      poll = null
       void supabase.removeChannel(channel)
     }
   }, [channelKey, eventId])

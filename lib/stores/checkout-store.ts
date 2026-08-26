@@ -4,6 +4,10 @@ import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 import { useShallow } from "zustand/react/shallow"
 
+import {
+  cartHasHoldableItems,
+  nextCartHoldExpiresAt,
+} from "@/lib/checkout/cart-hold-clock"
 import { ABSOLUTE_MAX_ITEMS_PER_PURCHASE } from "@/lib/checkout-limits"
 import {
   toCartItemPayload,
@@ -109,6 +113,9 @@ type CheckoutState = {
   buyer: CheckoutBuyerInfo
   subtotal: number
   holdExpiresAt: string | null
+  holdExpiredOpen: boolean
+  holdExpiryHandled: boolean
+  cartSessionId: string | null
   checkoutStep: CheckoutFlowStep
   viewMode: CheckoutViewMode
   identityOpen: boolean
@@ -135,6 +142,9 @@ type CheckoutState = {
     holdExpiresAt?: string | null
   }) => void
   setHoldExpiresAt: (holdExpiresAt: string | null) => void
+  ensureCartSessionId: () => string
+  markHoldExpired: () => boolean
+  dismissHoldExpired: () => void
   consumePendingAction: () => CheckoutPendingAction
   resetIfOtherEvent: (eventId: string) => void
   setCheckoutStep: (checkoutStep: CheckoutFlowStep) => void
@@ -287,6 +297,52 @@ function upsertGeneralLine(
   ]
 }
 
+function withCartHoldClock(
+  current: Pick<
+    CheckoutState,
+    | "holdExpiresAt"
+    | "holdExpiryHandled"
+    | "holdExpiredOpen"
+    | "cartSessionId"
+    | "lines"
+    | "quantities"
+    | "itemsCount"
+  >,
+  next: Partial<CheckoutState>,
+): Partial<CheckoutState> {
+  const lines = next.lines ?? current.lines
+  const quantities = next.quantities ?? current.quantities
+  const itemsCount =
+    next.itemsCount ??
+    (next.lines ? sumCartQuantities(next.lines) : current.itemsCount)
+  const hasItems = cartHasHoldableItems({ lines, quantities, itemsCount })
+  const extras: Partial<CheckoutState> = {}
+  if (!current.cartSessionId && !next.cartSessionId) {
+    extras.cartSessionId = createCartSessionId()
+  }
+  if (!hasItems) {
+    if (next.holdExpiresAt === undefined) extras.holdExpiresAt = null
+    return { ...next, ...extras }
+  }
+  if (current.holdExpiryHandled) {
+    extras.holdExpiryHandled = false
+    extras.holdExpiredOpen = false
+    extras.holdExpiresAt = next.holdExpiresAt ?? nextCartHoldExpiresAt()
+    return { ...next, ...extras }
+  }
+  if (!current.holdExpiresAt && !next.holdExpiresAt) {
+    extras.holdExpiresAt = nextCartHoldExpiresAt()
+  }
+  return { ...next, ...extras }
+}
+
+function createCartSessionId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID()
+  }
+  return `cart-${Date.now().toString(36)}`
+}
+
 function sameSeat(
   left: CheckoutSavedSeat | null,
   right: CheckoutSavedSeat | null,
@@ -316,6 +372,9 @@ export const useCheckoutStore = create<CheckoutState>()(
       buyer: EMPTY_CHECKOUT_BUYER,
       subtotal: 0,
       holdExpiresAt: null,
+      holdExpiredOpen: false,
+      holdExpiryHandled: false,
+      cartSessionId: null,
       checkoutStep: "tickets",
       viewMode: "info",
       identityOpen: false,
@@ -394,6 +453,29 @@ export const useCheckoutStore = create<CheckoutState>()(
         set({ holdExpiresAt })
       },
 
+      ensureCartSessionId: () => {
+        const current = get().cartSessionId
+        if (current) return current
+        const next = createCartSessionId()
+        set({ cartSessionId: next })
+        return next
+      },
+
+      markHoldExpired: () => {
+        const current = get()
+        if (current.holdExpiryHandled) return false
+        set({
+          holdExpiryHandled: true,
+          holdExpiredOpen: true,
+        })
+        return true
+      },
+
+      dismissHoldExpired: () => {
+        if (!get().holdExpiredOpen) return
+        set({ holdExpiredOpen: false })
+      },
+
       consumePendingAction: () => {
         const action = get().pendingAction
         if (action) set({ pendingAction: null })
@@ -416,6 +498,8 @@ export const useCheckoutStore = create<CheckoutState>()(
           buyer: EMPTY_CHECKOUT_BUYER,
           subtotal: 0,
           holdExpiresAt: null,
+          holdExpiredOpen: false,
+          holdExpiryHandled: false,
           isGuest: false,
           mode: "undecided",
           checkoutStep: "tickets",
@@ -510,7 +594,14 @@ export const useCheckoutStore = create<CheckoutState>()(
         if (sameLines(get().lines, lines) && catalog === get().catalogByTierId) {
           return
         }
-        set({ lines, catalogByTierId: catalog })
+        const current = get()
+        set(
+          withCartHoldClock(current, {
+            lines,
+            catalogByTierId: catalog,
+            ...cartTotalsFromLines(lines),
+          }),
+        )
       },
 
       addToCart: (input) => {
@@ -546,27 +637,30 @@ export const useCheckoutStore = create<CheckoutState>()(
             elementId,
           }
           const lines = [...others, line]
-          set({
-            lines,
-            catalogByTierId: mergeCatalog(get().catalogByTierId, [
-              {
-                id: input.ticketTierId,
-                name: input.name,
-                price: unitPrice,
-              },
-            ]),
-            ...cartTotalsFromLines(lines),
-            selectedSeat: seatId
-              ? {
-                  tierId: input.ticketTierId,
-                  seatingUnitId: seatId,
-                  sectorKey: null,
-                  tableNumber: null,
-                  label: input.name,
+          const current = get()
+          set(
+            withCartHoldClock(current, {
+              lines,
+              catalogByTierId: mergeCatalog(current.catalogByTierId, [
+                {
+                  id: input.ticketTierId,
+                  name: input.name,
                   price: unitPrice,
-                }
-              : get().selectedSeat,
-          })
+                },
+              ]),
+              ...cartTotalsFromLines(lines),
+              selectedSeat: seatId
+                ? {
+                    tierId: input.ticketTierId,
+                    seatingUnitId: seatId,
+                    sectorKey: null,
+                    tableNumber: null,
+                    label: input.name,
+                    price: unitPrice,
+                  }
+                : current.selectedSeat,
+            }),
+          )
           return { ok: true, quantity }
         }
 
@@ -574,25 +668,28 @@ export const useCheckoutStore = create<CheckoutState>()(
         const delta = input.quantity == null ? 1 : Math.floor(toCartNumber(input.quantity))
         const nextQty = Math.max(0, currentQty + delta)
         if (nextQty > maxQuantity) return { ok: false, reason: "limit" }
-        const quantities = { ...get().quantities, [input.ticketTierId]: nextQty }
-        const lines = upsertGeneralLine(get().lines, {
+        const current = get()
+        const quantities = { ...current.quantities, [input.ticketTierId]: nextQty }
+        const lines = upsertGeneralLine(current.lines, {
           ticketTierId: input.ticketTierId,
           name: input.name,
           price: unitPrice,
           quantity: nextQty,
         })
-        set({
-          quantities,
-          lines,
-          catalogByTierId: mergeCatalog(get().catalogByTierId, [
-            {
-              id: input.ticketTierId,
-              name: input.name,
-              price: unitPrice,
-            },
-          ]),
-          ...cartTotalsFromLines(lines),
-        })
+        set(
+          withCartHoldClock(current, {
+            quantities,
+            lines,
+            catalogByTierId: mergeCatalog(current.catalogByTierId, [
+              {
+                id: input.ticketTierId,
+                name: input.name,
+                price: unitPrice,
+              },
+            ]),
+            ...cartTotalsFromLines(lines),
+          }),
+        )
         return { ok: true, quantity: nextQty }
       },
 
@@ -609,24 +706,27 @@ export const useCheckoutStore = create<CheckoutState>()(
           input.price === undefined || input.price === null
             ? 0
             : toCartNumber(input.price)
-        const lines = upsertGeneralLine(get().lines, {
+        const current = get()
+        const lines = upsertGeneralLine(current.lines, {
           ticketTierId: input.ticketTierId,
           name: input.name,
           price: unitPrice,
           quantity: nextQty,
         })
-        set({
-          quantities,
-          lines,
-          catalogByTierId: mergeCatalog(get().catalogByTierId, [
-            {
-              id: input.ticketTierId,
-              name: input.name,
-              price: unitPrice,
-            },
-          ]),
-          ...cartTotalsFromLines(lines),
-        })
+        set(
+          withCartHoldClock(current, {
+            quantities,
+            lines,
+            catalogByTierId: mergeCatalog(current.catalogByTierId, [
+              {
+                id: input.ticketTierId,
+                name: input.name,
+                price: unitPrice,
+              },
+            ]),
+            ...cartTotalsFromLines(lines),
+          }),
+        )
         return { ok: true, quantity: nextQty }
       },
 
@@ -657,11 +757,13 @@ export const useCheckoutStore = create<CheckoutState>()(
           const lines = get().lines.filter(
             (item) => generalLineTierId(item) !== ticketId,
           )
-          set({
-            quantities: { ...get().quantities, [ticketId]: 0 },
-            lines,
-            ...cartTotalsFromLines(lines),
-          })
+          set(
+            withCartHoldClock(get(), {
+              quantities: { ...get().quantities, [ticketId]: 0 },
+              lines,
+              ...cartTotalsFromLines(lines),
+            }),
+          )
           return
         }
         useStorefrontSeatStore.getState().removeSelectedItem(id)
@@ -719,6 +821,9 @@ export const useCheckoutStore = create<CheckoutState>()(
           quantities: {},
           selectedSeat: null,
           holdExpiresAt: null,
+          holdExpiredOpen: false,
+          holdExpiryHandled: false,
+          cartSessionId: saved.cartSessionId ?? current.cartSessionId,
           lines: [],
           catalogByTierId: {},
           selectedScheduleId: null,
@@ -733,6 +838,7 @@ export const useCheckoutStore = create<CheckoutState>()(
         mode: state.mode,
         isGuest: state.isGuest || state.mode === "guest",
         buyer: state.buyer,
+        cartSessionId: state.cartSessionId,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return

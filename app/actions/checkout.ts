@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache"
 
-import { resolveCheckoutExpiresAt } from "@/lib/checkout-hold"
+import {
+  resolveCheckoutExpiresAt,
+  SEAT_HOLD_EXPIRED_ERROR,
+} from "@/lib/checkout-hold"
 import { assertPendingOrderStillReservable } from "@/lib/checkout/assert-order-stock"
 import { releaseWaitingRoomPassFromCookies } from "@/lib/waiting-room/release"
 import {
@@ -123,6 +126,7 @@ import {
   isMappedCheckoutItem,
   quoteHybridCartTotal,
   toReserveRpcItem,
+  trustedReserveZoneHints,
 } from "@/lib/checkout/hybrid-cart"
 import { toCheckoutUserError } from "@/lib/errors/commerce-errors"
 import {
@@ -135,6 +139,7 @@ import {
   CheckoutLockTicketsSchema,
   CheckoutPayloadSchema,
   CheckoutSeatHoldSchema,
+  HoldSeatSchema,
   buyerToHolderFields,
   checkoutTermsAreAccepted,
   formatCheckoutPayloadError,
@@ -190,6 +195,10 @@ function mapReserveRpcError(
 ): Extract<CheckoutResult, { success: false }> | null {
   if (/missing_event_date_id/i.test(message)) {
     return { success: false, error: MISSING_EVENT_DATE_ID }
+  }
+
+  if (/seat_hold_expired|seat_hold_session/i.test(message)) {
+    return { success: false, error: SEAT_HOLD_EXPIRED_ERROR }
   }
 
   if (isHighDemandLockError(message)) {
@@ -810,14 +819,41 @@ async function quoteCheckoutFromDatabase(
     }
   }
 
+  const seatedIds = [
+    ...new Set(
+      items
+        .map((item) => checkoutItemSeatId(item))
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ]
+  const unitSectorById = new Map<string, string>()
+  if (seatedIds.length > 0) {
+    const { data: units } = await supabase
+      .from("event_seating_units")
+      .select("id, sector_id")
+      .eq("event_id", eventId)
+      .in("id", seatedIds)
+    for (const unit of units ?? []) {
+      if (unit.sector_id) unitSectorById.set(unit.id, unit.sector_id)
+    }
+  }
+
   for (const item of items) {
     const tierId = checkoutItemTierId(item)
+    const seatId = checkoutItemSeatId(item)
+    const hints = trustedReserveZoneHints({
+      seatingUnitId: seatId,
+      unitSectorId: seatId ? (unitSectorById.get(seatId) ?? null) : null,
+      clientSectorKey: item.sectorKey ?? null,
+      clientTableNumber: item.tableNumber ?? null,
+      clientZoneId: item.zoneId ?? null,
+    })
     const { data, error } = await supabase.rpc("resolve_zone_tier_unit_price", {
       p_event_id: eventId,
       p_ticket_tier_id: tierId,
-      p_sector_key: item.sectorKey ?? null,
-      p_table_number: item.tableNumber ?? null,
-      p_zone_id: item.zoneId ?? null,
+      p_sector_key: hints.sectorKey,
+      p_table_number: hints.tableNumber,
+      p_zone_id: hints.zoneId,
     })
     if (error || data == null || !Number.isFinite(Number(data))) {
       continue
@@ -1150,6 +1186,122 @@ export async function holdSeatingUnitForCart(
   }
 
   return { success: true, reservedUntil }
+}
+
+export async function holdSeat(
+  seatId: string,
+  eventDateId: string | null,
+  sessionId: string,
+  eventId?: string | null,
+): Promise<
+  | {
+      success: true
+      reservedUntil: string
+      seatingUnitId: string
+      holdId?: string
+      eventId?: string
+    }
+  | { success: false; error: "auth_required" | "out_of_stock" | string }
+> {
+  const parsed = HoldSeatSchema.safeParse({
+    seatId,
+    eventDateId,
+    sessionId,
+    eventId: eventId || undefined,
+  })
+  if (!parsed.success) {
+    return { success: false, error: formatCheckoutPayloadError(parsed.error) }
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+  if (authError || !user) {
+    return { success: false, error: "auth_required" }
+  }
+
+  const allowed = await consumeNamedRateLimit("cartHoldUser", user.id)
+  if (!allowed) {
+    return {
+      success: false,
+      error: "Demasiados intentos. Esperá un momento y volvé a elegir.",
+    }
+  }
+
+  const { data, error } = await supabase.rpc("hold_seat", {
+    p_seat_id: parsed.data.seatId,
+    p_event_date_id: parsed.data.eventDateId,
+    p_session_id: user.id,
+  })
+
+  if (error) {
+    const mapped = mapReserveRpcError(reserveRpcErrorText(error))
+    if (mapped) {
+      return { success: false, error: mapped.error }
+    }
+    logger.error({
+      context: "checkout/seat-hold",
+      message: "hold_seat_failed",
+      seatId: parsed.data.seatId,
+      eventDateId: parsed.data.eventDateId,
+      error: error.message,
+    })
+    return {
+      success: false,
+      error: "No se pudo reservar esa ubicación. Elegí otra.",
+    }
+  }
+
+  const row = Array.isArray(data) ? data[0] : data
+  const reservedUntil = row?.expires_at
+  const seatingUnitId = row?.seating_unit_id
+  if (!reservedUntil || !seatingUnitId) {
+    return { success: false, error: "out_of_stock" }
+  }
+
+  return {
+    success: true,
+    reservedUntil,
+    seatingUnitId,
+    holdId: row?.hold_id,
+    eventId: row?.event_id,
+  }
+}
+
+export async function releaseSeatHolds(
+  eventId?: string | null,
+): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+  if (authError || !user) {
+    return { success: false, error: "auth_required" }
+  }
+
+  const { error } = await supabase.rpc("release_seat_holds", {
+    p_session_id: user.id,
+    p_event_id: eventId?.trim() || null,
+  })
+  if (error) {
+    if (/could not find|schema cache|does not exist|pgrst202/i.test(error.message)) {
+      return { success: true }
+    }
+    logger.error({
+      context: "checkout/seat-hold",
+      message: "release_seat_holds_failed",
+      eventId,
+      error: error.message,
+    })
+    return {
+      success: false,
+      error: toCheckoutUserError(error, "No se pudo liberar la reserva."),
+    }
+  }
+  return { success: true }
 }
 
 async function loadEventSeatingSectorIds(
@@ -2871,14 +3023,39 @@ export async function startCheckoutWithPayment(
     captchaScore = captcha.score
   }
 
+  const seatedIds = [
+    ...new Set(
+      cartItems
+        .map((item) => checkoutItemSeatId(item))
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ]
+  const unitSectorById = new Map<string, string>()
+  if (seatedIds.length > 0) {
+    const { data: units } = await db
+      .from("event_seating_units")
+      .select("id, sector_id")
+      .eq("event_id", payload.eventId)
+      .in("id", seatedIds)
+    for (const unit of units ?? []) {
+      if (unit.sector_id) unitSectorById.set(unit.id, unit.sector_id)
+    }
+  }
+
   const rpcItems = cartItems.map((item) => {
     const tierId = checkoutItemTierId(item)
     const decision = decidePhaseCart(
       phasesByTier.get(tierId) ?? [],
       item.quantity,
     )
+    const seatId = checkoutItemSeatId(item)
+    const tierSector = sectorByTier.get(tierId)
+    const allowed = new Set<string>()
+    if (tierSector) allowed.add(tierSector)
     return toReserveRpcItem(item, {
-      sectorKey: item.sectorKey ?? sectorByTier.get(tierId) ?? null,
+      sectorKey: item.sectorKey ?? tierSector ?? null,
+      unitSectorId: seatId ? (unitSectorById.get(seatId) ?? null) : null,
+      allowedSectorKeys: allowed,
       phaseId: decision.kind === "ok" ? decision.phase.id : null,
     })
   })
@@ -3049,32 +3226,52 @@ export async function startCheckoutWithPayment(
         })
       }
     } else {
-      const hybrid = await db.rpc("reserve_hybrid_cart_tx", {
+      const purchased = await db.rpc("purchase_held_seats_tx", {
         p_event_id: payload.eventId,
         p_owner_id: user.id,
+        p_session_id: user.id,
         p_items: rpcItems,
         p_promoter_id: promoterId,
         p_holder_dni: buyer.buyerDni,
         p_holder_email: buyer.buyerEmail,
         p_addons: addonItems,
       })
-      const missingHybrid = Boolean(
-        hybrid.error &&
+      const missingPurchase = Boolean(
+        purchased.error &&
           /could not find|schema cache|does not exist/i.test(
-            hybrid.error.message,
+            purchased.error.message,
           ),
       )
-      reservation = missingHybrid
-        ? await db.rpc("reserve_unified_cart_tx", {
-            p_event_id: payload.eventId,
-            p_owner_id: user.id,
-            p_items: rpcItems,
-            p_promoter_id: promoterId,
-            p_holder_dni: buyer.buyerDni,
-            p_holder_email: buyer.buyerEmail,
-            p_addons: addonItems,
-          })
-        : hybrid
+      if (!missingPurchase) {
+        reservation = purchased
+      } else {
+        const hybrid = await db.rpc("reserve_hybrid_cart_tx", {
+          p_event_id: payload.eventId,
+          p_owner_id: user.id,
+          p_items: rpcItems,
+          p_promoter_id: promoterId,
+          p_holder_dni: buyer.buyerDni,
+          p_holder_email: buyer.buyerEmail,
+          p_addons: addonItems,
+        })
+        const missingHybrid = Boolean(
+          hybrid.error &&
+            /could not find|schema cache|does not exist/i.test(
+              hybrid.error.message,
+            ),
+        )
+        reservation = missingHybrid
+          ? await db.rpc("reserve_unified_cart_tx", {
+              p_event_id: payload.eventId,
+              p_owner_id: user.id,
+              p_items: rpcItems,
+              p_promoter_id: promoterId,
+              p_holder_dni: buyer.buyerDni,
+              p_holder_email: buyer.buyerEmail,
+              p_addons: addonItems,
+            })
+          : hybrid
+      }
     }
     const { data, error } = reservation
 

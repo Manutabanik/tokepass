@@ -3,6 +3,7 @@
 import { memo, useMemo } from "react"
 
 import { VenueElementSymbol } from "@/components/admin/venue-svg-symbols"
+import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { compactVenueElementLabel } from "@/lib/seating/venue-element-geometry"
 import { isolateCanvasPointer } from "@/lib/seating/venue-touch"
 import { cn } from "@/lib/utils"
@@ -32,7 +33,7 @@ const VenueElementShape = memo(function VenueElementShape({
 }: {
   element: VenueMapElement
   selected: boolean
-  occupancyBySeatId: Record<string, "available" | "occupied" | "blocked">
+  occupancyBySeatId: Record<string, SeatStatus>
   selectedSeatIds: Set<string>
   onElementPointerDown?: (
     event: React.PointerEvent,
@@ -249,7 +250,7 @@ export function VenueMapElementLayer({
   elements: VenueMapElement[]
   selectedIds?: string[]
   selectedSeatIds?: string[]
-  occupancyBySeatId?: Record<string, "available" | "occupied" | "blocked">
+  occupancyBySeatId?: Record<string, SeatStatus>
   onElementPointerDown?: (
     event: React.PointerEvent,
     element: VenueMapElement,

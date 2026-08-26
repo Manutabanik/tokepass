@@ -20,6 +20,7 @@ import {
   storefrontItemFromElement,
   storefrontItemFromZone,
 } from "@/lib/seating/storefront-selection"
+import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import type { InteractiveVenueMap, VenueMapElement } from "@/types/venue-map"
 
 const InteractiveSeatingCanvas = dynamic(
@@ -44,7 +45,7 @@ export function PosSeatingMap({
   const [snapshot, setSnapshot] = useState<{
     eventId: string
     map: InteractiveVenueMap | null
-    occupancy: Record<string, "available" | "occupied" | "blocked">
+    occupancy: Record<string, SeatStatus>
   } | null>(null)
 
   const priceBySectorId = useMemo(

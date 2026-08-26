@@ -193,11 +193,13 @@ import {
   venuePriceModeFromSellMode,
   type VenueMapElement,
 } from "@/types/venue-map"
+import { mergeInventoryOccupancy } from "@/lib/seating/inventory-seat-state"
 import {
   occupancyFromSeatingUnits,
   resolveLiveVenueSeatStatus,
 } from "@/lib/seating/venue-map-occupancy"
 import { useOptimisticSeatHolds } from "@/hooks/use-optimistic-seat-holds"
+import { useSeatHoldsRealtime } from "@/hooks/use-seat-holds-realtime"
 import { useSeatingOccupancyRealtime } from "@/hooks/use-seating-occupancy-realtime"
 import { useEventCatalogRealtime } from "@/hooks/use-event-catalog-realtime"
 import { ticketSelectorPatchFromRow } from "@/lib/storefront/event-catalog-realtime"
@@ -485,7 +487,7 @@ export function CheckoutTunnel({
     setRealtimeMap(null)
   }
   const applyOccupancyPatch = useCallback((patch: Record<string, SeatStatus>) => {
-    setLiveOccupancy((current) => ({ ...current, ...patch }))
+    setLiveOccupancy((current) => mergeInventoryOccupancy(current, patch))
   }, [])
   useSeatingOccupancyRealtime(eventId, applyOccupancyPatch, "tunnel")
   useOptimisticSeatHolds({
@@ -606,6 +608,7 @@ export function CheckoutTunnel({
     checkoutDateCards.some((card) => card.dateId === storedScheduleId)
       ? storedScheduleId
       : defaultDateId
+  useSeatHoldsRealtime(eventId, applyOccupancyPatch, "tunnel", selectedDateId)
   const dayTiers = useMemo(() => {
     if (!selectedDateId) return admissionTiers
     return admissionTiers.filter((tier) =>
@@ -1090,16 +1093,17 @@ export function CheckoutTunnel({
   }, [loadedUnitsBySector, seatingUnits])
 
   const occupancyBySeatId = useMemo(
-    () => ({
-      ...occupancyFromSeatingUnits(
-        mergedSeatingUnits.map((unit) => ({
-          layoutItemId: unit.layoutItemId,
-          status: unit.status,
-          reservedUntil: unit.reservedUntil,
-        })),
+    () =>
+      mergeInventoryOccupancy(
+        occupancyFromSeatingUnits(
+          mergedSeatingUnits.map((unit) => ({
+            layoutItemId: unit.layoutItemId,
+            status: unit.status,
+            reservedUntil: unit.reservedUntil,
+          })),
+        ),
+        liveOccupancy,
       ),
-      ...liveOccupancy,
-    }),
     [liveOccupancy, mergedSeatingUnits],
   )
 

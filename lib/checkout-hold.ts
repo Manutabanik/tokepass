@@ -1,12 +1,12 @@
 /**
  * Política de holds de checkout / stock (TokePass).
  *
- * GA, tienda y asientos numerados: 10 minutos.
+ * GA, tienda y asientos numerados: 15 minutos.
  * - GA / pending: desde `orders.created_at` (`expire_abandoned_orders` + preferencia MP).
- * - Seating: `event_seating_units.reserved_until` al reservar (mismo TTL).
+ * - Seating: `seat_holds.expires_at` + `event_seating_units.reserved_until`.
  */
-export const GA_CHECKOUT_HOLD_MINUTES = 10
-export const SEATING_HOLD_MINUTES = 10
+export const GA_CHECKOUT_HOLD_MINUTES = 15
+export const SEATING_HOLD_MINUTES = 15
 
 export const GA_CHECKOUT_HOLD_INTERVAL = `${GA_CHECKOUT_HOLD_MINUTES} minutes` as const
 
@@ -16,6 +16,14 @@ export const EXPIRE_HOLD_BATCH_SIZE = 500
 export const GA_CHECKOUT_HOLD_MS = GA_CHECKOUT_HOLD_MINUTES * 60 * 1000
 
 export const HOLD_EXPIRED_MESSAGE = "Tu reserva ha expirado por tiempo"
+
+export const SEAT_HOLD_EXPIRED_ERROR =
+  "Tu reserva expiró o el asiento ya no está disponible. Elegí de nuevo."
+
+export const CART_HOLD_EXPIRED_MODAL_TITLE = "Reserva expirada"
+
+export const CART_HOLD_EXPIRED_MODAL_MESSAGE =
+  "Tu tiempo de reserva expiró. Los asientos han sido liberados."
 
 /** El más próximo de dos `reserved_until` ISO del servidor. */
 export function minReservedUntil(
@@ -32,7 +40,7 @@ export function minReservedUntil(
   return null
 }
 
-/** Fin del hold: seating usa reserved_until; GA/tienda = ahora + 10m. */
+/** Fin del hold: seating usa reserved_until; GA/tienda = ahora + 15m. */
 export function resolveCheckoutExpiresAt(
   reservedUntil?: string | null,
   nowMs: number = Date.now(),

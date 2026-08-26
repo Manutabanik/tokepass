@@ -5,6 +5,7 @@ import {
   CheckoutLayoutHoldSchema,
   CheckoutPayloadSchema,
   CheckoutSeatHoldSchema,
+  HoldSeatSchema,
   PublicTicketPriceSchema,
   checkoutTermsAreAccepted,
 } from "@/lib/validations/checkout"
@@ -288,6 +289,26 @@ describe("CheckoutLayoutHoldSchema", () => {
     if (alias.success) {
       assert.equal(alias.data.dateId, dayId)
     }
+  })
+})
+
+describe("HoldSeatSchema", () => {
+  it("accepts seatId + eventDateId + sessionId", () => {
+    const parsed = HoldSeatSchema.safeParse({
+      seatId: seatId,
+      eventDateId: "550e8400-e29b-41d4-a716-446655440001",
+      sessionId: "550e8400-e29b-41d4-a716-446655440099",
+    })
+    assert.equal(parsed.success, true)
+  })
+
+  it("rejects an empty session", () => {
+    const parsed = HoldSeatSchema.safeParse({
+      seatId: seatId,
+      eventDateId: null,
+      sessionId: "",
+    })
+    assert.equal(parsed.success, false)
   })
 })
 

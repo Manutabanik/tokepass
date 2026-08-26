@@ -32,25 +32,70 @@ export function checkoutItemElementId(item: CheckoutCartItem): string | null {
   return item.elementId || item.element_id || null
 }
 
+/** Zone hints that can change the charge. Numbered seats always price from the DB unit. */
+export function trustedReserveZoneHints(input: {
+  seatingUnitId?: string | null
+  unitSectorId?: string | null
+  clientSectorKey?: string | null
+  clientTableNumber?: number | null
+  clientZoneId?: string | null
+  allowedSectorKeys?: ReadonlySet<string> | null
+}): {
+  sectorKey: string | null
+  tableNumber: number | null
+  zoneId: string | null
+} {
+  if (input.seatingUnitId?.trim()) {
+    const sector = input.unitSectorId?.trim() || null
+    return { sectorKey: sector, tableNumber: null, zoneId: null }
+  }
+  const sector = input.clientSectorKey?.trim() || null
+  const allowed = input.allowedSectorKeys
+  if (
+    sector &&
+    allowed &&
+    allowed.size > 0 &&
+    !allowed.has(sector)
+  ) {
+    return { sectorKey: null, tableNumber: null, zoneId: null }
+  }
+  return {
+    sectorKey: sector,
+    tableNumber: sector ? (input.clientTableNumber ?? null) : null,
+    zoneId: sector ? (input.clientZoneId?.trim() || null) : null,
+  }
+}
+
 export function toReserveRpcItem(
   item: CheckoutCartItem,
   input: {
     sectorKey?: string | null
+    unitSectorId?: string | null
+    allowedSectorKeys?: ReadonlySet<string> | null
     phaseId?: string | null
   } = {},
 ) {
   const mapped = isMappedCheckoutItem(item)
   const isNumbered = item.isNumbered ?? item.is_numbered
+  const seatId = mapped ? checkoutItemSeatId(item) : null
+  const hints = trustedReserveZoneHints({
+    seatingUnitId: seatId,
+    unitSectorId: input.unitSectorId ?? null,
+    clientSectorKey: item.sectorKey ?? input.sectorKey ?? null,
+    clientTableNumber: item.tableNumber ?? null,
+    clientZoneId: item.zoneId ?? null,
+    allowedSectorKeys: input.allowedSectorKeys ?? null,
+  })
   return {
     type: mapped ? "mapped" : "general",
     ticket_tier_id: checkoutItemTierId(item),
     tier_id: checkoutItemTierId(item),
     quantity: mapped ? 1 : item.quantity,
-    sector_key: item.sectorKey ?? input.sectorKey ?? null,
-    table_number: item.tableNumber ?? null,
-    zone_id: item.zoneId ?? null,
-    seating_unit_id: mapped ? checkoutItemSeatId(item) : null,
-    seat_id: mapped ? checkoutItemSeatId(item) : null,
+    sector_key: hints.sectorKey,
+    table_number: hints.tableNumber,
+    zone_id: hints.zoneId,
+    seating_unit_id: seatId,
+    seat_id: seatId,
     element_id: mapped ? checkoutItemElementId(item) : null,
     has_map: item.hasMap ?? item.has_map ?? null,
     is_numbered: isNumbered ?? mapped,

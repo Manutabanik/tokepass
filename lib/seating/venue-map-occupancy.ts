@@ -1,7 +1,16 @@
+import {
+  inventoryStateToSeatStatus,
+  resolveInventorySeatState,
+} from "@/lib/seating/inventory-seat-state"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import type { VenueMapSeatStatus } from "@/types/venue-map"
 
-export type LiveVenueSeatStatus = "available" | "selected" | "occupied" | "blocked"
+export type LiveVenueSeatStatus =
+  | "available"
+  | "selected"
+  | "occupied"
+  | "blocked"
+  | "held"
 
 export function resolveLiveVenueSeatStatus(input: {
   mapStatus: VenueMapSeatStatus
@@ -14,6 +23,7 @@ export function resolveLiveVenueSeatStatus(input: {
   }
   if (input.selected || input.held) return "selected"
   if (input.occupancy === "occupied") return "occupied"
+  if (input.occupancy === "held") return "held"
   return "available"
 }
 
@@ -43,6 +53,9 @@ export function occupancyFromSeatingUnits(
     layoutItemId: string
     status: string
     reservedUntil?: string | null
+    holdExpiresAt?: string | null
+    sold?: boolean
+    soldOrderId?: string | null
   }>,
   knownLayoutItemIds: Iterable<string> = [],
 ): Record<string, SeatStatus> {
@@ -51,13 +64,14 @@ export function occupancyFromSeatingUnits(
     occupancy[id] = "occupied"
   }
   for (const unit of units) {
-    const status = effectiveSeatingUnitStatus(unit.status, unit.reservedUntil)
-    occupancy[unit.layoutItemId] =
-      status === "available"
-        ? "available"
-        : status === "blocked"
-          ? "blocked"
-          : "occupied"
+    occupancy[unit.layoutItemId] = inventoryStateToSeatStatus(
+      resolveInventorySeatState({
+        unitStatus: unit.status,
+        reservedUntil: unit.reservedUntil,
+        holdExpiresAt: unit.holdExpiresAt,
+        sold: unit.sold || Boolean(unit.soldOrderId),
+      }),
+    )
   }
   return occupancy
 }

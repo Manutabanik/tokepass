@@ -63,6 +63,16 @@ export async function GET(request: NextRequest) {
       throw new Error(gaHolds.error.message)
     }
 
+    const seatHolds = await admin.rpc("expire_seat_holds", batch)
+    if (
+      seatHolds.error &&
+      !/could not find|schema cache|does not exist|pgrst202/i.test(
+        seatHolds.error.message,
+      )
+    ) {
+      throw new Error(seatHolds.error.message)
+    }
+
     const resaleHolds = await admin.rpc("expire_resale_listing_reservations", batch)
     if (resaleHolds.error) {
       throw new Error(resaleHolds.error.message)
@@ -78,6 +88,7 @@ export async function GET(request: NextRequest) {
       expiredSeatingCount: Number(seating.data ?? 0),
       expiredCartHoldCount: Number(cartHolds.data ?? 0),
       expiredGaHoldCount: Number(gaHolds.data ?? 0),
+      expiredSeatHoldCount: Number(seatHolds.data ?? 0),
       expiredResaleHoldCount: Number(resaleHolds.data ?? 0),
       expiredTransferHoldCount: Number(transfers.data ?? 0),
       holdInterval: GA_CHECKOUT_HOLD_INTERVAL,

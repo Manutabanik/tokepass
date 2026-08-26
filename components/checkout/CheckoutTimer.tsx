@@ -1,16 +1,10 @@
 "use client"
 
+import { useEffect, useRef } from "react"
 import { Clock } from "lucide-react"
-import { toast } from "sonner"
 
-import {
-  listCartHolds,
-  releaseGaCartHolds,
-  releaseSeatingUnitCartHold,
-} from "@/app/actions/checkout"
-import { releaseWaitingRoomPass } from "@/app/actions/waiting-room"
 import { CountdownTimer } from "@/components/public/countdown-timer"
-import { HOLD_EXPIRED_MESSAGE } from "@/lib/checkout-hold"
+import { useCheckoutTimer } from "@/hooks/use-checkout-timer"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import { cn } from "@/lib/utils"
 
@@ -52,33 +46,25 @@ export function CheckoutTimer({
   const expiresAt = useCheckoutStore((state) =>
     state.eventId === eventId ? state.holdExpiresAt : null,
   )
+  const expiredOpen = useCheckoutStore((state) => state.holdExpiredOpen)
+  const seenExpired = useRef(false)
+  useCheckoutTimer()
+
+  useEffect(() => {
+    if (!expiredOpen || seenExpired.current) return
+    seenExpired.current = true
+    onAcknowledged?.()
+  }, [expiredOpen, onAcknowledged])
+
+  useEffect(() => {
+    if (!expiredOpen) seenExpired.current = false
+  }, [expiredOpen])
 
   if (!expiresAt) return null
 
-  function handleHoldExpired() {
-    const seat = useCheckoutStore.getState().selectedSeat
-    toast.error(HOLD_EXPIRED_MESSAGE)
-    void releaseGaCartHolds(eventId)
-    if (seat) void releaseSeatingUnitCartHold(eventId, seat.seatingUnitId)
-    void listCartHolds(eventId).then((result) => {
-      if (!result.success) return
-      const released = new Set<string>()
-      if (seat?.seatingUnitId) released.add(seat.seatingUnitId)
-      for (const hold of result.holds) {
-        const unitId = hold.seating_unit_id?.trim()
-        if (!unitId || released.has(unitId)) continue
-        released.add(unitId)
-        void releaseSeatingUnitCartHold(eventId, unitId)
-      }
-    })
-    void releaseWaitingRoomPass()
-    useCheckoutStore.getState().clearCart()
-    onAcknowledged?.()
-  }
-
   return (
     <span className="sr-only">
-      <CountdownTimer expiresAt={expiresAt} onExpire={handleHoldExpired} />
+      <CountdownTimer expiresAt={expiresAt} />
     </span>
   )
 }

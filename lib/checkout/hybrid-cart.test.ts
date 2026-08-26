@@ -5,6 +5,7 @@ import {
   amountsMatch,
   quoteHybridCartTotal,
   toReserveRpcItem,
+  trustedReserveZoneHints,
 } from "./hybrid-cart"
 import type { CheckoutCartItem } from "@/lib/validations/checkout"
 
@@ -40,6 +41,19 @@ describe("hybrid cart quote", () => {
     assert.equal(amountsMatch(55000, 55000), true)
   })
 
+  it("does not send a client sector when the line already has a seating unit", () => {
+    const spoofed = toReserveRpcItem({
+      ...mapped,
+      sectorKey: "campo-barato",
+      tableNumber: 99,
+      zoneId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    })
+    assert.equal(spoofed.sector_key, null)
+    assert.equal(spoofed.table_number, null)
+    assert.equal(spoofed.zone_id, null)
+    assert.equal(spoofed.seating_unit_id, mapped.seatingUnitId)
+  })
+
   it("serializes mixed rpc items", () => {
     const generalRpc = toReserveRpcItem(general)
     const mappedRpc = toReserveRpcItem(mapped)
@@ -51,5 +65,32 @@ describe("hybrid cart quote", () => {
     assert.equal(mappedRpc.quantity, 1)
     assert.equal(mappedRpc.seat_id, mapped.seatingUnitId)
     assert.equal(mappedRpc.is_numbered, true)
+    assert.equal(mappedRpc.sector_key, null)
+    assert.equal(mappedRpc.zone_id, null)
+  })
+})
+
+describe("trustedReserveZoneHints", () => {
+  it("ignores client sector/table/zone when a seating unit is present", () => {
+    const hints = trustedReserveZoneHints({
+      seatingUnitId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      unitSectorId: "platea",
+      clientSectorKey: "campo-barato",
+      clientTableNumber: 99,
+      clientZoneId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    })
+    assert.deepEqual(hints, {
+      sectorKey: "platea",
+      tableNumber: null,
+      zoneId: null,
+    })
+  })
+
+  it("drops a GA sector that does not belong to the purchased SKU", () => {
+    const hints = trustedReserveZoneHints({
+      clientSectorKey: "otro-sector",
+      allowedSectorKeys: new Set(["campo"]),
+    })
+    assert.equal(hints.sectorKey, null)
   })
 })

@@ -67,6 +67,31 @@ describe("isCategorySoldOut", () => {
     )
   })
 
+  it("does not treat cart holds as sold out", () => {
+    const seats = [seat({ id: "a1" }), seat({ id: "a2", number: 2 })]
+    const held = resolveCategoryAvailability({
+      requiresMap: true,
+      stock: 99,
+      seatingSectorId: "grada-naranja",
+      seats,
+      occupancyBySeatId: { a1: "held", a2: "held" },
+      mapReady: true,
+    })
+    assert.equal(held.isSoldOut, false)
+    assert.equal(held.available, 0)
+    assert.equal(
+      isCategorySoldOut({
+        requiresMap: true,
+        stock: 99,
+        seatingSectorId: "grada-naranja",
+        seats,
+        occupancyBySeatId: { a1: "held", a2: "occupied" },
+        mapReady: true,
+      }),
+      false,
+    )
+  })
+
   it("marks a mapped sector sold out only when every seat is taken", () => {
     const seats = [seat({ id: "a1" }), seat({ id: "a2", number: 2 })]
     assert.equal(

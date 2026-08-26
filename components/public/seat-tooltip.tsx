@@ -1,6 +1,7 @@
 "use client"
 
 import { formatCurrency } from "@/lib/format"
+import { SEAT_HELD_BY_OTHER_MESSAGE } from "@/lib/seating/inventory-seat-state"
 import { cn } from "@/lib/utils"
 
 export type BuyerMapHoverItem = {
@@ -8,6 +9,7 @@ export type BuyerMapHoverItem = {
   seatNumber?: number | string | null
   row?: string | null
   price: number
+  heldByOther?: boolean
 }
 
 export function SeatTooltip({
@@ -43,8 +45,18 @@ export function SeatTooltip({
       <span className="text-sm font-black text-emerald-400">
         {formattedPrice}
       </span>
+      {item.heldByOther ? (
+        <span className="max-w-[240px] text-center text-[11px] font-medium leading-snug text-amber-300">
+          {SEAT_HELD_BY_OTHER_MESSAGE}
+        </span>
+      ) : null}
     </div>
   )
+}
+
+function tooltipBoxSize(item?: BuyerMapHoverItem) {
+  if (item?.heldByOther) return { width: 280, height: 140 }
+  return { width: 196, height: 58 }
 }
 
 export function clampTooltipPosition(
@@ -52,9 +64,9 @@ export function clampTooltipPosition(
   y: number,
   width: number,
   height: number,
+  item?: BuyerMapHoverItem,
 ) {
-  const tooltipWidth = 196
-  const tooltipHeight = 58
+  const { width: tooltipWidth, height: tooltipHeight } = tooltipBoxSize(item)
   return {
     x: Math.min(Math.max(8, x + 12), Math.max(8, width - tooltipWidth - 8)),
     y: Math.min(

@@ -4,7 +4,10 @@ import {
   flattenSeatsForAvailability,
   type FlattenedVenueSeat,
 } from "@/lib/seating/venue-map-geometry"
-import { resolveLiveVenueSeatStatus } from "@/lib/seating/venue-map-occupancy"
+import {
+  resolveLiveVenueSeatStatus,
+  type LiveVenueSeatStatus,
+} from "@/lib/seating/venue-map-occupancy"
 import { resolveEffectiveSeatingType, type SeatingType } from "@/lib/seating/seating-type"
 import type { InteractiveVenueMap } from "@/types/venue-map"
 import {
@@ -17,7 +20,7 @@ export type AccessibleSeatNode = {
   number: number
   label: string
   price: number
-  status: "available" | "occupied" | "blocked" | "selected"
+  status: LiveVenueSeatStatus
 }
 
 export type AccessibleRowNode = {
@@ -188,7 +191,14 @@ function toSectorNode(input: {
     price: input.price,
     kind: seatingType === "GENERAL" ? "ga" : "numbered",
     seatingType,
-    soldOut: input.soldOut || (rows.length > 0 && availableCount === 0),
+    soldOut:
+      input.soldOut ||
+      (rows.length > 0 &&
+        rows.every((row) =>
+          row.seats.every(
+            (seat) => seat.status === "occupied" || seat.status === "blocked",
+          ),
+        )),
     availableCount,
     isTableSector: tableMeta.isTableSector,
     capacityPerUnit: tableMeta.capacityPerUnit,

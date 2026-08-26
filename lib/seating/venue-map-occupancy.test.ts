@@ -43,6 +43,51 @@ describe("venue-map-occupancy", () => {
     )
   })
 
+  it("paints another buyer's cart hold as held, not sold", () => {
+    assert.equal(
+      resolveLiveVenueSeatStatus({
+        mapStatus: "available",
+        occupancy: "held",
+        selected: false,
+      }),
+      "held",
+    )
+  })
+
+  it("maps a sold unit to occupied and a live hold to held", () => {
+    const occupancy = occupancyFromSeatingUnits(
+      [
+        {
+          layoutItemId: "sold-1",
+          status: "sold",
+          soldOrderId: "order-1",
+        },
+        {
+          layoutItemId: "hold-1",
+          status: "available",
+          holdExpiresAt: "2099-01-01T00:00:00.000Z",
+        },
+      ],
+      ["sold-1", "hold-1"],
+    )
+    assert.equal(occupancy["sold-1"], "occupied")
+    assert.equal(occupancy["hold-1"], "held")
+  })
+
+  it("maps an active reserved unit to held", () => {
+    const occupancy = occupancyFromSeatingUnits(
+      [
+        {
+          layoutItemId: "a-1",
+          status: "reserved",
+          reservedUntil: "2099-01-01T00:00:00.000Z",
+        },
+      ],
+      ["a-1"],
+    )
+    assert.equal(occupancy["a-1"], "held")
+  })
+
   it("converts hex to rgba", () => {
     assert.equal(hexToRgba("#10b981", 0.2), "rgba(16, 185, 129, 0.2)")
   })

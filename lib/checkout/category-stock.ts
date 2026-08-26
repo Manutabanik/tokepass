@@ -55,6 +55,18 @@ export function isSeatNodeAvailable(
   return live === "available" || live === "selected"
 }
 
+export function isSeatNodeSold(
+  seat: FlattenedVenueSeat,
+  occupancyBySeatId: Record<string, SeatStatus> = {},
+) {
+  const live = resolveLiveVenueSeatStatus({
+    mapStatus: seat.mapStatus,
+    occupancy: occupancyBySeatId[seat.id],
+    selected: false,
+  })
+  return live === "occupied" || live === "blocked"
+}
+
 export function countAvailableSeatsForCategory(input: CategoryStockInput) {
   const seats = input.seats ?? []
   const occupancy = input.occupancyBySeatId ?? {}
@@ -123,10 +135,13 @@ export function resolveCategoryAvailability(input: CategoryStockInput) {
   ).length
 
   if (matched.length > 0) {
+    const soldSeatsCount = matched.filter((seat) =>
+      isSeatNodeSold(seat, input.occupancyBySeatId),
+    ).length
     return {
       available: availableSeatsCount,
       matchedCount: matched.length,
-      isSoldOut: availableSeatsCount === 0,
+      isSoldOut: soldSeatsCount === matched.length,
       isUnconfigured: false,
     }
   }

@@ -68,11 +68,11 @@ function fillFor(
   buyerOccupancy = false,
 ) {
   if (buyerOccupancy) {
-    if (state === "held") return "#eab308"
+    if (state === "held") return "#f59e0b"
     if (state === "occupied" || state === "blocked") return "#333333"
     return color || "#22c55e"
   }
-  if (state === "held") return "#eab308"
+  if (state === "held") return "#f59e0b"
   if (state === "selected") return "#34d399"
   if (state === "occupied" || state === "blocked") return "#ef4444"
   return color || "#22c55e"
@@ -85,12 +85,12 @@ function strokeFor(
   buyerOccupancy = false,
 ) {
   if (buyerOccupancy) {
-    if (state === "held") return "#854d0e"
+    if (state === "held") return "#c2410c"
     if (selected || state === "selected") return "#10b981"
     if (state === "occupied" || state === "blocked") return "#333333"
     return color
   }
-  if (state === "held") return "#854d0e"
+  if (state === "held") return "#c2410c"
   if (selected || state === "selected") return "#ffffff"
   if (state === "occupied" || state === "blocked") return "#7f1d1d"
   return color
@@ -105,6 +105,7 @@ function occupancyOpacity(
   if (state === "occupied" || state === "blocked") {
     return buyerOccupancy ? 0.3 : occupiedFallback
   }
+  if (state === "held") return 0.5
   return buyerOccupancy ? 1 : availableFallback
 }
 

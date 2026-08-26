@@ -969,6 +969,19 @@ export type EventSeatingUnit = {
   updated_at: string
 }
 
+export type SeatHold = {
+  id: string
+  event_id: string
+  event_date_id: string | null
+  event_date_key: string
+  layout_item_id: string
+  seating_unit_id: string | null
+  user_session_id: string
+  owner_id: string | null
+  expires_at: string
+  created_at: string
+}
+
 export type Promoter = {
   id: string
   organizer_id: string
@@ -1563,6 +1576,14 @@ type EventSeatingUnitInsert = Omit<
   event_date_id?: string | null
   created_at?: string
   updated_at?: string
+}
+type SeatHoldInsert = Omit<
+  SeatHold,
+  "id" | "event_date_key" | "created_at"
+> & {
+  id?: string
+  event_date_key?: string
+  created_at?: string
 }
 type PromoterInsert = Omit<
   Promoter,
@@ -2498,6 +2519,12 @@ export type Database = {
         Update: Partial<EventSeatingUnitInsert>
         Relationships: []
       }
+      seat_holds: {
+        Row: SeatHold
+        Insert: SeatHoldInsert
+        Update: Partial<SeatHoldInsert>
+        Relationships: []
+      }
       promoters: {
         Row: Promoter
         Insert: PromoterInsert
@@ -3284,6 +3311,69 @@ export type Database = {
         Returns: {
           seating_unit_id: string
           reserved_until: string
+        }[]
+      }
+      hold_seat: {
+        Args: {
+          p_seat_id: string
+          p_event_date_id: string | null
+          p_session_id: string
+        }
+        Returns: {
+          hold_id: string
+          seating_unit_id: string
+          event_id: string
+          expires_at: string
+        }[]
+      }
+      release_seat_holds: {
+        Args: {
+          p_session_id: string
+          p_event_id?: string | null
+        }
+        Returns: number
+      }
+      expire_seat_holds: {
+        Args: {
+          p_batch_size?: number
+        }
+        Returns: number
+      }
+      assert_seat_holds_for_purchase: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+          p_session_id: string
+          p_items: Json
+        }
+        Returns: undefined
+      }
+      consume_seat_holds_for_purchase: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+          p_session_id: string
+          p_items: Json
+        }
+        Returns: number
+      }
+      purchase_held_seats_tx: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+          p_session_id: string
+          p_items: Json
+          p_promoter_id?: string | null
+          p_holder_dni?: string | null
+          p_holder_email?: string | null
+          p_addons?: Json
+        }
+        Returns: {
+          order_id: string
+          ticket_id: string
+          subtotal: number
+          service_charge: number
+          total_amount: number
         }[]
       }
       release_seating_unit_cart_hold: {

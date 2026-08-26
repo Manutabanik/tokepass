@@ -88,7 +88,7 @@ export function useOptimisticSeatHolds({
       for (const item of holdable) {
         const selectionKey = storefrontSelectionKey(item)
         if (held.has(selectionKey) || inFlightRef.current.has(selectionKey)) continue
-        applyOccupancyPatch({ [item.id]: "occupied" })
+        applyOccupancyPatch({ [item.id]: "held" })
 
         const eventDateId =
           asHoldEventDateId(item.eventDateId) ??
@@ -140,7 +140,7 @@ export function useOptimisticSeatHolds({
             }
 
             held.set(selectionKey, hold.seatingUnitId)
-            applyOccupancyPatch({ [item.id]: "occupied" })
+            applyOccupancyPatch({ [item.id]: "held" })
             const next = minReservedUntil(
               useCheckoutStore.getState().holdExpiresAt,
               hold.reservedUntil,

@@ -3,6 +3,7 @@ export type SeatAllocationStatus =
   | "occupied"
   | "blocked"
   | "selected"
+  | "held"
 
 export type Seat = {
   id: string

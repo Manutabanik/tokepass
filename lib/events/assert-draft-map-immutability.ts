@@ -33,7 +33,7 @@ export async function assertDraftMapLayoutImmutable(input: {
   const nowIso = new Date().toISOString()
   const protectedItems: ProtectedLayoutItem[] = []
 
-  const [soldUnits, reservedUnits, heldUnits, soldTiers, activeTickets] =
+  const [soldUnits, reservedUnits, heldUnits, soldTiers, activeTickets, seatHolds] =
     await Promise.all([
       admin
         .from("event_seating_units")
@@ -66,6 +66,12 @@ export async function assertDraftMapLayoutImmutable(input: {
         .in("status", [...ACTIVE_TICKET_STATUSES])
         .not("seating_unit_id", "is", null)
         .limit(4000),
+      admin
+        .from("seat_holds")
+        .select("layout_item_id, event_date_id, expires_at")
+        .eq("event_id", input.eventId)
+        .gt("expires_at", nowIso)
+        .limit(4000),
     ])
 
   const queryError =
@@ -73,7 +79,11 @@ export async function assertDraftMapLayoutImmutable(input: {
     reservedUnits.error ??
     heldUnits.error ??
     soldTiers.error ??
-    activeTickets.error
+    activeTickets.error ??
+    (seatHolds.error &&
+    !/seat_holds|schema cache|PGRST205|42P01/i.test(seatHolds.error.message)
+      ? seatHolds.error
+      : null)
   if (queryError) {
     return { ok: false, error: formatSupabaseError(queryError) }
   }
@@ -114,6 +124,21 @@ export async function assertDraftMapLayoutImmutable(input: {
     protectedItems.push({
       itemId: sectorId,
       dateId: tier.day_id ?? null,
+    })
+  }
+
+  for (const hold of seatHolds.data ?? []) {
+    if (!hold.layout_item_id?.trim()) continue
+    if (
+      !isActiveSeatingHold({
+        reservedUntil: hold.expires_at,
+      })
+    ) {
+      continue
+    }
+    protectedItems.push({
+      itemId: hold.layout_item_id,
+      dateId: hold.event_date_id ?? null,
     })
   }
 

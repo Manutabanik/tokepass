@@ -2,6 +2,7 @@
 
 import { Minus, Plus, Sparkles } from "lucide-react"
 import { useMemo, useState } from "react"
+import { toast } from "sonner"
 
 import {
   Accordion,
@@ -32,6 +33,7 @@ import {
   type FastAssignMode,
 } from "@/lib/seating/assign-best-seats"
 import { flattenVenueMapSeats } from "@/lib/seating/venue-map-geometry"
+import { SEAT_HELD_BY_OTHER_MESSAGE } from "@/lib/seating/inventory-seat-state"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { cn } from "@/lib/utils"
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
@@ -376,6 +378,7 @@ function SeatMatrixButton({
 }) {
   const token = compactSeatToken(seat.label, seat.number)
   const taken = seat.status === "occupied" || seat.status === "blocked"
+  const heldByOther = seat.status === "held"
   const selected = seat.status === "selected"
   const disabled = pending || taken
 
@@ -383,20 +386,32 @@ function SeatMatrixButton({
     <button
       type="button"
       disabled={disabled}
+      title={heldByOther ? SEAT_HELD_BY_OTHER_MESSAGE : undefined}
       aria-pressed={selected}
       aria-label={
         taken
           ? `${groupTitle} ${token} ocupado`
-          : `${groupTitle} ${token}`
+          : heldByOther
+            ? `${groupTitle} ${token}. ${SEAT_HELD_BY_OTHER_MESSAGE}`
+            : `${groupTitle} ${token}`
       }
-      onClick={onToggle}
+      onClick={() => {
+        if (heldByOther) {
+          toast.info(SEAT_HELD_BY_OTHER_MESSAGE)
+          return
+        }
+        onToggle()
+      }}
       className={cn(
         "flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-sm font-medium tabular-nums transition-colors",
         !disabled &&
           !selected &&
+          !heldByOther &&
           "border border-input bg-background text-foreground hover:border-primary hover:bg-primary/10",
         selected &&
           "border border-primary bg-primary text-primary-foreground shadow-sm",
+        heldByOther &&
+          "border-amber-500/70 bg-amber-500/50 text-amber-950 opacity-50 dark:text-amber-50",
         taken &&
           "cursor-not-allowed border-transparent bg-muted text-muted-foreground opacity-50",
       )}

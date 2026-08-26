@@ -9,6 +9,7 @@ import {
 
 describe("hold countdown", () => {
   it("formats MM:SS with padded digits", () => {
+    assert.equal(formatHoldCountdown(900), "15:00")
     assert.equal(formatHoldCountdown(600), "10:00")
     assert.equal(formatHoldCountdown(61), "01:01")
     assert.equal(formatHoldCountdown(0), "00:00")

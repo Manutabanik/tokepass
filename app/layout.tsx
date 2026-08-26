@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
 
+import { CheckoutHoldGuard } from "@/components/checkout/checkout-hold-guard";
 import { NavigationProgressBar } from "@/components/navigation/navigation-progress-bar";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { ReferralCapture } from "@/components/public/referral-capture";
@@ -106,6 +107,7 @@ export default async function RootLayout({
             <ReferralCapture />
           </Suspense>
           {children}
+          <CheckoutHoldGuard />
           <Suspense fallback={null}>
             <PwaRegister />
           </Suspense>

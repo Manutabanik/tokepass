@@ -27,8 +27,14 @@ import {
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
 
+import { useSeatHoldsRealtime } from "@/hooks/use-seat-holds-realtime"
 import { useSeatingOccupancyRealtime } from "@/hooks/use-seating-occupancy-realtime"
+import { SEATING_HOLD_MINUTES } from "@/lib/checkout-hold"
 import { storefrontLimitMessage } from "@/lib/checkout-limits"
+import {
+  mergeInventoryOccupancy,
+  SEAT_HELD_BY_OTHER_MESSAGE,
+} from "@/lib/seating/inventory-seat-state"
 import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
 import {
   asHoldEventDateId,
@@ -109,7 +115,7 @@ const MAX_ZOOM = 3.5
 const WHEEL_STEP = 0.05
 const ZOOM_ANIM_MS = 160
 const REVEAL_MOUNT_MS = 160
-const HOLD_MINUTES = 10
+const HOLD_MINUTES = SEATING_HOLD_MINUTES
 const INACTIVITY_MS = 5 * 60 * 1000
 const MIN_HIT_PX = 44
 const VIEW_TOP_PAD = 40
@@ -258,15 +264,16 @@ export function InteractiveSeatingCanvas({
     setLiveOccupancy({})
   }
   const applyOccupancyPatch = useCallback((patch: Record<string, SeatStatus>) => {
-    setLiveOccupancy((current) => ({ ...current, ...patch }))
+    setLiveOccupancy((current) => mergeInventoryOccupancy(current, patch))
   }, [])
   useSeatingOccupancyRealtime(
     readOnly ? null : eventId,
     applyOccupancyPatch,
     "canvas",
   )
+  useSeatHoldsRealtime(eventId, applyOccupancyPatch, "canvas", activeScheduleId)
   const occupancy = useMemo(
-    () => ({ ...occupancyBySeatId, ...liveOccupancy }),
+    () => mergeInventoryOccupancy(occupancyBySeatId, liveOccupancy),
     [liveOccupancy, occupancyBySeatId],
   )
   const heldSet = useMemo(() => new Set(heldSeatIds), [heldSeatIds])
@@ -518,6 +525,12 @@ export function InteractiveSeatingCanvas({
   const hoverLookup = useMemo(() => {
     const seatById = new Map<string, BuyerMapHoverItem>()
     for (const seat of hoverSeats) {
+      const live = resolveLiveVenueSeatStatus({
+        mapStatus: seat.mapStatus,
+        occupancy: occupancy[seat.id],
+        selected: selectedIds.has(seat.id),
+        held: heldSet.has(seat.id),
+      })
       const item = {
         sectorName: seat.sectorName,
         row: seat.row,
@@ -529,6 +542,7 @@ export function InteractiveSeatingCanvas({
             : Number(seat.price),
           priceBySectorId,
         ),
+        heldByOther: live === "held",
       }
       seatById.set(seat.id, item)
     }
@@ -548,6 +562,19 @@ export function InteractiveSeatingCanvas({
     const elementById = new Map<string, BuyerMapHoverItem>()
     for (const element of map.elements ?? []) {
       if (isInfrastructureElement(element)) continue
+      const elementLive = resolveLiveVenueSeatStatus({
+        mapStatus: "available",
+        occupancy: occupancy[element.id],
+        selected:
+          selectedIds.has(element.id) || selectedElementIds.includes(element.id),
+        held: heldSet.has(element.id),
+      })
+      const heldByOther =
+        elementLive === "held" ||
+        element.seats.some((seat) => {
+          if (selectedIds.has(seat.id) || heldSet.has(seat.id)) return false
+          return occupancy[seat.id] === "held"
+        })
       elementById.set(element.id, {
         sectorName:
           element.groupName ||
@@ -556,10 +583,19 @@ export function InteractiveSeatingCanvas({
           element.label ||
           "Sector",
         price: resolveElementPublicPrice(element, priceBySectorId, map),
+        heldByOther,
       })
     }
     return { seatById, zoneById, elementById }
-  }, [hoverSeats, map, priceBySectorId])
+  }, [
+    heldSet,
+    hoverSeats,
+    map,
+    occupancy,
+    priceBySectorId,
+    selectedElementIds,
+    selectedIds,
+  ])
 
   function updateHoverFromEvent(event: React.PointerEvent) {
     if (silentHover) return
@@ -578,6 +614,7 @@ export function InteractiveSeatingCanvas({
         event.clientY - rect.top,
         rect.width,
         rect.height,
+        item,
       ),
     )
   }
@@ -714,6 +751,10 @@ export function InteractiveSeatingCanvas({
       held: heldSet.has(seat.id),
     })
     if (live === "blocked" || live === "occupied") return
+    if (live === "held") {
+      toast.info(SEAT_HELD_BY_OTHER_MESSAGE)
+      return
+    }
 
     const tableElement = (map.elements ?? []).find(
       (element) =>
@@ -780,12 +821,43 @@ export function InteractiveSeatingCanvas({
     const live = (map.elements ?? []).find((item) => item.id === element.id)
     if (!live || isInfrastructureElement(live)) return
     if (onPickElement) {
+      const pickIds = seatId
+        ? [seatId]
+        : [live.id, ...live.seats.map((seat) => seat.id).filter(Boolean)]
+      let heldByOther = false
+      for (const id of pickIds) {
+        const pickLive = resolveLiveVenueSeatStatus({
+          mapStatus: "available",
+          occupancy: occupancy[id],
+          selected: selectedIds.has(id) || selectedElementIds.includes(id),
+          held: heldSet.has(id),
+        })
+        if (pickLive === "blocked" || pickLive === "occupied") return
+        if (pickLive === "held") heldByOther = true
+      }
+      if (heldByOther) {
+        toast.info(SEAT_HELD_BY_OTHER_MESSAGE)
+        return
+      }
       vibrateTap()
       markActivity()
       onPickElement(live)
       return
     }
     if (live.sellMode === "per_seat" && seatId) {
+      const seatLive = resolveLiveVenueSeatStatus({
+        mapStatus:
+          live.seats.find((entry) => entry.id === seatId)?.status ??
+          "available",
+        occupancy: occupancy[seatId],
+        selected: selectedIds.has(seatId),
+        held: heldSet.has(seatId),
+      })
+      if (seatLive === "blocked" || seatLive === "occupied") return
+      if (seatLive === "held") {
+        toast.info(SEAT_HELD_BY_OTHER_MESSAGE)
+        return
+      }
       const seat = live.seats.find((entry) => entry.id === seatId)
       const item = seat
         ? storefrontItemFromElementSeat(live, seat, priceBySectorId, map)
@@ -832,6 +904,17 @@ export function InteractiveSeatingCanvas({
       live.type !== "vip_chair" &&
       !seatId
     ) {
+      return
+    }
+    const elementLive = resolveLiveVenueSeatStatus({
+      mapStatus: "available",
+      occupancy: occupancy[live.id],
+      selected: selectedIds.has(live.id) || selectedElementIds.includes(live.id),
+      held: heldSet.has(live.id),
+    })
+    if (elementLive === "blocked" || elementLive === "occupied") return
+    if (elementLive === "held") {
+      toast.info(SEAT_HELD_BY_OTHER_MESSAGE)
       return
     }
     const item = storefrontItemFromElement(live, priceBySectorId, map)
@@ -1225,7 +1308,7 @@ export function InteractiveSeatingCanvas({
               })
               const label = `${seat.sectorName} · Fila ${seat.row} · ${seat.number} — ${formatCurrency(price)}`
               const selected = live === "selected"
-              const held = heldSet.has(seat.id)
+              const heldByOther = live === "held"
               const highlighted = focusedMapIds.includes(seat.id)
               const taken = live === "occupied" || live === "blocked"
               const dimmed = spotlight && !selected && !highlighted
@@ -1235,12 +1318,13 @@ export function InteractiveSeatingCanvas({
                   id={`venue-sel-${seat.id}`}
                   data-seat-id={seat.id}
                   className={cn(
-                    !readOnly && !taken && "cursor-pointer",
+                    !readOnly && !taken && !heldByOther && "cursor-pointer",
+                    (taken || heldByOther) && "cursor-not-allowed",
                     taken && "pointer-events-none",
                     (selected || highlighted) && "animate-pulse-subtle",
                   )}
                   style={{
-                    opacity: taken && !buyerOccupancy ? 0.3 : dimmed ? 0.7 : 1,
+                    opacity: taken && !buyerOccupancy ? 0.3 : heldByOther ? 0.5 : dimmed ? 0.7 : 1,
                     pointerEvents: readOnly || taken ? "none" : "auto",
                     filter: selected
                       ? "drop-shadow(0px 0px 10px rgba(16, 185, 129, 0.9))"
@@ -1256,7 +1340,11 @@ export function InteractiveSeatingCanvas({
                     fill="transparent"
                     stroke="none"
                     data-seat-id={seat.id}
-                    className={taken ? "cursor-not-allowed" : "cursor-pointer"}
+                    className={
+                      taken || heldByOther
+                        ? "cursor-not-allowed"
+                        : "cursor-pointer"
+                    }
                     aria-label={label}
                     tabIndex={-1}
                     onClick={(event) => {
@@ -1281,9 +1369,9 @@ export function InteractiveSeatingCanvas({
                       width={12}
                       height={12}
                       color={posStatusColors ? "#22c55e" : seat.color}
-                      selected={selected && !held}
+                      selected={selected}
                       occupied={taken}
-                      held={held}
+                      held={heldByOther}
                       buyerOccupancy={buyerOccupancy}
                       label={String(seat.number)}
                       showLabel={zoom >= 1.35 || selected}

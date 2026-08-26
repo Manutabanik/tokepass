@@ -3,7 +3,7 @@
  * Compatible con estadios, teatros, boliches y mesas VIP.
  */
 
-export type SeatStatus = "available" | "occupied" | "blocked"
+export type SeatStatus = "available" | "occupied" | "blocked" | "held"
 
 export type UniversalSeat = {
   id: string

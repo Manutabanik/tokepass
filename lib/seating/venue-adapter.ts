@@ -7,6 +7,7 @@ import type {
   UniversalSeatGroup,
   UniversalNumberedSector,
 } from "@/lib/seating/universal-seat-types"
+import { occupancyFromSeatingUnits } from "@/lib/seating/venue-map-occupancy"
 import {
   getVenueSeatingItems,
   type EventSeatingUnit,
@@ -330,15 +331,13 @@ export function buildUniversalSeatPayloadForCheckout(input: {
   }
 
   const seatingUnits = input.seatingUnits ?? []
-  const occupancyBySeatId: Record<string, SeatStatus> = {}
-  for (const unit of seatingUnits) {
-    occupancyBySeatId[unit.layoutItemId] =
-      unit.status === "available"
-        ? "available"
-        : unit.status === "blocked"
-          ? "blocked"
-          : "occupied"
-  }
+  const occupancyBySeatId: Record<string, SeatStatus> = occupancyFromSeatingUnits(
+    seatingUnits.map((unit) => ({
+      layoutItemId: unit.layoutItemId,
+      status: unit.status,
+      reservedUntil: unit.reservedUntil,
+    })),
+  )
 
   const availableBySectorId: Record<string, number> = {}
   for (const summary of input.seatingSectorSummaries ?? []) {

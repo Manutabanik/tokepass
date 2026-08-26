@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from "react"
 
-import { formatHoldCountdown } from "@/lib/checkout-hold"
+import { formatHoldCountdown, GA_CHECKOUT_HOLD_MINUTES } from "@/lib/checkout-hold"
 import { cn } from "@/lib/utils"
 
 export function CountdownTimer({
   expiresAt,
-  initialMinutes = 10,
+  initialMinutes = GA_CHECKOUT_HOLD_MINUTES,
   onExpire,
   className,
   compact = false,
