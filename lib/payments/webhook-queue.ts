@@ -35,18 +35,20 @@ function toJson(value: unknown): Json {
   }
 }
 
-export async function enqueueMercadoPagoWebhook(input: {
-  paymentId: string
+export async function enqueuePaymentWebhook(input: {
+  provider: string
+  externalEventId: string
   eventType: string
   payload: unknown
 }): Promise<{ id: string; status: WebhookQueueStatus } | null> {
   const admin = createAdminClient()
-  const paymentId = input.paymentId.trim()
-  if (!paymentId) return null
+  const externalEventId = input.externalEventId.trim()
+  const provider = input.provider.trim()
+  if (!externalEventId || !provider) return null
 
   const { data, error } = await admin.rpc("enqueue_payment_webhook_event", {
-    p_provider: "mercadopago",
-    p_external_event_id: paymentId,
+    p_provider: provider,
+    p_external_event_id: externalEventId,
     p_event_type: input.eventType || "payment",
     p_payload: toJson(input.payload),
   })
@@ -57,7 +59,8 @@ export async function enqueueMercadoPagoWebhook(input: {
     logger.error({
       context: "payments/webhook-queue",
       message: "enqueue_failed",
-      paymentId,
+      provider,
+      paymentId: externalEventId,
       error: error?.message,
     })
     return null
@@ -67,6 +70,19 @@ export async function enqueueMercadoPagoWebhook(input: {
     id: row.id,
     status: (row.status as WebhookQueueStatus) ?? "pending",
   }
+}
+
+export async function enqueueMercadoPagoWebhook(input: {
+  paymentId: string
+  eventType: string
+  payload: unknown
+}): Promise<{ id: string; status: WebhookQueueStatus } | null> {
+  return enqueuePaymentWebhook({
+    provider: "mercadopago",
+    externalEventId: input.paymentId,
+    eventType: input.eventType,
+    payload: input.payload,
+  })
 }
 
 export async function markWebhookEventProcessed(eventId: string): Promise<void> {

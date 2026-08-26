@@ -239,6 +239,7 @@ export async function processPaidOrderNotification(
   )
 
   if (finalizeError) {
+    const promoExhausted = /PROMO_MAX_USES/i.test(finalizeError.message)
     logger.error({
       context: "payments/confirm-order",
       message: "finalize_rpc_failed",
@@ -247,7 +248,11 @@ export async function processPaidOrderNotification(
       transactionId,
       error: finalizeError.message,
     })
-    return { ok: false, code: "finalize_failed" }
+    return {
+      ok: false,
+      code: promoExhausted ? "promo_max_uses" : "finalize_failed",
+      needsRefund: promoExhausted,
+    }
   }
 
   const finalize = (finalizeRaw ?? {}) as FinalizePaidResult

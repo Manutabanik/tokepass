@@ -6,7 +6,7 @@ import { after, NextResponse, type NextRequest } from "next/server"
 
 import { logger } from "@/lib/logger"
 import { getMercadoPagoWebhookSecret } from "@/lib/mercadopago"
-import { resolveMercadoPagoChargebackPaymentId } from "@/lib/payments/mercadopago/chargebacks"
+import { mercadoPagoWebhookQueueRef } from "@/lib/payments/mercadopago/enqueue-ref"
 import { parseMercadoPagoNotification } from "@/lib/payments/mercadopago/parse-notification"
 import { processEnqueuedWebhookEvent } from "@/lib/payments/mercadopago/process-enqueued"
 import { enqueueMercadoPagoWebhook } from "@/lib/payments/webhook-queue"
@@ -64,37 +64,22 @@ export async function POST(request: NextRequest) {
       return webhookOk({ ignored: true, reason: "invalid_signature" })
     }
 
-    let paymentId = notification.id
-    if (notification.kind === "chargeback") {
-      const resolved = await resolveMercadoPagoChargebackPaymentId(
-        notification.id,
-      )
-      if (!resolved) {
-        logger.error({
-          context: "webhooks/mercadopago",
-          message: "chargeback_payment_unresolved",
-          chargeback_id: notification.id,
-        })
-        return NextResponse.json({ received: false }, { status: 500 })
-      }
-      paymentId = resolved
-    }
+    const queueRef = mercadoPagoWebhookQueueRef(
+      notification,
+      request.nextUrl.searchParams.get("type") ??
+        request.nextUrl.searchParams.get("topic"),
+    )
 
-    let payload: unknown = { raw: rawBody, paymentId }
+    let payload: unknown = { raw: rawBody, paymentId: queueRef.paymentId }
     try {
       payload = rawBody.trim() ? JSON.parse(rawBody) : payload
     } catch {
-      payload = { raw: rawBody, paymentId }
+      payload = { raw: rawBody, paymentId: queueRef.paymentId }
     }
 
     const queued = await enqueueMercadoPagoWebhook({
-      paymentId,
-      eventType:
-        notification.kind === "chargeback"
-          ? "chargebacks"
-          : (request.nextUrl.searchParams.get("type") ??
-            request.nextUrl.searchParams.get("topic") ??
-            "payment"),
+      paymentId: queueRef.paymentId,
+      eventType: queueRef.eventType,
       payload,
     })
 

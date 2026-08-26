@@ -133,6 +133,7 @@ import {
   toReserveRpcItem,
   trustedReserveZoneHints,
 } from "@/lib/checkout/hybrid-cart"
+import { sortCheckoutItemsForLocks, sortReserveRpcItems } from "@/lib/checkout/lock-order"
 import { toCheckoutUserError } from "@/lib/errors/commerce-errors"
 import {
   assertCartRemainingStock,
@@ -231,6 +232,13 @@ function mapReserveRpcError(
     return {
       success: false,
       error: message.replace(/^TIER_PURCHASE_(MAX|MIN)_EXCEEDED:\s*/i, ""),
+    }
+  }
+
+  if (normalized.includes("promo_max_uses")) {
+    return {
+      success: false,
+      error: "Este cupón agotó sus usos.",
     }
   }
 
@@ -2013,7 +2021,9 @@ async function executeLockTickets(
     return { success: false, error: saleGate.error }
   }
 
-  const rpcItems = cartItems.map((item) => toReserveRpcItem(item))
+  const rpcItems = sortReserveRpcItems(
+    cartItems.map((item) => toReserveRpcItem(item)),
+  )
   const mixed = await access.db.rpc("hold_mixed_cart_for_checkout", {
     p_event_id: eventId,
     p_owner_id: user.id,
@@ -2033,13 +2043,14 @@ async function executeLockTickets(
     let gaHeld = false
     const heldSeatIds: string[] = []
     if (zoneGeneralItems.length > 0) {
-      const gaPayload = zoneGeneralItems
-        .map((item) => ({
+      const gaPayload = sortReserveRpcItems(
+        zoneGeneralItems.map((item) => ({
           type: "general" as const,
           ticket_tier_id: checkoutItemTierId(item),
           tier_id: checkoutItemTierId(item),
           quantity: item.quantity,
-        }))
+        })),
+      )
       if (gaPayload.length > 0) {
         const ga = await access.db.rpc("hold_ga_tickets_for_cart", {
           p_event_id: eventId,
@@ -2052,7 +2063,7 @@ async function executeLockTickets(
       }
     }
     if (!error) {
-      for (const item of numberedMapItems) {
+      for (const item of sortCheckoutItemsForLocks(numberedMapItems)) {
         const seatId = checkoutItemSeatId(item)
         if (!seatId) {
           if (gaHeld) {
@@ -3053,23 +3064,25 @@ export async function startCheckoutWithPayment(
     }
   }
 
-  const rpcItems = cartItems.map((item) => {
-    const tierId = checkoutItemTierId(item)
-    const decision = decidePhaseCart(
-      phasesByTier.get(tierId) ?? [],
-      item.quantity,
-    )
-    const seatId = checkoutItemSeatId(item)
-    const tierSector = sectorByTier.get(tierId)
-    const allowed = new Set<string>()
-    if (tierSector) allowed.add(tierSector)
-    return toReserveRpcItem(item, {
-      sectorKey: item.sectorKey ?? tierSector ?? null,
-      unitSectorId: seatId ? (unitSectorById.get(seatId) ?? null) : null,
-      allowedSectorKeys: allowed,
-      phaseId: decision.kind === "ok" ? decision.phase.id : null,
-    })
-  })
+  const rpcItems = sortReserveRpcItems(
+    cartItems.map((item) => {
+      const tierId = checkoutItemTierId(item)
+      const decision = decidePhaseCart(
+        phasesByTier.get(tierId) ?? [],
+        item.quantity,
+      )
+      const seatId = checkoutItemSeatId(item)
+      const tierSector = sectorByTier.get(tierId)
+      const allowed = new Set<string>()
+      if (tierSector) allowed.add(tierSector)
+      return toReserveRpcItem(item, {
+        sectorKey: item.sectorKey ?? tierSector ?? null,
+        unitSectorId: seatId ? (unitSectorById.get(seatId) ?? null) : null,
+        allowedSectorKeys: allowed,
+        phaseId: decision.kind === "ok" ? decision.phase.id : null,
+      })
+    }),
+  )
 
   let pendingOrderId: string | null = null
   let resumedPromoCodeId: string | null = null
@@ -3391,12 +3404,19 @@ export async function startCheckoutWithPayment(
       const promoResult = Array.isArray(promoRows) ? promoRows[0] : promoRows
       if (promoError || !promoResult?.ok) {
         await cleanupPendingOrder(orderId)
+        const promoMessage = promoError?.message ?? promoResult?.message ?? ""
         logger.error({
           context: "checkout/promo",
           message: "promo_apply_failed",
           orderId,
-          error: promoError?.message ?? promoResult?.message,
+          error: promoMessage,
         })
+        if (/promo_max_uses|agotó sus usos/i.test(promoMessage)) {
+          return {
+            success: false,
+            error: "Este cupón agotó sus usos.",
+          }
+        }
         return {
           success: false,
           error: "No se pudo aplicar el cupón.",

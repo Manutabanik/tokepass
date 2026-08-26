@@ -15,6 +15,11 @@ import {
 import { getSeoOrigin } from "@/lib/seo/site"
 import { buildTicketClaimUrl } from "@/lib/ticket-share"
 import { createClient } from "@/lib/supabase/server"
+import {
+  evaluateTransferPolicy,
+  resolveTicketEventStartsAt,
+  TRANSFER_WINDOW_CLOSED_ERROR,
+} from "@/lib/tickets/transfer-policy"
 import type { TicketTransferStatus } from "@/types/database"
 
 export type TransferTicketInput = {
@@ -46,6 +51,7 @@ export type TransferTicketResult =
         | "listed"
         | "already_admitted"
         | "consent_required"
+        | "window_closed"
         | "unknown"
     }
 
@@ -54,6 +60,34 @@ type InitiateRpcRow = {
   claim_token: string
   event_title: string
   receiver_email: string
+}
+
+async function assertTicketTransferPolicy(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ticketId: string,
+): Promise<Extract<TransferTicketResult, { success: false }> | null> {
+  const { data: ticket } = await supabase
+    .from("tickets")
+    .select("transfer_count, max_transfers_allowed, seating_unit_id, tier_id, event_id")
+    .eq("id", ticketId)
+    .maybeSingle()
+
+  if (!ticket) return null
+
+  const startsAt = await resolveTicketEventStartsAt(supabase, ticket)
+  const decision = evaluateTransferPolicy({
+    transferCount: ticket.transfer_count,
+    maxTransfersAllowed: ticket.max_transfers_allowed,
+    eventStartsAt: startsAt,
+  })
+  if (!decision.ok) {
+    return {
+      success: false,
+      error: decision.error,
+      code: decision.code,
+    }
+  }
+  return null
 }
 
 function revalidateWalletPaths() {
@@ -95,6 +129,13 @@ function mapTransferError(
       success: false,
       error: "Esta entrada ya alcanzó el límite de transferencias.",
       code: "transfer_limit",
+    }
+  }
+  if (normalized.includes("TRANSFER_WINDOW_CLOSED")) {
+    return {
+      success: false,
+      error: TRANSFER_WINDOW_CLOSED_ERROR,
+      code: "window_closed",
     }
   }
   if (normalized.includes("NOT_TICKET_OWNER") || normalized.includes("NOT_TRANSFER_SENDER")) {
@@ -191,6 +232,9 @@ export async function transferTicketAction(
       }
     }
 
+    const policy = await assertTicketTransferPolicy(supabase, ticketId)
+    if (policy) return policy
+
     const { data, error } = await supabase.rpc("initiate_ticket_transfer", {
       p_ticket_id: ticketId,
       p_receiver_email: receiverEmail,
@@ -286,6 +330,9 @@ export async function startTicketShareTransferAction(
         code: "consent_required",
       }
     }
+
+    const policy = await assertTicketTransferPolicy(supabase, id)
+    if (policy) return policy
 
     const { data, error } = await supabase.rpc("initiate_ticket_share_transfer", {
       p_ticket_id: id,

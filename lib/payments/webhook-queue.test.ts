@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
+import { webhookHttpStatusAfterEnqueue } from "./core/verified-webhook-payload"
+import { mercadoPagoWebhookQueueRef } from "./mercadopago/enqueue-ref"
 import {
   extractMercadoPagoPaymentId,
   parseMercadoPagoNotification,
@@ -57,5 +59,16 @@ describe("parseMercadoPagoNotification", () => {
       ),
       { kind: "chargeback", id: "555" },
     )
+  })
+})
+
+describe("mercadopago webhook enqueue", () => {
+  it("queues the notification id without resolving chargebacks", () => {
+    assert.deepEqual(
+      mercadoPagoWebhookQueueRef({ kind: "chargeback", id: "888" }),
+      { paymentId: "888", eventType: "chargebacks" },
+    )
+    assert.equal(webhookHttpStatusAfterEnqueue({ id: "evt-1" }), 200)
+    assert.equal(webhookHttpStatusAfterEnqueue(null), 500)
   })
 })
