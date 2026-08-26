@@ -63,6 +63,28 @@ export function formatCentsAsArs(cents: bigint): string {
   }).format(negative ? -amount : amount)
 }
 
+export function assertIntegerCents(value: number): number {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error("El monto debe ser un entero en centavos.")
+  }
+  return value
+}
+
+/**
+ * Mercado Pago Preference `unit_price` usa unidades mayores (ARS), no centavos.
+ * Esta es la única división de backend: centavos enteros → payload del gateway.
+ */
+export function centsToGatewayMajorUnits(cents: number): number {
+  const safe = assertIntegerCents(cents)
+  return Number((safe / 100).toFixed(2))
+}
+
+export function moneyToGatewayMajorUnits(
+  value: number | string | null | undefined,
+): number {
+  return centsToGatewayMajorUnits(moneyToCents(value))
+}
+
 export function moneyAmountsEqual(
   left: number | string | null | undefined,
   right: number | string | null | undefined,

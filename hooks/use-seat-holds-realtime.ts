@@ -18,6 +18,7 @@ type SeatHoldRealtimeRow = {
   event_date_id?: string | null
   layout_item_id?: string | null
   expires_at?: string | null
+  status?: string | null
 }
 
 let seatHoldChannelSeq = 0
@@ -47,9 +48,8 @@ export function useSeatHoldsRealtime(
     function fetchHoldsSnapshot() {
       void supabase
         .from("seat_holds")
-        .select("layout_item_id, event_date_id, expires_at")
+        .select("layout_item_id, event_date_id, expires_at, status")
         .eq("event_id", resolvedEventId)
-        .gt("expires_at", new Date().toISOString())
         .then(({ data, error }) => {
           if (cancelled || error || !data) return
           const patch = occupancyFromSeatHolds(
@@ -57,6 +57,7 @@ export function useSeatHoldsRealtime(
               layoutItemId: row.layout_item_id,
               eventDateId: row.event_date_id,
               expiresAt: row.expires_at,
+              status: row.status,
             })),
             { eventDateId: dateId },
           )

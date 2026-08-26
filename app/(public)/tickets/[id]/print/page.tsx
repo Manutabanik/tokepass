@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation"
 import { getPrintableTicket } from "@/app/actions/pos"
 import { PrintTicketActions } from "@/components/public/print-ticket-actions"
 import { PrintableTicketView } from "@/components/public/printable-ticket"
+import { isPublicEntityId } from "@/lib/security/public-ids"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
@@ -20,6 +21,7 @@ export default async function TicketPrintPage({
   searchParams: Promise<{ autoprint?: string }>
 }) {
   const { id } = await params
+  if (!isPublicEntityId(id)) notFound()
   const query = await searchParams
   const autoPrint = query.autoprint === "1" || query.autoprint === "true"
 

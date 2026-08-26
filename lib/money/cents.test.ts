@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  assertIntegerCents,
+  centsToGatewayMajorUnits,
   centsToMoney,
   formatCentsAsArs,
   formatCentsAsDecimal,
@@ -21,6 +23,13 @@ describe("integer cents money", () => {
     assert.equal(moneyAmountsEqual(100.1, "100.10"), true)
     assert.equal(moneyAmountsEqual(100.1, 100.11), false)
     assert.equal(moneyAmountsEqual(Number.NaN, 0), false)
+  })
+
+  it("sends gateway amounts from integer cents only", () => {
+    assert.equal(centsToGatewayMajorUnits(150050), 1500.5)
+    assert.equal(centsToGatewayMajorUnits(10000), 100)
+    assert.throws(() => assertIntegerCents(10.5))
+    assert.throws(() => centsToGatewayMajorUnits(-1))
   })
 
   it("keeps processing in BigInt cents and formats only at the visual layer", () => {

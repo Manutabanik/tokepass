@@ -907,6 +907,7 @@ export function CheckoutTunnel({
       })
       return
     }
+    useCheckoutStore.getState().freezeHoldClock()
     redirectToCheckoutPaymentOrToast(paymentUrl)
   }
 

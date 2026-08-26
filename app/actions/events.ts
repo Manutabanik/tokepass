@@ -35,6 +35,7 @@ import {
 } from "@/lib/seating/venue-map-pricing"
 import { listVenuePriceGroups } from "@/lib/seating/venue-price-groups"
 import { notifyOrganizerEventAudit } from "@/lib/events/notify-event-audit"
+import { eventSoftDeleteDecision } from "@/lib/events/event-delete-policy"
 import { isSandboxEventStatus } from "@/lib/events/review-status"
 import { logger } from "@/lib/logger"
 import { mapUnknownError } from "@/lib/errors/error-handler"
@@ -148,6 +149,7 @@ export async function getOrganizerEvents(): Promise<OrganizerEvent[]> {
       "id, title, description, date, location, image_url, status, venue_id, created_at, is_featured, featured_tier, featured_until, review_note, venues(id, name, location)",
     )
     .eq("organizer_id", user.id)
+    .eq("is_deleted", false)
     .order("date", { ascending: true })
 
   if (error) {
@@ -713,10 +715,9 @@ export type DeleteOrArchiveEventResult =
   | { success: false; error: string }
 
 /**
- * Borrado seguro:
- * - Con órdenes `paid` → bloqueado (el organizador debe pedir cancelación a soporte)
- * - Sin entradas vendidas/comprometidas → DELETE físico
- * - Con tickets no cobrados → soft delete (`cancelled`) para preservar auditoría
+ * Soft delete:
+ * - Con ventas confirmadas → bloqueado
+ * - Sin ventas → `is_deleted = true` (nunca DELETE físico)
  */
 export async function deleteOrArchiveEvent(
   eventId: string,
@@ -729,7 +730,7 @@ export async function deleteOrArchiveEvent(
 
   const { data: event, error: eventError } = await supabase
     .from("events")
-    .select("id, organizer_id, status, title")
+    .select("id, organizer_id, status, title, is_deleted")
     .eq("id", eventId)
     .maybeSingle()
 
@@ -745,53 +746,36 @@ export async function deleteOrArchiveEvent(
   }
 
   const paidOrderCount = await countPaidOrdersForEvent(eventId)
-  if (paidOrderCount > 0) {
-    return {
-      success: false,
-      error:
-        "Este evento tiene compras pagadas. Solicitá la cancelación a soporte para iniciar el reembolso.",
-    }
-  }
-
   const { count, error: countError } = await supabase
     .from("tickets")
     .select("id", { count: "exact", head: true })
     .eq("event_id", eventId)
-    .in("status", ["valid", "used", "scanned", "pending_payment"])
+    .in("status", ["valid", "used", "scanned", "transferred"])
 
   if (countError) {
     return persistFailure(countError)
   }
 
-  const ticketsSold = count ?? 0
-
-  if (ticketsSold === 0) {
-    const { error: deleteError } = await supabase
-      .from("events")
-      .delete()
-      .eq("id", eventId)
-      .eq("organizer_id", user.id)
-
-    if (deleteError) {
-      return { success: false, error: formatSupabaseError(deleteError) }
-    }
-
-    revalidatePath("/admin")
-    revalidatePath("/admin/events")
-    revalidatePath("/events")
-    revalidatePath("/")
-    revalidatePath("/superadmin/events")
-    return { success: true, mode: "deleted" }
+  const decision = eventSoftDeleteDecision({
+    isDeleted: Boolean(event.is_deleted),
+    paidOrders: paidOrderCount,
+    confirmedTickets: count ?? 0,
+  })
+  if (!decision.ok) {
+    return { success: false, error: decision.error }
   }
 
+  const now = new Date().toISOString()
   const { data: updated, error: updateError } = await supabase
     .from("events")
     .update({
-      status: "cancelled",
-      updated_at: new Date().toISOString(),
+      is_deleted: true,
+      deleted_at: now,
+      updated_at: now,
     })
     .eq("id", eventId)
     .eq("organizer_id", user.id)
+    .eq("is_deleted", false)
     .select("id")
     .maybeSingle()
 
@@ -801,7 +785,7 @@ export async function deleteOrArchiveEvent(
   if (!updated) {
     return {
       success: false,
-      error: "No se pudo cancelar el evento. Recargá e intentá de nuevo.",
+      error: "No se pudo eliminar el evento. Recargá e intentá de nuevo.",
     }
   }
 
@@ -813,7 +797,7 @@ export async function deleteOrArchiveEvent(
   revalidatePath("/")
   revalidatePath("/superadmin/events")
 
-  return { success: true, mode: "cancelled" }
+  return { success: true, mode: "deleted" }
 }
 
 export async function archiveEvent(

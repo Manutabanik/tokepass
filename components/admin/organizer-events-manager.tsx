@@ -387,8 +387,8 @@ export function OrganizerEventsManager({
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
               {deleteTarget && deleteTarget.ticketsSold > 0
-                ? `“${deleteTarget.title}” tiene ${deleteTarget.ticketsSold} entrada(s) vendidas o en compra. Se marcará como cancelado para preservar la auditoría financiera.`
-                : `“${deleteTarget?.title ?? "Este evento"}” no tiene ventas. Se eliminará de forma permanente.`}
+                ? `“${deleteTarget.title}” tiene ventas confirmadas. No se puede eliminar: pedí la cancelación a soporte.`
+                : `“${deleteTarget?.title ?? "Este evento"}” no tiene ventas. Se ocultará con un borrado lógico. El historial no se destruye.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-2">
@@ -402,7 +402,11 @@ export function OrganizerEventsManager({
             </Button>
             <Button
               type="button"
-              disabled={pendingDelete || !deleteTarget}
+              disabled={
+                pendingDelete ||
+                !deleteTarget ||
+                deleteTarget.ticketsSold > 0
+              }
               className="bg-red-600 text-white hover:bg-red-500"
               onClick={() => {
                 if (!deleteTarget) return
@@ -419,7 +423,7 @@ export function OrganizerEventsManager({
                     {
                       description:
                         result.mode === "deleted"
-                          ? "Se borró de la base de datos."
+                          ? "Quedó oculto (borrado lógico). No se destruyeron filas."
                           : "Quedó cancelado para proteger el historial de ventas.",
                     },
                   )
@@ -434,8 +438,8 @@ export function OrganizerEventsManager({
                 <Trash2 className="size-4" aria-hidden="true" />
               )}
               {deleteTarget && deleteTarget.ticketsSold > 0
-                ? "Cancelar evento"
-                : "Eliminar definitivamente"}
+                ? "No se puede eliminar"
+                : "Eliminar (borrado lógico)"}
             </Button>
           </DialogFooter>
         </DialogContent>

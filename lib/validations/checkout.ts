@@ -10,6 +10,7 @@ const MAX_SEATING_UNITS_PER_PURCHASE = Math.max(
   MAX_TABLES_PER_PURCHASE,
   MAX_TICKETS_PER_PURCHASE,
 )
+import { centsToMoney, moneyToCents } from "@/lib/money/cents"
 import {
   DNI_ERROR,
   EMAIL_ERROR,
@@ -256,8 +257,11 @@ export const CheckoutAddonItemSchema = z.object({
   quantity: z.number().int().positive().max(20),
 })
 
-/** All-In public price. Gratis (`0`) is valid. */
-export const PublicTicketPriceSchema = z.number().min(0)
+/** All-In public price. Gratis (`0`) is valid. Persist/compare via integer cents. */
+export const PublicTicketPriceSchema = z
+  .number()
+  .min(0)
+  .transform((value) => centsToMoney(moneyToCents(value)))
 
 export const CheckoutSeatHoldSchema = z.object({
   eventId: z.string().uuid(UUID_ERROR),
@@ -348,7 +352,14 @@ export const CheckoutPayloadSchema = z.preprocess(
     paymentProvider: z
       .enum(["mercadopago", "payway", "naranjax", "modo"])
       .default("mercadopago"),
-    displayedTotal: z.number().finite().min(0).optional(),
+    displayedTotal: z
+      .number()
+      .finite()
+      .min(0)
+      .optional()
+      .transform((value) =>
+        value == null ? value : centsToMoney(moneyToCents(value)),
+      ),
     idempotencyKey: z.string().uuid(UUID_ERROR).optional().nullable(),
   })
   .superRefine((payload, ctx) => {

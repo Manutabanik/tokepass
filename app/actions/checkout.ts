@@ -40,6 +40,7 @@ import {
   PaymentProviderNotSupportedError,
   PaymentProviderUnavailableError,
 } from "@/lib/payments/core/errors"
+import { freezeSeatHoldsForPayment } from "@/lib/payments/freeze-seat-holds"
 import { PaymentGatewayFactory } from "@/lib/payments/core/factory"
 import type { SupportedPaymentProvider } from "@/lib/payments/core/interfaces"
 import { buildCheckoutBackUrls } from "@/lib/payments/mercadopago"
@@ -3679,6 +3680,7 @@ export async function startCheckoutWithPayment(
           }
         }
 
+        await freezeSeatHoldsForPayment(orderId)
         initPoint = session.checkoutUrl
       } catch (error) {
         await cleanupPendingOrder(orderId)

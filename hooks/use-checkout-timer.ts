@@ -45,6 +45,7 @@ function releaseCartHoldsInBackground(eventId: string | null) {
 
 export function useCheckoutTimer(options?: { onExpire?: () => void }) {
   const holdExpiresAt = useCheckoutStore((state) => state.holdExpiresAt)
+  const holdFrozen = useCheckoutStore((state) => state.holdFrozen)
   const holdExpiredOpen = useCheckoutStore((state) => state.holdExpiredOpen)
   const itemsCount = useCheckoutStore((state) => state.itemsCount)
   const lines = useCheckoutStore((state) => state.lines)
@@ -71,6 +72,7 @@ export function useCheckoutTimer(options?: { onExpire?: () => void }) {
     }
 
     function tick() {
+      if (useCheckoutStore.getState().holdFrozen) return
       const now = Date.now()
       const seconds = remainingHoldSeconds(holdExpiresAt, now)
       setRemainingSeconds(seconds)
@@ -87,7 +89,7 @@ export function useCheckoutTimer(options?: { onExpire?: () => void }) {
     tick()
     const id = window.setInterval(tick, 1000)
     return () => window.clearInterval(id)
-  }, [holdExpiresAt])
+  }, [holdExpiresAt, holdFrozen])
 
   return {
     remainingSeconds,

@@ -60,6 +60,7 @@ async function searchPublishedEventsLight(
       )
       .eq("status", "published")
       .eq("visibility", "public")
+      .eq("is_deleted", false)
       .or(buildCatalogSearchOr(safeNeedle, artistEventIds))
       .order("date", { ascending: true })
       .limit(OMNI_SEARCH_LIMIT)

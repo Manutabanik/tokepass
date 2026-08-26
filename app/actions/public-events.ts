@@ -495,6 +495,7 @@ export async function getPublishedEvents(
       .select(select)
       .eq("status", "published")
       .eq("visibility", "public")
+      .eq("is_deleted", false)
       .order("date", { ascending: true })
 
     if (filterByArtist) {
@@ -686,6 +687,7 @@ export async function getFeaturedEvents(options?: {
       .select(select)
       .eq("status", "published")
       .eq("visibility", "public")
+      .eq("is_deleted", false)
       .or("is_sponsored_by_tokepass.eq.true,is_featured.eq.true")
 
     if (!result.error) {
@@ -1710,6 +1712,7 @@ export async function getRelatedEvents(input: {
     )
     .eq("status", "published")
     .eq("visibility", "public")
+    .eq("is_deleted", false)
     .neq("id", currentEventId)
     .order("date", { ascending: true })
     .limit(RELATED_POOL_LIMIT)

@@ -67,6 +67,20 @@ describe("inventory-seat-state", () => {
     assert.equal(merged.c, "held")
   })
 
+  it("keeps pending_payment holds painted even after expires_at", () => {
+    const occupancy = occupancyFromSeatHolds(
+      [
+        {
+          layoutItemId: "s-frozen",
+          expiresAt: "2020-01-01T00:00:00.000Z",
+          status: "pending_payment",
+        },
+      ],
+      { nowMs: Date.parse("2026-08-16T00:00:00.000Z") },
+    )
+    assert.equal(occupancy["s-frozen"], "held")
+  })
+
   it("builds occupancy from active seat_holds and ignores other dates", () => {
     const occupancy = occupancyFromSeatHolds(
       [

@@ -3,6 +3,8 @@
 import { Preference } from "mercadopago"
 
 import { resolveOrderHoldExpiresAt } from "@/lib/checkout-hold"
+import { centsToGatewayMajorUnits, moneyToCents } from "@/lib/money/cents"
+import { freezeSeatHoldsForPayment } from "@/lib/payments/freeze-seat-holds"
 import { assertPendingOrderStillReservable } from "@/lib/checkout/assert-order-stock"
 import { logger } from "@/lib/logger"
 import { normalizeCheckoutBuyer } from "@/lib/checkout-buyer"
@@ -163,22 +165,17 @@ export async function createPaymentPreference(
     }
   }
 
-  const frozenSubtotal = Number(order.subtotal)
-  const frozenServiceCharge = Number(order.service_charge ?? 0)
-  const frozenTotal = Number(order.total_amount)
+  const frozenSubtotalCents = moneyToCents(order.subtotal)
+  const frozenServiceChargeCents = moneyToCents(order.service_charge ?? 0)
+  const frozenTotalCents = moneyToCents(order.total_amount)
 
-  if (
-    !Number.isFinite(frozenSubtotal) ||
-    !Number.isFinite(frozenTotal) ||
-    frozenTotal < 0 ||
-    frozenSubtotal < 0
-  ) {
+  if (frozenTotalCents < 0 || frozenSubtotalCents < 0) {
     return { success: false, error: "Montos de orden inválidos." }
   }
 
-  const isAllIn = Math.abs(frozenSubtotal - frozenTotal) <= 0.05
+  const isAllIn = frozenSubtotalCents === frozenTotalCents
   const isLegacyMarkup =
-    Math.abs(frozenSubtotal + frozenServiceCharge - frozenTotal) <= 0.05
+    frozenSubtotalCents + frozenServiceChargeCents === frozenTotalCents
 
   if (!isAllIn && !isLegacyMarkup) {
     return {
@@ -187,7 +184,7 @@ export async function createPaymentPreference(
     }
   }
 
-  if (frozenServiceCharge > frozenTotal + 0.05) {
+  if (frozenServiceChargeCents > frozenTotalCents) {
     return {
       success: false,
       error: "Comisión interna inconsistente con el total cobrado.",
@@ -262,7 +259,7 @@ export async function createPaymentPreference(
         : `${eventTitle} — entradas`
       ).slice(0, 256),
       quantity: 1,
-      unit_price: frozenTotal,
+      unit_price: centsToGatewayMajorUnits(frozenTotalCents),
       currency_id: "ARS",
     },
   ]
@@ -409,6 +406,8 @@ export async function createPaymentPreference(
         error: "No se pudo guardar la preferencia de pago.",
       }
     }
+
+    await freezeSeatHoldsForPayment(orderId)
 
     return {
       success: true,

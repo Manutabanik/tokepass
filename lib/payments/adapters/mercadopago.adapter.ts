@@ -3,6 +3,7 @@ import "server-only"
 import { Preference, Payment, WebhookSignatureValidator } from "mercadopago"
 
 import { resolveCheckoutExpiresAt } from "@/lib/checkout-hold"
+import { moneyToGatewayMajorUnits } from "@/lib/money/cents"
 import { logger } from "@/lib/logger"
 import {
   getMercadoPagoClient,
@@ -80,7 +81,7 @@ export class MercadoPagoAdapter implements IPaymentGatewayAdapter {
                 id: `order-${input.orderId}-all-in`,
                 title: input.description.slice(0, 256),
                 quantity: 1,
-                unit_price: input.amount,
+                unit_price: moneyToGatewayMajorUnits(input.amount),
                 currency_id: input.currency === "USD" ? "USD" : "ARS",
               },
             ],

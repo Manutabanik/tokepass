@@ -7,6 +7,7 @@ import { createPaymentPreference } from "@/app/actions/payments"
 import { CheckoutCountdown } from "@/components/public/checkout-countdown"
 import { Button } from "@/components/ui/button"
 import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
+import { useCheckoutStore } from "@/lib/stores/checkout-store"
 
 export function PendingOrderPayPanel({
   orderId,
@@ -28,6 +29,7 @@ export function PendingOrderPayPanel({
         })
         return
       }
+      useCheckoutStore.getState().freezeHoldClock()
       redirectToCheckoutPaymentOrToast(result.paymentUrl ?? result.initPoint)
     })
   }

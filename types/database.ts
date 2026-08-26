@@ -353,6 +353,9 @@ export type Event = {
   review_note: string | null
   reviewed_at: string | null
   reviewed_by: string | null
+  /** Soft delete. El panel nunca hace DELETE físico. */
+  is_deleted: boolean
+  deleted_at: string | null
   /** Event Creator V2: progreso crudo del wizard. No es catálogo público. */
   draft_state?: Json | null
 }
@@ -979,6 +982,9 @@ export type SeatHold = {
   user_session_id: string
   owner_id: string | null
   expires_at: string
+  status: "active" | "pending_payment"
+  frozen_at: string | null
+  order_id: string | null
   created_at: string
 }
 
@@ -1077,6 +1083,8 @@ export type Order = {
   updated_at: string
   /** Orden de prueba (preview). Los tickets asociados no valen en puerta. */
   is_test: boolean
+  /** Se setea al abrir la pasarela. Congela el TTL de seat_holds. */
+  payment_started_at: string | null
   /** production = dinero real. test = sandbox / evento no publicado. */
   environment: "production" | "test"
   legal_consent_required: boolean
@@ -1325,6 +1333,8 @@ type EventInsert = Omit<
   | "review_note"
   | "reviewed_at"
   | "reviewed_by"
+  | "is_deleted"
+  | "deleted_at"
   | "created_at"
   | "updated_at"
 > & {
@@ -1375,6 +1385,8 @@ type EventInsert = Omit<
   review_note?: string | null
   reviewed_at?: string | null
   reviewed_by?: string | null
+  is_deleted?: boolean
+  deleted_at?: string | null
   created_at?: string
   updated_at?: string
   draft_state?: Json | null
@@ -1579,10 +1591,13 @@ type EventSeatingUnitInsert = Omit<
 }
 type SeatHoldInsert = Omit<
   SeatHold,
-  "id" | "event_date_key" | "created_at"
+  "id" | "event_date_key" | "status" | "frozen_at" | "order_id" | "created_at"
 > & {
   id?: string
   event_date_key?: string
+  status?: SeatHold["status"]
+  frozen_at?: string | null
+  order_id?: string | null
   created_at?: string
 }
 type PromoterInsert = Omit<
@@ -1634,6 +1649,7 @@ type OrderInsert = Omit<
   | "cashier_user_id"
   | "is_test"
   | "environment"
+  | "payment_started_at"
   | "legal_consent_required"
   | "terms_accepted"
   | "terms_accepted_at"
@@ -1666,6 +1682,7 @@ type OrderInsert = Omit<
   cashier_user_id?: string | null
   is_test?: boolean
   environment?: "production" | "test"
+  payment_started_at?: string | null
   legal_consent_required?: boolean
   terms_accepted?: boolean
   terms_accepted_at?: string | null
@@ -3943,6 +3960,14 @@ export type Database = {
       expire_abandoned_order: {
         Args: { p_order_id: string }
         Returns: boolean
+      }
+      freeze_seat_holds_for_payment: {
+        Args: { p_order_id: string }
+        Returns: number
+      }
+      release_payment_frozen_holds: {
+        Args: { p_order_id: string }
+        Returns: number
       }
       expire_abandoned_orders: {
         Args: { p_older_than?: string; p_batch_size?: number }
