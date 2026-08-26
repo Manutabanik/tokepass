@@ -306,7 +306,12 @@ describe("buildPublishEventV2Payload", () => {
     assert.equal(general?.seating_sector_id, null)
   })
 
-  it("maps private visibility without folding refunds into description", () => {
+  it("lists the event in the public catalog unless the organizer opts out", () => {
+    const listed = buildPublishEventV2Payload({
+      ...publishableDraft(),
+      settings: { ...publishableDraft().settings, isPublic: undefined },
+    })
+    assert.equal(listed.visibility, "public")
     const draft = publishableDraft()
     draft.settings.isPublic = false
     draft.settings.refundPolicy = "Reintegro a criterio"

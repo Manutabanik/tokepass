@@ -131,14 +131,14 @@ const draftBasicInfoSchema = z
 
 const draftSettingsSchema = z
   .object({
-    isPublic: z.boolean().optional().default(false),
+    isPublic: z.boolean().optional().default(true),
     absorbFees: z.boolean().optional().default(false),
     refundPolicy: z.string().optional().default(""),
     checkoutMessage: z.string().optional().default(""),
     deliveryMode: z.enum(EVENT_DRAFT_DELIVERY_MODES).optional().default("PRESENCIAL"),
   })
   .default({
-    isPublic: false,
+    isPublic: true,
     absorbFees: false,
     refundPolicy: "",
     checkoutMessage: "",
@@ -410,7 +410,7 @@ export function emptyEventDraftV2(): EventDraftV2 {
     seatingMap: emptyDraftSeatingMap(),
     seatingMaps: [],
     settings: {
-      isPublic: false,
+      isPublic: true,
       absorbFees: false,
       refundPolicy: "",
       checkoutMessage: "",
@@ -792,7 +792,7 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
       dateId: item.dateId || schedule[0]?.id || "",
     })),
     settings: {
-      isPublic: settingsRaw.isPublic === true,
+      isPublic: settingsRaw.isPublic !== false,
       absorbFees: settingsRaw.absorbFees === true,
       refundPolicy: asOptionalString(settingsRaw.refundPolicy),
       checkoutMessage: asOptionalString(settingsRaw.checkoutMessage),

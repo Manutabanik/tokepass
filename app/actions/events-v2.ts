@@ -757,6 +757,24 @@ async function bindPublishedTicketDays(
   }
 }
 
+async function ensurePublishedCatalogListing(
+  eventId: string,
+  payload: PublishEventV2Payload,
+) {
+  const admin = createAdminClient()
+  const written = await admin
+    .from("events")
+    .update({
+      status: "published" as EventStatus,
+      visibility: "public",
+      date: payload.date,
+      ends_at: payload.ends_at,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("id", eventId)
+  if (written.error) throw new Error(formatSupabaseError(written.error))
+}
+
 async function unpackPublishedSchedule(
   eventId: string,
   payload: PublishEventV2Payload,
@@ -841,8 +859,7 @@ async function unpackPublishEventV2Sequential(input: {
       province: input.payload.venue.province,
       department: input.payload.venue.city,
       delivery_mode: input.payload.delivery_mode as EventDeliveryMode,
-      visibility:
-        input.targetStatus === "draft" ? "private" : input.payload.visibility,
+      visibility: input.targetStatus === "draft" ? "private" : "public",
       flyer_url: input.payload.flyer_url ?? input.existingFlyerUrl,
       image_url:
         input.payload.image_url ??
@@ -949,6 +966,9 @@ export async function publishEventV2(
   }
 
   const lineup = parsed.data.lineup ?? []
+  if (targetStatus === "published") {
+    payload = { ...payload, visibility: "public" }
+  }
   let slug = event.slug
   if (targetStatus === "draft") {
     try {
@@ -1016,6 +1036,17 @@ export async function publishEventV2(
           success: false,
           error: error instanceof Error ? error.message : formatSupabaseError(error),
         }
+      }
+    }
+  }
+
+  if (targetStatus === "published") {
+    try {
+      await ensurePublishedCatalogListing(id, payload)
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : formatSupabaseError(error),
       }
     }
   }

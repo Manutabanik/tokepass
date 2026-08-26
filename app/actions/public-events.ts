@@ -374,15 +374,20 @@ function computeInventory(
   })
 }
 
-function startOfTodayIso(): string {
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  return now.toISOString()
-}
-
 const EVENT_LIST_SELECT =
   "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, sale_starts_at, sale_ends_at, category, tier_type, layout_type), profiles!events_organizer_id_fkey(full_name)"
+const EVENT_LIST_SELECT_MINIMAL =
+  "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, category, tier_type, layout_type), profiles!events_organizer_id_fkey(full_name)"
 const EVENT_LIST_SELECT_WITH_DELIVERY = `${EVENT_LIST_SELECT}, delivery_mode`
+
+function isCatalogListRetryable(message: string): boolean {
+  return (
+    isMissingArtistSchema(message) ||
+    /lineup|delivery_mode|sale_starts_at|sale_ends_at|schedule_days|schema cache|PGRST204|42703/i.test(
+      message,
+    )
+  )
+}
 
 const EVENT_ARTISTS_EMBED =
   "event_artists(artist_id, artists(id, name, image_url, spotify_id))"
@@ -470,6 +475,7 @@ export async function getPublishedEvents(
         EVENT_LIST_SELECT_WITH_LINEUP,
         EVENT_LIST_SELECT_WITH_LINEUP_LEGACY,
         EVENT_LIST_SELECT,
+        EVENT_LIST_SELECT_MINIMAL,
       ]
     : [
         EVENT_LIST_SELECT_WITH_ARTISTS,
@@ -477,6 +483,7 @@ export async function getPublishedEvents(
         EVENT_LIST_SELECT_WITH_LINEUP,
         EVENT_LIST_SELECT_WITH_LINEUP_LEGACY,
         EVENT_LIST_SELECT,
+        EVENT_LIST_SELECT_MINIMAL,
       ]
 
   for (const [index, select] of selects.entries()) {
@@ -505,28 +512,25 @@ export async function getPublishedEvents(
     const { data, error } = await query
 
     if (!error) {
-      const mapped = ((data ?? []) as unknown as EventListRow[]).map(
-        mapEventListRow,
-      )
+      const mapped = ((data ?? []) as unknown as EventListRow[])
+        .map(mapEventListRow)
+        .filter((event) => !isPastEvent(event))
       return sortCatalogForHome(mapped)
     }
 
-    const canRetryWithoutJoin =
-      usingArtistJoin &&
-      index === 0 &&
-      isMissingArtistSchema(error.message)
-
-    if (!canRetryWithoutJoin) {
-      logger.error({
-        context: "public-events",
-        message: filterByArtist
-          ? "list_published_by_artist_failed"
-          : "list_published_failed",
-        artist_id: filterByArtist ? artistId : undefined,
-        error,
-      })
-      return []
+    if (index < selects.length - 1 && isCatalogListRetryable(error.message)) {
+      continue
     }
+
+    logger.error({
+      context: "public-events",
+      message: filterByArtist
+        ? "list_published_by_artist_failed"
+        : "list_published_failed",
+      artist_id: filterByArtist ? artistId : undefined,
+      error,
+    })
+    return []
   }
 
   return []
@@ -670,6 +674,7 @@ export async function getFeaturedEvents(options?: {
     EVENT_LIST_SELECT_WITH_LINEUP,
     EVENT_LIST_SELECT_WITH_LINEUP_LEGACY,
     EVENT_LIST_SELECT,
+    EVENT_LIST_SELECT_MINIMAL,
   ]
 
   let data: unknown[] | null = null
@@ -681,7 +686,6 @@ export async function getFeaturedEvents(options?: {
       .select(select)
       .eq("status", "published")
       .eq("visibility", "public")
-      .gte("date", startOfTodayIso())
       .or("is_sponsored_by_tokepass.eq.true,is_featured.eq.true")
 
     if (!result.error) {
@@ -691,10 +695,7 @@ export async function getFeaturedEvents(options?: {
     }
 
     error = result.error
-    const retryable =
-      isMissingArtistSchema(result.error.message) ||
-      /lineup|schema cache|PGRST204|42703/i.test(result.error.message)
-    if (!retryable) break
+    if (!isCatalogListRetryable(result.error.message)) break
   }
 
   if (error) {

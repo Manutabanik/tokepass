@@ -387,7 +387,7 @@ export function buildPublishEventV2Payload(
     ends_at: lastEnd ? draftDateToIso(lastEnd) : null,
     schedule_days: scheduleDays,
     location,
-    visibility: parsed.settings?.isPublic === true ? "public" : "private",
+    visibility: parsed.settings?.isPublic === false ? "private" : "public",
     flyer_url: flyer,
     image_url: flyer ?? banner,
     social_share_image_url: banner,

@@ -263,7 +263,7 @@ describe("parseEventDraftV2", () => {
     assert.equal(parsed.flyerUrl, "")
     assert.equal(parsed.seatingMap.url, "")
     assert.deepEqual(parsed.seatingMap.sectors, [])
-    assert.equal(parsed.settings.isPublic, false)
+    assert.equal(parsed.settings.isPublic, true)
     assert.equal((parsed as { keep?: number }).keep, 1)
     assert.equal(parsed.schedule.length, 1)
     assert.equal(parsed.schedule[0]?.name, "Día 1")
