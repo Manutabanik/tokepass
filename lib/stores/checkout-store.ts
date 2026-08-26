@@ -7,6 +7,7 @@ import { useShallow } from "zustand/react/shallow"
 import {
   cartHasHoldableItems,
   nextCartHoldExpiresAt,
+  remainingHoldSeconds,
 } from "@/lib/checkout/cart-hold-clock"
 import { ABSOLUTE_MAX_ITEMS_PER_PURCHASE } from "@/lib/checkout-limits"
 import {
@@ -114,6 +115,7 @@ type CheckoutState = {
   subtotal: number
   holdExpiresAt: string | null
   holdFrozen: boolean
+  holdFrozenSeconds: number | null
   holdExpiredOpen: boolean
   holdExpiryHandled: boolean
   cartSessionId: string | null
@@ -375,6 +377,7 @@ export const useCheckoutStore = create<CheckoutState>()(
       subtotal: 0,
       holdExpiresAt: null,
       holdFrozen: false,
+      holdFrozenSeconds: null,
       holdExpiredOpen: false,
       holdExpiryHandled: false,
       cartSessionId: null,
@@ -458,7 +461,10 @@ export const useCheckoutStore = create<CheckoutState>()(
 
       freezeHoldClock: () => {
         if (get().holdFrozen) return
-        set({ holdFrozen: true })
+        set({
+          holdFrozen: true,
+          holdFrozenSeconds: remainingHoldSeconds(get().holdExpiresAt),
+        })
       },
 
       ensureCartSessionId: () => {
@@ -507,6 +513,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           subtotal: 0,
           holdExpiresAt: null,
           holdFrozen: false,
+          holdFrozenSeconds: null,
           holdExpiredOpen: false,
           holdExpiryHandled: false,
           isGuest: false,
@@ -798,6 +805,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           catalogByTierId: {},
           holdExpiresAt: null,
           holdFrozen: false,
+          holdFrozenSeconds: null,
           checkoutStep: "tickets",
           seatSheetOpen: false,
           ticketErrorId: null,
@@ -832,6 +840,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           selectedSeat: null,
           holdExpiresAt: null,
           holdFrozen: false,
+          holdFrozenSeconds: null,
           holdExpiredOpen: false,
           holdExpiryHandled: false,
           cartSessionId: saved.cartSessionId ?? current.cartSessionId,

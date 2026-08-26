@@ -46,11 +46,12 @@ function releaseCartHoldsInBackground(eventId: string | null) {
 export function useCheckoutTimer(options?: { onExpire?: () => void }) {
   const holdExpiresAt = useCheckoutStore((state) => state.holdExpiresAt)
   const holdFrozen = useCheckoutStore((state) => state.holdFrozen)
+  const holdFrozenSeconds = useCheckoutStore((state) => state.holdFrozenSeconds)
   const holdExpiredOpen = useCheckoutStore((state) => state.holdExpiredOpen)
   const itemsCount = useCheckoutStore((state) => state.itemsCount)
   const lines = useCheckoutStore((state) => state.lines)
   const quantities = useCheckoutStore((state) => state.quantities)
-  const [remainingSeconds, setRemainingSeconds] = useState(0)
+  const [, setTick] = useState(0)
   const expiredRef = useRef(false)
   const onExpireRef = useRef(options?.onExpire)
 
@@ -66,16 +67,12 @@ export function useCheckoutTimer(options?: { onExpire?: () => void }) {
 
   useEffect(() => {
     expiredRef.current = false
-    if (!holdExpiresAt) {
-      setRemainingSeconds(0)
-      return
-    }
+    if (!holdExpiresAt || holdFrozen) return
 
-    function tick() {
+    const id = window.setInterval(() => {
       if (useCheckoutStore.getState().holdFrozen) return
       const now = Date.now()
-      const seconds = remainingHoldSeconds(holdExpiresAt, now)
-      setRemainingSeconds(seconds)
+      setTick((value) => value + 1)
       if (!isCartHoldExpired(holdExpiresAt, now) || expiredRef.current) return
       expiredRef.current = true
       const marked = useCheckoutStore.getState().markHoldExpired()
@@ -84,12 +81,16 @@ export function useCheckoutTimer(options?: { onExpire?: () => void }) {
       releaseCartHoldsInBackground(currentEventId)
       useCheckoutStore.getState().clearCart()
       onExpireRef.current?.()
-    }
+    }, 1000)
 
-    tick()
-    const id = window.setInterval(tick, 1000)
     return () => window.clearInterval(id)
   }, [holdExpiresAt, holdFrozen])
+
+  const remainingSeconds = !holdExpiresAt
+    ? 0
+    : holdFrozen
+      ? (holdFrozenSeconds ?? remainingHoldSeconds(holdExpiresAt))
+      : remainingHoldSeconds(holdExpiresAt)
 
   return {
     remainingSeconds,
