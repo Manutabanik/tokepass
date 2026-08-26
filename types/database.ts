@@ -41,6 +41,7 @@ export type TicketStatus =
   | "transferred"
   | "used"
   | "cancelled"
+  | "refunded"
   /** @deprecated legacy — migrado a `used` */
   | "scanned"
   /** @deprecated legacy — migrado a `cancelled` */
@@ -3836,6 +3837,12 @@ export type Database = {
           p_order_status?: string
         }
         Returns: number
+      }
+      refund_single_ticket: {
+        Args: {
+          p_ticket_id: string
+        }
+        Returns: Json
       }
       is_ticket_admission_eligible: {
         Args: {

@@ -33,6 +33,7 @@ import {
   type ScanTicketResult,
 } from "@/app/actions/scanner"
 import { overlayKindFromDeniedScanStatus } from "@/lib/scanner/offline-sync-conflicts"
+import { parseScannerBlacklistPayload } from "@/lib/scanner/ticket-blacklist"
 import {
   ScanResultOverlay,
   type ScanOverlayState,
@@ -63,6 +64,7 @@ import { requestDoorAssetCache } from "@/lib/pwa/door-cache"
 import { prefetchDoorManifest } from "@/lib/scanner/prefetch-manifest"
 import {
   applyAdmissionSnapshot,
+  applyTicketBlacklist,
   clearSyncQueueItems,
   countAdmittedTickets,
   countAdmissionLeases,
@@ -584,7 +586,11 @@ export function DoorScanner({
         showOverlay({ kind: "transferred" })
         return
       }
-      if (ticket.status === "cancelled" || ticket.status === "revoked") {
+      if (
+        ticket.status === "cancelled" ||
+        ticket.status === "revoked" ||
+        ticket.status === "refunded"
+      ) {
         showOverlay({ kind: "cancelled" })
         return
       }
@@ -925,9 +931,19 @@ export function DoorScanner({
     async function pullAdmissions() {
       if (!navigator.onLine) return
       try {
-        const snap = await fetchEventAdmissionSnapshot(eventId)
+        const [snap, blacklistRes] = await Promise.all([
+          fetchEventAdmissionSnapshot(eventId),
+          fetch(
+            `/api/scanner/blacklist?eventId=${encodeURIComponent(eventId)}`,
+            { cache: "no-store", credentials: "same-origin" },
+          ),
+        ])
         if (cancelled) return
         await applyAdmissionSnapshot(eventId, snap.tickets)
+        if (blacklistRes.ok) {
+          const raw: unknown = await blacklistRes.json()
+          await applyTicketBlacklist(eventId, parseScannerBlacklistPayload(raw))
+        }
         setAdmittedCount(await countAdmittedTickets(eventId))
       } catch (error) {
         logger.error({

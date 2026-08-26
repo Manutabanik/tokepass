@@ -23,6 +23,7 @@ export function selectOfflineScansReadyToFlush<
     if (
       status === "transferred" ||
       status === "cancelled" ||
+      status === "refunded" ||
       status === "pending_payment"
     ) {
       return false

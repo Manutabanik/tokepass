@@ -119,7 +119,11 @@ function sectorLabelFromRow(row: TicketDbRow): string {
 }
 
 function toUiStatus(row: TicketDbRow): IssuedTicketUiStatus {
-  if (row.status === "cancelled" || row.status === "revoked") {
+  if (
+    row.status === "cancelled" ||
+    row.status === "revoked" ||
+    row.status === "refunded"
+  ) {
     return "cancelled"
   }
   if (row.status === "transferred") return "transferred"
@@ -523,6 +527,7 @@ export async function cancelTicketAdmin(
     if (
       access.ticketStatus === "cancelled" ||
       access.ticketStatus === "revoked" ||
+      access.ticketStatus === "refunded" ||
       access.ticketStatus === "transferred"
     ) {
       return {
@@ -606,6 +611,7 @@ export async function resendTicketEmailAdmin(
     if (
       access.ticketStatus === "cancelled" ||
       access.ticketStatus === "revoked" ||
+      access.ticketStatus === "refunded" ||
       access.ticketStatus === "transferred"
     ) {
       return {
@@ -690,6 +696,7 @@ export async function updateTicketHolderAdmin(
     if (
       access.ticketStatus === "cancelled" ||
       access.ticketStatus === "revoked" ||
+      access.ticketStatus === "refunded" ||
       access.ticketStatus === "transferred"
     ) {
       return {

@@ -2,6 +2,7 @@ const TERMINAL_OFFLINE_SYNC_CODES = [
   "invalid_status",
   "unpaid",
   "cancelled",
+  "refunded",
   "transferred",
   "revoked",
   "test_ticket",
@@ -46,6 +47,7 @@ export function overlayKindFromDeniedScanStatus(
     case "test_ticket_live":
       return "test_ticket"
     case "cancelled":
+    case "refunded":
     case "revoked":
       return "cancelled"
     case "unpaid":

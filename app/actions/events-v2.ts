@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
+import { assertDraftMapLayoutImmutable } from "@/lib/events/assert-draft-map-immutability"
 import { hardReplacePublishedEventArtists } from "@/lib/events/hard-replace-event-artists-v2"
 import { hardReplacePublishedSeatingMaps } from "@/lib/events/hard-replace-seating-maps-v2"
 import { eventArtistRowsToDraftLineup } from "@/lib/events/publish-event-v2-lineup"
@@ -324,9 +325,14 @@ export async function saveEventDraftV2(
     return { success: false, error: "No tenés permiso para editar este evento." }
   }
 
-  const draftState = toEventDraftV2Payload(
-    parseEventDraftV2(rawData),
-  ) as unknown as Json
+  const parsed = parseEventDraftV2(rawData)
+  const locked = await assertDraftMapLayoutImmutable({
+    eventId: id,
+    draft: parsed,
+  })
+  if (!locked.ok) return { success: false, error: locked.error }
+
+  const draftState = toEventDraftV2Payload(parsed) as unknown as Json
   const { data, error } = await gate.supabase
     .from("events")
     .update({

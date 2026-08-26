@@ -1,5 +1,7 @@
 "use server"
 
+import { unstable_noStore as noStore } from "next/cache"
+
 import { getGuestOrderWallet } from "@/app/actions/guest-ticket-access"
 import { getMyTickets, type MyTicket } from "@/app/actions/tickets"
 import { resolveOrderHoldExpiresAt } from "@/lib/checkout-hold"
@@ -45,6 +47,7 @@ function emptyFulfillment(orderId: string): CheckoutOrderFulfillment {
 export async function getCheckoutOrderFulfillment(
   orderId: string,
 ): Promise<CheckoutOrderFulfillment> {
+  noStore()
   const clean = orderId.trim()
   if (!clean) return emptyFulfillment("")
 

@@ -92,6 +92,7 @@ export function decideOfflineAdmission(input: {
   if (
     input.status === "transferred" ||
     input.status === "cancelled" ||
+    input.status === "refunded" ||
     input.status === "pending_payment" ||
     input.status === "revoked"
   ) {

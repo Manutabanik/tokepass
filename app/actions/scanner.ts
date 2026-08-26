@@ -10,6 +10,7 @@ import {
 import { listOperableEvents } from "@/lib/event-ops-access"
 import { readValidDoorGuestSession } from "@/lib/scanner/door-guest-session"
 import { isTerminalOfflineSyncConflict } from "@/lib/scanner/offline-sync-conflicts"
+import { isScannerBlacklistTicketStatus } from "@/lib/scanner/ticket-blacklist"
 import { resolveScannerActor } from "@/lib/scanner/resolve-scanner-access"
 import { hashTotpSecretSha256 } from "@/lib/scanner/totp-secret-hash"
 import {
@@ -578,11 +579,14 @@ export async function scanAndValidateTicket(
     }
   }
 
-  if (row.status === "cancelled" || row.status === "revoked") {
+  if (isScannerBlacklistTicketStatus(row.status)) {
     return {
       success: false,
       status: "cancelled",
-      message: "Ticket cancelado / revocado",
+      message:
+        row.status === "refunded"
+          ? "Ticket reembolsado — acceso denegado"
+          : "Ticket cancelado / revocado",
     }
   }
 
@@ -791,6 +795,7 @@ export type EventTicketManifestPayload = {
       | "used"
       | "transferred"
       | "cancelled"
+      | "refunded"
       | "scanned"
       | "revoked"
     owner_name: string

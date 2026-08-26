@@ -8,6 +8,9 @@ import { getMercadoPagoClient, getSiteUrl, isLocalSiteUrl, resolveCheckoutInitPo
 import { createClient } from "@/lib/supabase/server"
 
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+export const fetchCache = "force-no-store"
 
 const bodySchema = z.object({
   eventId: z.string().uuid(),

@@ -78,6 +78,24 @@ describe("offline admission lease", () => {
     assert.equal(decision.action, "admit")
   })
 
+  it("rejects refunded tickets offline", () => {
+    const decision = decideOfflineAdmission({
+      status: "refunded",
+      admissionsUsed: 0,
+      maxAdmissions: 1,
+      groupId: null,
+      ticketId: "ticket-refunded",
+      deviceSlotIndex: 0,
+      deviceSlotCount: 1,
+      online: false,
+      hasLivePeers: false,
+      localLeaseCount: 0,
+      scannedAt: null,
+    })
+    assert.equal(decision.action, "reject")
+    assert.equal(decision.reason, "invalid_status")
+  })
+
   it("rejects tickets outside the assigned pistol range", () => {
     const ticketId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     const owner = ticketDeviceSlot(ticketId, 2)

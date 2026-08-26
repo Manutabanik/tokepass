@@ -9,6 +9,10 @@ import { StoryFlyerSuccessCard } from "@/components/public/story-flyer-modal"
 import { CheckoutWalletPrecache } from "@/components/pwa/checkout-wallet-precache"
 import { getWalletUiFlags } from "@/lib/wallet-cache"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+export const fetchCache = "force-no-store"
+
 export const metadata: Metadata = {
   title: "Confirmando tu compra",
   description: "Estamos acreditando tu pago y preparando tus entradas.",

@@ -10,6 +10,7 @@ describe("offline scan flush filter", () => {
       { ticket_id: "cesion", event_id: "e1" },
       { ticket_id: "reventa", event_id: "e1" },
       { ticket_id: "baja", event_id: "e1" },
+      { ticket_id: "reembolso", event_id: "e1" },
       { ticket_id: "missing", event_id: "e1" },
     ]
     const ready = selectOfflineScansReadyToFlush(queue, [
@@ -17,6 +18,7 @@ describe("offline scan flush filter", () => {
       { id: "cesion", status: "valid", pending_transfer: true },
       { id: "reventa", status: "valid", listed_for_resale: true },
       { id: "baja", status: "cancelled", pending_transfer: false },
+      { id: "reembolso", status: "refunded", pending_transfer: false },
     ])
     assert.deepEqual(
       ready.map((row) => row.ticket_id),

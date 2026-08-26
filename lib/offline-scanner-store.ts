@@ -40,6 +40,7 @@ export type ScannerManifestTicket = {
     | "used"
     | "transferred"
     | "cancelled"
+    | "refunded"
     | "scanned"
     | "revoked"
   owner_name: string
@@ -715,6 +716,44 @@ export async function applyAdmissionSnapshot(
       totp_secret_hash: nextHash,
       pending_transfer: nextPending,
       listed_for_resale: nextListed,
+    })
+    applied += 1
+  }
+
+  await txDone(tx)
+  db.close()
+  return applied
+}
+
+/** Marca QRs reembolsados/anulados sin bajar el manifiesto completo. */
+export async function applyTicketBlacklist(
+  eventId: string,
+  ticketIds: readonly string[],
+): Promise<number> {
+  if (!eventId || ticketIds.length === 0) return 0
+
+  const db = await openDb()
+  const tx = db.transaction(TICKETS, "readwrite")
+  const store = tx.objectStore(TICKETS)
+  let applied = 0
+
+  for (const rawId of ticketIds) {
+    const id = rawId.trim()
+    if (!id) continue
+    const current = (await requestToPromise(
+      store.get(id),
+    )) as ScannerManifestTicket | undefined
+    if (!current || current.event_id !== eventId) continue
+    if (
+      current.status === "refunded" ||
+      current.status === "cancelled" ||
+      current.status === "revoked"
+    ) {
+      continue
+    }
+    store.put({
+      ...current,
+      status: "refunded",
     })
     applied += 1
   }

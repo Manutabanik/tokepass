@@ -7,6 +7,10 @@ import {
 } from "@/lib/checkout/guest-access"
 import { getEmailAppUrl } from "@/lib/email/resend"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+export const fetchCache = "force-no-store"
+
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const token = url.searchParams.get("token")?.trim() ?? ""
