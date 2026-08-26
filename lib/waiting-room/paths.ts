@@ -4,6 +4,10 @@ const CHECKOUT_PASS_THROUGH = new Set([
   "/checkout/pending",
 ])
 
+export function isOrganizerEventPreviewPath(pathname: string): boolean {
+  return /^\/events\/preview\/[^/]+\/?$/.test(pathname)
+}
+
 export function isWaitingRoomBypassPath(pathname: string): boolean {
   if (pathname === "/waiting-room" || pathname.startsWith("/waiting-room/")) {
     return true
@@ -40,6 +44,8 @@ export function resolveProtectedEventKey(pathname: string): string | null {
   if (eventos?.[1] && eventos[1] !== "preview") {
     return decodePathSegment(eventos[1])
   }
+
+  if (isOrganizerEventPreviewPath(pathname)) return null
 
   const events = pathname.match(/^\/events\/([^/]+)$/)
   if (events?.[1] && events[1] !== "preview") {

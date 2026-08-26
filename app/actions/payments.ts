@@ -157,7 +157,7 @@ export async function createPaymentPreference(
   }
 
   if (eventId) {
-    const room = await assertWaitingRoomCheckoutPass([eventId, eventSlug])
+    const room = await assertWaitingRoomCheckoutPass([eventSlug, eventId])
     if (!room.ok) {
       return { success: false, error: room.error }
     }

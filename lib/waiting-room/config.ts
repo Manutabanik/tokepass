@@ -28,12 +28,37 @@ export function waitingRoomCapacity(): number {
   return Math.min(parsed, 100_000)
 }
 
+/** Real production only. Vercel preview uses NODE_ENV=production. */
+export function isWaitingRoomStrictRuntime(): boolean {
+  return process.env.VERCEL_ENV === "production"
+}
+
 export function isWaitingRoomEnabled(): boolean {
   const flag = process.env.WAITING_ROOM_ENABLED?.trim().toLowerCase()
   if (flag === "0" || flag === "false" || flag === "off") return false
   if (flag === "1" || flag === "true" || flag === "on") return true
   if (hasUpstashRedis()) return true
   return process.env.NODE_ENV !== "production"
+}
+
+export function waitingRoomPassCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: WAITING_ROOM_TTL_SECONDS,
+  }
+}
+
+export function waitingRoomQueueCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: QUEUE_TTL_SECONDS,
+  }
 }
 
 export function hasUpstashRedis(): boolean {
@@ -44,7 +69,7 @@ export function hasUpstashRedis(): boolean {
 }
 
 export function waitingRoomRequiresRedis(): boolean {
-  return process.env.NODE_ENV === "production" && isWaitingRoomEnabled()
+  return isWaitingRoomStrictRuntime() && isWaitingRoomEnabled()
 }
 
 let localDevWaitingRoomSecret: Uint8Array | null = null

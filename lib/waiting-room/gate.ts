@@ -3,11 +3,12 @@ import { NextResponse, type NextRequest } from "next/server"
 import {
   LEGACY_WAITING_ROOM_COOKIE,
   QUEUE_COOKIE,
-  QUEUE_TTL_SECONDS,
   WAITING_ROOM_COOKIE,
-  WAITING_ROOM_TTL_SECONDS,
   hasUpstashRedis,
   isWaitingRoomEnabled,
+  isWaitingRoomStrictRuntime,
+  waitingRoomPassCookieOptions,
+  waitingRoomQueueCookieOptions,
 } from "@/lib/waiting-room/config"
 import {
   isWaitingRoomBypassPath,
@@ -34,23 +35,11 @@ export type WaitingRoomGate =
   | { kind: "admit"; cookie: string }
 
 function passCookieOptions() {
-  return {
-    httpOnly: true,
-    sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: WAITING_ROOM_TTL_SECONDS,
-  }
+  return waitingRoomPassCookieOptions()
 }
 
 function queueCookieOptions() {
-  return {
-    httpOnly: true,
-    sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: QUEUE_TTL_SECONDS,
-  }
+  return waitingRoomQueueCookieOptions()
 }
 
 export function applyVipCookie(response: NextResponse, token: string) {
@@ -79,7 +68,7 @@ export async function evaluateWaitingRoomGate(
 ): Promise<WaitingRoomGate> {
   if (!isWaitingRoomEnabled()) return { kind: "bypass" }
 
-  if (process.env.NODE_ENV === "production" && !hasUpstashRedis()) {
+  if (isWaitingRoomStrictRuntime() && !hasUpstashRedis()) {
     return {
       kind: "block",
       response: NextResponse.json(
@@ -147,7 +136,7 @@ export async function evaluateWaitingRoomGate(
       response: await redirectToQueue(request, eventKey, queueId),
     }
   } catch {
-    if (process.env.NODE_ENV === "production") {
+    if (isWaitingRoomStrictRuntime()) {
       return {
         kind: "block",
         response: NextResponse.json(

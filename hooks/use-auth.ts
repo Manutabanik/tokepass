@@ -3,6 +3,7 @@
 import type { User } from "@supabase/supabase-js"
 import { useEffect, useMemo, useState } from "react"
 
+import { getBrowserAuthUser } from "@/lib/supabase/browser-auth"
 import { createClient } from "@/lib/supabase/client"
 
 export function useAuth() {
@@ -13,9 +14,9 @@ export function useAuth() {
   useEffect(() => {
     let active = true
 
-    supabase.auth.getUser().then(({ data }) => {
+    void getBrowserAuthUser().then((nextUser) => {
       if (active) {
-        setUser(data.user)
+        setUser(nextUser)
         setIsLoading(false)
       }
     })

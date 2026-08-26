@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 
 import { PublicNavbarClient } from "@/components/shared/public-navbar-client"
 import { getInitials } from "@/lib/format"
+import { getBrowserAuthUser } from "@/lib/supabase/browser-auth"
 import { createClient } from "@/lib/supabase/client"
 
 type NavbarSession = {
@@ -30,9 +31,7 @@ export function PublicNavbar() {
 
     async function loadSession() {
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const user = await getBrowserAuthUser()
       if (cancelled) return
       if (!user) {
         setSession(GUEST_SESSION)
@@ -57,7 +56,9 @@ export function PublicNavbar() {
       })
     }
 
-    void loadSession()
+    void loadSession().catch(() => {
+      if (!cancelled) setSession(GUEST_SESSION)
+    })
     return () => {
       cancelled = true
     }

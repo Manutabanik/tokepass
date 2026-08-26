@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import {
   isNextServerActionRequest,
+  isOrganizerEventPreviewPath,
   isWaitingRoomBypassPath,
   resolveProtectedEventKey,
   resolveRefererEventKey,
@@ -19,6 +20,12 @@ describe("waiting-room paths", () => {
     assert.equal(resolveProtectedEventKey("/eventos/fiesta"), "fiesta")
     assert.equal(resolveProtectedEventKey("/e/fiesta"), "fiesta")
     assert.equal(resolveProtectedEventKey("/checkout"), "__checkout__")
+  })
+
+  it("does not gate organizer draft preview", () => {
+    assert.equal(isOrganizerEventPreviewPath("/events/preview/abc"), true)
+    assert.equal(resolveProtectedEventKey("/events/preview/abc"), null)
+    assert.equal(resolveProtectedEventKey("/events/preview"), null)
   })
 
   it("does not gate the virtual queue or status API", () => {

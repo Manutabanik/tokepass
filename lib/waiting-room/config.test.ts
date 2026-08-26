@@ -1,7 +1,12 @@
 import assert from "node:assert/strict"
 import { after, describe, it } from "node:test"
 
-import { waitingRoomCapacity, waitingRoomSecret } from "./config"
+import {
+  isWaitingRoomStrictRuntime,
+  waitingRoomCapacity,
+  waitingRoomRequiresRedis,
+  waitingRoomSecret,
+} from "./config"
 
 describe("waiting-room capacity", () => {
   const previousCapacity = process.env.WAITING_ROOM_MAX_CAPACITY
@@ -23,6 +28,20 @@ describe("waiting-room capacity", () => {
     process.env.WAITING_ROOM_MAX_CAPACITY = "500"
     process.env.MAX_CONCURRENT_USERS = "1"
     assert.equal(waitingRoomCapacity(), 1)
+  })
+
+  it("treats only Vercel production as a strict waiting-room runtime", () => {
+    const previous = process.env.VERCEL_ENV
+    try {
+      process.env.VERCEL_ENV = "preview"
+      assert.equal(isWaitingRoomStrictRuntime(), false)
+      assert.equal(waitingRoomRequiresRedis(), false)
+      process.env.VERCEL_ENV = "production"
+      assert.equal(isWaitingRoomStrictRuntime(), true)
+    } finally {
+      if (previous == null) delete process.env.VERCEL_ENV
+      else process.env.VERCEL_ENV = previous
+    }
   })
 
   it("does not use a hardcoded development HMAC secret", () => {

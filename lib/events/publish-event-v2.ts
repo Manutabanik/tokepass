@@ -188,6 +188,7 @@ function mapLineItemToTier(
     layoutType?: string
     slotId?: string
     validDayIds?: string[]
+    ticketType?: EventDraftV2LineItem["ticketType"]
   },
   kind: "ticket" | "extra",
   fee: EventFeeConfig,

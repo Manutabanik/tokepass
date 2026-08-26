@@ -1,13 +1,10 @@
 "use client"
 
+import { getBrowserAuthUser } from "@/lib/supabase/browser-auth"
 import { createClient } from "@/lib/supabase/client"
 
 export async function hasCheckoutAuthSession(): Promise<boolean> {
-  const supabase = createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  return Boolean(user)
+  return Boolean(await getBrowserAuthUser())
 }
 
 /**
@@ -15,12 +12,13 @@ export async function hasCheckoutAuthSession(): Promise<boolean> {
  * not when the buyer only opens the ticket list.
  */
 export async function ensureGuestCheckoutSession(): Promise<boolean> {
-  const supabase = createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (user) return true
+  if (await getBrowserAuthUser()) return true
 
-  const { error } = await supabase.auth.signInAnonymously()
-  return !error
+  const supabase = createClient()
+  try {
+    const { error } = await supabase.auth.signInAnonymously()
+    return !error
+  } catch {
+    return false
+  }
 }

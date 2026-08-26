@@ -11,6 +11,7 @@ import {
   isEventDraftStateEmpty,
   overlayLiveExperienceOnDraft,
   rehydrateEventDraftV2,
+  type LiveEventTicketSnapshotV2,
 } from "@/lib/events/rehydrate-event-draft-v2"
 import {
   buildPublishEventV2Payload,
@@ -239,11 +240,16 @@ async function persistRehydratedPublishedDraft(input: {
         .eq("id", input.event.venue_id)
         .maybeSingle()
     : { data: null, error: null }
-  const ticketSelect =
+  const ticketSelectWithType =
     "id, name, description, price, capacity, min_purchase_limit, max_purchase_limit, tier_type, category, layout_type, seating_sector_id, day_id, ticket_type"
-  let ticketsQuery = await input.supabase
+  const ticketSelectCore =
+    "id, name, description, price, capacity, min_purchase_limit, max_purchase_limit, tier_type, category, layout_type, seating_sector_id, day_id"
+  let ticketsQuery: {
+    data: LiveEventTicketSnapshotV2[] | null
+    error: { message: string } | null
+  } = await input.supabase
     .from("ticket_tiers")
-    .select(ticketSelect)
+    .select(ticketSelectWithType)
     .eq("event_id", input.event.id)
     .order("created_at", { ascending: true })
   if (
@@ -252,9 +258,7 @@ async function persistRehydratedPublishedDraft(input: {
   ) {
     ticketsQuery = await input.supabase
       .from("ticket_tiers")
-      .select(
-        "id, name, description, price, capacity, min_purchase_limit, max_purchase_limit, tier_type, category, layout_type, seating_sector_id, day_id",
-      )
+      .select(ticketSelectCore)
       .eq("event_id", input.event.id)
       .order("created_at", { ascending: true })
   }

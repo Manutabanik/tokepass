@@ -10,6 +10,7 @@ import type { ResaleListingPublic } from "@/app/actions/resale"
 import { EventStorefront } from "@/components/public/event-storefront"
 import { normalizePreviewKey } from "@/lib/preview/sandbox"
 import { extractAffiliateCode } from "@/lib/rrpp"
+import { getBrowserAuthUser } from "@/lib/supabase/browser-auth"
 import { createClient } from "@/lib/supabase/client"
 
 type BuyerPrefill = {
@@ -61,9 +62,7 @@ export function EventStorefrontSession({
 
     async function loadSession() {
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const user = await getBrowserAuthUser()
       if (cancelled) return
       if (!user) {
         setCurrentUserId(null)
