@@ -13,8 +13,11 @@ export const PERSIST_ERROR_TITLES: Record<PersistErrorSource, string> = {
   app: "No se pudo guardar",
 }
 
+export const NETWORK_SAVE_MESSAGE =
+  "No pudimos conectar con el servidor. Recargá la página e intentá de nuevo."
+
 const NETWORK_RE =
-  /failed to fetch|networkerror|err_network|econnrefused|etimedout|enotfound|fetch failed|load failed|network request failed|the internet connection appears|sin conexi[oó]n/i
+  /failed to fetch|networkerror|err_network|err_name_not_resolved|econnrefused|etimedout|enotfound|fetch failed|load failed|network request failed|the internet connection appears|sin conexi[oó]n/i
 const SQL_RE =
   /\b(PGRST\d+|22P02|23503|23505|23514|23P01|40001|42501|42703|42P01|P0001)\b|column ["']|violates (unique|foreign|check|not-null)|relation ["']|schema cache|SQLSTATE|duplicate key|postgrest|postgres(?:ql)?/i
 
@@ -79,6 +82,7 @@ export function persistErrorUserMessage(
   }
   const seatingMessage = seatingPersistUserMessage(error)
   if (seatingMessage) return seatingMessage
+  if (classifyPersistError(error) === "network") return NETWORK_SAVE_MESSAGE
   const formatted = formatSupabaseError(error)
   return formatted || fallback
 }

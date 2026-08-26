@@ -52,7 +52,7 @@ describe("toUserFacingError", () => {
   it("enmascara fugas técnicas que no son código de Postgres", () => {
     assert.equal(
       toUserFacingError("Failed to fetch"),
-      INVENTORY_SYNC_MESSAGE,
+      "No pudimos conectar con el servidor. Recargá la página e intentá de nuevo.",
     )
     assert.equal(
       toUserFacingError("Could not find the function public.create_pos_sale_tx"),

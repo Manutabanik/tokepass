@@ -5,6 +5,7 @@ import type { UseFormGetValues } from "react-hook-form"
 
 import { saveEventDraftV2 } from "@/app/actions/events-v2"
 import { sanitizeEventDraftForPersist } from "@/lib/events/draft-seating-map-v2"
+import { persistErrorUserMessage } from "@/lib/errors/persist-error"
 import {
   EDITOR_V2_AUTOSAVE_MS,
   type DraftSaveStatus,
@@ -39,22 +40,32 @@ export function useEventDraftV2Persist(
     const current = ++generation.current
     setSaveStatus("saving")
     setSaveError("")
-    const result = await saveEventDraftV2(
-      eventId,
-      toEventDraftV2Payload(sanitizeEventDraftForPersist(getValues())),
-    )
-    if (current !== generation.current) {
-      return result.success
-        ? { success: true }
-        : { success: false, error: result.error }
-    }
-    if (!result.success) {
+    try {
+      const result = await saveEventDraftV2(
+        eventId,
+        toEventDraftV2Payload(sanitizeEventDraftForPersist(getValues())),
+      )
+      if (current !== generation.current) {
+        return result.success
+          ? { success: true }
+          : { success: false, error: result.error }
+      }
+      if (!result.success) {
+        setSaveStatus("error")
+        setSaveError(result.error)
+        return { success: false, error: result.error }
+      }
+      setSaveStatus("saved")
+      return { success: true }
+    } catch (error) {
+      const message = persistErrorUserMessage(error)
+      if (current !== generation.current) {
+        return { success: false, error: message }
+      }
       setSaveStatus("error")
-      setSaveError(result.error)
-      return { success: false, error: result.error }
+      setSaveError(message)
+      return { success: false, error: message }
     }
-    setSaveStatus("saved")
-    return { success: true }
   }, [eventId, getValues])
 
   const flushAndPause = useCallback(async (): Promise<PersistDraftResult> => {

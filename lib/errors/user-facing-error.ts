@@ -5,6 +5,10 @@ import {
   isSafeUserFacingCopy,
   mapUnknownError,
 } from "@/lib/errors/error-handler"
+import {
+  classifyPersistError,
+  NETWORK_SAVE_MESSAGE,
+} from "@/lib/errors/persist-error"
 import { isUnmaskedSupabaseError } from "@/lib/errors/supabase-error"
 
 export const INVENTORY_SYNC_MESSAGE = APP_ERRORS.INVENTORY_SYNC.message
@@ -20,6 +24,7 @@ export function toUserFacingError(
 ): string {
   const seatingMessage = seatingPersistUserMessage(text)
   if (seatingMessage) return seatingMessage
+  if (classifyPersistError(text) === "network") return NETWORK_SAVE_MESSAGE
   if (isUnmaskedSupabaseError(text)) return text
   const safeFallback = isSafeUserFacingCopy(fallback)
     ? fallback

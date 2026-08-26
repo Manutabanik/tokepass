@@ -56,5 +56,13 @@ describe("classifyPersistError", () => {
   it("labels fetch failures as network", () => {
     assert.equal(classifyPersistError(new TypeError("Failed to fetch")), "network")
     assert.equal(classifyPersistError("ERR_NETWORK: load failed"), "network")
+    assert.equal(
+      classifyPersistError("net::ERR_NAME_NOT_RESOLVED"),
+      "network",
+    )
+    assert.equal(
+      persistErrorUserMessage(new TypeError("Failed to fetch")),
+      "No pudimos conectar con el servidor. Recargá la página e intentá de nuevo.",
+    )
   })
 })

@@ -14,6 +14,7 @@ import { EventEditorV2InventoryStep } from "./event-editor-v2-inventory"
 import { EventEditorV2LaunchStep } from "./event-editor-v2-launch"
 import { EventEditorV2SuccessDialog } from "./event-editor-v2-success"
 import { publishEventV2 } from "@/app/actions/events-v2"
+import { persistErrorUserMessage } from "@/lib/errors/persist-error"
 import { Button } from "@/components/ui/button"
 import { useEventDraftV2Persist } from "@/hooks/use-event-draft-v2-persist"
 import { useOrphanMapTicketGarbageCollector } from "@/hooks/use-orphan-map-ticket-gc"
@@ -116,6 +117,8 @@ export function EventEditorV2({
       redirected = true
       setAllowLeave(true)
       window.location.assign(result.previewPath)
+    } catch (error) {
+      toast.error(persistErrorUserMessage(error))
     } finally {
       actionBusyRef.current = false
       if (!redirected) {
@@ -145,6 +148,8 @@ export function EventEditorV2({
       setSuccessUpdated(wasPublished)
       setSuccessUrl(result.publicUrl)
       setSuccessOpen(true)
+    } catch (error) {
+      toast.error(persistErrorUserMessage(error))
     } finally {
       actionBusyRef.current = false
       resume()
