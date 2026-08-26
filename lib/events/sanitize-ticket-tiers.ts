@@ -343,6 +343,12 @@ export function seatingPersistUserMessage(error: unknown): string | null {
   if (/23514/i.test(text) && /seating|sector/i.test(text)) {
     return ORPHAN_SEATING_SECTOR_MESSAGE
   }
+  if (
+    /23505/i.test(text) &&
+    /ticket_tiers_event_sector/i.test(text)
+  ) {
+    return "Ese sector del mapa ya tiene una entrada para el mismo día. Revisá las jornadas o el nombre de la tarifa."
+  }
   return null
 }
 

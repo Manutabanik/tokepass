@@ -530,4 +530,13 @@ describe("seatingPersistUserMessage", () => {
     )
     assert.equal(seatingPersistUserMessage("PGRST204"), null)
   })
+
+  it("traduce 23505 del unique de sector por día a un mensaje legible", () => {
+    assert.equal(
+      seatingPersistUserMessage(
+        '[SUPABASE ERROR - Code: 23505]: duplicate key value violates unique constraint "ticket_tiers_event_sector_undated_key". Details: Key (event_id, seating_sector_id)=(a81c76e1-6f7b-4c8e-b35d-125d9a8709be, grada-amarilla) already exists.',
+      ),
+      "Ese sector del mapa ya tiene una entrada para el mismo día. Revisá las jornadas o el nombre de la tarifa.",
+    )
+  })
 })
