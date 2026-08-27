@@ -637,4 +637,23 @@ describe("seatingPersistUserMessage", () => {
       "Ese sector del mapa ya tiene una entrada para el mismo día. Revisá las jornadas o el nombre de la tarifa.",
     )
   })
+
+  it("traduce 23505 del asiento físico sin jornada a un mensaje legible", () => {
+    assert.equal(
+      seatingPersistUserMessage(
+        '[SUPABASE ERROR - Code: 23505]: duplicate key value violates unique constraint "event_seating_units_physical_undated_uidx". Details: Key (event_id, sector_id, layout_item_id)=(a81c76e1-6f7b-4c8e-b35d-125d9a8709be, grada-naranja, grada-naranja-r1-n1) already exists.',
+      ),
+      "Ese sector del mapa ya tiene una entrada para el mismo día. Revisá las jornadas o el nombre de la tarifa.",
+    )
+  })
+
+  it("traduce la colisión de dos tarifas en el mismo sector", () => {
+    assert.equal(
+      seatingPersistUserMessage({
+        code: "23505",
+        message: "SEATING_SECTOR_TIER_COLLISION",
+      }),
+      "Ese sector del mapa ya tiene una entrada para el mismo día. Revisá las jornadas o el nombre de la tarifa.",
+    )
+  })
 })

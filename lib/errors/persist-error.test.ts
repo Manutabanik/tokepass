@@ -54,6 +54,15 @@ describe("classifyPersistError", () => {
     )
   })
 
+  it("maps the physical undated seating unique to a readable persist message", () => {
+    assert.equal(
+      persistErrorUserMessage(
+        '[SUPABASE ERROR - Code: 23505]: duplicate key value violates unique constraint "event_seating_units_physical_undated_uidx". Details: Key (event_id, sector_id, layout_item_id)=(a81c76e1-6f7b-4c8e-b35d-125d9a8709be, grada-naranja, grada-naranja-r1-n1) already exists.',
+      ),
+      "Ese sector del mapa ya tiene una entrada para el mismo día. Revisá las jornadas o el nombre de la tarifa.",
+    )
+  })
+
   it("labels fetch failures as network", () => {
     assert.equal(classifyPersistError(new TypeError("Failed to fetch")), "network")
     assert.equal(classifyPersistError("ERR_NETWORK: load failed"), "network")

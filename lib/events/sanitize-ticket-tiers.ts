@@ -412,8 +412,11 @@ export function seatingPersistUserMessage(error: unknown): string | null {
     return ORPHAN_SEATING_SECTOR_MESSAGE
   }
   if (
-    /23505/i.test(text) &&
-    /ticket_tiers_event_sector/i.test(text)
+    /SEATING_SECTOR_TIER_COLLISION/i.test(text) ||
+    (/23505/i.test(text) &&
+      /ticket_tiers_event_sector|event_seating_units_physical|event_seating_units_tier_/i.test(
+        text,
+      ))
   ) {
     return "Ese sector del mapa ya tiene una entrada para el mismo día. Revisá las jornadas o el nombre de la tarifa."
   }

@@ -32,6 +32,7 @@ import { assertDraftMapLayoutImmutable } from "@/lib/events/assert-draft-map-imm
 import { draftLayoutSourceFromSavedVenueMap } from "@/lib/events/draft-map-immutability-v2"
 import { hardReplacePublishedSeatingMaps } from "@/lib/events/hard-replace-seating-maps-v2"
 import { seatingMapsFromSavedVenueMap } from "@/lib/events/publish-seating-inventory"
+import { seatingPersistUserMessage } from "@/lib/events/sanitize-ticket-tiers"
 import {
   venueMapHasInventory,
   venueMapToSeatingLayout,
@@ -284,7 +285,7 @@ export async function materializeEventSeatingUnits(
     event_id: eventId,
     error,
   })
-  return formatSupabaseError(error)
+  return seatingPersistUserMessage(error) ?? formatSupabaseError(error)
 }
 
 function normalizeSectorLabel(value: string | null | undefined) {
