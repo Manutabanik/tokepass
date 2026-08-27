@@ -608,6 +608,45 @@ function mapTicketHasDayBinding(ticket: DraftMapTicketLike): boolean {
   return /^map:[0-9a-f-]+:/i.test(id)
 }
 
+export function seatedDraftTicketBelongsToDay(
+  ticket: {
+    id?: string
+    source?: unknown
+    sectorId?: unknown
+    seatingSectorId?: unknown
+    seating_sector_id?: unknown
+    slotId?: string
+    validDayIds?: string[]
+  },
+  dateId: string,
+): boolean {
+  if (!ticketSeatingSectorRef(ticket)) return false
+  const day = dateId.trim()
+  if (!day) return true
+  if ((ticket.validDayIds ?? []).some((id) => String(id).trim() === day)) {
+    return true
+  }
+  if ((ticket.slotId ?? "").trim() === day) return true
+  return String(ticket.id ?? "").startsWith(`map:${day}:`)
+}
+
+export function removeSeatedDraftTicketsForDay<T extends DraftMapTicketLike>(
+  tickets: T[],
+  dateId: string,
+): T[] {
+  return tickets.filter(
+    (ticket) => !seatedDraftTicketBelongsToDay(ticket, dateId),
+  )
+}
+
+export function removeDraftSeatingMapInstance(
+  maps: DraftSeatingMapInstance[],
+  dateId: string,
+): DraftSeatingMapInstance[] {
+  const day = dateId.trim()
+  return maps.filter((item) => item.dateId !== day)
+}
+
 function mapTicketBelongsToDay(
   ticket: DraftMapTicketLike,
   dateId: string,

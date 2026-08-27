@@ -11,6 +11,8 @@ import {
   mergeDraftTicketsWithMap,
   mergeDraftTicketsWithScheduleMaps,
   parseDraftSeatingMaps,
+  removeDraftSeatingMapInstance,
+  removeSeatedDraftTicketsForDay,
   sanitizeDraftTicketsForPersist,
   ticketsFromVenueMap,
   toDraftSeatingMap,
@@ -408,5 +410,52 @@ describe("draft seating map isolation", () => {
     })
     assert.equal(kept.length, 1)
     assert.equal(kept[0]?.sectorId, "sector-platea")
+  })
+
+  it("drops only seated tickets of the deleted jornada and keeps generals", () => {
+    const dayA = "day-a"
+    const dayB = "day-b"
+    const general = {
+      ...emptyEventDraftV2LineItem("vip-1"),
+      name: "VIP",
+      source: "general",
+      validDayIds: [dayA],
+    }
+    const fridayMap = {
+      ...emptyEventDraftV2LineItem(`map:${dayA}:grada-naranja`),
+      name: "Grada Naranja Viernes",
+      source: "map",
+      sectorId: "grada-naranja",
+      seating_sector_id: "grada-naranja",
+      validDayIds: [dayA],
+      slotId: dayA,
+    }
+    const saturdayMap = {
+      ...emptyEventDraftV2LineItem(`map:${dayB}:grada-naranja`),
+      name: "Grada Naranja Sábado",
+      source: "map",
+      sectorId: "grada-naranja",
+      seating_sector_id: "grada-naranja",
+      validDayIds: [dayB],
+      slotId: dayB,
+    }
+    const nextTickets = removeSeatedDraftTicketsForDay(
+      [general, fridayMap, saturdayMap],
+      dayA,
+    )
+    assert.deepEqual(
+      nextTickets.map((ticket) => ticket.id),
+      ["vip-1", `map:${dayB}:grada-naranja`],
+    )
+    assert.deepEqual(
+      removeDraftSeatingMapInstance(
+        [
+          { dateId: dayA, mapConfig: toDraftSeatingMap(plateaMap()), pricing: { sectorPrices: {}, blockedSeatIds: [] } },
+          { dateId: dayB, mapConfig: toDraftSeatingMap(plateaMap()), pricing: { sectorPrices: {}, blockedSeatIds: [] } },
+        ],
+        dayA,
+      ).map((item) => item.dateId),
+      [dayB],
+    )
   })
 })

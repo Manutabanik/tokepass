@@ -17,8 +17,7 @@ export const DRAFT_TICKET_CARD_CLASS =
 export const BENTO_GRID_CLASS =
   "grid grid-cols-1 items-stretch gap-6 md:grid-cols-12"
 
-export const BENTO_INVENTORY_GRID_CLASS =
-  "grid grid-cols-1 items-stretch gap-6 md:grid-cols-12"
+export const BENTO_INVENTORY_GRID_CLASS = "flex w-full flex-col gap-6"
 
 export const BENTO_CARD_CLASS =
   "flex h-full flex-col rounded-2xl border border-border/50 bg-card p-6 shadow-sm"

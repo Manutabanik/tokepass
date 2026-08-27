@@ -7,6 +7,12 @@ import { useDraftArchetype } from "./event-editor-v2-archetype"
 import { EventEditorV2SlotSelect } from "./event-editor-v2-slot-select"
 import { DraftCard, DraftHint } from "./event-editor-v2-ui"
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
+import {
   buildInventorySummaryRows,
   inventorySummaryTotals,
   type InventorySummaryKind,
@@ -232,13 +238,23 @@ export function InventorySummaryTable() {
   }
 
   return (
-    <DraftCard className="min-w-0 md:col-span-8">
-      <div className="mb-4 flex items-center gap-2">
-        <LayoutList className="size-4 text-emerald-400" aria-hidden />
-        <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-          Resumen general
-        </h2>
-      </div>
+    <DraftCard className="w-full min-w-0">
+      <Accordion className="w-full">
+        <AccordionItem value="ledger" className="border-0">
+          <AccordionTrigger className="py-1 hover:no-underline">
+            <span className="flex min-w-0 flex-1 items-center justify-between gap-3 pr-3">
+              <span className="flex min-w-0 items-center gap-2">
+                <LayoutList className="size-4 shrink-0 text-emerald-400" aria-hidden />
+                <span className="truncate text-sm font-bold text-slate-800 dark:text-zinc-100">
+                  Resumen y Proyección de Recaudación
+                </span>
+              </span>
+              <span className="shrink-0 text-xs font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                {formatCurrency(totals.revenue)}
+              </span>
+            </span>
+          </AccordionTrigger>
+          <AccordionContent className="pb-0">
       <DraftHint>
         Ledger del inventario. Cambiá precio o stock acá y se actualizan las
         tarjetas, el termómetro y el JSON del borrador.
@@ -250,8 +266,8 @@ export function InventorySummaryTable() {
           resumir.
         </p>
       ) : (
-        <>
-          <ul className="mt-5 space-y-3 sm:hidden">
+        <div className="no-scrollbar mt-5 max-h-96 overflow-y-auto">
+          <ul className="space-y-3 sm:hidden">
             {rows.map((row) => {
               const badge = KIND_BADGE[row.type]
               const dayBadge = ticketValidDaysBadge(row)
@@ -338,7 +354,7 @@ export function InventorySummaryTable() {
             </li>
           </ul>
 
-          <div className="mt-5 hidden overflow-x-auto px-1 pb-2 sm:block">
+          <div className="hidden overflow-x-auto px-1 pb-2 sm:block">
             <table className="w-full min-w-[36rem] table-auto text-left text-sm">
               <thead>
                 <tr className="text-[11px] font-semibold tracking-wide text-gray-500 uppercase">
@@ -450,8 +466,11 @@ export function InventorySummaryTable() {
               </tfoot>
             </table>
           </div>
-        </>
+        </div>
       )}
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
     </DraftCard>
   )
 }

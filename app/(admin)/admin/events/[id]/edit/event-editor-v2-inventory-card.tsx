@@ -28,7 +28,13 @@ import {
   TICKET_COMMERCE_TYPE_LABELS,
 } from "@/lib/events/ticket-commerce-type"
 import {
+  applyDraftDayPriceStock,
+  draftDayPriceStockRows,
+  generalTicketNeedsDayPricing,
+} from "@/lib/events/draft-day-priced-tickets"
+import {
   draftNumberValue,
+  isMapDraftTicket,
   toggleDraftLineupDay,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
@@ -53,14 +59,24 @@ export function DraftInventoryAccordionCard({
   const {
     control,
     register,
+    getValues,
     setValue,
     formState: { errors },
   } = useFormContext<EventDraftV2>()
   const schedule = useWatch({ control, name: "schedule" }) ?? []
+  const tickets = useWatch({ control, name: "tickets" }) ?? []
   const slotId = useWatch({ control, name: `${name}.${index}.slotId` })
   const validDayIds =
     useWatch({ control, name: `${name}.${index}.validDayIds` }) ?? []
+  const source = useWatch({ control, name: `${name}.${index}.source` })
+  const sectorId = useWatch({ control, name: `${name}.${index}.sectorId` })
   const multiDay = name === "tickets" && schedule.length > 1
+  const pricedByDay =
+    name === "tickets" &&
+    generalTicketNeedsDayPricing(
+      { source, validDayIds, sectorId },
+      schedule.length,
+    )
   const slotOptions = listDraftScheduleSlots(schedule)
   const showSlots = name === "tickets" && hasMultipleDraftSlots(schedule)
   const itemName = useWatch({ control, name: `${name}.${index}.name` })
@@ -87,9 +103,34 @@ export function DraftInventoryAccordionCard({
   const scheduled = hasDraftPresale({ startDate, endDate })
 
   function toggleValidDay(dayId: string) {
+    const nextDays = toggleDraftLineupDay(validDayIds, dayId)
+    setValue(`${name}.${index}.validDayIds`, nextDays, {
+      shouldDirty: true,
+      shouldTouch: true,
+    })
+    setValue(`${name}.${index}.slotId`, nextDays.length === 1 ? nextDays[0] : "", {
+      shouldDirty: true,
+      shouldTouch: true,
+    })
+  }
+
+  function writeDayRate(dayId: string, field: "price" | "stock", raw: string) {
+    const currentTickets = getValues("tickets")
+    const current = currentTickets[index]
+    if (!current || isMapDraftTicket(current)) return
+    const rows = draftDayPriceStockRows(
+      current,
+      currentTickets,
+      index,
+      schedule,
+    ).map((row) =>
+      row.dayId === dayId
+        ? { ...row, [field]: draftNumberValue(raw) }
+        : row,
+    )
     setValue(
-      `${name}.${index}.validDayIds`,
-      toggleDraftLineupDay(validDayIds, dayId),
+      "tickets",
+      applyDraftDayPriceStock(currentTickets, index, schedule, rows),
       { shouldDirty: true, shouldTouch: true },
     )
   }
@@ -227,6 +268,77 @@ export function DraftInventoryAccordionCard({
               </div>
             </div>
 
+            {pricedByDay ? (
+              <div className="grid gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                <DraftFieldLabel>
+                  Precio y stock por día
+                </DraftFieldLabel>
+                <DraftHint>
+                  El viernes y el sábado son entradas distintas. Cada jornada
+                  tiene su precio y su cupo.
+                </DraftHint>
+                <div className="grid gap-2">
+                  {tickets[index]
+                    ? draftDayPriceStockRows(
+                        tickets[index],
+                        tickets,
+                        index,
+                        schedule,
+                      ).map((row) => (
+                    <div
+                      key={row.dayId}
+                      className="grid grid-cols-1 gap-2 sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)] sm:items-end"
+                    >
+                      <p className="text-sm font-semibold text-slate-800 dark:text-zinc-100">
+                        {row.label}
+                      </p>
+                      <div className="grid gap-1.5">
+                        <DraftFieldLabel
+                          htmlFor={`event-v2-${name}-${index}-price-${row.dayId}`}
+                          required
+                        >
+                          Precio
+                        </DraftFieldLabel>
+                        <Input
+                          id={`event-v2-${name}-${index}-price-${row.dayId}`}
+                          type="number"
+                          min={0}
+                          step={1}
+                          inputMode="numeric"
+                          className={DRAFT_FIELD_CLASS}
+                          value={row.price}
+                          onChange={(event) =>
+                            writeDayRate(row.dayId, "price", event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="grid gap-1.5">
+                        <DraftFieldLabel
+                          htmlFor={`event-v2-${name}-${index}-stock-${row.dayId}`}
+                          required
+                        >
+                          Stock
+                        </DraftFieldLabel>
+                        <Input
+                          id={`event-v2-${name}-${index}-stock-${row.dayId}`}
+                          type="number"
+                          min={0}
+                          step={1}
+                          inputMode="numeric"
+                          className={DRAFT_FIELD_CLASS}
+                          value={row.stock}
+                          onChange={(event) =>
+                            writeDayRate(row.dayId, "stock", event.target.value)
+                          }
+                        />
+                      </div>
+                    </div>
+                  ))
+                    : null}
+                </div>
+              </div>
+            ) : null}
+
             <div className="grid gap-1.5">
               <DraftFieldLabel
                 htmlFor={`event-v2-${name}-${index}-description`}
@@ -274,7 +386,9 @@ export function DraftInventoryAccordionCard({
                   })}
                 </div>
                 <DraftHint>
-                  Un día = pase diario. Varios días = abono.
+                  {validDayIds.length === 1
+                    ? "Este precio y stock son solo para ese día."
+                    : "Un día = pase diario con su propio precio. Varios días = abono al mismo valor."}
                 </DraftHint>
               </div>
             ) : null}

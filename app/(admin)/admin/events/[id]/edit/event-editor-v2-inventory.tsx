@@ -22,6 +22,7 @@ import {
   explicitDraftSlotCount,
   hasMultipleDraftSlots,
 } from "@/lib/events/draft-schedule-slots-v2"
+import { createDraftLineItemsForScheduleDays } from "@/lib/events/draft-day-priced-tickets"
 import {
   createDraftLineItem,
   draftCapacityThermometer,
@@ -47,48 +48,54 @@ export function EventEditorV2InventoryStep({ eventId }: { eventId: string }) {
 
   return (
     <div className={BENTO_INVENTORY_GRID_CLASS}>
-      <DraftCard className="h-full md:col-span-4">
-        <div className="mb-4 flex items-center gap-2">
-          <Users className="size-4 text-emerald-400" aria-hidden />
-          <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-            {labels.capacity}
-          </h2>
-        </div>
-        <div className="grid flex-grow gap-4">
-          <DraftFieldLabel
-            htmlFor="event-v2-venue-capacity"
-            required
-            className="text-sm"
-          >
-            ¿Cuánta gente entra?
-          </DraftFieldLabel>
-          <Input
-            id="event-v2-venue-capacity"
-            type="number"
-            min={0}
-            step={1}
-            inputMode="numeric"
-            className={DRAFT_FIELD_CLASS}
-            {...register("venueCapacity", { setValueAs: draftNumberValue })}
-          />
-          <DraftHint>
-            Este número define el tope máximo del termómetro. Los extras no ocupan{" "}
-            {labels.capacity.toLowerCase()}.
-          </DraftHint>
-          {meter.overCapacity ? (
-            <p
-              role="status"
-              className="rounded-lg bg-orange-500/10 px-3 py-2 text-sm text-orange-400"
-            >
-              Atención: El stock de tus {ticketsLabel.toLowerCase()} supera{" "}
-              {labels.capacity.toLowerCase()}
-            </p>
-          ) : null}
-          <CapacityBar
-            meter={meter}
-            capacityLabel={labels.capacity}
-            ticketsLabel={ticketsLabel}
-          />
+      <DraftCard className="w-full">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-center gap-2 md:w-auto">
+            <Users className="size-4 shrink-0 text-emerald-400" aria-hidden />
+            <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
+              {labels.capacity}
+            </h2>
+          </div>
+          <div className="flex min-w-0 w-full flex-col gap-4 md:flex-1 md:flex-row md:items-center md:justify-between">
+            <div className="grid w-full gap-1.5 md:max-w-xs">
+              <DraftFieldLabel
+                htmlFor="event-v2-venue-capacity"
+                required
+                className="text-sm"
+              >
+                ¿Cuánta gente entra?
+              </DraftFieldLabel>
+              <Input
+                id="event-v2-venue-capacity"
+                type="number"
+                min={0}
+                step={1}
+                inputMode="numeric"
+                className={DRAFT_FIELD_CLASS}
+                {...register("venueCapacity", { setValueAs: draftNumberValue })}
+              />
+              <DraftHint>
+                Tope del termómetro. Los extras no ocupan{" "}
+                {labels.capacity.toLowerCase()}.
+              </DraftHint>
+            </div>
+            <div className="min-w-0 flex-1">
+              {meter.overCapacity ? (
+                <p
+                  role="status"
+                  className="mb-2 rounded-lg bg-orange-500/10 px-3 py-2 text-sm text-orange-400"
+                >
+                  Atención: El stock de tus {ticketsLabel.toLowerCase()} supera{" "}
+                  {labels.capacity.toLowerCase()}
+                </p>
+              ) : null}
+              <CapacityBar
+                meter={meter}
+                capacityLabel={labels.capacity}
+                ticketsLabel={ticketsLabel}
+              />
+            </div>
+          </div>
         </div>
       </DraftCard>
 
@@ -204,6 +211,7 @@ function DraftLineItemList({
   emptyItemTitle?: string
 }) {
   const { control, register } = useFormContext<EventDraftV2>()
+  const schedule = useWatch({ control, name: "schedule" }) ?? []
   const { fields, append, remove } = useFieldArray({
     control,
     name,
@@ -211,7 +219,11 @@ function DraftLineItemList({
   })
 
   function addItem() {
-    append(createDraftLineItem(name === "extras" ? "extra" : "standard"))
+    if (name === "extras") {
+      append(createDraftLineItem("extra"))
+      return
+    }
+    append(createDraftLineItemsForScheduleDays(schedule, "standard"))
   }
 
   const visibleCount =
@@ -220,7 +232,7 @@ function DraftLineItemList({
       : fields.length
 
   return (
-    <DraftCard className="space-y-4 md:col-span-12">
+    <DraftCard className="w-full space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-zinc-200">

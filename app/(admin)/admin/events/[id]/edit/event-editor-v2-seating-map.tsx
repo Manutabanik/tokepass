@@ -1,6 +1,6 @@
 "use client"
 
-import { Copy, MapPinned, PenTool } from "lucide-react"
+import { Copy, MapPinned, MoreHorizontal, PenTool, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { useFormContext, useWatch } from "react-hook-form"
 
@@ -8,6 +8,12 @@ import { DRAFT_FIELD_CLASS, DraftCard, DraftHint } from "./event-editor-v2-ui"
 import { InteractiveVenueMapStudio } from "@/components/admin/interactive-venue-map-studio"
 import { VenueMapStudioSummary } from "@/components/admin/venue-map-studio-summary"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { datePartFromDateTime } from "@/lib/events/draft-schedule-slots-v2"
 import {
   cloneDraftSeatingMapInstance,
@@ -20,6 +26,8 @@ import {
   mergeDraftTicketsWithDayMap,
   mergeDraftTicketsWithScheduleMaps,
   parseDraftSeatingMaps,
+  removeDraftSeatingMapInstance,
+  removeSeatedDraftTicketsForDay,
   sanitizeDraftTicketsForPersist,
   seatingInstanceToVenueMap,
   toDraftSeatingMap,
@@ -158,8 +166,42 @@ export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
     )
   }
 
+  function handleRemoveDayMap(dateId: string) {
+    const day = dateId.trim()
+    const maps = parseDraftSeatingMaps(
+      getValues("seatingMaps"),
+      getValues("seatingMap"),
+      day,
+    )
+    const nextMaps = removeDraftSeatingMapInstance(maps, day)
+    writeSeatingMaps(nextMaps)
+    const liveSectors = collectDraftLiveSectors({
+      seatingMaps: nextMaps,
+      seatingMap: nextMaps[0]?.mapConfig,
+    })
+    setValue(
+      "tickets",
+      sanitizeDraftTicketsForPersist(
+        removeSeatedDraftTicketsForDay(getValues("tickets") ?? [], day),
+        {
+          mapActive: draftHasActiveSeatingMap({
+            seatingMaps: nextMaps,
+            seatingMap: nextMaps[0]?.mapConfig,
+          }),
+          liveSectorIds: collectDraftLiveSectorIds({
+            seatingMaps: nextMaps,
+            seatingMap: nextMaps[0]?.mapConfig,
+          }),
+          liveSectors,
+        },
+      ),
+      { shouldDirty: true, shouldTouch: true },
+    )
+    if (openDateId === dateId) setOpenDateId(null)
+  }
+
   return (
-    <DraftCard className="md:col-span-12">
+    <DraftCard className="w-full">
       <div className="mb-4">
         <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-zinc-100">
           <MapPinned className="size-4 text-emerald-400" aria-hidden />
@@ -185,9 +227,31 @@ export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
               key={dateId || `day-${index}`}
               className="rounded-2xl border border-border/60 p-3 sm:p-4"
             >
-              <p className="mb-3 text-sm font-semibold text-slate-800 dark:text-zinc-100">
-                {label}
-              </p>
+              <div className="mb-3 flex items-start justify-between gap-2">
+                <p className="min-w-0 text-sm font-semibold text-slate-800 dark:text-zinc-100">
+                  {label}
+                </p>
+                {hasMap ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      type="button"
+                      aria-label={`Opciones del mapa de ${label}`}
+                      className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <MoreHorizontal className="size-4" aria-hidden />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-48">
+                      <DropdownMenuItem
+                        className="text-destructive"
+                        onClick={() => handleRemoveDayMap(dateId)}
+                      >
+                        <Trash2 className="size-4" aria-hidden />
+                        Eliminar mapa de esta jornada
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : null}
+              </div>
               {hasMap ? (
                 <VenueMapStudioSummary
                   map={map}
