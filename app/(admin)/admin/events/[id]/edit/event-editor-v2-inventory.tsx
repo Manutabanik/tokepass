@@ -1,6 +1,7 @@
 "use client"
 
 import { Package, Plus, Ticket, Users } from "lucide-react"
+import { useLayoutEffect, useState } from "react"
 import { useFieldArray, useFormContext, useWatch } from "react-hook-form"
 
 import { useDraftArchetype } from "./event-editor-v2-archetype"
@@ -11,10 +12,15 @@ import {
   BENTO_INVENTORY_GRID_CLASS,
   DRAFT_FIELD_CLASS,
   DraftAddButton,
-  DraftCard,
   DraftFieldLabel,
-  DraftHint,
+  SUPER_PANEL_ITEM_CLASS,
 } from "./event-editor-v2-ui"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Input } from "@/components/ui/input"
 import { formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -24,6 +30,12 @@ import {
 } from "@/lib/events/draft-schedule-slots-v2"
 import { createDraftLineItemsForScheduleDays } from "@/lib/events/draft-day-priced-tickets"
 import {
+  inventoryExtrasErrorsOpenPanel,
+  inventorySuperPanelForFieldPath,
+  resolveInventorySuperPanel,
+  type InventorySuperPanelId,
+} from "@/lib/events/editor-v2-inventory-panels"
+import {
   createDraftLineItem,
   draftCapacityThermometer,
   draftNumberValue,
@@ -31,10 +43,20 @@ import {
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
 
-export function EventEditorV2InventoryStep({ eventId }: { eventId: string }) {
-  const { register } = useFormContext<EventDraftV2>()
+export function EventEditorV2InventoryStep({
+  eventId,
+  revealField = null,
+}: {
+  eventId: string
+  revealField?: string | null
+}) {
+  const {
+    register,
+    formState: { errors },
+  } = useFormContext<EventDraftV2>()
   const { labels } = useDraftArchetype()
   const tickets = useWatch({ name: "tickets" }) ?? []
+  const extras = useWatch({ name: "extras" }) ?? []
   const venueCapacity = useWatch({ name: "venueCapacity" })
   const schedule = useWatch({ name: "schedule" }) ?? []
   const slotCount = explicitDraftSlotCount(schedule)
@@ -45,84 +67,128 @@ export function EventEditorV2InventoryStep({ eventId }: { eventId: string }) {
     slotCount: hasMultipleDraftSlots(schedule) ? slotCount : 1,
   })
   const ticketsLabel = labels.tickets
+  const extrasCount = extras.length
+  const [openPanel, setOpenPanel] = useState<InventorySuperPanelId[]>(() => [
+    resolveInventorySuperPanel(errors, revealField),
+  ])
+  const extrasErrors = inventoryExtrasErrorsOpenPanel(errors)
+
+  useLayoutEffect(() => {
+    if (revealField?.trim()) {
+      setOpenPanel([inventorySuperPanelForFieldPath(revealField)])
+      return
+    }
+    if (extrasErrors) {
+      setOpenPanel(["extras"])
+    }
+  }, [extrasErrors, revealField])
 
   return (
-    <div className={BENTO_INVENTORY_GRID_CLASS}>
-      <DraftCard className="w-full">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex min-w-0 items-center gap-2 md:w-auto">
-            <Users className="size-4 shrink-0 text-emerald-400" aria-hidden />
-            <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-              {labels.capacity}
-            </h2>
-          </div>
-          <div className="flex min-w-0 w-full flex-col gap-4 md:flex-1 md:flex-row md:items-center md:justify-between">
-            <div className="grid w-full gap-1.5 md:max-w-xs">
-              <DraftFieldLabel
-                htmlFor="event-v2-venue-capacity"
-                required
-                className="text-sm"
-              >
-                ¿Cuánta gente entra?
-              </DraftFieldLabel>
-              <Input
-                id="event-v2-venue-capacity"
-                type="number"
-                min={0}
-                step={1}
-                inputMode="numeric"
-                className={DRAFT_FIELD_CLASS}
-                {...register("venueCapacity", { setValueAs: draftNumberValue })}
-              />
-              <DraftHint>
-                Tope del termómetro. Los extras no ocupan{" "}
-                {labels.capacity.toLowerCase()}.
-              </DraftHint>
-            </div>
-            <div className="min-w-0 flex-1">
-              {meter.overCapacity ? (
-                <p
-                  role="status"
-                  className="mb-2 rounded-lg bg-orange-500/10 px-3 py-2 text-sm text-orange-400"
-                >
-                  Atención: El stock de tus {ticketsLabel.toLowerCase()} supera{" "}
-                  {labels.capacity.toLowerCase()}
-                </p>
-              ) : null}
-              <CapacityBar
-                meter={meter}
-                capacityLabel={labels.capacity}
-                ticketsLabel={ticketsLabel}
-              />
-            </div>
-          </div>
+    <div className={cn(BENTO_INVENTORY_GRID_CLASS, "flex w-full flex-col")}>
+      <section className="flex w-full flex-col gap-3 rounded-2xl border border-border/50 bg-card px-4 py-3 shadow-sm md:flex-row md:items-center">
+        <div className="flex min-w-0 items-center gap-2 md:w-auto">
+          <Users className="size-4 shrink-0 text-emerald-400" aria-hidden />
+          <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
+            {labels.capacity}
+          </h2>
         </div>
-      </DraftCard>
+        <div className="grid min-w-0 w-full gap-1.5 md:max-w-[13rem]">
+          <DraftFieldLabel
+            htmlFor="event-v2-venue-capacity"
+            required
+            className="text-sm"
+          >
+            ¿Cuánta gente entra?
+          </DraftFieldLabel>
+          <Input
+            id="event-v2-venue-capacity"
+            type="number"
+            min={0}
+            step={1}
+            inputMode="numeric"
+            className={cn(DRAFT_FIELD_CLASS, "h-11 min-h-11")}
+            {...register("venueCapacity", { setValueAs: draftNumberValue })}
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          {meter.overCapacity ? (
+            <p
+              role="status"
+              className="mb-2 rounded-lg bg-orange-500/10 px-3 py-1.5 text-xs text-orange-400"
+            >
+              Atención: El stock de tus {ticketsLabel.toLowerCase()} supera{" "}
+              {labels.capacity.toLowerCase()}
+            </p>
+          ) : null}
+          <CapacityBar
+            meter={meter}
+            capacityLabel={labels.capacity}
+            ticketsLabel={ticketsLabel}
+          />
+        </div>
+      </section>
 
-      <InventorySummaryTable />
+      <Accordion
+        type="single"
+        collapsible
+        keepMounted
+        value={openPanel}
+        onValueChange={(next) => {
+          const panel = next[0]
+          setOpenPanel(panel === "tickets" || panel === "extras" ? [panel] : [])
+        }}
+        className="w-full"
+      >
+        <AccordionItem value="tickets" className={SUPER_PANEL_ITEM_CLASS}>
+          <AccordionTrigger className="px-1 py-4 hover:no-underline">
+            <span className="flex min-w-0 flex-1 items-center gap-2 pr-3 text-left">
+              <Ticket className="size-4 shrink-0 text-emerald-400" aria-hidden />
+              <span className="truncate text-sm font-bold text-slate-800 dark:text-zinc-100">
+                Aforo y Entradas • {formatNumber(meter.used)} configurados
+              </span>
+            </span>
+          </AccordionTrigger>
+          <AccordionContent className="space-y-5 pb-4">
+            <DraftLineItemList
+              embedded
+              name="tickets"
+              title={ticketsLabel}
+              description={`El stock de ${ticketsLabel.toLowerCase()} alimenta el termómetro de ${labels.capacity.toLowerCase()}.`}
+              addLabel={`Agregar ${ticketsLabel.toLowerCase()}`}
+              emptyTitle={`Aún no has creado ${ticketsLabel.toLowerCase()}`}
+              emptyHint={`Armá el primer ítem de ${ticketsLabel.toLowerCase()} para empezar a definir el inventario.`}
+              emptyIcon={Ticket}
+              emptyItemTitle={`Nuevo: ${ticketsLabel}`}
+            />
+            <EventEditorV2SeatingMap eventId={eventId} embedded />
+            <InventorySummaryTable embedded />
+          </AccordionContent>
+        </AccordionItem>
 
-      <EventEditorV2SeatingMap eventId={eventId} />
-
-      <DraftLineItemList
-        name="tickets"
-        title={ticketsLabel}
-        description={`El stock de ${ticketsLabel.toLowerCase()} alimenta el termómetro de ${labels.capacity.toLowerCase()}.`}
-        addLabel={`Agregar ${ticketsLabel.toLowerCase()}`}
-        emptyTitle={`Aún no has creado ${ticketsLabel.toLowerCase()}`}
-        emptyHint={`Armá el primer ítem de ${ticketsLabel.toLowerCase()} para empezar a definir el inventario.`}
-        emptyIcon={Ticket}
-        emptyItemTitle={`Nuevo: ${ticketsLabel}`}
-      />
-
-      <DraftLineItemList
-        name="extras"
-        title="Adicionales"
-        description={`Bebidas, merch u otros extras. No suman a ${labels.capacity.toLowerCase()}.`}
-        addLabel="Agregar extra"
-        emptyTitle="Aún no has creado adicionales"
-        emptyHint={`Sumá un extra cuando quieras vender algo además de ${ticketsLabel.toLowerCase()}.`}
-        emptyIcon={Package}
-      />
+        <AccordionItem value="extras" className={SUPER_PANEL_ITEM_CLASS}>
+          <AccordionTrigger className="px-1 py-4 hover:no-underline">
+            <span className="flex min-w-0 flex-1 items-center gap-2 pr-3 text-left">
+              <Package className="size-4 shrink-0 text-emerald-400" aria-hidden />
+              <span className="truncate text-sm font-bold text-slate-800 dark:text-zinc-100">
+                Adicionales y Tienda
+                {extrasCount > 0 ? ` • ${formatNumber(extrasCount)}` : ""}
+              </span>
+            </span>
+          </AccordionTrigger>
+          <AccordionContent className="space-y-5 pb-4">
+            <DraftLineItemList
+              embedded
+              name="extras"
+              title="Adicionales"
+              description={`Bebidas, merch u otros extras. No suman a ${labels.capacity.toLowerCase()}.`}
+              addLabel="Agregar extra"
+              emptyTitle="Aún no has creado adicionales"
+              emptyHint={`Sumá un extra cuando quieras vender algo además de ${ticketsLabel.toLowerCase()}.`}
+              emptyIcon={Package}
+            />
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
     </div>
   )
 }
@@ -200,6 +266,7 @@ function DraftLineItemList({
   emptyHint,
   emptyIcon: EmptyIcon,
   emptyItemTitle,
+  embedded = false,
 }: {
   name: "tickets" | "extras"
   title: string
@@ -209,6 +276,7 @@ function DraftLineItemList({
   emptyHint: string
   emptyIcon: typeof Ticket
   emptyItemTitle?: string
+  embedded?: boolean
 }) {
   const { control, register } = useFormContext<EventDraftV2>()
   const schedule = useWatch({ control, name: "schedule" }) ?? []
@@ -232,27 +300,30 @@ function DraftLineItemList({
       : fields.length
 
   return (
-    <DraftCard className="w-full space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-zinc-200">
-            {name === "tickets" ? (
-              <Ticket className="size-4 text-emerald-400" aria-hidden />
-            ) : (
-              <Package className="size-4 text-emerald-400" aria-hidden />
-            )}
-            {title}
-          </h2>
-          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-        </div>
+    <section className={cn("w-full space-y-3", !embedded && "space-y-4")}>
+      <div className="flex flex-col gap-1">
+        <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-zinc-200">
+          {name === "tickets" ? (
+            <Ticket className="size-4 text-emerald-400" aria-hidden />
+          ) : (
+            <Package className="size-4 text-emerald-400" aria-hidden />
+          )}
+          {title}
+        </h2>
+        <p className="text-xs text-muted-foreground">{description}</p>
       </div>
 
       {visibleCount === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white/40 px-6 py-12 text-center transition-all duration-200 dark:border-gray-700 dark:bg-gray-950/40">
-          <EmptyIcon className="size-10 text-gray-400" aria-hidden />
+        <div
+          className={cn(
+            "flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-transparent px-4 text-center dark:border-gray-700",
+            embedded ? "py-8" : "py-12",
+          )}
+        >
+          <EmptyIcon className="size-8 text-gray-400" aria-hidden />
           <p className="mt-3 text-sm font-semibold text-foreground">{emptyTitle}</p>
           <p className="mt-1 max-w-sm text-sm text-gray-500">{emptyHint}</p>
-          <div className="mt-5 w-full max-w-xs">
+          <div className="mt-4 w-full max-w-xs">
             <DraftAddButton onClick={addItem}>
               <Plus className="size-4" />
               {addLabel}
@@ -262,7 +333,7 @@ function DraftLineItemList({
       ) : null}
 
       {fields.length > 0 ? (
-        <ul className={visibleCount === 0 ? "hidden" : "w-full space-y-3"}>
+        <ul className={visibleCount === 0 ? "hidden" : "w-full space-y-2"}>
           {fields.map((field, index) => {
             if (name === "tickets" && isMapDraftTicket(field)) {
               return (
@@ -309,6 +380,6 @@ function DraftLineItemList({
           {addLabel}
         </DraftAddButton>
       ) : null}
-    </DraftCard>
+    </section>
   )
 }

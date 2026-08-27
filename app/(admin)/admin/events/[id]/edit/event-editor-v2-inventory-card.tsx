@@ -136,7 +136,7 @@ export function DraftInventoryAccordionCard({
   }
 
   return (
-    <li className="w-full overflow-hidden rounded-xl border border-slate-200 bg-white/80 transition-all duration-200 dark:border-gray-700/50 dark:bg-gray-800/50">
+    <li className="w-full overflow-hidden rounded-xl border border-border/40 bg-transparent transition-all duration-200">
       <input type="hidden" {...register(`${name}.${index}.id`)} />
       <input type="hidden" {...register(`${name}.${index}.source`)} />
       <input type="hidden" {...register(`${name}.${index}.sectorId`)} />

@@ -20,6 +20,7 @@ import {
   DraftFieldError,
   DraftFieldLabel,
   DraftHint,
+  SUPER_PANEL_ITEM_CLASS,
 } from "./event-editor-v2-ui"
 import {
   Accordion,
@@ -40,9 +41,6 @@ import {
   emptyEventDraftV2Location,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
-
-const SUPER_PANEL_ITEM_CLASS =
-  "not-last:border-b-0 mb-4 overflow-hidden rounded-2xl border border-border/50 bg-card px-3 shadow-sm last:mb-0"
 
 export function EventEditorV2InfoStep({
   eventId,

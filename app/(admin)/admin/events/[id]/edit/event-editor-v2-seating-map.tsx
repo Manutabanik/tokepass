@@ -36,7 +36,13 @@ import {
 import { isMapDraftTicket, type EventDraftV2 } from "@/lib/validations/event-draft-v2"
 import type { InteractiveVenueMap } from "@/types/venue-map"
 
-export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
+export function EventEditorV2SeatingMap({
+  eventId,
+  embedded = false,
+}: {
+  eventId: string
+  embedded?: boolean
+}) {
   const { control, getValues, setValue } = useFormContext<EventDraftV2>()
   const [openDateId, setOpenDateId] = useState<string | null>(null)
   const seatingMaps = useWatch({ control, name: "seatingMaps" }) ?? []
@@ -200,9 +206,9 @@ export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
     if (openDateId === dateId) setOpenDateId(null)
   }
 
-  return (
-    <DraftCard className="w-full">
-      <div className="mb-4">
+  const body = (
+    <>
+      <div className={embedded ? "mb-3" : "mb-4"}>
         <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-zinc-100">
           <MapPinned className="size-4 text-emerald-400" aria-hidden />
           Mapas por jornada
@@ -214,7 +220,7 @@ export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
         </DraftHint>
       </div>
 
-      <ul className="space-y-4">
+      <ul className={embedded ? "divide-y divide-border/50" : "space-y-4"}>
         {days.map((day, index) => {
           const dateId = day.id || ""
           const instance = currentMaps.find((item) => item.dateId === dateId)
@@ -225,7 +231,11 @@ export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
           return (
             <li
               key={dateId || `day-${index}`}
-              className="rounded-2xl border border-border/60 p-3 sm:p-4"
+              className={
+                embedded
+                  ? "py-3 first:pt-0 last:pb-0"
+                  : "rounded-2xl border border-border/60 p-3 sm:p-4"
+              }
             >
               <div className="mb-3 flex items-start justify-between gap-2">
                 <p className="min-w-0 text-sm font-semibold text-slate-800 dark:text-zinc-100">
@@ -308,8 +318,14 @@ export function EventEditorV2SeatingMap({ eventId }: { eventId: string }) {
           setOpenDateId(null)
         }}
       />
-    </DraftCard>
+    </>
   )
+
+  if (embedded) {
+    return <section className="w-full min-w-0">{body}</section>
+  }
+
+  return <DraftCard className="w-full">{body}</DraftCard>
 }
 
 function EmptyDayMapActions({

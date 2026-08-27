@@ -276,7 +276,12 @@ export function EventEditorV2({
                   revealField={revealField}
                 />
               ) : null}
-              {step === 2 ? <EventEditorV2InventoryStep eventId={eventId} /> : null}
+              {step === 2 ? (
+                <EventEditorV2InventoryStep
+                  eventId={eventId}
+                  revealField={revealField}
+                />
+              ) : null}
               {step === 3 ? (
                 <EventEditorV2LaunchStep
                   isPublished={nowPublished}

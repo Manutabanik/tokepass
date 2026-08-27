@@ -57,7 +57,11 @@ const KIND_BADGE: Record<
   },
 }
 
-export function InventorySummaryTable() {
+export function InventorySummaryTable({
+  embedded = false,
+}: {
+  embedded?: boolean
+}) {
   const { labels } = useDraftArchetype()
   const { control, getValues, setValue } = useFormContext<EventDraftV2>()
   const tickets = useWatch({ control, name: "tickets" }) ?? []
@@ -237,9 +241,8 @@ export function InventorySummaryTable() {
     }
   }
 
-  return (
-    <DraftCard className="w-full min-w-0">
-      <Accordion className="w-full">
+  const body = (
+      <Accordion keepMounted className="w-full">
         <AccordionItem value="ledger" className="border-0">
           <AccordionTrigger className="py-1 hover:no-underline">
             <span className="flex min-w-0 flex-1 items-center justify-between gap-3 pr-3">
@@ -471,8 +474,13 @@ export function InventorySummaryTable() {
           </AccordionContent>
         </AccordionItem>
       </Accordion>
-    </DraftCard>
   )
+
+  if (embedded) {
+    return <div className="w-full min-w-0">{body}</div>
+  }
+
+  return <DraftCard className="w-full min-w-0">{body}</DraftCard>
 }
 
 function LedgerMapRowMenu({
