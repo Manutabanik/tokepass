@@ -1,7 +1,6 @@
 "use client"
 
-import { Eye, Rocket } from "lucide-react"
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { FormProvider, useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 
@@ -9,17 +8,30 @@ import {
   EventEditorV2StickyHeader,
   type EditorV2StepId,
 } from "./event-editor-v2-chrome"
+import { EventEditorV2StickyFooter } from "./event-editor-v2-footer"
 import { EventEditorV2InfoStep } from "./event-editor-v2-info"
 import { EventEditorV2InventoryStep } from "./event-editor-v2-inventory"
 import { EventEditorV2LaunchStep } from "./event-editor-v2-launch"
 import { EventEditorV2SuccessDialog } from "./event-editor-v2-success"
 import { getEventDraftV2, publishEventV2 } from "@/app/actions/events-v2"
+import { focusInvalidFormField } from "@/lib/errors/form-field"
 import { persistErrorUserMessage } from "@/lib/errors/persist-error"
 import { Button } from "@/components/ui/button"
 import { useEventDraftV2Persist } from "@/hooks/use-event-draft-v2-persist"
 import { useOrphanMapTicketGarbageCollector } from "@/hooks/use-orphan-map-ticket-gc"
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
 import { getArchetypeConfig, resolveDraftArchetype } from "@/lib/events/archetypes.config"
+import {
+  applyDraftIssuesToForm,
+  collectDraftPublishIssues,
+  editorStepsWithFieldErrors,
+  editorStepsWithIssues,
+  editorTabAlert,
+  firstDraftPublishIssue,
+  nextEditorStep,
+  prevEditorStep,
+  type EditorTabAlert,
+} from "@/lib/events/editor-v2-steps"
 import {
   DRAFT_LEAVE_GUARD_MESSAGE,
   draftInventoryDrifted,
@@ -28,11 +40,9 @@ import {
   shouldBlockDraftLeave,
 } from "@/lib/events/editor-v2-ux"
 import {
-  draftLaunchPreviewLabel,
   draftLaunchSubmitLabel,
   isDraftLaunchReady,
 } from "@/lib/events/launch-center-v2"
-import { cn } from "@/lib/utils"
 import {
   eventPublishDisabledReason,
   parseEventDraftV2,
@@ -105,22 +115,29 @@ export function EventEditorV2({
     isSubmitting: working,
     allowLeave,
   })
-  const actionsDisabled = !launchReady || working
   const launchBlockedReason = launchReady
     ? ""
     : eventPublishDisabledReason(getValues())
-  const publishTitle = launchReady
-    ? nowPublished
-      ? "Actualizar el evento publicado"
-      : "Subir el evento al catálogo"
-    : launchBlockedReason || "Completá el checklist del paso 3 para continuar."
-  const previewTitle = launchReady
-    ? nowPublished
-      ? "Abrir la ficha como la ve un comprador"
-      : "Guardar el borrador y probar la compra sin publicarlo"
-    : launchBlockedReason || "Completá el checklist del paso 3 para continuar."
   const publishLabel = draftLaunchSubmitLabel(nowPublished, busy === "publish")
-  const previewLabel = draftLaunchPreviewLabel(nowPublished, busy === "preview")
+  const fieldErrorSteps = editorStepsWithFieldErrors(formState.errors)
+  const schemaIssueSteps = useMemo(
+    () => editorStepsWithIssues(collectDraftPublishIssues(getValues())),
+    [getValues, watched],
+  )
+  const tabAlerts = useMemo(() => {
+    const alerts: Partial<Record<EditorV2StepId, EditorTabAlert>> = {}
+    for (const id of [1, 2, 3] as const) {
+      alerts[id] = editorTabAlert(id, { fieldErrorSteps, schemaIssueSteps })
+    }
+    return alerts
+  }, [fieldErrorSteps, schemaIssueSteps])
+
+  function goToIssue(stepId: EditorV2StepId, field?: string | null) {
+    setStep(stepId)
+    window.setTimeout(() => {
+      focusInvalidFormField(field)
+    }, 80)
+  }
 
   useUnsavedChanges(leaveBlocked, DRAFT_LEAVE_GUARD_MESSAGE, {
     interceptLinks: true,
@@ -170,7 +187,19 @@ export function EventEditorV2({
   }
 
   async function handlePublish() {
-    if (!launchReady || working || actionBusyRef.current) return
+    if (working || actionBusyRef.current) return
+    const issues = collectDraftPublishIssues(getValues())
+    if (issues.length > 0) {
+      applyDraftIssuesToForm(form.setError, issues)
+      const first = firstDraftPublishIssue(issues)
+      goToIssue(first?.step ?? 1, first?.name)
+      toast.error(
+        first?.message ||
+          launchBlockedReason ||
+          "Revisá los campos marcados antes de publicar.",
+      )
+      return
+    }
     actionBusyRef.current = true
     const wasPublished = nowPublished
     setBusy("publish")
@@ -204,57 +233,22 @@ export function EventEditorV2({
     }
   }
 
-  const previewAction = (
-    <Button
-      type="button"
-      variant="outline"
-      disabled={actionsDisabled}
-      title={previewTitle}
-      className="hidden h-12 min-h-12 shrink-0 md:inline-flex"
-      onClick={() => void handlePreviewDraft()}
-    >
-      <Eye className="size-4" aria-hidden />
-      {previewLabel}
-    </Button>
-  )
-
-  const primaryAction = (
-    <div className="fixed bottom-0 left-0 z-50 w-full border-t border-border bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:relative md:w-auto md:border-0 md:bg-transparent md:p-0">
-      <Button
-        type="button"
-        disabled={actionsDisabled}
-        title={publishTitle}
-        className={cn(
-          "h-12 min-h-12 w-full transition-all duration-200 md:w-auto",
-          launchReady
-            ? "bg-emerald-500 text-black hover:bg-emerald-400"
-            : "cursor-not-allowed opacity-50",
-        )}
-        onClick={() => void handlePublish()}
-      >
-        <Rocket className="size-4" aria-hidden />
-        {publishLabel}
-      </Button>
-    </div>
-  )
-
   return (
     <FormProvider {...form}>
       <OrphanMapTicketGarbageCollector />
-      <div className="w-full flex-1 overflow-x-hidden bg-background pb-20 text-foreground md:pb-0">
+      <div className="w-full flex-1 overflow-x-hidden bg-background pb-24 text-foreground">
         <EventEditorV2StickyHeader
           step={step}
           ticketsLabel={labels.tickets}
           badge={badge}
-          previewAction={previewAction}
-          primaryAction={primaryAction}
+          tabAlerts={tabAlerts}
           onStep={setStep}
           onRetrySave={
             saveStatus === "error" ? () => void persistDraft() : undefined
           }
         />
 
-        <div className="mx-auto max-w-5xl px-4 py-8 pb-20 sm:px-6 md:pb-8">
+        <div className="mx-auto max-w-5xl px-4 py-8 pb-24 sm:px-6">
           <div className="mb-8 min-w-0">
             <p className="text-xs font-bold tracking-[0.18em] text-emerald-400 uppercase">
               Editor
@@ -279,7 +273,6 @@ export function EventEditorV2({
                   launchReady={launchReady}
                   launchBlockedReason={launchBlockedReason}
                   onPreview={() => void handlePreviewDraft()}
-                  onLaunch={() => void handlePublish()}
                 />
               ) : null}
             </div>
@@ -303,6 +296,20 @@ export function EventEditorV2({
           </section>
         </div>
       </div>
+      <EventEditorV2StickyFooter
+        step={step}
+        busy={working}
+        publishLabel={publishLabel}
+        onBack={() => {
+          const previous = prevEditorStep(step)
+          if (previous) setStep(previous)
+        }}
+        onNext={() => {
+          const next = nextEditorStep(step)
+          if (next) setStep(next)
+        }}
+        onPublish={() => void handlePublish()}
+      />
       <EventEditorV2SuccessDialog
         open={successOpen}
         eventId={eventId}

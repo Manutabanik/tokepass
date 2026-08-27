@@ -2,8 +2,9 @@
 
 import { ArrowLeft, Rocket, Ticket, Type, WifiOff } from "lucide-react"
 import Link from "next/link"
-import type { ReactNode } from "react"
 
+import { EventEditorTabAlertDot } from "./event-editor-v2-footer"
+import type { EditorTabAlert } from "@/lib/events/editor-v2-steps"
 import type { DraftSaveBadgeTone } from "@/lib/events/editor-v2-ux"
 import { cn } from "@/lib/utils"
 
@@ -34,16 +35,14 @@ export function EventEditorV2StickyHeader({
   step,
   ticketsLabel,
   badge,
-  previewAction,
-  primaryAction,
+  tabAlerts,
   onStep,
   onRetrySave,
 }: {
   step: EditorV2StepId
   ticketsLabel: string
   badge: { label: string; tone: DraftSaveBadgeTone }
-  previewAction?: ReactNode
-  primaryAction?: ReactNode
+  tabAlerts?: Partial<Record<EditorV2StepId, EditorTabAlert>>
   onStep: (step: EditorV2StepId) => void
   onRetrySave?: () => void
 }) {
@@ -65,13 +64,20 @@ export function EventEditorV2StickyHeader({
           {EDITOR_V2_STEPS.map((item) => {
             const current = item.id === step
             const label = item.id === 2 ? ticketsLabel : item.label
+            const alert = tabAlerts?.[item.id] ?? null
             return (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => onStep(item.id)}
                 aria-current={current ? "step" : undefined}
-                aria-label={label}
+                aria-label={
+                  alert === "error"
+                    ? `${label}, con errores`
+                    : alert === "warn"
+                      ? `${label}, incompleto`
+                      : label
+                }
                 className={cn(
                   "inline-flex h-11 min-h-11 shrink-0 items-center gap-2 rounded-full border px-3 text-sm font-semibold transition-all duration-200",
                   current
@@ -81,6 +87,7 @@ export function EventEditorV2StickyHeader({
               >
                 <item.icon className="size-4 shrink-0" aria-hidden />
                 <span className="truncate">{label}</span>
+                <EventEditorTabAlertDot tone={alert} />
               </button>
             )
           })}
@@ -92,8 +99,6 @@ export function EventEditorV2StickyHeader({
           onRetry={badge.tone === "error" ? onRetrySave : undefined}
           className="hidden shrink-0 md:inline-flex"
         />
-        {previewAction}
-        {primaryAction}
       </div>
     </header>
   )
