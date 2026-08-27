@@ -81,7 +81,7 @@ export function EventEditorV2ScheduleFields() {
           : "Por defecto el evento dura un día. Agregá otra función si se repite en varias fechas."}
       </DraftHint>
 
-      <ul className="mt-5 space-y-3">
+      <ul className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
         {fields.map((field, index) => {
           const dayErrors = errors.schedule?.[index]
           const label = schedule[index]?.name?.trim() || `Día ${index + 1}`

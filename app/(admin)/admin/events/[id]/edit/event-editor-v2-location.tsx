@@ -2,7 +2,7 @@
 
 import { LoaderCircle, MapPinned, Search, X } from "lucide-react"
 import dynamic from "next/dynamic"
-import { useEffect, useId, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState, type ReactNode } from "react"
 import { useFormContext, useWatch } from "react-hook-form"
 
 import { useDraftArchetype } from "./event-editor-v2-archetype"
@@ -76,7 +76,13 @@ function matchGeorefName(rows: GeorefEntity[], name: string) {
   )
 }
 
-export function EventEditorV2LocationFields() {
+export function EventEditorV2LocationFields({
+  headerExtra,
+  hideFields = false,
+}: {
+  headerExtra?: ReactNode
+  hideFields?: boolean
+}) {
   const listboxId = useId()
   const { labels } = useDraftArchetype()
   const {
@@ -290,14 +296,19 @@ export function EventEditorV2LocationFields() {
   return (
     <DraftCard className="md:col-span-12">
       <div className="mb-5 flex flex-col items-start justify-between gap-3 sm:flex-row">
-        <div className="flex items-center gap-2">
-          <MapPinned className="size-4 text-emerald-400" aria-hidden />
-          <div>
-            <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-              {labels.venue}
-            </h2>
+        <div className="flex min-w-0 items-center gap-2">
+          <MapPinned className="size-4 shrink-0 text-emerald-400" aria-hidden />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
+                {labels.venue}
+              </h2>
+              {headerExtra}
+            </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Buscá la dirección y afiná el pin en el mapa.
+              {hideFields
+                ? "El acceso va por link. El mapa queda fuera del borrador."
+                : "Buscá la dirección y afiná el pin en el mapa."}
             </p>
           </div>
         </div>
@@ -314,7 +325,10 @@ export function EventEditorV2LocationFields() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+      <div
+        hidden={hideFields}
+        className="grid grid-cols-1 gap-5 md:grid-cols-2"
+      >
         <div className="grid gap-2 md:col-span-2">
           <DraftFieldLabel htmlFor="event-v2-venue-name" required className="text-sm">
             ¿Dónde es?
@@ -494,10 +508,11 @@ export function EventEditorV2LocationFields() {
         </div>
       </div>
 
-      {georefError ? (
+      {georefError && !hideFields ? (
         <p className="mt-3 text-xs text-red-500">{georefError}</p>
       ) : null}
 
+      {hideFields ? null : (
       <div className="relative z-0 mt-5 h-[300px] w-full overflow-hidden rounded-xl border border-slate-200 dark:border-zinc-800">
         <VenueLeafletMap
           coordinates={
@@ -509,8 +524,12 @@ export function EventEditorV2LocationFields() {
           zoom={location.lat != null ? 16 : 12}
         />
       </div>
+      )}
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+      <div
+        hidden={hideFields}
+        className="mt-3 flex flex-wrap items-center justify-between gap-2"
+      >
         <p className="text-xs text-muted-foreground">
           {location.lat != null && location.lng != null
             ? `Coordenadas: ${location.lat.toFixed(6)}, ${location.lng.toFixed(6)} · arrastrá el pin para afinar`

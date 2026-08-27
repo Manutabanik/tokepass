@@ -69,6 +69,7 @@ export function EventEditorV2({
   const [successOpen, setSuccessOpen] = useState(false)
   const [successUrl, setSuccessUrl] = useState("")
   const [successUpdated, setSuccessUpdated] = useState(false)
+  const [revealField, setRevealField] = useState<string | null>(null)
 
   const form = useForm<EventDraftV2>({
     defaultValues: initialDraft,
@@ -132,11 +133,17 @@ export function EventEditorV2({
     return alerts
   }, [fieldErrorSteps, schemaIssueSteps])
 
+  function goToStep(next: EditorV2StepId) {
+    setRevealField(null)
+    setStep(next)
+  }
+
   function goToIssue(stepId: EditorV2StepId, field?: string | null) {
+    setRevealField(field ?? null)
     setStep(stepId)
     window.setTimeout(() => {
       focusInvalidFormField(field)
-    }, 80)
+    }, 220)
   }
 
   useUnsavedChanges(leaveBlocked, DRAFT_LEAVE_GUARD_MESSAGE, {
@@ -242,7 +249,7 @@ export function EventEditorV2({
           ticketsLabel={labels.tickets}
           badge={badge}
           tabAlerts={tabAlerts}
-          onStep={setStep}
+          onStep={goToStep}
           onRetrySave={
             saveStatus === "error" ? () => void persistDraft() : undefined
           }
@@ -263,7 +270,12 @@ export function EventEditorV2({
 
           <section className="min-w-0">
             <div key={step} className="animate-in fade-in duration-200">
-              {step === 1 ? <EventEditorV2InfoStep eventId={eventId} /> : null}
+              {step === 1 ? (
+                <EventEditorV2InfoStep
+                  eventId={eventId}
+                  revealField={revealField}
+                />
+              ) : null}
               {step === 2 ? <EventEditorV2InventoryStep eventId={eventId} /> : null}
               {step === 3 ? (
                 <EventEditorV2LaunchStep
@@ -302,11 +314,11 @@ export function EventEditorV2({
         publishLabel={publishLabel}
         onBack={() => {
           const previous = prevEditorStep(step)
-          if (previous) setStep(previous)
+          if (previous) goToStep(previous)
         }}
         onNext={() => {
           const next = nextEditorStep(step)
-          if (next) setStep(next)
+          if (next) goToStep(next)
         }}
         onPublish={() => void handlePublish()}
       />
