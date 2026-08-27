@@ -7,6 +7,8 @@ import {
   countAvailableSeatsForCategory,
   isCategorySoldOut,
   resolveCategoryAvailability,
+  sectorStockFromSummary,
+  undatedSectorSummaryNumber,
 } from "./category-stock"
 
 function seat(
@@ -204,5 +206,27 @@ describe("isCategorySoldOut", () => {
     })
     assert.equal(open.isSoldOut, false)
     assert.equal(open.available, 1)
+  })
+})
+
+describe("undatedSectorSummaryNumber", () => {
+  it("drops the all-days summary on multi-day events", () => {
+    assert.equal(undatedSectorSummaryNumber(0, 2), undefined)
+    assert.equal(undatedSectorSummaryNumber(4, 1), 4)
+    assert.equal(undatedSectorSummaryNumber(null, 1), undefined)
+  })
+})
+
+describe("sectorStockFromSummary", () => {
+  it("uses a dated summary on multi-day events", () => {
+    const stock = sectorStockFromSummary(
+      {
+        available: 3,
+        total: 10,
+        eventDateId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      },
+      2,
+    )
+    assert.deepEqual(stock, { available: 3, total: 10 })
   })
 })

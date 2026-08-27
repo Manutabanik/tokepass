@@ -80,6 +80,17 @@ describe("hybrid cart quote", () => {
     assert.equal(mappedRpc.sector_key, null)
     assert.equal(mappedRpc.zone_id, null)
   })
+
+  it("keeps the jornada on a mapped reserve item", () => {
+    const friday = "550e8400-e29b-41d4-a716-446655440001"
+    const rpc = toReserveRpcItem({
+      ...mapped,
+      eventDateId: friday,
+      event_date_id: friday,
+    })
+    assert.equal(rpc.event_date_id, friday)
+    assert.equal(rpc.eventDateId, friday)
+  })
 })
 
 describe("trustedReserveZoneHints", () => {

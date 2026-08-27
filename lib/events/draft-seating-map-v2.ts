@@ -1,3 +1,5 @@
+import { pruneDraftScheduleBindings } from "@/lib/events/draft-schedule-bindings"
+import type { EventDraftV2ScheduleDay } from "@/lib/events/draft-schedule-slots-v2"
 import { collectLiveSeatingSectorIds } from "@/lib/events/sanitize-ticket-tiers"
 import {
   collectNamedMapSectorIds,
@@ -330,6 +332,8 @@ type SanitizableDraftTicket = {
   seatingSectorId?: string | null
   seating_sector_id?: string | null
   layoutType?: string
+  slotId?: string
+  validDayIds?: string[]
 }
 
 function firstNonEmptySectorId(...values: unknown[]): string {
@@ -405,10 +409,9 @@ export function sanitizeDraftTicketsForPersist<T extends SanitizableDraftTicket>
   const healed = options.mapActive
     ? healTicketsSeatingSectors(tickets, options.liveSectors ?? [])
     : tickets
-  const collected = garbageCollectDraftTickets(
-    healed,
-    options.mapActive ? live : [],
-  )
+  const collected = options.mapActive
+    ? garbageCollectDraftTickets(healed, live)
+    : healed
   return collected.map((ticket) => {
     const explicitGeneral = ticket.source === "general"
     if (!options.mapActive || explicitGeneral) {
@@ -418,6 +421,7 @@ export function sanitizeDraftTicketsForPersist<T extends SanitizableDraftTicket>
         sectorId: "",
         seatingSectorId: null,
         seating_sector_id: null,
+        layoutType: "general",
       }
     }
     return ticket
@@ -428,21 +432,23 @@ export function sanitizeEventDraftForPersist<
   T extends {
     tickets?: SanitizableDraftTicket[]
     extras?: SanitizableDraftTicket[]
-    seatingMaps?: Array<{ mapConfig?: unknown }> | null
+    seatingMaps?: Array<{ mapConfig?: unknown; dateId?: string }> | null
     seatingMap?: unknown
+    schedule?: EventDraftV2ScheduleDay[]
   },
 >(draft: T): T {
-  const mapActive = draftHasActiveSeatingMap(draft)
-  const liveSectors = collectDraftLiveSectors(draft)
+  const pruned = pruneDraftScheduleBindings(draft)
+  const mapActive = draftHasActiveSeatingMap(pruned)
+  const liveSectors = collectDraftLiveSectors(pruned)
   const liveSectorIds = liveSectors.map((sector) => sector.id)
   return {
-    ...draft,
-    tickets: sanitizeDraftTicketsForPersist(draft.tickets ?? [], {
+    ...pruned,
+    tickets: sanitizeDraftTicketsForPersist(pruned.tickets ?? [], {
       mapActive,
       liveSectorIds,
       liveSectors,
     }),
-    extras: sanitizeDraftTicketsForPersist(draft.extras ?? [], {
+    extras: sanitizeDraftTicketsForPersist(pruned.extras ?? [], {
       mapActive: false,
       liveSectorIds: [],
     }),

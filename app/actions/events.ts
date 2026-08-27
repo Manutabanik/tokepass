@@ -28,6 +28,10 @@ import {
   serializeVenueMap,
   type InteractiveVenueMap,
 } from "@/types/venue-map"
+import { assertDraftMapLayoutImmutable } from "@/lib/events/assert-draft-map-immutability"
+import { draftLayoutSourceFromSavedVenueMap } from "@/lib/events/draft-map-immutability-v2"
+import { hardReplacePublishedSeatingMaps } from "@/lib/events/hard-replace-seating-maps-v2"
+import { seatingMapsFromSavedVenueMap } from "@/lib/events/publish-seating-inventory"
 import {
   venueMapHasInventory,
   venueMapToSeatingLayout,
@@ -46,9 +50,9 @@ import { mapUnknownError } from "@/lib/errors/error-handler"
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import type { AppErrorCode } from "@/lib/errors/app-error"
 import {
-  isZodLikeError,
   logPersistError,
   persistErrorLogLabel,
+  persistErrorUserMessage,
   type PersistErrorSource,
 } from "@/lib/errors/persist-error"
 import { fieldFromAppError } from "@/lib/errors/form-field"
@@ -236,10 +240,7 @@ function persistFailure(error: unknown): {
   wizardConflict?: WizardConflict
 } {
   const source = logPersistError("event-persist", error)
-  const message = isZodLikeError(error)
-    ? error.issues[0]?.message?.trim() || formatSupabaseError(error)
-    : formatSupabaseError(error)
-  console.log("PERSIST FAILURE:", message, error)
+  const message = persistErrorUserMessage(error)
   logger.error({
     context: "event-persist",
     message: persistErrorLogLabel(source),
@@ -1137,13 +1138,43 @@ export async function saveVenueMapOnly(
   const parsedMap = parseVenueMap(venueMapData)
   const seatingLayout = venueMapToSeatingLayout(parsedMap) as unknown as Json
   const now = new Date().toISOString()
-  const { data: eventRow, error: eventReadError } = await mutationClient
-    .from("events")
-    .select("venue_id")
-    .eq("id", id)
-    .maybeSingle()
+  const [{ data: eventRow, error: eventReadError }, schedules] = await Promise.all([
+    mutationClient.from("events").select("venue_id").eq("id", id).maybeSingle(),
+    mutationClient
+      .from("event_schedules")
+      .select("id")
+      .eq("event_id", id)
+      .order("start_time", { ascending: true }),
+  ])
   if (eventReadError) {
     return { success: false, error: formatSupabaseError(eventReadError) }
+  }
+  if (schedules.error) {
+    return { success: false, error: formatSupabaseError(schedules.error) }
+  }
+  const scheduleDayIds = (schedules.data ?? []).map((row) => row.id)
+  const inventoryMaps = seatingMapsFromSavedVenueMap({
+    mapConfig: payload,
+    seatingLayout,
+    scheduleDayIds,
+  })
+  if (!inventoryMaps.ok) {
+    return {
+      success: false,
+      error:
+        "Este evento tiene varias jornadas. Editá el mapa de cada día en el editor y publicá.",
+    }
+  }
+
+  const locked = await assertDraftMapLayoutImmutable({
+    eventId: id,
+    draft: draftLayoutSourceFromSavedVenueMap({
+      map: parsedMap,
+      scheduleDayIds,
+    }),
+  })
+  if (!locked.ok) {
+    return { success: false, error: locked.error }
   }
 
   const mapPatch = {
@@ -1171,7 +1202,7 @@ export async function saveVenueMapOnly(
     return { success: false, error: formatSupabaseError(error) }
   }
 
-  if (eventRow?.venue_id) {
+  if (eventRow?.venue_id && scheduleDayIds.length < 2) {
     const venueWrite = await mutationClient
       .from("venues")
       .update({
@@ -1182,6 +1213,18 @@ export async function saveVenueMapOnly(
       .eq("id", eventRow.venue_id)
     if (venueWrite.error) {
       return { success: false, error: formatSupabaseError(venueWrite.error) }
+    }
+  }
+
+  try {
+    await hardReplacePublishedSeatingMaps({
+      eventId: id,
+      maps: inventoryMaps.maps,
+    })
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : formatSupabaseError(error),
     }
   }
 

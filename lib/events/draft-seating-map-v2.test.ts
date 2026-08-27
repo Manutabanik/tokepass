@@ -142,6 +142,39 @@ describe("draft seating map isolation", () => {
     )
   })
 
+  it("keeps extras with leftover seating_sector_id when the map is off", () => {
+    const extra = {
+      ...emptyEventDraftV2LineItem("extra-1"),
+      name: "Estacionamiento",
+      source: "",
+      seating_sector_id: "sector-fantasma",
+    }
+    const kept = sanitizeDraftTicketsForPersist([extra], {
+      mapActive: false,
+      liveSectorIds: [],
+    })
+    assert.equal(kept.length, 1)
+    assert.equal(kept[0]?.seating_sector_id, null)
+  })
+
+  it("converts map tickets to general instead of deleting them when the map is off", () => {
+    const mapTicket = {
+      ...emptyEventDraftV2LineItem("map-1"),
+      name: "Mesa VIP",
+      source: "map",
+      sectorId: "vip",
+      seating_sector_id: "vip",
+    }
+    const kept = sanitizeDraftTicketsForPersist([mapTicket], {
+      mapActive: false,
+      liveSectorIds: [],
+    })
+    assert.equal(kept.length, 1)
+    assert.equal(kept[0]?.source, "general")
+    assert.equal(kept[0]?.seating_sector_id, null)
+    assert.equal(kept[0]?.layoutType, "general")
+  })
+
   it("never deletes general or extra tickets without seating_sector_id", () => {
     const general = {
       ...emptyEventDraftV2LineItem("vip-1"),

@@ -173,3 +173,35 @@ export function getCategoryAvailability(input: CategoryStockInput) {
 export function isCategorySoldOut(input: CategoryStockInput) {
   return resolveCategoryAvailability(input).isSoldOut
 }
+
+/**
+ * `get_event_seating_sector_summary` groups every jornada together.
+ * On multi-day events that number cannot mark Saturday sold out.
+ */
+export function undatedSectorSummaryNumber(
+  value: number | null | undefined,
+  scheduleDayCount: number,
+): number | undefined {
+  if (scheduleDayCount >= 2) return undefined
+  return typeof value === "number" ? value : undefined
+}
+
+/** Use a per-jornada summary when present; otherwise ignore mixed-day totals. */
+export function sectorStockFromSummary(
+  summary:
+    | { available: number; total?: number; eventDateId?: string | null }
+    | undefined,
+  scheduleDayCount: number,
+): { available?: number; total?: number } {
+  if (!summary) return {}
+  if (summary.eventDateId) {
+    return {
+      available: summary.available,
+      ...(typeof summary.total === "number" ? { total: summary.total } : {}),
+    }
+  }
+  return {
+    available: undatedSectorSummaryNumber(summary.available, scheduleDayCount),
+    total: undatedSectorSummaryNumber(summary.total, scheduleDayCount),
+  }
+}

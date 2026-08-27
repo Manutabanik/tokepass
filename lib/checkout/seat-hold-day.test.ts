@@ -3,15 +3,25 @@ import { describe, it } from "node:test"
 
 import {
   MISSING_EVENT_DATE_ID,
+  MISSING_EVENT_DATE_ID_MESSAGE,
   asHoldEventDateId,
   requireHoldEventDateId,
   seatingUnitMatchesEventDate,
+  filterSeatingUnitsForRequestedDay,
+  pickSeatingUnitRowForRequestedDay,
   storefrontItemMatchesSchedule,
   storefrontSelectionKey,
 } from "./seat-hold-day"
 
 const dayA = "550e8400-e29b-41d4-a716-446655440001"
 const dayB = "550e8400-e29b-41d4-a716-446655440002"
+
+describe("MISSING_EVENT_DATE_ID_MESSAGE", () => {
+  it("speaks to the buyer, not the debugger", () => {
+    assert.match(MISSING_EVENT_DATE_ID_MESSAGE, /día del evento/)
+    assert.doesNotMatch(MISSING_EVENT_DATE_ID_MESSAGE, /seat-hold|event_date_id/)
+  })
+})
 
 describe("asHoldEventDateId", () => {
   it("keeps real jornadas and drops full-pass tabs", () => {
@@ -81,6 +91,12 @@ describe("storefrontItemMatchesSchedule", () => {
       false,
     )
     assert.equal(storefrontItemMatchesSchedule({ id: "seat-1" }, dayA), true)
+    assert.equal(
+      storefrontItemMatchesSchedule({ id: "seat-1" }, dayA, {
+        scheduleDayCount: 2,
+      }),
+      false,
+    )
   })
 })
 
@@ -98,5 +114,89 @@ describe("seatingUnitMatchesEventDate", () => {
       seatingUnitMatchesEventDate({ event_date_id: null, day_id: null }, dayA),
       true,
     )
+    assert.equal(
+      seatingUnitMatchesEventDate(
+        { event_date_id: null, day_id: null },
+        dayA,
+        { scheduleDayCount: 2 },
+      ),
+      false,
+    )
+    assert.equal(
+      seatingUnitMatchesEventDate({ event_date_id: dayA }, null, {
+        scheduleDayCount: 2,
+      }),
+      false,
+    )
+  })
+})
+
+describe("filterSeatingUnitsForRequestedDay", () => {
+  it("keeps undated units on a single-day event", () => {
+    const units = filterSeatingUnitsForRequestedDay(
+      [
+        { id: "a", eventDateId: null },
+        { id: "b", eventDateId: dayA },
+      ],
+      dayA,
+      1,
+    )
+    assert.deepEqual(
+      units.map((unit) => unit.id),
+      ["a", "b"],
+    )
+  })
+
+  it("keeps only the selected jornada on a multi-day event", () => {
+    const units = filterSeatingUnitsForRequestedDay(
+      [
+        { id: "undated", eventDateId: null },
+        { id: "fri", eventDateId: dayA },
+        { id: "sat", eventDateId: dayB },
+      ],
+      dayB,
+      2,
+    )
+    assert.deepEqual(
+      units.map((unit) => unit.id),
+      ["sat"],
+    )
+  })
+
+  it("returns nothing when a multi-day event has no selected jornada", () => {
+    assert.deepEqual(
+      filterSeatingUnitsForRequestedDay(
+        [{ id: "fri", eventDateId: dayA }],
+        null,
+        2,
+      ),
+      [],
+    )
+  })
+})
+
+describe("pickSeatingUnitRowForRequestedDay", () => {
+  it("prefers the dated unit and still accepts undated on one jornada", () => {
+    const picked = pickSeatingUnitRowForRequestedDay(
+      [
+        { id: "undated", event_date_id: null },
+        { id: "dated", event_date_id: dayA },
+      ],
+      dayA,
+      1,
+    )
+    assert.equal(picked?.id, "dated")
+  })
+
+  it("never returns Saturday when Friday is requested", () => {
+    const picked = pickSeatingUnitRowForRequestedDay(
+      [
+        { id: "undated", event_date_id: null },
+        { id: "sat", event_date_id: dayB },
+      ],
+      dayA,
+      2,
+    )
+    assert.equal(picked, null)
   })
 })

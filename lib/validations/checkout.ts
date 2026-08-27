@@ -167,6 +167,9 @@ function normalizeIncomingCartItem(raw: unknown) {
       item.is_mapped_selection,
       item.isMappedSelection,
     ),
+    eventDateId: firstString(item.eventDateId, item.event_date_id, item.dateId),
+    event_date_id: firstString(item.event_date_id, item.eventDateId, item.dateId),
+    dateId: firstString(item.dateId, item.eventDateId, item.event_date_id),
   }
 }
 
@@ -202,6 +205,9 @@ export const CheckoutGeneralItemSchema = z.object({
   is_numbered: z.boolean().optional(),
   isMappedSelection: z.boolean().optional(),
   is_mapped_selection: z.boolean().optional(),
+  eventDateId: z.string().uuid(UUID_ERROR).optional().nullable(),
+  event_date_id: z.string().uuid(UUID_ERROR).optional().nullable(),
+  dateId: z.string().uuid(UUID_ERROR).optional().nullable(),
 })
 
 export const CheckoutMappedItemSchema = z
@@ -226,6 +232,9 @@ export const CheckoutMappedItemSchema = z
     is_numbered: z.boolean().optional(),
     isMappedSelection: z.boolean().optional(),
     is_mapped_selection: z.boolean().optional(),
+    eventDateId: z.string().uuid(UUID_ERROR).optional().nullable(),
+    event_date_id: z.string().uuid(UUID_ERROR).optional().nullable(),
+    dateId: z.string().uuid(UUID_ERROR).optional().nullable(),
   })
   .superRefine((item, ctx) => {
     if (item.isNumbered === false || item.is_numbered === false) return
@@ -474,6 +483,9 @@ export type CheckoutCartItemInput = {
   is_numbered?: boolean
   isMappedSelection?: boolean
   is_mapped_selection?: boolean
+  eventDateId?: string | null
+  event_date_id?: string | null
+  dateId?: string | null
 }
 export type CheckoutAddonItem = CheckoutPayload["addons"][number]
 

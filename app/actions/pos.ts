@@ -2,11 +2,16 @@
 
 import { revalidatePath } from "next/cache"
 
+import {
+  asHoldEventDateId,
+  pickSeatingUnitRowForRequestedDay,
+} from "@/lib/checkout/seat-hold-day"
 import { eventAcceptsPosPayments } from "@/lib/events/checkout-policy"
 import { isSandboxEventStatus } from "@/lib/events/review-status"
 import { findScheduleDay, parseScheduleDays } from "@/lib/event-schedule"
 import { orderTestFlags } from "@/lib/finance/order-test-flags"
 import { assertEventOpsAccess, listOperableEvents } from "@/lib/event-ops-access"
+import { layoutRequiresSeatSelection } from "@/lib/checkout/revalidate-seat-holds"
 import { toPosUserError } from "@/lib/errors/commerce-errors"
 import {
   requeuePosIssueNotifications,
@@ -33,8 +38,12 @@ import {
   PosSupervisorPinSchema,
   VoidPosOrderSchema,
   formatPosValidationError,
+  type PosSaleRequest,
 } from "@/lib/validations/pos"
+import { hasInteractiveVenueMap } from "@/lib/seating/venue-map-geometry"
 import type { PaymentMethod, QrType } from "@/types/database"
+import type { InteractiveVenueMap } from "@/types/venue-map"
+import { parseVenueMap } from "@/types/venue-map"
 
 export type TicketZReport = {
   shiftId: string
@@ -427,6 +436,123 @@ export async function getPosEvents(): Promise<PosEventOption[]> {
   })
 }
 
+export type PosSeatingCatalog = {
+  days: Array<{ id: string; label: string }>
+  seatingMaps: Array<{ eventDateId: string | null; map: InteractiveVenueMap }>
+  fallbackMap: InteractiveVenueMap | null
+}
+
+function formatPosScheduleLabel(input: {
+  title?: string | null
+  start_time?: string | null
+}): string {
+  const title = input.title?.trim()
+  if (title) return title
+  const start = input.start_time ? new Date(input.start_time) : null
+  if (start && Number.isFinite(start.getTime())) {
+    return start.toLocaleDateString("es-AR", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    })
+  }
+  return "Jornada"
+}
+
+export async function getPosSeatingCatalog(
+  eventId: string,
+): Promise<PosSeatingCatalog | null> {
+  const cleanEvent = eventId.trim()
+  if (!cleanEvent) return null
+  const access = await assertEventOpsAccess(cleanEvent, [...POS_STAFF_ROLES])
+  if (!access.ok) return null
+
+  const supabase = await createClient()
+  const [schedules, maps, event] = await Promise.all([
+    supabase
+      .from("event_schedules")
+      .select("id, title, start_time")
+      .eq("event_id", cleanEvent)
+      .order("start_time", { ascending: true }),
+    supabase
+      .from("seating_maps")
+      .select("event_date_id, map_config")
+      .eq("event_id", cleanEvent),
+    supabase
+      .from("events")
+      .select("venue_map")
+      .eq("id", cleanEvent)
+      .maybeSingle(),
+  ])
+
+  const days = (schedules.data ?? []).map((row) => ({
+    id: row.id,
+    label: formatPosScheduleLabel(row),
+  }))
+  const seatingMaps: PosSeatingCatalog["seatingMaps"] = []
+  for (const row of maps.data ?? []) {
+    const parsed = parseVenueMap(row.map_config)
+    if (!hasInteractiveVenueMap(parsed)) continue
+    seatingMaps.push({
+      eventDateId: row.event_date_id ?? null,
+      map: parsed,
+    })
+  }
+  const fallback = parseVenueMap(event.data?.venue_map)
+  return {
+    days,
+    seatingMaps,
+    fallbackMap: hasInteractiveVenueMap(fallback) ? fallback : null,
+  }
+}
+
+async function resolvePosMappedSeatingUnit(input: {
+  eventId: string
+  layoutItemId: string
+  tierId: string
+  eventDateId?: string | null
+}): Promise<string | null> {
+  const supabase = await createClient()
+  const { count } = await supabase
+    .from("event_schedules")
+    .select("id", { count: "exact", head: true })
+    .eq("event_id", input.eventId)
+  const scheduleDayCount = count ?? 0
+  const dateId = asHoldEventDateId(input.eventDateId)
+  if (scheduleDayCount >= 2 && !dateId) return null
+
+  let query = supabase
+    .from("event_seating_units")
+    .select("id, event_date_id")
+    .eq("event_id", input.eventId)
+    .eq("layout_item_id", input.layoutItemId)
+    .eq("tier_id", input.tierId)
+    .limit(8)
+  if (scheduleDayCount >= 2 && dateId) {
+    query = query.eq("event_date_id", dateId)
+  }
+  const { data, error } = await query
+  if (
+    error &&
+    /event_date_id|schema cache|PGRST204|42703/i.test(error.message)
+  ) {
+    if (scheduleDayCount >= 2) return null
+    const fallback = await supabase
+      .from("event_seating_units")
+      .select("id")
+      .eq("event_id", input.eventId)
+      .eq("layout_item_id", input.layoutItemId)
+      .eq("tier_id", input.tierId)
+      .limit(1)
+    return fallback.data?.[0]?.id ?? null
+  }
+  if (error || !data?.length) return null
+  return (
+    pickSeatingUnitRowForRequestedDay(data, dateId, scheduleDayCount)?.id ??
+    null
+  )
+}
+
 export async function getOpenCashierShift(
   eventId: string,
 ): Promise<CashierShiftRow | null> {
@@ -672,20 +798,9 @@ export async function getTicketZReport(
   return buildTicketZReport(mapShift(data as Parameters<typeof mapShift>[0]))
 }
 
-export async function createPosSale(input: {
-  eventId: string
-  tierId: string
-  quantity: number
-  paymentMethod: "cash" | "card" | "transfer" | "cash_pos" | "transfer_pos" | "card_pos"
-  customerPhone?: string | null
-  customerEmail?: string | null
-  customerDni?: string | null
-  customerName?: string | null
-  shiftId: string
-  supervisorPin?: string | null
-  seatingLayoutItemId?: string | null
-  seatingUnitId?: string | null
-}): Promise<PosSaleResult> {
+export async function createPosSale(
+  input: PosSaleRequest,
+): Promise<PosSaleResult> {
   try {
     const parsed = PosSaleInputSchema.safeParse(input)
     if (!parsed.success) {
@@ -735,8 +850,38 @@ export async function createPosSale(input: {
     const dni =
       rawDni.length >= 7 && rawDni.length <= 11 ? rawDni : "00000000"
 
-    const seatingLayoutItemId = sale.seatingLayoutItemId
-    const seatingUnitId = sale.seatingUnitId
+    let seatingLayoutItemId = sale.seatingLayoutItemId
+    let seatingUnitId = sale.seatingUnitId
+    if (seatingLayoutItemId && !seatingUnitId) {
+      seatingUnitId = await resolvePosMappedSeatingUnit({
+        eventId: sale.eventId,
+        layoutItemId: seatingLayoutItemId,
+        tierId: sale.tierId,
+        eventDateId: sale.eventDateId,
+      })
+      if (!seatingUnitId) {
+        return {
+          success: false,
+          error: "Esa ubicación no está publicada para la jornada elegida.",
+        }
+      }
+      seatingLayoutItemId = null
+    }
+
+    if (!seatingUnitId && !seatingLayoutItemId) {
+      const { data: saleTier } = await supabase
+        .from("ticket_tiers")
+        .select("layout_type")
+        .eq("id", sale.tierId)
+        .eq("event_id", sale.eventId)
+        .maybeSingle()
+      if (layoutRequiresSeatSelection(saleTier?.layout_type)) {
+        return {
+          success: false,
+          error: "Elegí una mesa o asiento en el plano para esa entrada.",
+        }
+      }
+    }
 
     const checkoutArgs = {
       p_event_id: sale.eventId,
@@ -751,6 +896,7 @@ export async function createPosSale(input: {
       p_supervisor_pin: sale.supervisorPin,
       p_seating_unit_id: seatingUnitId,
       p_seating_layout_item_id: seatingLayoutItemId,
+      p_event_date_id: asHoldEventDateId(sale.eventDateId),
     }
 
     const checkout = await supabase.rpc("process_pos_checkout_tx", checkoutArgs)

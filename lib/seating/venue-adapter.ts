@@ -418,7 +418,13 @@ export function stripSeatingLayoutItems(
 function layoutShellsFromSummaries(
   summaries: SeatingSectorSummary[],
 ): VenueSeatingLayout {
-  return summaries.map((summary) => ({
+  const seen = new Set<string>()
+  const unique = summaries.filter((summary) => {
+    if (seen.has(summary.sectorId)) return false
+    seen.add(summary.sectorId)
+    return true
+  })
+  return unique.map((summary) => ({
     id: summary.sectorId,
     sector_name: summary.sectorName,
     color: summary.color || "#f97316",

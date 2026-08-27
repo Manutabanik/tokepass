@@ -12,6 +12,7 @@ import {
   healTicketSeatingSector,
   type NamedMapSector,
 } from "@/lib/seating/stabilize-venue-map-ids"
+import { venueMapToSeatingLayout } from "@/lib/seating/venue-map-geometry"
 import { parseVenueMap } from "@/types/venue-map"
 import { parsePromoVideoUrl } from "@/lib/promo-video"
 import { calculateTierPricing } from "@/lib/pricing/flexible-pricing"
@@ -20,6 +21,7 @@ import {
   sumFreeTicketCapacity,
   type EventFeeConfig,
 } from "@/lib/pricing/event-fees"
+import { occurrenceIdsForDraftTicket } from "@/lib/events/draft-schedule-bindings"
 import {
   flattenDraftScheduleOccurrences,
   type DraftScheduleOccurrence,
@@ -30,6 +32,7 @@ import {
   eventPublishSchema,
   isEventDraftOnline,
   isMapDraftTicket,
+  parseEventDraftV2,
   resolveDraftSchedule,
   type EventDraftV2LineItem,
 } from "@/lib/validations/event-draft-v2"
@@ -109,6 +112,22 @@ export type PublishEventV2SeatingMap = {
   event_date_id: string | null
   map_config: Json
   pricing: Json
+  seating_layout?: Json
+}
+
+function seatingMapPayload(
+  event_date_id: string | null,
+  map_config: Json,
+  pricing: Json,
+): PublishEventV2SeatingMap {
+  return {
+    event_date_id,
+    map_config,
+    pricing,
+    seating_layout: venueMapToSeatingLayout(
+      parseVenueMap(map_config),
+    ) as unknown as Json,
+  }
 }
 
 export function formatEventPublishIssues(
@@ -124,6 +143,31 @@ export function asPublishUuid(value: unknown): string | null {
   if (typeof value !== "string") return null
   const id = value.trim()
   return UUID_RE.test(id) ? id : null
+}
+
+/** Draft days/slots may still be `slot-*`. Keep a stable UUID so day_id matches. */
+export function asPublishScheduleId(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const id = value.trim()
+  if (!id) return null
+  const uuid = asPublishUuid(id)
+  if (uuid) return uuid
+  let hash = 2166136261
+  const seed = `tokepass.schedule:${id}`
+  const bytes = new Uint8Array(16)
+  for (let i = 0; i < seed.length; i += 1) {
+    hash ^= seed.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  for (let i = 0; i < bytes.length; i += 1) {
+    hash ^= i + seed.charCodeAt(i % seed.length)
+    hash = Math.imul(hash, 16777619)
+    bytes[i] = (hash >>> 24) & 0xff
+  }
+  bytes[6] = (bytes[6]! & 0x0f) | 0x50
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("")
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 export function isPublishScheduleForeignKeyError(error: {
@@ -258,29 +302,29 @@ function mapLineItemToTier(
   }
 }
 
-function resolvePublishedTicketDayId(
+export function resolvePublishedTicketDayIds(
   item: { slotId?: string; validDayIds?: string[] },
   publishedDayIds: Set<string>,
   occurrences: DraftScheduleOccurrence[],
-): string | null {
-  const slotId = asPublishUuid(item.slotId)
-  if (slotId && publishedDayIds.has(slotId)) return slotId
+): string[] {
+  const slotId = asPublishScheduleId(item.slotId)
+  if (slotId && publishedDayIds.has(slotId)) return [slotId]
 
   const valid = (item.validDayIds ?? [])
     .map((id) => id.trim())
     .filter((id) => id.length > 0)
-  if (valid.length !== 1) return null
+  if (valid.length !== 1) return []
 
-  const only = asPublishUuid(valid[0])
-  if (only && publishedDayIds.has(only)) return only
+  const only = asPublishScheduleId(valid[0])
+  if (only && publishedDayIds.has(only)) return [only]
 
-  const matching = occurrences.filter(
-    (occurrence) =>
-      occurrence.dayId === valid[0] || occurrence.id === valid[0],
-  )
-  if (matching.length !== 1) return null
-  const occurrenceId = asPublishUuid(matching[0]?.id)
-  return occurrenceId && publishedDayIds.has(occurrenceId) ? occurrenceId : null
+  return [
+    ...new Set(
+      occurrenceIdsForDraftTicket(item, occurrences)
+        .map((id) => asPublishScheduleId(id))
+        .filter((id): id is string => id != null && publishedDayIds.has(id)),
+    ),
+  ]
 }
 
 export function composePublishDescription(input: {
@@ -373,6 +417,14 @@ function sanitizePublishedTicketSectors(
     )
     const sectorId = healed.seating_sector_id?.trim() || ""
     if (!sectorId || !live.has(sectorId)) {
+      if (
+        ticket.layout_type === "table_combo" ||
+        ticket.layout_type === "numbered_seat"
+      ) {
+        throw new Error(
+          `La ubicación "${ticket.name}" no está en el mapa. Revisá el mapa antes de publicar.`,
+        )
+      }
       return {
         ...ticket,
         seating_sector_id: null,
@@ -388,7 +440,9 @@ export function buildPublishEventV2Payload(
   draft: unknown,
   fee: EventFeeConfig = defaultEventFeeConfig(),
 ): PublishEventV2Payload {
-  const parsed = sanitizeEventDraftForPersist(eventPublishSchema.parse(draft))
+  const parsed = sanitizeEventDraftForPersist(
+    parseEventDraftV2(eventPublishSchema.parse(draft)),
+  )
   const title = parsed.basicInfo.name.trim()
   const isOnline = isEventDraftOnline(parsed)
   const venueName = (
@@ -425,7 +479,7 @@ export function buildPublishEventV2Payload(
   const scheduleDays =
     occurrences.length >= 2
       ? occurrences.map((item, index) => ({
-          id: asPublishUuid(item.id),
+          id: asPublishScheduleId(item.id),
           title: item.title.trim() || `Turno ${index + 1}`,
           start_time: draftDateToIso(item.startDateTime),
           end_time: draftDateToIso(item.endDateTime || item.startDateTime),
@@ -436,20 +490,23 @@ export function buildPublishEventV2Payload(
       .map((day) => day.id)
       .filter((id): id is string => Boolean(id)),
   )
-  const tickets = parsed.tickets
-    .map((item) => {
-      const mapped = mapLineItemToTier(item, "ticket", fee, absorbFees)
-      if (!mapped) return null
-      return {
-        ...mapped,
-        day_id: resolvePublishedTicketDayId(
-          item,
-          publishedDayIds,
-          occurrences,
-        ),
-      }
-    })
-    .filter((item): item is PublishEventV2TierPayload => item != null)
+  const tickets = parsed.tickets.flatMap((item): PublishEventV2TierPayload[] => {
+    const mapped = mapLineItemToTier(item, "ticket", fee, absorbFees)
+    if (!mapped) return []
+    const dayIds = resolvePublishedTicketDayIds(
+      item,
+      publishedDayIds,
+      occurrences,
+    )
+    if (dayIds.length === 0) {
+      return [{ ...mapped, day_id: null }]
+    }
+    return dayIds.map((day_id, index) => ({
+      ...mapped,
+      id: index === 0 ? mapped.id : null,
+      day_id,
+    }))
+  })
 
   if (tickets.length < 1) {
     throw new Error("Agregá al menos una entrada")
@@ -538,32 +595,31 @@ function publishSeatingMapsFromDraft(
     if (!published.venue_map) return []
     const pricing = (item.pricing ?? {}) as Json
     return resolvePublishedMapDayIds(item.dateId, occurrences).map(
-      (event_date_id) => ({
-        event_date_id,
-        map_config: published.venue_map as Json,
-        pricing,
-      }),
+      (event_date_id) =>
+        seatingMapPayload(event_date_id, published.venue_map as Json, pricing),
     )
   })
-  if (seating_maps.length === 0) {
+  const uniqueMaps: PublishEventV2SeatingMap[] = []
+  const seenDays = new Set<string>()
+  for (const map of seating_maps) {
+    const key = map.event_date_id ?? "__null__"
+    if (seenDays.has(key)) continue
+    seenDays.add(key)
+    uniqueMaps.push(map)
+  }
+  if (uniqueMaps.length === 0) {
     const published = publishVenueMapFromDraft(draft.seatingMap)
     return {
       seating_maps: published.venue_map
-        ? [
-            {
-              event_date_id: null,
-              map_config: published.venue_map,
-              pricing: {} as Json,
-            },
-          ]
+        ? [seatingMapPayload(null, published.venue_map, {} as Json)]
         : [],
       venue_map: published.venue_map,
       has_seating_plan: published.has_seating_plan,
     }
   }
   return {
-    seating_maps,
-    venue_map: seating_maps[0]?.map_config,
+    seating_maps: uniqueMaps,
+    venue_map: uniqueMaps[0]?.map_config,
     has_seating_plan: true,
   }
 }
@@ -582,8 +638,8 @@ function resolvePublishedMapDayIds(
   const published = [
     ...new Set(
       (matching.length > 0
-        ? matching.map((occurrence) => asPublishUuid(occurrence.id))
-        : [asPublishUuid(id)]
+        ? matching.map((occurrence) => asPublishScheduleId(occurrence.id))
+        : []
       ).filter((value): value is string => Boolean(value)),
     ),
   ]

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
+import { venueLayoutDrivesSeatingUnits } from "@/lib/events/publish-seating-inventory"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { Json } from "@/types/database"
@@ -108,7 +109,32 @@ async function rematerializeEventsForVenue(
     .from("events")
     .select("id")
     .eq("venue_id", venueId)
+  const eventIds = (events ?? []).map((row) => row.id)
+  if (eventIds.length === 0) return null
+
+  const [schedules, maps] = await Promise.all([
+    supabase.from("event_schedules").select("event_id").in("event_id", eventIds),
+    supabase.from("seating_maps").select("event_id").in("event_id", eventIds),
+  ])
+  if (schedules.error) return formatSupabaseError(schedules.error)
+  if (maps.error) return formatSupabaseError(maps.error)
+  const dayCount = new Map<string, number>()
+  for (const row of schedules.data ?? []) {
+    dayCount.set(row.event_id, (dayCount.get(row.event_id) ?? 0) + 1)
+  }
+  const mappedEvents = new Set(
+    (maps.data ?? []).map((row) => row.event_id).filter(Boolean),
+  )
+
   for (const row of events ?? []) {
+    if (
+      !venueLayoutDrivesSeatingUnits({
+        scheduleDayCount: dayCount.get(row.id) ?? 0,
+        hasPublishedSeatingMaps: mappedEvents.has(row.id),
+      })
+    ) {
+      continue
+    }
     const { error } = await supabase.rpc("materialize_event_seating_units", {
       p_event_id: row.id,
     })

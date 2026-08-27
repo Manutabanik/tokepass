@@ -77,6 +77,7 @@ type AdaptiveSeatingFlowProps = {
   onLoadAllUnits?: () => Promise<EventSeatingUnit[]>
   maxSelectable?: number | null
   heldSeatIds?: string[]
+  scheduleDayCount?: number
 }
 
 export function AdaptiveSeatingFlow({
@@ -105,6 +106,7 @@ export function AdaptiveSeatingFlow({
   onLoadAllUnits,
   maxSelectable = null,
   heldSeatIds = [],
+  scheduleDayCount = 0,
 }: AdaptiveSeatingFlowProps) {
   if (immersive && venueMap) {
     return (
@@ -125,6 +127,7 @@ export function AdaptiveSeatingFlow({
           occupancyBySeatId={occupancyBySeatId}
           priceBySectorId={priceBySectorId}
           heldSeatIds={heldSeatIds}
+          scheduleDayCount={scheduleDayCount}
           onSelectZone={(zone) => onSelectZone?.(zone)}
           onContinue={(seats) => {
             const seat = seats[0]
@@ -175,6 +178,7 @@ export function AdaptiveSeatingFlow({
         onContinue={onContinue}
         onLoadSectorUnits={onLoadSectorUnits}
         onLoadAllUnits={onLoadAllUnits}
+        scheduleDayCount={scheduleDayCount}
       />
     )
   }
@@ -193,6 +197,7 @@ export function AdaptiveSeatingFlow({
       onBack={onBack}
       onContinue={onContinue}
       onLoadSectorUnits={onLoadSectorUnits}
+      scheduleDayCount={scheduleDayCount}
     />
   )
 }
@@ -210,6 +215,7 @@ function MacroSeatingFlow({
   onContinue,
   onLoadSectorUnits,
   maxSelectable = null,
+  scheduleDayCount = 0,
 }: {
   map: InteractiveVenueMap
   eventId?: string | null
@@ -223,6 +229,7 @@ function MacroSeatingFlow({
   onContinue?: (selection: UniversalSeatSelection) => void
   onLoadSectorUnits?: (sectorId: string) => Promise<EventSeatingUnit[]>
   maxSelectable?: number | null
+  scheduleDayCount?: number
 }) {
   const [zoneId, setZoneId] = useState<string | null>(null)
   const [quantity, setQuantity] = useState(1)
@@ -604,6 +611,7 @@ function MacroSeatingFlow({
                 onSelectZone={handleSelectZone}
                 onContinue={handleCanvasContinue}
                 onBack={takeover ? undefined : onBack}
+                scheduleDayCount={scheduleDayCount}
               />
             )
           ) : (

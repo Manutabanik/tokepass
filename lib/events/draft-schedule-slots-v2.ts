@@ -41,7 +41,14 @@ function newId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID()
   }
-  return `slot-${Math.random().toString(16).slice(2, 10)}`
+  const bytes = new Uint8Array(16)
+  for (let i = 0; i < bytes.length; i += 1) {
+    bytes[i] = Math.floor(Math.random() * 256)
+  }
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("")
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 function asString(value: unknown): string {
@@ -235,8 +242,11 @@ export function flattenDraftScheduleOccurrences(
 ): DraftScheduleOccurrence[] {
   const occurrences: DraftScheduleOccurrence[] = []
   for (const day of days) {
-    const date = day.date.trim() || datePartFromDateTime(day.startDate)
-    const slots = (day.slots ?? []).filter((slot) => slot.startTime.trim())
+    const date =
+      (day.date ?? "").trim() || datePartFromDateTime(day.startDate ?? "")
+    const slots = (day.slots ?? []).filter((slot) =>
+      (slot.startTime ?? "").trim(),
+    )
     if (date && slots.length > 0) {
       for (const slot of slots) {
         occurrences.push({
@@ -251,11 +261,11 @@ export function flattenDraftScheduleOccurrences(
       }
       continue
     }
-    if (day.startDate.trim()) {
+    if ((day.startDate ?? "").trim()) {
       occurrences.push({
         id: day.id,
         dayId: day.id,
-        title: day.name.trim(),
+        title: (day.name ?? "").trim(),
         date: date || datePartFromDateTime(day.startDate),
         startDateTime: day.startDate,
         endDateTime: day.endDate || day.startDate,

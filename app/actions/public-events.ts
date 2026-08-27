@@ -50,6 +50,10 @@ import { fetchPublicOrganizerCard } from "@/lib/public-organizer"
 import { isEventUuid } from "@/lib/seo/site"
 import { decodeEventParam, eventSlugSuffix, uuidPrefixFromSlugSuffix } from "@/lib/seo/event-slug"
 import {
+  asHoldEventDateId,
+  filterSeatingUnitsForRequestedDay,
+} from "@/lib/checkout/seat-hold-day"
+import {
   applyActivePhaseToTier,
   isMissingPhasesSchema,
   mapPublicPhaseRow,
@@ -165,6 +169,10 @@ export type EventDetails = {
     | null
   /** El recinto tiene plano SVG (zonas, fondo o butacas) para el takeover B2C. */
   hasInteractiveMap: boolean
+  seatingMaps: Array<{
+    eventDateId: string | null
+    map: InteractiveVenueMap
+  }>
   seatingUnits: EventSeatingUnit[]
   seatingSectorSummaries: SeatingSectorSummary[]
   zoneTierPricing: Array<{
@@ -921,6 +929,28 @@ async function loadVenueMapJson(
   return data.venue_map
 }
 
+async function loadPublishedSeatingMaps(
+  supabase: PublicSupabase | Awaited<ReturnType<typeof createClient>>,
+  eventId: string,
+): Promise<Array<{ eventDateId: string | null; map: InteractiveVenueMap }>> {
+  const { data, error } = await supabase
+    .from("seating_maps")
+    .select("event_date_id, map_config")
+    .eq("event_id", eventId)
+  if (error || !Array.isArray(data)) return []
+  const maps: Array<{ eventDateId: string | null; map: InteractiveVenueMap }> =
+    []
+  for (const row of data) {
+    const parsed = parseVenueMap(row.map_config)
+    if (!hasInteractiveVenueMap(parsed)) continue
+    maps.push({
+      eventDateId: row.event_date_id ?? null,
+      map: parsed,
+    })
+  }
+  return maps
+}
+
 export async function getPublicEventVenueMap(
   eventId: string,
 ): Promise<InteractiveVenueMap | null> {
@@ -1297,10 +1327,17 @@ async function loadEventDetails(
   const seatingLayout = event.venues
     ? parsePublicSeatingLayout(event.venues.seating_layout)
     : []
-  const venueMap = await resolvePublicVenueMap(supabase, event, seatingLayout)
-  const hasInteractiveMap = eventNeedsInteractiveCanvas(venueMap, tiers, {
-    hasSeatingPlan: event.has_seating_plan,
-  })
+  const [venueMap, seatingMaps] = await Promise.all([
+    resolvePublicVenueMap(supabase, event, seatingLayout),
+    loadPublishedSeatingMaps(supabase, event.id),
+  ])
+  const hasInteractiveMap = eventNeedsInteractiveCanvas(
+    seatingMaps[0]?.map ?? venueMap,
+    tiers,
+    {
+      hasSeatingPlan: event.has_seating_plan,
+    },
+  )
 
   return {
     id: event.id,
@@ -1367,6 +1404,7 @@ async function loadEventDetails(
           }
         : null,
     hasInteractiveMap,
+    seatingMaps,
     seatingUnits: [],
     seatingSectorSummaries:
       rpcSummaries.length > 0
@@ -1638,6 +1676,7 @@ function mapAvailabilityUnit(unit: {
   capacity_per_unit: number
   status: string
   reserved_until: string | null
+  event_date_id?: string | null
 }): EventSeatingUnit {
   return {
     id: unit.id,
@@ -1665,47 +1704,95 @@ function mapAvailabilityUnit(unit: {
       return "available"
     })(),
     reservedUntil: unit.reserved_until,
+    eventDateId: unit.event_date_id ?? null,
   }
+}
+
+async function scheduleDayCountForEvent(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  eventId: string,
+): Promise<number> {
+  const { count } = await supabase
+    .from("event_schedules")
+    .select("id", { count: "exact", head: true })
+    .eq("event_id", eventId)
+  return count ?? 0
 }
 
 /** Inventario de un sector (lazy). No usar para el evento completo. */
 export async function getEventSeatingUnitsForSector(
   eventId: string,
   sectorId: string,
+  eventDateId?: string | null,
 ): Promise<EventSeatingUnit[]> {
   const cleanEvent = eventId.trim()
   const cleanSector = sectorId.trim()
+  const dateId = asHoldEventDateId(eventDateId)
   if (!cleanEvent || !cleanSector) return []
   if (!(await allowPublicStockRead())) return []
 
   const supabase = await createClient()
-  const { data, error } = await supabase.rpc(
-    "get_event_seating_units_by_sector",
-    {
+  const args = {
+    p_event_id: cleanEvent,
+    p_sector_id: cleanSector,
+    ...(dateId ? { p_event_date_id: dateId } : {}),
+  }
+  const [rpc, scheduleDayCount] = await Promise.all([
+    supabase.rpc("get_event_seating_units_by_sector", args),
+    scheduleDayCountForEvent(supabase, cleanEvent),
+  ])
+  let { data, error } = rpc
+  if (error && /p_event_date_id|PGRST202/i.test(error.message)) {
+    const retry = await supabase.rpc("get_event_seating_units_by_sector", {
       p_event_id: cleanEvent,
       p_sector_id: cleanSector,
-    },
-  )
+    })
+    data = retry.data
+    error = retry.error
+  }
 
   if (error || !data) return []
-  return data.map(mapAvailabilityUnit)
+  return filterSeatingUnitsForRequestedDay(
+    data.map(mapAvailabilityUnit),
+    dateId,
+    scheduleDayCount,
+  )
 }
 
 /** Ocupación de todo el evento (teatros). Evitar en festivales de miles de unidades. */
 export async function getEventSeatingAvailability(
   eventId: string,
+  eventDateId?: string | null,
 ): Promise<EventSeatingUnit[]> {
   const cleanEvent = eventId.trim()
+  const dateId = asHoldEventDateId(eventDateId)
   if (!cleanEvent) return []
   if (!(await allowPublicStockRead())) return []
 
   const supabase = await createClient()
-  const { data, error } = await supabase.rpc("get_event_seating_availability", {
+  const args = {
     p_event_id: cleanEvent,
-  })
+    ...(dateId ? { p_event_date_id: dateId } : {}),
+  }
+  const [rpc, scheduleDayCount] = await Promise.all([
+    supabase.rpc("get_event_seating_availability", args),
+    scheduleDayCountForEvent(supabase, cleanEvent),
+  ])
+  let { data, error } = rpc
+  if (error && /p_event_date_id|PGRST202/i.test(error.message)) {
+    const retry = await supabase.rpc("get_event_seating_availability", {
+      p_event_id: cleanEvent,
+    })
+    data = retry.data
+    error = retry.error
+  }
 
   if (error || !data) return []
-  return data.map(mapAvailabilityUnit)
+  return filterSeatingUnitsForRequestedDay(
+    data.map(mapAvailabilityUnit),
+    dateId,
+    scheduleDayCount,
+  )
 }
 
 const RELATED_POOL_LIMIT = 48

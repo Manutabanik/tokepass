@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { archetypeUsesTimeSlots } from "@/lib/events/archetypes.config"
+import { pruneDraftScheduleBindings } from "@/lib/events/draft-schedule-bindings"
 import {
   createDraftScheduleDay,
   createDraftScheduleSlot,
@@ -94,7 +95,15 @@ export function EventEditorV2ScheduleFields() {
                   size="icon"
                   className="absolute top-3 right-3 size-11 text-muted-foreground hover:text-red-500"
                   aria-label={`Eliminar ${label}`}
-                  onClick={() => remove(index)}
+                  onClick={() => {
+                    remove(index)
+                    const next = pruneDraftScheduleBindings(getValues())
+                    setValue("seatingMaps", next.seatingMaps ?? [], {
+                      shouldDirty: true,
+                    })
+                    setValue("tickets", next.tickets ?? [], { shouldDirty: true })
+                    setValue("extras", next.extras ?? [], { shouldDirty: true })
+                  }}
                 >
                   <Trash2 className="size-4" />
                 </Button>

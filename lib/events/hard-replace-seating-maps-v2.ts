@@ -1,28 +1,53 @@
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import { createAdminClient } from "@/lib/supabase/admin"
 import type { PublishEventV2SeatingMap } from "@/lib/events/publish-event-v2"
+import {
+  pickUnusedPublishedSeatingMapRow,
+  resolveHardReplaceSeatingMapDay,
+} from "@/lib/events/published-seating-map-match"
 
-const MISSING_SEATING_MAPS_RE =
-  /seating_maps|event_date_id|schema cache|PGRST205|PGRST204|42P01|42703/i
+const MISSING_SYNC_RPC_RE =
+  /sync_published_seating_maps|Could not find the function|PGRST202|42883/i
+
+export {
+  pickUnusedPublishedSeatingMapRow,
+  resolveHardReplaceSeatingMapDay,
+} from "@/lib/events/published-seating-map-match"
+
+function seatingMapsWriteError(error: { message: string }): Error {
+  return new Error(
+    /seating_maps|event_date_id|schema cache|PGRST205|PGRST204|42P01|42703/i.test(
+      error.message,
+    )
+      ? "Falta aplicar la migración de mapas por jornada (p160/p172) en Supabase."
+      : formatSupabaseError(error),
+  )
+}
 
 /**
  * Replace per-day map instances without deleting first.
- * Updates matching days, inserts missing ones, then removes leftovers so a
- * mid-flight failure cannot leave a published event without maps.
+ * Prefers the atomic RPC; if it is not deployed, writes row-by-row and
+ * fails closed on schema errors so publish never reports success without maps.
  */
 export async function hardReplacePublishedSeatingMaps(input: {
   eventId: string
   maps: PublishEventV2SeatingMap[]
 }): Promise<void> {
   const admin = createAdminClient()
+  const synced = await admin.rpc("sync_published_seating_maps", {
+    p_event_id: input.eventId,
+    p_maps: input.maps,
+  })
+  if (!synced.error) return
+  if (!MISSING_SYNC_RPC_RE.test(synced.error.message)) {
+    throw new Error(formatSupabaseError(synced.error))
+  }
+
   const existing = await admin
     .from("seating_maps")
     .select("id, event_date_id")
     .eq("event_id", input.eventId)
-  if (existing.error) {
-    if (MISSING_SEATING_MAPS_RE.test(existing.error.message)) return
-    throw new Error(formatSupabaseError(existing.error))
-  }
+  if (existing.error) throw seatingMapsWriteError(existing.error)
 
   const rows = existing.data ?? []
   const keepIds = new Set<string>()
@@ -33,10 +58,7 @@ export async function hardReplacePublishedSeatingMaps(input: {
       .from("seating_maps")
       .delete()
       .eq("event_id", input.eventId)
-    if (cleared.error) {
-      if (MISSING_SEATING_MAPS_RE.test(cleared.error.message)) return
-      throw new Error(formatSupabaseError(cleared.error))
-    }
+    if (cleared.error) throw seatingMapsWriteError(cleared.error)
     return
   }
 
@@ -48,21 +70,28 @@ export async function hardReplacePublishedSeatingMaps(input: {
   const dayIds = new Set((days.data ?? []).map((row) => row.id))
 
   for (const item of input.maps) {
-    const eventDateId =
-      item.event_date_id && dayIds.has(item.event_date_id)
-        ? item.event_date_id
-        : null
-    const match = rows.find((row) =>
-      eventDateId
-        ? row.event_date_id === eventDateId
-        : row.event_date_id == null,
+    const day = resolveHardReplaceSeatingMapDay({
+      requested: item.event_date_id,
+      dayIds,
+    })
+    if ("keepRequested" in day) {
+      throw new Error(
+        "El mapa de una jornada no coincide con el cronograma. Revisá las fechas y publicá de nuevo.",
+      )
+    }
+    const eventDateId = day.writeDateId
+    const match = pickUnusedPublishedSeatingMapRow(
+      rows,
+      eventDateId,
+      keepIds,
     )
     const payload = {
       event_id: input.eventId,
-      event_date_id: eventDateId,
       map_config: item.map_config,
       pricing: item.pricing,
+      seating_layout: item.seating_layout ?? [],
       updated_at: new Date().toISOString(),
+      event_date_id: eventDateId,
     }
     if (match) {
       const written = await admin
@@ -70,10 +99,7 @@ export async function hardReplacePublishedSeatingMaps(input: {
         .update(payload)
         .eq("id", match.id)
         .eq("event_id", input.eventId)
-      if (written.error) {
-        if (MISSING_SEATING_MAPS_RE.test(written.error.message)) return
-        throw new Error(formatSupabaseError(written.error))
-      }
+      if (written.error) throw seatingMapsWriteError(written.error)
       keepIds.add(match.id)
       continue
     }
@@ -83,10 +109,7 @@ export async function hardReplacePublishedSeatingMaps(input: {
       .insert(payload)
       .select("id")
       .maybeSingle()
-    if (inserted.error) {
-      if (MISSING_SEATING_MAPS_RE.test(inserted.error.message)) return
-      throw new Error(formatSupabaseError(inserted.error))
-    }
+    if (inserted.error) throw seatingMapsWriteError(inserted.error)
     if (inserted.data?.id) keepIds.add(inserted.data.id)
   }
 
@@ -97,8 +120,5 @@ export async function hardReplacePublishedSeatingMaps(input: {
     .delete()
     .eq("event_id", input.eventId)
     .in("id", stale)
-  if (removed.error) {
-    if (MISSING_SEATING_MAPS_RE.test(removed.error.message)) return
-    throw new Error(formatSupabaseError(removed.error))
-  }
+  if (removed.error) throw seatingMapsWriteError(removed.error)
 }

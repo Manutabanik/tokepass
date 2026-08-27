@@ -4,6 +4,12 @@ export type OccupancyRealtimeRow = {
   event_id?: string
   layout_item_id?: string
   status?: string
+  event_date_id?: string | null
+}
+
+export type OccupancyDayScope = {
+  eventDateId?: string | null
+  scheduleDayCount?: number
 }
 
 function statusToOccupancy(status: string | undefined): SeatStatus {
@@ -13,24 +19,45 @@ function statusToOccupancy(status: string | undefined): SeatStatus {
   return "occupied"
 }
 
+export function occupancyRowMatchesDay(
+  row: OccupancyRealtimeRow | null | undefined,
+  scope?: OccupancyDayScope,
+): boolean {
+  const selected = scope?.eventDateId?.trim() || ""
+  const rowDate = row?.event_date_id?.trim() || ""
+  const multi = (scope?.scheduleDayCount ?? 0) >= 2
+  if (multi) {
+    if (!selected) return false
+    return rowDate === selected
+  }
+  if (selected && rowDate && rowDate !== selected) return false
+  return true
+}
+
 export function occupancyPatchFromSeatingRow(
   row: OccupancyRealtimeRow | null,
+  scope?: OccupancyDayScope,
 ): Record<string, SeatStatus> | null {
-  if (!row) return null
+  if (!row || !occupancyRowMatchesDay(row, scope)) return null
   const layoutItemId = row.layout_item_id?.trim()
   if (!layoutItemId) return null
   return { [layoutItemId]: statusToOccupancy(row.status) }
 }
 
-export function occupancyPatchFromRealtimePayload(payload: {
-  eventType?: string
-  new?: OccupancyRealtimeRow | null
-  old?: OccupancyRealtimeRow | null
-}): Record<string, SeatStatus> | null {
+export function occupancyPatchFromRealtimePayload(
+  payload: {
+    eventType?: string
+    new?: OccupancyRealtimeRow | null
+    old?: OccupancyRealtimeRow | null
+  },
+  scope?: OccupancyDayScope,
+): Record<string, SeatStatus> | null {
   if (payload.eventType === "DELETE") {
-    const layoutItemId = payload.old?.layout_item_id?.trim()
+    const old = payload.old
+    if (!old || !occupancyRowMatchesDay(old, scope)) return null
+    const layoutItemId = old.layout_item_id?.trim()
     if (!layoutItemId) return null
     return { [layoutItemId]: "available" }
   }
-  return occupancyPatchFromSeatingRow(payload.new ?? null)
+  return occupancyPatchFromSeatingRow(payload.new ?? null, scope)
 }

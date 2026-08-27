@@ -80,6 +80,7 @@ export type SeatSelectionContext = {
     available: number
     total?: number
     tierId?: string | null
+    eventDateId?: string | null
   }>
 }
 

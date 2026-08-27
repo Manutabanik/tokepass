@@ -52,6 +52,7 @@ export const PosSaleInputSchema = z.object({
   shiftId: uuid,
   supervisorPin: optionalText(12),
   seatingLayoutItemId: optionalText(80),
+  eventDateId: z.string().uuid(UUID_ERROR).optional().nullable(),
   seatingUnitId: z
     .union([uuid, z.literal(""), z.null()])
     .optional()
@@ -137,6 +138,7 @@ export const DeliverPosTicketsSchema = z.object({
 })
 
 export type PosSaleInput = z.infer<typeof PosSaleInputSchema>
+export type PosSaleRequest = z.input<typeof PosSaleInputSchema>
 
 export function formatPosValidationError(error: z.ZodError): string {
   const first = error.issues[0]?.message?.trim()

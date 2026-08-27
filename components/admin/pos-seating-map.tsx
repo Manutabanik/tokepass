@@ -5,23 +5,28 @@ import { useEffect, useMemo, useState } from "react"
 import { LoaderCircle } from "lucide-react"
 import { toast } from "sonner"
 
+import { getEventSeatingAvailability } from "@/app/actions/public-events"
 import {
-  getEventSeatingAvailability,
-  getPublicEventVenueMap,
-} from "@/app/actions/public-events"
-import type { PosEventOption } from "@/app/actions/pos"
-import type { PosSeatPick } from "@/lib/pos-cart"
+  getPosSeatingCatalog,
+  type PosEventOption,
+  type PosSeatingCatalog,
+} from "@/app/actions/pos"
+import { posSeatPickMatchesDay, type PosSeatPick } from "@/lib/pos-cart"
 import { buildTierUnitPriceIndex } from "@/lib/checkout/tier-price-index"
+import { resolveLiveVenueMapForDay } from "@/lib/seating/live-venue-map-for-day"
 import { resolveTierIdForUniversalSector } from "@/lib/seating/venue-adapter"
 import { flattenVenueMapSeats } from "@/lib/seating/venue-map-geometry"
-import { occupancyFromSeatingUnits } from "@/lib/seating/venue-map-occupancy"
+import {
+  occupancyFromSeatingUnits,
+  seatingUnitsForOccupancyDay,
+} from "@/lib/seating/venue-map-occupancy"
 import { classifyZoneClick } from "@/lib/seating/map-click-target"
 import {
   storefrontItemFromElement,
   storefrontItemFromZone,
 } from "@/lib/seating/storefront-selection"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
-import type { InteractiveVenueMap, VenueMapElement } from "@/types/venue-map"
+import type { VenueMapElement } from "@/types/venue-map"
 
 const InteractiveSeatingCanvas = dynamic(
   () =>
@@ -33,18 +38,20 @@ const InteractiveSeatingCanvas = dynamic(
 
 export function PosSeatingMap({
   event,
-  heldSeatIds,
+  heldPicks,
   disabled = false,
   onToggleSeat,
 }: {
   event: PosEventOption
-  heldSeatIds: string[]
+  heldPicks: PosSeatPick[]
   disabled?: boolean
   onToggleSeat: (pick: PosSeatPick) => void
 }) {
+  const [catalog, setCatalog] = useState<PosSeatingCatalog | null>(null)
+  const [selectedDateId, setSelectedDateId] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<{
     eventId: string
-    map: InteractiveVenueMap | null
+    dateId: string | null
     occupancy: Record<string, SeatStatus>
   } | null>(null)
 
@@ -62,18 +69,53 @@ export function PosSeatingMap({
 
   useEffect(() => {
     let cancelled = false
-    void Promise.all([
-      getPublicEventVenueMap(event.id),
-      getEventSeatingAvailability(event.id),
-    ]).then(([venueMap, units]) => {
+    setCatalog(null)
+    setSelectedDateId(null)
+    setSnapshot(null)
+    void getPosSeatingCatalog(event.id).then((next) => {
+      if (cancelled || !next) return
+      setCatalog(next)
+      setSelectedDateId(next.days[0]?.id ?? null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [event.id])
+
+  const scheduleDayCount = catalog?.days.length ?? 0
+  const liveMap = useMemo(
+    () =>
+      catalog
+        ? resolveLiveVenueMapForDay({
+            selectedDateId,
+            scheduleDayCount,
+            seatingMaps: catalog.seatingMaps,
+            fallback: catalog.fallbackMap,
+          })
+        : null,
+    [catalog, scheduleDayCount, selectedDateId],
+  )
+
+  useEffect(() => {
+    if (!catalog) return
+    if (scheduleDayCount >= 2 && !selectedDateId) {
+      setSnapshot({ eventId: event.id, dateId: null, occupancy: {} })
+      return
+    }
+    let cancelled = false
+    void getEventSeatingAvailability(event.id, selectedDateId).then((units) => {
       if (cancelled) return
+      const scoped = seatingUnitsForOccupancyDay(units, {
+        eventDateId: selectedDateId,
+        scheduleDayCount,
+      })
       setSnapshot({
         eventId: event.id,
-        map: venueMap,
-        occupancy: venueMap
+        dateId: selectedDateId,
+        occupancy: liveMap
           ? occupancyFromSeatingUnits(
-              units,
-              flattenVenueMapSeats(venueMap).map((seat) => seat.id),
+              scoped,
+              flattenVenueMapSeats(liveMap).map((seat) => seat.id),
             )
           : {},
       })
@@ -81,12 +123,13 @@ export function PosSeatingMap({
     return () => {
       cancelled = true
     }
-  }, [event.id])
+  }, [catalog, event.id, liveMap, scheduleDayCount, selectedDateId])
 
-  const map = snapshot?.eventId === event.id ? snapshot.map : null
   const occupancy =
-    snapshot?.eventId === event.id ? snapshot.occupancy : {}
-  const loading = snapshot?.eventId !== event.id
+    snapshot?.eventId === event.id && snapshot.dateId === selectedDateId
+      ? snapshot.occupancy
+      : {}
+  const loading = !catalog || snapshot?.eventId !== event.id
 
   function resolvePick(
     seatId: string,
@@ -111,6 +154,7 @@ export function PosSeatingMap({
     const tier = event.tiers.find((item) => item.id === tierId)
     return {
       seatId,
+      eventDateId: selectedDateId,
       tierId,
       label,
       sectorName,
@@ -126,20 +170,48 @@ export function PosSeatingMap({
     )
   }
 
-  if (!map) {
+  if (scheduleDayCount >= 2 && !selectedDateId) {
     return (
       <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
-        Este evento no tiene un plano interactivo. Usa la vista rapida de
-        entradas.
+        Elegí la jornada para ver el plano.
+      </div>
+    )
+  }
+
+  if (!liveMap) {
+    return (
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+        Este evento no tiene un plano interactivo para esta jornada. Usa la
+        vista rapida de entradas.
       </div>
     )
   }
 
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-muted/30">
+      {catalog && catalog.days.length >= 2 ? (
+        <div className="absolute left-3 top-3 z-20 flex flex-wrap gap-1.5">
+          {catalog.days.map((day) => (
+            <button
+              key={day.id}
+              type="button"
+              onClick={() => setSelectedDateId(day.id)}
+              className={
+                day.id === selectedDateId
+                  ? "rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white"
+                  : "rounded-full border border-border bg-card/95 px-2.5 py-1 text-[11px] font-semibold text-foreground"
+              }
+            >
+              {day.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <InteractiveSeatingCanvas
-        map={map}
+        map={liveMap}
         eventId={event.id}
+        eventDateId={selectedDateId}
+        scheduleDayCount={scheduleDayCount}
         fillParent
         hideChrome
         hideToolbar
@@ -149,7 +221,11 @@ export function PosSeatingMap({
         pending={disabled}
         occupancyBySeatId={occupancy}
         priceBySectorId={priceBySectorId}
-        heldSeatIds={heldSeatIds}
+        heldSeatIds={heldPicks
+          .filter((pick) =>
+            posSeatPickMatchesDay(pick, selectedDateId, scheduleDayCount),
+          )
+          .map((pick) => pick.seatId)}
         posStatusColors
         maxSelectable={200}
         onContinue={() => undefined}
@@ -178,7 +254,7 @@ export function PosSeatingMap({
           else toast.error("No hay tipo de entrada para ese sector.")
         }}
         onSelectZone={(zone) => {
-          if (classifyZoneClick(zone, map) === "SECTOR_NUMERADO") {
+          if (classifyZoneClick(zone, liveMap) === "SECTOR_NUMERADO") {
             toast.error("Elegí una mesa o silla de este sector.")
             return
           }

@@ -46,4 +46,30 @@ describe("cartHasPurchasableItems", () => {
     assert.equal(cartHasPurchasableItems({ quantities: {}, selectedCount: 1 }), true)
     assert.equal(cartHasPurchasableItems({ quantities: { lima: 1 }, selectedCount: 0 }), true)
   })
+
+  it("accepts a mesa or numbered place without general ticket qty", () => {
+    assert.equal(
+      cartHasPurchasableItems({
+        quantities: { general: 0 },
+        selectedCount: 0,
+        seats: [{ id: "mesa-09" }],
+      }),
+      true,
+    )
+    assert.equal(
+      cartHasPurchasableItems({
+        quantities: {},
+        selectedItems: [{ id: "mesa-09", type: "table" }],
+      }),
+      true,
+    )
+    assert.equal(
+      cartHasPurchasableItems({
+        quantities: { general: 0 },
+        tickets: [],
+        seats: [],
+      }),
+      false,
+    )
+  })
 })

@@ -57,4 +57,50 @@ describe("cart item payload", () => {
     assert.equal("unit_price" in item, false)
     assert.equal("total" in item, false)
   })
+
+  it("keeps a mesa map node as a mapped line via element_id", () => {
+    const item = sanitizeCheckoutActionItem({
+      type: "mapped",
+      ticket_tier_id: tierId,
+      quantity: 1,
+      element_id: "mesa-09",
+      sectorKey: "vip",
+      tableNumber: 9,
+      price: 40000,
+    })
+    assert.equal(item.type, "mapped")
+    assert.equal(item.ticket_tier_id, tierId)
+    assert.equal(item.element_id, "mesa-09")
+    assert.equal(item.elementId, "mesa-09")
+    assert.equal(item.quantity, 1)
+    assert.equal("price" in item, false)
+  })
+
+  it("keeps element_id and jornada on the exclusive cart payload", () => {
+    const dayId = "550e8400-e29b-41d4-a716-446655440001"
+    const payload = toCartItemPayload({
+      ticket_tier_id: tierId,
+      element_id: "mesa-09",
+      eventDateId: dayId,
+      quantity: 1,
+      price: 40000,
+    })
+    assert.equal(payload.element_id, "mesa-09")
+    assert.equal(payload.event_date_id, dayId)
+    assert.equal("price" in payload, false)
+  })
+
+  it("keeps the jornada on a mapped mesa line", () => {
+    const dayId = "550e8400-e29b-41d4-a716-446655440001"
+    const item = sanitizeCheckoutActionItem({
+      type: "mapped",
+      ticket_tier_id: tierId,
+      quantity: 1,
+      element_id: "mesa-09",
+      eventDateId: dayId,
+    })
+    assert.equal(item.eventDateId, dayId)
+    assert.equal(item.event_date_id, dayId)
+    assert.equal(item.dateId, dayId)
+  })
 })

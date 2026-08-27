@@ -10,6 +10,7 @@ import {
   EDITOR_V2_AUTOSAVE_MS,
   EDITOR_V2_AUTOSAVE_TIMEOUT_MS,
   OFFLINE_SAVE_LABEL,
+  draftInventoryDrifted,
   draftSaveBadge,
   isDraftPersistTimeoutError,
   isInAppLeaveNavigation,
@@ -72,9 +73,41 @@ describe("shouldBlockDraftLeave", () => {
     )
     assert.equal(shouldBlockDraftLeave("saved"), false)
     assert.equal(shouldBlockDraftLeave("offline"), false)
+    assert.equal(shouldBlockDraftLeave("offline", { isDirty: true }), true)
     assert.equal(shouldBlockDraftLeave("idle"), false)
     assert.equal(shouldBlockDraftLeave("error"), false)
     assert.equal(shouldBlockDraftLeave("error", { isDirty: true }), true)
+  })
+})
+
+describe("draftInventoryDrifted", () => {
+  it("detects when persist rematched or converted ticket identities", () => {
+    const current = {
+      tickets: [
+        {
+          id: "map:vip",
+          source: "map",
+          sectorId: "vip",
+          layoutType: "table_combo",
+          slotId: "",
+        },
+      ],
+      extras: [],
+    }
+    const saved = {
+      tickets: [
+        {
+          id: "550e8400-e29b-41d4-a716-446655440099",
+          source: "map",
+          sectorId: "vip",
+          layoutType: "table_combo",
+          slotId: "",
+        },
+      ],
+      extras: [],
+    }
+    assert.equal(draftInventoryDrifted(current, saved), true)
+    assert.equal(draftInventoryDrifted(saved, saved), false)
   })
 })
 

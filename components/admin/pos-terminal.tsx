@@ -344,7 +344,11 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       if (picks.length > 0) {
         const last = picks[picks.length - 1]
         setSeatPicks((current) =>
-          current.filter((item) => item.seatId !== last.seatId),
+          current.filter(
+            (item) =>
+              item.seatId !== last.seatId ||
+              item.eventDateId !== last.eventDateId,
+          ),
         )
       }
     }
@@ -499,10 +503,12 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
             ? picks.map((pick) => ({
                 quantity: 1 as const,
                 seatingLayoutItemId: pick.seatId,
+                eventDateId: pick.eventDateId ?? null,
               }))
             : splitPosQuantity(line.quantity).map((quantity) => ({
                 quantity,
                 seatingLayoutItemId: null as string | null,
+                eventDateId: null as string | null,
               }))
         let leftover = line.quantity
 
@@ -519,6 +525,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
             shiftId: shift.id,
             supervisorPin: pin,
             seatingLayoutItemId: unit.seatingLayoutItemId,
+            eventDateId: unit.eventDateId,
           })
 
           if (!sale.success) {
@@ -1017,7 +1024,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
                 <PosSeatingMap
                   event={selectedEvent}
-                  heldSeatIds={seatPicks.map((pick) => pick.seatId)}
+                  heldPicks={seatPicks}
                   disabled={!canSell}
                   onToggleSeat={toggleMapSeat}
                 />

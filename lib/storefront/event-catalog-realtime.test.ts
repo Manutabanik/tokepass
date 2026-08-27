@@ -48,6 +48,7 @@ function sampleEvent(): EventDetails {
       venue_map: emptyVenueMap(),
     },
     hasInteractiveMap: false,
+    seatingMaps: [],
     seatingUnits: [],
     seatingSectorSummaries: [],
     zoneTierPricing: [

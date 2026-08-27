@@ -674,6 +674,7 @@ export function EventStorefront({
             seatingSectorSummaries={event.seatingSectorSummaries}
             seatingBackgroundUrl={event.venue?.seating_background_url}
             venueMap={event.venue?.venue_map ?? null}
+            seatingMaps={event.seatingMaps ?? []}
             hasInteractiveMap={hasInteractiveMap}
             seatingLayout={event.venue?.seating_layout ?? []}
             venueId={event.venue?.id}

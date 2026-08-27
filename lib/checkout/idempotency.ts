@@ -1,4 +1,5 @@
 import {
+  checkoutItemElementId,
   checkoutItemSeatId,
   checkoutItemTierId,
   isMappedCheckoutItem,
@@ -14,11 +15,13 @@ export const CHECKOUT_IN_PROGRESS_ERROR =
 export const CHECKOUT_IDEMPOTENCY_CART_MISMATCH_ERROR =
   "Tu carrito cambió. Actualizá e intentá de nuevo."
 
+/** Must match `checkoutTicketRowsFingerprint`. Day is implied by seating_unit_id. */
 export function checkoutCartFingerprint(items: CheckoutCartItem[]): string {
   return items
     .map((item) => {
       const mapped = isMappedCheckoutItem(item)
-      const seat = checkoutItemSeatId(item) ?? ""
+      const seat =
+        checkoutItemSeatId(item) ?? checkoutItemElementId(item) ?? ""
       const quantity = mapped ? 1 : Math.max(0, Math.floor(item.quantity) || 0)
       return `${mapped ? "m" : "g"}:${checkoutItemTierId(item)}:${quantity}:${seat}`
     })

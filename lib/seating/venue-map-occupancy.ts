@@ -1,3 +1,4 @@
+import { seatingUnitMatchesEventDate } from "@/lib/checkout/seat-hold-day"
 import {
   inventoryStateToSeatStatus,
   resolveInventorySeatState,
@@ -45,6 +46,48 @@ export function effectiveSeatingUnitStatus(
     return "available"
   }
   return status
+}
+
+/** Drop units that belong to another jornada before collapsing by layout_item_id. */
+export function seatingUnitsForOccupancyDay<
+  T extends { tierId?: string | null; eventDateId?: string | null },
+>(
+  units: readonly T[],
+  input: {
+    eventDateId?: string | null
+    dayTierIds?: ReadonlySet<string>
+    scheduleDayCount?: number
+  },
+): T[] {
+  const dateId = input.eventDateId?.trim() || ""
+  const dayTierIds = input.dayTierIds
+  const scheduleDayCount = input.scheduleDayCount ?? 0
+  const multi = scheduleDayCount >= 2
+  if (multi && !dateId) return []
+  const hasDatedUnits = units.some((unit) => Boolean(unit.eventDateId?.trim()))
+  return units.filter((unit) => {
+    if (
+      !seatingUnitMatchesEventDate(
+        { event_date_id: unit.eventDateId },
+        dateId || null,
+        { scheduleDayCount },
+      )
+    ) {
+      return false
+    }
+    if (!multi && dateId && hasDatedUnits && !unit.eventDateId?.trim()) {
+      return false
+    }
+    if (
+      dayTierIds &&
+      dayTierIds.size > 0 &&
+      unit.tierId &&
+      !dayTierIds.has(unit.tierId)
+    ) {
+      return false
+    }
+    return true
+  })
 }
 
 /** After a live occupancy fetch, unknown ids are occupied — never optimistic-available. */

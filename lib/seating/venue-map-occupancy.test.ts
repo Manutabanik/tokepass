@@ -6,6 +6,7 @@ import {
   hexToRgba,
   occupancyFromSeatingUnits,
   resolveLiveVenueSeatStatus,
+  seatingUnitsForOccupancyDay,
 } from "./venue-map-occupancy"
 
 describe("venue-map-occupancy", () => {
@@ -121,5 +122,85 @@ describe("venue-map-occupancy", () => {
       ["a-1"],
     )
     assert.equal(occupancy["a-1"], "available")
+  })
+
+  it("keeps occupancy of mesa-09 isolated to the selected jornada", () => {
+    const friday = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    const saturday = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    const units = seatingUnitsForOccupancyDay(
+      [
+        {
+          layoutItemId: "mesa-09",
+          tierId: friday,
+          eventDateId: friday,
+          status: "sold",
+        },
+        {
+          layoutItemId: "mesa-09",
+          tierId: saturday,
+          eventDateId: saturday,
+          status: "available",
+        },
+      ],
+      {
+        eventDateId: saturday,
+        dayTierIds: new Set([saturday]),
+      },
+    )
+    const occupancy = occupancyFromSeatingUnits(units)
+    assert.equal(units.length, 1)
+    assert.equal(occupancy["mesa-09"], "available")
+  })
+
+  it("does not let an undated mesa leak into a dated jornada", () => {
+    const saturday = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    const units = seatingUnitsForOccupancyDay(
+      [
+        {
+          layoutItemId: "mesa-09",
+          eventDateId: null,
+          status: "sold",
+        },
+        {
+          layoutItemId: "mesa-09",
+          eventDateId: saturday,
+          status: "available",
+        },
+      ],
+      { eventDateId: saturday },
+    )
+    assert.equal(units.length, 1)
+    assert.equal(units[0]?.status, "available")
+  })
+
+  it("keeps undated occupancy on a single-day event with a schedule UUID", () => {
+    const day = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    const units = seatingUnitsForOccupancyDay(
+      [
+        {
+          layoutItemId: "mesa-09",
+          eventDateId: null,
+          status: "available",
+        },
+      ],
+      { eventDateId: day, scheduleDayCount: 1 },
+    )
+    assert.equal(units.length, 1)
+    assert.equal(units[0]?.status, "available")
+  })
+
+  it("drops undated units on multi-day even when no dated sibling exists", () => {
+    const saturday = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    const units = seatingUnitsForOccupancyDay(
+      [
+        {
+          layoutItemId: "mesa-09",
+          eventDateId: null,
+          status: "sold",
+        },
+      ],
+      { eventDateId: saturday, scheduleDayCount: 2 },
+    )
+    assert.equal(units.length, 0)
   })
 })

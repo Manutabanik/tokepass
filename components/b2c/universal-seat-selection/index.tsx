@@ -44,6 +44,7 @@ type UniversalSeatSelectionFlowProps = {
   onContinue?: (selection: UniversalSeatSelection) => void
   onLoadSectorUnits?: (sectorId: string) => Promise<EventSeatingUnit[]>
   onLoadAllUnits?: () => Promise<EventSeatingUnit[]>
+  scheduleDayCount?: number
 }
 
 export function UniversalSeatSelectionFlow({
@@ -59,6 +60,7 @@ export function UniversalSeatSelectionFlow({
   onContinue,
   onLoadSectorUnits,
   onLoadAllUnits,
+  scheduleDayCount = 0,
 }: UniversalSeatSelectionFlowProps) {
   const [sectorId, setSectorId] = useState<string | null>(null)
   const [quantity, setQuantity] = useState(1)
@@ -309,6 +311,7 @@ export function UniversalSeatSelectionFlow({
               priceBySectorId={priceBySectorId}
               pending={pending}
               fillParent={takeover}
+              scheduleDayCount={scheduleDayCount}
               onBack={onBack}
               onContinue={handleCanvasContinue}
               onSelectZone={(zone) => {

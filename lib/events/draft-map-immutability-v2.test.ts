@@ -5,6 +5,7 @@ import {
   ACTIVE_SALE_LAYOUT_DELETE_ERROR,
   collectDraftLayoutItemKeys,
   collectVenueMapLayoutItemIds,
+  draftLayoutSourceFromSavedVenueMap,
   incomingKeepsLayoutItem,
   isActiveSeatingHold,
   missingProtectedLayoutItems,
@@ -99,5 +100,19 @@ describe("draft map immutability v2", () => {
 
   it("exposes the organizer-facing block copy", () => {
     assert.match(ACTIVE_SALE_LAYOUT_DELETE_ERROR, /bloqueado/)
+  })
+
+  it("keys a saved single-day venue_map like a draft instance", () => {
+    const day = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    const source = draftLayoutSourceFromSavedVenueMap({
+      map: plateaMap(),
+      scheduleDayIds: [day],
+    })
+    const keys = collectDraftLayoutItemKeys(source)
+    assert.ok(keys.has(`${day}::s1`))
+    assert.equal(
+      missingProtectedLayoutItems(keys, [{ itemId: "s1", dateId: day }]).length,
+      0,
+    )
   })
 })

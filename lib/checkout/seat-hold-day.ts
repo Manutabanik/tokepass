@@ -7,7 +7,7 @@ const UUID_RE =
 export const MISSING_EVENT_DATE_ID = "missing_event_date_id"
 
 export const MISSING_EVENT_DATE_ID_MESSAGE =
-  "[seat-hold] falta event_date_id para reservar un asiento en un evento multidía"
+  "Elegí el día del evento para reservar esa ubicación."
 
 export function asHoldEventDateId(value: unknown): string | null {
   if (typeof value !== "string") return null
@@ -30,11 +30,13 @@ export function storefrontSelectionKey(item: {
 export function storefrontItemMatchesSchedule(
   item: { eventDateId?: string | null; dateId?: string | null },
   scheduleId?: string | null,
+  options?: { scheduleDayCount?: number },
 ): boolean {
   const itemDate =
     asHoldEventDateId(item.eventDateId) ?? asHoldEventDateId(item.dateId)
   const active = asHoldEventDateId(scheduleId)
-  if (!active || !itemDate) return true
+  if (!active) return true
+  if (!itemDate) return (options?.scheduleDayCount ?? 0) < 2
   return itemDate === active
 }
 
@@ -50,11 +52,51 @@ export function withCheckoutEventDateId(
 export function seatingUnitMatchesEventDate(
   unit: { event_date_id?: string | null; day_id?: string | null },
   eventDateId: string | null,
+  options?: { scheduleDayCount?: number },
 ): boolean {
-  if (!eventDateId) return true
+  if (!eventDateId) return (options?.scheduleDayCount ?? 0) < 2
   const unitDay = asHoldEventDateId(unit.event_date_id) ?? asHoldEventDateId(unit.day_id)
-  if (!unitDay) return true
+  if (!unitDay) return (options?.scheduleDayCount ?? 0) < 2
   return unitDay === eventDateId
+}
+
+export function filterSeatingUnitsForRequestedDay<
+  T extends { eventDateId?: string | null },
+>(
+  units: readonly T[],
+  eventDateId?: string | null,
+  scheduleDayCount = 0,
+): T[] {
+  const dateId = asHoldEventDateId(eventDateId)
+  if (scheduleDayCount >= 2 && !dateId) return []
+  return units.filter((unit) =>
+    seatingUnitMatchesEventDate(
+      { event_date_id: unit.eventDateId },
+      dateId,
+      { scheduleDayCount },
+    ),
+  )
+}
+
+export function pickSeatingUnitRowForRequestedDay<
+  T extends { event_date_id?: string | null },
+>(
+  rows: readonly T[],
+  eventDateId?: string | null,
+  scheduleDayCount = 0,
+): T | null {
+  const dateId = asHoldEventDateId(eventDateId)
+  if (scheduleDayCount >= 2 && !dateId) return null
+  const matched = rows.filter((row) =>
+    seatingUnitMatchesEventDate(row, dateId, { scheduleDayCount }),
+  )
+  if (matched.length === 0) return null
+  if (!dateId) return matched[0] ?? null
+  return (
+    matched.find((row) => asHoldEventDateId(row.event_date_id) === dateId) ??
+    matched[0] ??
+    null
+  )
 }
 
 export function requireHoldEventDateId(input: {

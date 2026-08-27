@@ -28,6 +28,7 @@ export function useSeatHoldsRealtime(
   onPatch: (patch: Record<string, SeatStatus>) => void,
   channelKey = "map",
   eventDateId?: string | null,
+  scheduleDayCount = 0,
 ) {
   const onPatchRef = useRef(onPatch)
   useEffect(() => {
@@ -41,7 +42,7 @@ export function useSeatHoldsRealtime(
 
     const supabase = createClient()
     const dateId = eventDateId?.trim() || null
-    const topic = `public:seat_holds:${cleanEventId}:${channelKey}:${++seatHoldChannelSeq}`
+    const topic = `public:seat_holds:${cleanEventId}:${channelKey}:${dateId ?? ""}:${++seatHoldChannelSeq}`
     let cancelled = false
     let poll: { stop: () => void } | null = null
 
@@ -59,7 +60,7 @@ export function useSeatHoldsRealtime(
               expiresAt: row.expires_at,
               status: row.status,
             })),
-            { eventDateId: dateId },
+            { eventDateId: dateId, scheduleDayCount },
           )
           if (Object.keys(patch).length > 0) onPatchRef.current(patch)
         })
@@ -72,7 +73,10 @@ export function useSeatHoldsRealtime(
       row: SeatHoldRealtimeRow | null,
     ) {
       if (cancelled) return
-      const next = seatHoldRealtimePatch(event, row, { eventDateId: dateId })
+      const next = seatHoldRealtimePatch(event, row, {
+        eventDateId: dateId,
+        scheduleDayCount,
+      })
       if (next) onPatchRef.current(next)
     }
 
@@ -115,5 +119,5 @@ export function useSeatHoldsRealtime(
       poll = null
       void supabase.removeChannel(channel)
     }
-  }, [channelKey, eventDateId, eventId])
+  }, [channelKey, eventDateId, eventId, scheduleDayCount])
 }

@@ -1,23 +1,45 @@
+import { storefrontItemMatchesSchedule } from "@/lib/checkout/seat-hold-day"
+
 export const POS_RPC_QTY_CAP = 20
 
 export type PosCart = Record<string, number>
 
 export type PosSeatPick = {
   seatId: string
+  eventDateId?: string | null
   tierId: string
   label: string
   sectorName: string
   price: number
 }
 
+export function posSeatPickKey(pick: {
+  seatId: string
+  eventDateId?: string | null
+}): string {
+  const date = pick.eventDateId?.trim() || ""
+  return date ? `${pick.seatId}::${date}` : pick.seatId
+}
+
+export function posSeatPickMatchesDay(
+  pick: { eventDateId?: string | null },
+  selectedDateId: string | null,
+  scheduleDayCount: number,
+): boolean {
+  return storefrontItemMatchesSchedule(pick, selectedDateId, {
+    scheduleDayCount,
+  })
+}
+
 export function togglePosSeatPick(
   picks: PosSeatPick[],
   pick: PosSeatPick,
 ): { picks: PosSeatPick[]; added: boolean } {
-  const exists = picks.some((item) => item.seatId === pick.seatId)
+  const key = posSeatPickKey(pick)
+  const exists = picks.some((item) => posSeatPickKey(item) === key)
   if (exists) {
     return {
-      picks: picks.filter((item) => item.seatId !== pick.seatId),
+      picks: picks.filter((item) => posSeatPickKey(item) !== key),
       added: false,
     }
   }

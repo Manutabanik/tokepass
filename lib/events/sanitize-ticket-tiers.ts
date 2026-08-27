@@ -153,14 +153,16 @@ export function collectValidSectorIdsFromVenueMaps(input: {
 }
 
 type NullifiableDbTicket = {
+  name?: string | null
   seating_sector_id?: string | null
   layout_type?: string | null
   tier_type?: string | null
 }
 
 /**
- * Last-line defense before ticket_tiers writes: ghost seating_sector_id
- * becomes null (general) instead of failing the transaction with 23514.
+ * Last-line defense before ticket_tiers writes. Ghost sectors on GA
+ * become null. Numbered / mesa tickets throw so they are not silently
+ * converted to general.
  */
 export function nullifyInvalidTicketSeatingSectors<T extends NullifiableDbTicket>(
   tickets: T[],
@@ -172,14 +174,18 @@ export function nullifyInvalidTicketSeatingSectors<T extends NullifiableDbTicket
   return tickets.map((ticket) => {
     const sectorId = ticket.seating_sector_id?.trim() || ""
     if (sectorId && !valid.has(sectorId)) {
+      if (
+        ticket.layout_type === "numbered_seat" ||
+        ticket.layout_type === "table_combo"
+      ) {
+        const label = ticket.name?.trim() || "mapa"
+        throw new Error(
+          `La ubicación "${label}" no está en el mapa. Revisá el mapa antes de publicar.`,
+        )
+      }
       return {
         ...ticket,
         seating_sector_id: null,
-        layout_type:
-          ticket.layout_type === "numbered_seat" ||
-          ticket.layout_type === "table_combo"
-            ? "general"
-            : ticket.layout_type,
         tier_type:
           ticket.tier_type === "seated" ? "general" : ticket.tier_type,
       }
@@ -398,6 +404,9 @@ function seatingErrorText(error: unknown): string {
 export function seatingPersistUserMessage(error: unknown): string | null {
   const text = seatingErrorText(error)
   if (!text) return null
+  if (/SEATING_LAYOUT_SOLD_ITEM_REMOVED/i.test(text)) {
+    return "No puedes eliminar asientos con ventas activas. Mantenlo en el mapa y márcalo como 'bloqueado'."
+  }
   if (isSeatingSectorRpcError(text)) return ORPHAN_SEATING_SECTOR_MESSAGE
   if (/23514/i.test(text) && /seating|sector/i.test(text)) {
     return ORPHAN_SEATING_SECTOR_MESSAGE

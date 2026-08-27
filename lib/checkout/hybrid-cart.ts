@@ -33,6 +33,11 @@ export function checkoutItemElementId(item: CheckoutCartItem): string | null {
   return item.elementId || item.element_id || null
 }
 
+export function checkoutItemEventDateId(item: CheckoutCartItem): string | null {
+  const dateId = item.eventDateId || item.event_date_id || item.dateId || null
+  return dateId?.trim() || null
+}
+
 /** Zone hints that can change the charge. Numbered seats always price from the DB unit. */
 export function trustedReserveZoneHints(input: {
   seatingUnitId?: string | null
@@ -98,6 +103,9 @@ export function toReserveRpcItem(
     seating_unit_id: seatId,
     seat_id: seatId,
     element_id: mapped ? checkoutItemElementId(item) : null,
+    event_date_id: checkoutItemEventDateId(item),
+    eventDateId: checkoutItemEventDateId(item),
+    dateId: checkoutItemEventDateId(item),
     has_map: item.hasMap ?? item.has_map ?? null,
     is_numbered: isNumbered ?? mapped,
     hasMap: item.hasMap ?? item.has_map ?? null,

@@ -75,16 +75,25 @@ export function occupancyFromSeatHolds(
     eventDateId?: string | null
     status?: string | null
   }>,
-  options?: { eventDateId?: string | null; nowMs?: number },
+  options?: {
+    eventDateId?: string | null
+    nowMs?: number
+    scheduleDayCount?: number
+  },
 ): Record<string, SeatStatus> {
   const occupancy: Record<string, SeatStatus> = {}
   const dateId = options?.eventDateId?.trim() || null
+  const multi = (options?.scheduleDayCount ?? 0) >= 2
   const nowMs = options?.nowMs ?? Date.now()
   for (const hold of holds) {
     const id = hold.layoutItemId?.trim()
     if (!id) continue
     const holdDate = hold.eventDateId?.trim() || null
-    if (dateId && holdDate && holdDate !== dateId) continue
+    if (multi) {
+      if (!dateId || holdDate !== dateId) continue
+    } else if (dateId && holdDate && holdDate !== dateId) {
+      continue
+    }
     const frozen = hold.status === "pending_payment"
     if (!frozen && isCheckoutHoldExpired(hold.expiresAt, nowMs)) continue
     occupancy[id] = "held"
@@ -100,14 +109,23 @@ export function seatHoldRealtimePatch(
     event_date_id?: string | null
     status?: string | null
   } | null,
-  options?: { eventDateId?: string | null; nowMs?: number },
+  options?: {
+    eventDateId?: string | null
+    nowMs?: number
+    scheduleDayCount?: number
+  },
 ): Record<string, SeatStatus> | null {
   if (!row) return null
   const layoutItemId = row.layout_item_id?.trim()
   if (!layoutItemId) return null
   const dateId = options?.eventDateId?.trim() || null
   const rowDate = row.event_date_id?.trim() || null
-  if (dateId && rowDate && rowDate !== dateId) return null
+  const multi = (options?.scheduleDayCount ?? 0) >= 2
+  if (multi) {
+    if (!dateId || rowDate !== dateId) return null
+  } else if (dateId && rowDate && rowDate !== dateId) {
+    return null
+  }
   const frozen = row.status === "pending_payment"
   if (
     event === "DELETE" ||

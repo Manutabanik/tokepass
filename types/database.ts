@@ -412,6 +412,7 @@ export type SeatingMap = {
   event_date_id: string | null
   map_config: Json
   pricing: Json
+  seating_layout: Json
   created_at: string
   updated_at: string
 }
@@ -2034,6 +2035,7 @@ export type Database = {
           event_date_id?: string | null
           map_config?: Json
           pricing?: Json
+          seating_layout?: Json
           created_at?: string
           updated_at?: string
         }
@@ -2042,6 +2044,7 @@ export type Database = {
           event_date_id: string | null
           map_config: Json
           pricing: Json
+          seating_layout: Json
           updated_at: string
         }>
         Relationships: [
@@ -3296,6 +3299,13 @@ export type Database = {
         }
         Returns: number
       }
+      sync_published_seating_maps: {
+        Args: {
+          p_event_id: string
+          p_maps: Json
+        }
+        Returns: undefined
+      }
       seating_unit_is_owner_cart_hold: {
         Args: {
           p_status: string
@@ -3335,6 +3345,7 @@ export type Database = {
           p_seat_id: string
           p_event_date_id: string | null
           p_session_id: string
+          p_event_id?: string | null
         }
         Returns: {
           hold_id: string
@@ -3569,6 +3580,7 @@ export type Database = {
       get_event_seating_availability: {
         Args: {
           p_event_id: string
+          p_event_date_id?: string | null
         }
         Returns: {
           id: string
@@ -3585,6 +3597,7 @@ export type Database = {
           capacity_per_unit: number
           status: "available" | "reserved" | "sold" | "blocked"
           reserved_until: string | null
+          event_date_id: string | null
         }[]
       }
       get_event_seating_sector_summary: {
@@ -3603,12 +3616,14 @@ export type Database = {
           sold: number
           blocked: number
           total: number
+          event_date_id: string | null
         }[]
       }
       get_event_seating_units_by_sector: {
         Args: {
           p_event_id: string
           p_sector_id: string
+          p_event_date_id?: string | null
         }
         Returns: {
           id: string
@@ -3625,6 +3640,7 @@ export type Database = {
           capacity_per_unit: number
           status: string
           reserved_until: string | null
+          event_date_id: string | null
         }[]
       }
       get_event_seating_unit: {
@@ -3641,6 +3657,7 @@ export type Database = {
           label: string
           status: string
           reserved_until: string | null
+          event_date_id: string | null
         }[]
       }
       get_event_scanner_gates: {
@@ -3745,6 +3762,13 @@ export type Database = {
           p_payload: Json
         }
         Returns: Json
+      }
+      publish_event_seating_inventory: {
+        Args: {
+          p_event_id: string
+          p_payload: Json
+        }
+        Returns: undefined
       }
       update_complete_event_with_seating_tx: {
         Args: {
@@ -4418,6 +4442,7 @@ export type Database = {
           p_supervisor_pin?: string | null
           p_seating_unit_id?: string | null
           p_seating_layout_item_id?: string | null
+          p_event_date_id?: string | null
         }
         Returns: {
           order_id: string

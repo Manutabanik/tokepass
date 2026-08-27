@@ -20,8 +20,8 @@ import {
   rehydrateEventDraftV2,
   type LiveEventTicketSnapshotV2,
 } from "@/lib/events/rehydrate-event-draft-v2"
+import { preparePublishDraftV2 } from "@/lib/events/prepare-publish-draft-v2"
 import {
-  buildPublishEventV2Payload,
   formatEventPublishIssues,
   freePublishCapacity,
   isPublishScheduleForeignKeyError,
@@ -31,6 +31,10 @@ import {
   type PublishEventV2Payload,
   type PublishEventV2TierPayload,
 } from "@/lib/events/publish-event-v2"
+import {
+  rematchEventDraftTicketIds,
+  type LiveTicketIdSnapshot,
+} from "@/lib/events/sync-draft-ticket-ids-v2"
 import { venueMapToSeatingLayout } from "@/lib/seating/venue-map-geometry"
 import { eventPreviewPath } from "@/lib/events/editor-v2-ux"
 import { revalidatePublicEventCache } from "@/lib/events/revalidate-public-event"
@@ -221,6 +225,57 @@ async function loadDraftLineupFromLiveEvent(
   return parseDraftLineup(fallbackLineup)
 }
 
+async function loadLiveTicketIdSnapshots(
+  eventId: string,
+): Promise<LiveTicketIdSnapshot[]> {
+  const admin = createAdminClient()
+  const withType = await admin
+    .from("ticket_tiers")
+    .select("id, name, seating_sector_id, day_id, ticket_type, tier_type")
+    .eq("event_id", eventId)
+  if (!withType.error) return withType.data ?? []
+  if (!/ticket_type|schema cache|PGRST204|42703/i.test(withType.error.message)) {
+    throw new Error(formatSupabaseError(withType.error))
+  }
+  const core = await admin
+    .from("ticket_tiers")
+    .select("id, name, seating_sector_id, day_id, tier_type")
+    .eq("event_id", eventId)
+  if (core.error) throw new Error(formatSupabaseError(core.error))
+  return (core.data ?? []).map((row) => ({
+    ...row,
+    ticket_type: null,
+  }))
+}
+
+async function rematerializeDraftTicketIds(eventId: string) {
+  const admin = createAdminClient()
+  const event = await admin
+    .from("events")
+    .select("draft_state")
+    .eq("id", eventId)
+    .maybeSingle()
+  if (event.error) throw new Error(formatSupabaseError(event.error))
+  if (!event.data?.draft_state) return
+  const tickets = await loadLiveTicketIdSnapshots(eventId)
+  const draft = parseEventDraftV2(event.data.draft_state)
+  const next = rematchEventDraftTicketIds(draft, tickets)
+  const same =
+    next.tickets.every((ticket, index) => ticket.id === draft.tickets[index]?.id) &&
+    next.extras.every((ticket, index) => ticket.id === draft.extras[index]?.id) &&
+    next.tickets.length === draft.tickets.length &&
+    next.extras.length === draft.extras.length
+  if (same) return
+  const written = await admin
+    .from("events")
+    .update({
+      draft_state: toEventDraftV2Payload(next) as Json,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", eventId)
+  if (written.error) throw new Error(formatSupabaseError(written.error))
+}
+
 async function persistRehydratedPublishedDraft(input: {
   supabase: Awaited<ReturnType<typeof createClient>>
   event: {
@@ -284,6 +339,10 @@ async function persistRehydratedPublishedDraft(input: {
     .select("id, title, start_time, end_time")
     .eq("event_id", input.event.id)
     .order("start_time", { ascending: true })
+  const seatingMapsQuery = await input.supabase
+    .from("seating_maps")
+    .select("event_date_id, map_config, pricing")
+    .eq("event_id", input.event.id)
 
   const liveLineup = await loadDraftLineupFromLiveEvent(
     input.supabase,
@@ -296,6 +355,15 @@ async function persistRehydratedPublishedDraft(input: {
       venue: venueQuery.error ? null : (venueQuery.data ?? null),
       tickets: ticketsQuery.error ? [] : (ticketsQuery.data ?? []),
       schedules: schedulesQuery.error ? [] : (schedulesQuery.data ?? []),
+      seatingMaps: seatingMapsQuery.error
+        ? []
+        : (seatingMapsQuery.data ?? []).map((row) => ({
+            dateId: row.event_date_id,
+            event_date_id: row.event_date_id,
+            mapConfig: row.map_config,
+            map_config: row.map_config,
+            pricing: row.pricing,
+          })),
       lineup: liveLineup,
     }),
   ) as Json
@@ -534,10 +602,14 @@ async function upsertPublishedVenue(input: {
   existingVenueId: string | null
   venue: PublishEventV2Payload["venue"]
   venueMap?: Json
+  persistVenueLayout?: boolean
 }): Promise<string> {
   const admin = createAdminClient()
   const now = new Date().toISOString()
-  const seatingLayout = seatingLayoutJsonFromVenueMap(input.venueMap)
+  const seatingLayout =
+    input.persistVenueLayout === false
+      ? undefined
+      : seatingLayoutJsonFromVenueMap(input.venueMap)
   const patch = {
     name: input.venue.name,
     location: input.venue.location,
@@ -884,6 +956,7 @@ async function unpackPublishEventV2Sequential(input: {
     existingVenueId: input.existingVenueId,
     venue: payload.venue,
     venueMap: payload.venue_map,
+    persistVenueLayout: payload.schedule_days.length < 2,
   })
   // Children first: unlink ticket_tiers.day_id, sync tickets, write
   // event_schedules / schedule_days, then rebind days. Avoids 23503.
@@ -904,6 +977,14 @@ async function unpackPublishEventV2Sequential(input: {
   })
 
   const admin = createAdminClient()
+  if (payload.has_seating_plan) {
+    const materialized = await admin.rpc("materialize_event_seating_units", {
+      p_event_id: input.eventId,
+    })
+    if (materialized.error) {
+      throw new Error(formatSupabaseError(materialized.error))
+    }
+  }
   const written = await admin
     .from("events")
     .update({
@@ -939,14 +1020,6 @@ async function unpackPublishEventV2Sequential(input: {
     throw new Error("events.update publish no devolvió fila")
   }
   await unpackPublishedExperience(input.eventId, payload)
-  if (payload.has_seating_plan) {
-    const materialized = await admin.rpc("materialize_event_seating_units", {
-      p_event_id: input.eventId,
-    })
-    if (materialized.error) {
-      throw new Error(formatSupabaseError(materialized.error))
-    }
-  }
   return written.data
 }
 
@@ -980,9 +1053,26 @@ export async function publishEventV2(
     return { success: false, error: "No tenés permiso para publicar este evento." }
   }
 
-  const parsed = eventPublishSchema.safeParse(
-    sanitizeEventDraftForPersist(parseEventDraftV2(event.draft_state)),
-  )
+  try {
+    await rematerializeDraftTicketIds(id)
+  } catch (error) {
+    return {
+      success: false,
+      error: publishActionError(error),
+    }
+  }
+  const latestDraft = await gate.supabase
+    .from("events")
+    .select("draft_state")
+    .eq("id", id)
+    .maybeSingle()
+  if (latestDraft.error) {
+    return { success: false, error: formatSupabaseError(latestDraft.error) }
+  }
+  const draftState = latestDraft.data?.draft_state ?? event.draft_state
+  const draft = sanitizeEventDraftForPersist(parseEventDraftV2(draftState))
+
+  const parsed = eventPublishSchema.safeParse(draft)
   if (!parsed.success) {
     const issues = formatEventPublishIssues(parsed.error.issues)
     return {
@@ -994,15 +1084,20 @@ export async function publishEventV2(
 
   let payload: PublishEventV2Payload
   try {
-    payload = buildPublishEventV2Payload(parsed.data, {
-      platformFeePercentage: Number(
-        event.platform_fee_percentage ?? DEFAULT_PLATFORM_FEE_PERCENTAGE,
-      ),
-      platformFixedFee: Number(
-        event.platform_fixed_fee ?? DEFAULT_PLATFORM_FIXED_FEE,
-      ),
-      maxFreeTickets: Number(event.max_free_tickets ?? DEFAULT_MAX_FREE_TICKETS),
-      isSponsoredByTokePass: Boolean(event.is_sponsored_by_tokepass),
+    const liveTickets = await loadLiveTicketIdSnapshots(id)
+    payload = preparePublishDraftV2({
+      draft,
+      liveTickets,
+      fee: {
+        platformFeePercentage: Number(
+          event.platform_fee_percentage ?? DEFAULT_PLATFORM_FEE_PERCENTAGE,
+        ),
+        platformFixedFee: Number(
+          event.platform_fixed_fee ?? DEFAULT_PLATFORM_FIXED_FEE,
+        ),
+        maxFreeTickets: Number(event.max_free_tickets ?? DEFAULT_MAX_FREE_TICKETS),
+        isSponsoredByTokePass: Boolean(event.is_sponsored_by_tokepass),
+      },
     })
   } catch (error) {
     return {
@@ -1012,6 +1107,12 @@ export async function publishEventV2(
   }
 
   payload = sanitizePublishPayloadForDatabase(payload)
+
+  const locked = await assertDraftMapLayoutImmutable({
+    eventId: id,
+    draft,
+  })
+  if (!locked.ok) return { success: false, error: locked.error }
 
   if (!gate.isSuperAdmin) {
     const freeCapacity = freePublishCapacity(payload)
@@ -1044,6 +1145,7 @@ export async function publishEventV2(
         keepDraftState: true,
       })
       slug = written.slug
+      await rematerializeDraftTicketIds(id)
     } catch (error) {
       return {
         success: false,
@@ -1058,6 +1160,7 @@ export async function publishEventV2(
           existingVenueId: event.venue_id,
           venue: payload.venue,
           venueMap: payload.venue_map,
+          persistVenueLayout: payload.schedule_days.length < 2,
         })
         if (venueId !== event.venue_id) {
           const linked = await createAdminClient()
@@ -1105,12 +1208,7 @@ export async function publishEventV2(
       }
     } else {
       try {
-        // publish_event_v2 already wrote tickets, schedule and day binds
-        // atomically. Only persist relations the RPC does not cover.
-        await hardReplacePublishedSeatingMaps({
-          eventId: id,
-          maps: payload.seating_maps,
-        })
+        // publish_event_v2 already wrote tickets, maps and units in one TX.
         await hardReplacePublishedEventArtists({ eventId: id, lineup })
         await unpackPublishedExperience(id, payload)
       } catch (error) {

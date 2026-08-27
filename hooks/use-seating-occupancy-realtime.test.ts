@@ -18,6 +18,41 @@ describe("occupancyPatchFromSeatingRow", () => {
     )
     assert.equal(occupancyPatchFromSeatingRow(null), null)
   })
+
+  it("drops occupancy from another jornada on multi-day events", () => {
+    assert.equal(
+      occupancyPatchFromSeatingRow(
+        {
+          layout_item_id: "mesa-09",
+          status: "sold",
+          event_date_id: "day-fri",
+        },
+        { eventDateId: "day-sat", scheduleDayCount: 2 },
+      ),
+      null,
+    )
+    assert.deepEqual(
+      occupancyPatchFromSeatingRow(
+        {
+          layout_item_id: "mesa-09",
+          status: "sold",
+          event_date_id: "day-sat",
+        },
+        { eventDateId: "day-sat", scheduleDayCount: 2 },
+      ),
+      { "mesa-09": "occupied" },
+    )
+  })
+
+  it("ignores undated occupancy when a jornada is selected on multi-day", () => {
+    assert.equal(
+      occupancyPatchFromSeatingRow(
+        { layout_item_id: "mesa-09", status: "sold" },
+        { eventDateId: "day-sat", scheduleDayCount: 2 },
+      ),
+      null,
+    )
+  })
 })
 
 describe("occupancyPatchFromRealtimePayload", () => {
@@ -28,6 +63,23 @@ describe("occupancyPatchFromRealtimePayload", () => {
         old: { layout_item_id: "s-1", status: "sold" },
       }),
       { "s-1": "available" },
+    )
+  })
+
+  it("does not free Saturday when Friday occupancy is deleted", () => {
+    assert.equal(
+      occupancyPatchFromRealtimePayload(
+        {
+          eventType: "DELETE",
+          old: {
+            layout_item_id: "mesa-09",
+            status: "sold",
+            event_date_id: "day-fri",
+          },
+        },
+        { eventDateId: "day-sat", scheduleDayCount: 2 },
+      ),
+      null,
     )
   })
 })

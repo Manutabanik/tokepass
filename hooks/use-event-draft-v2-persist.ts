@@ -12,14 +12,19 @@ import {
   type DraftSaveStatus,
 } from "@/lib/events/editor-v2-ux"
 import {
+  parseEventDraftV2,
   toEventDraftV2Payload,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
 
-
 export type PersistDraftResult =
   | { success: true }
   | { success: false; error: string }
+
+type QueuedPersist = {
+  force: boolean
+  waiters: Array<(result: PersistDraftResult) => void>
+}
 
 export function useEventDraftV2Persist(
   eventId: string,
@@ -34,64 +39,126 @@ export function useEventDraftV2Persist(
   const paused = useRef(false)
   const generation = useRef(0)
   const lastFingerprint = useRef("")
+  const busy = useRef(false)
+  const queued = useRef<QueuedPersist | null>(null)
   const onSavedRef = useRef(options?.onSaved)
   useLayoutEffect(() => {
     onSavedRef.current = options?.onSaved
   }, [options?.onSaved])
 
-  const persistDraft = useCallback(async (force?: boolean): Promise<PersistDraftResult> => {
-    const shouldForce = force === true
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
-      setSaveStatus("offline")
-      return { success: false, error: "Sin conexión. El borrador quedó en este dispositivo." }
-    }
-    const snapshot = getValues()
-    const payload = toEventDraftV2Payload(sanitizeEventDraftForPersist(snapshot))
-    const fingerprint = JSON.stringify(payload)
-    if (!shouldForce && fingerprint === lastFingerprint.current) {
-      setSaveStatus("saved")
+  const runWrite = useCallback(
+    async (shouldForce: boolean): Promise<PersistDraftResult> => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        setSaveStatus("offline")
+        return {
+          success: false,
+          error: "Sin conexión. El borrador quedó en este dispositivo.",
+        }
+      }
+      const snapshot = getValues()
+      const sanitized = sanitizeEventDraftForPersist(snapshot)
+      const payload = toEventDraftV2Payload(sanitized)
+      const fingerprint = JSON.stringify(payload)
+      if (!shouldForce && fingerprint === lastFingerprint.current) {
+        setSaveStatus("saved")
+        setSaveError("")
+        try {
+          onSavedRef.current?.(parseEventDraftV2(payload))
+        } catch {
+          // reset is best-effort; the fingerprint already matches
+        }
+        return { success: true }
+      }
+      const current = ++generation.current
+      setSaveStatus("saving")
       setSaveError("")
-      onSavedRef.current?.(snapshot)
-      return { success: true }
-    }
-    const current = ++generation.current
-    setSaveStatus("saving")
-    setSaveError("")
-    try {
-      const result = await withDraftPersistTimeout(
-        saveEventDraftV2(eventId, payload),
-      )
-      if (current !== generation.current) {
-        return result.success
-          ? { success: true }
-          : { success: false, error: result.error }
-      }
-      if (!result.success) {
+      try {
+        const result = await withDraftPersistTimeout(
+          saveEventDraftV2(eventId, payload),
+        )
+        if (current !== generation.current) {
+          return result.success
+            ? { success: true }
+            : { success: false, error: result.error }
+        }
+        if (!result.success) {
+          setSaveStatus("error")
+          setSaveError(result.error)
+          return { success: false, error: result.error }
+        }
+        lastFingerprint.current = fingerprint
+        setSaveStatus("saved")
+        const saved = parseEventDraftV2(result.draftState)
+        try {
+          onSavedRef.current?.(saved)
+        } catch {
+          // reset is best-effort; the draft already landed on the server
+        }
+        return { success: true }
+      } catch (error) {
+        const message = persistErrorUserMessage(error)
+        if (current !== generation.current) {
+          return { success: false, error: message }
+        }
+        generation.current += 1
         setSaveStatus("error")
-        setSaveError(result.error)
-        return { success: false, error: result.error }
-      }
-      lastFingerprint.current = fingerprint
-      setSaveStatus("saved")
-      onSavedRef.current?.(snapshot)
-      return { success: true }
-    } catch (error) {
-      const message = persistErrorUserMessage(error)
-      if (current !== generation.current) {
+        setSaveError(message)
         return { success: false, error: message }
       }
-      // Invalidate this generation so a hung request cannot keep "saving"
-      // or flip the badge back after the timeout already failed.
-      generation.current += 1
-      setSaveStatus("error")
-      setSaveError(message)
-      return { success: false, error: message }
-    }
-  }, [eventId, getValues])
+    },
+    [eventId, getValues],
+  )
+
+  const persistDraft = useCallback(
+    async (force?: boolean): Promise<PersistDraftResult> => {
+      const shouldForce = force === true
+      if (busy.current) {
+        return await new Promise((resolve) => {
+          const current = queued.current
+          if (current) {
+            current.force = current.force || shouldForce
+            current.waiters.push(resolve)
+            return
+          }
+          queued.current = { force: shouldForce, waiters: [resolve] }
+        })
+      }
+      busy.current = true
+      try {
+        let pendingForce = shouldForce
+        let result = await runWrite(pendingForce)
+        for (;;) {
+          const next = queued.current
+          if (!next) return result
+          queued.current = null
+          result = await runWrite(next.force)
+          for (const waiter of next.waiters) waiter(result)
+        }
+      } finally {
+        try {
+          while (queued.current) {
+            const leftover = queued.current
+            queued.current = null
+            const leftoverResult = await runWrite(leftover.force)
+            for (const waiter of leftover.waiters) waiter(leftoverResult)
+          }
+        } finally {
+          busy.current = false
+        }
+        const raced = queued.current as QueuedPersist | null
+        if (raced) {
+          queued.current = null
+          void persistDraft(raced.force).then((result) => {
+            for (const waiter of raced.waiters) waiter(result)
+          })
+        }
+      }
+    },
+    [runWrite],
+  )
 
   const flushAndPause = useCallback(async (): Promise<PersistDraftResult> => {
     paused.current = true
-    generation.current += 1
     return persistDraft(true)
   }, [persistDraft])
 

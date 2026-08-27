@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import {
   isSeatingSummaryMinUuidError,
+  pickSectorSummaryForDay,
   seatingSummariesFromTicketTiers,
 } from "./seating-sector-summary"
 
@@ -42,5 +43,57 @@ describe("seating-sector-summary", () => {
     assert.equal(rows[0]?.available, 15)
     assert.equal(rows[0]?.sold, 5)
     assert.equal(rows[0]?.total, 20)
+  })
+
+  it("picks the sector summary of the selected jornada", () => {
+    const friday = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    const saturday = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    const rows = [
+      {
+        sectorId: "vip",
+        sectorName: "VIP",
+        available: 0,
+        eventDateId: friday,
+      },
+      {
+        sectorId: "vip",
+        sectorName: "VIP",
+        available: 8,
+        eventDateId: saturday,
+      },
+    ]
+    assert.equal(
+      pickSectorSummaryForDay(rows, {
+        sectorId: "vip",
+        eventDateId: saturday,
+      })?.available,
+      8,
+    )
+  })
+
+  it("does not pick an arbitrary jornada when the day is missing", () => {
+    const friday = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    const saturday = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    assert.equal(
+      pickSectorSummaryForDay(
+        [
+          { sectorId: "vip", available: 0, eventDateId: friday },
+          { sectorId: "vip", available: 8, eventDateId: saturday },
+        ],
+        { sectorId: "vip" },
+      ),
+      undefined,
+    )
+  })
+
+  it("keeps an undated single-day summary when the schedule UUID is selected", () => {
+    const day = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    assert.equal(
+      pickSectorSummaryForDay(
+        [{ sectorId: "vip", available: 12, eventDateId: null }],
+        { sectorId: "vip", eventDateId: day, scheduleDayCount: 1 },
+      )?.available,
+      12,
+    )
   })
 })

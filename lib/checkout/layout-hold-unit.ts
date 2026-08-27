@@ -28,9 +28,10 @@ export function pickSeatingUnitForLayoutHold(
   units: LayoutHoldUnitRow[],
   sectorId: string,
   eventDateId: string | null = null,
+  options?: { scheduleDayCount?: number },
 ): LayoutHoldUnitRow | null {
   const scoped = units.filter((unit) =>
-    seatingUnitMatchesEventDate(unit, eventDateId),
+    seatingUnitMatchesEventDate(unit, eventDateId, options),
   )
   if (scoped.length === 0) return null
   const wanted = sectorId.trim()

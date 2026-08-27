@@ -202,6 +202,20 @@ describe("eventPublishSchema", () => {
     assert.equal(isEventDraftPublishable(publishableDraft()), true)
   })
 
+  it("does not block publish when the promo video lacks https", () => {
+    const draft = {
+      ...publishableDraft(),
+      promoVideoUrl: "youtu.be/dQw4w9WgXcQ",
+    }
+    const result = eventPublishSchema.safeParse(draft)
+    assert.equal(result.success, true)
+    if (!result.success) return
+    assert.equal(
+      result.data.promoVideoUrl,
+      "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    )
+  })
+
   it("requires venue name and address when the event is presencial", () => {
     const draft = publishableDraft()
     draft.location.venueName = ""
@@ -407,11 +421,13 @@ describe("parseEventDraftV2", () => {
       restrictions: "+18",
       what_to_bring: "DNI",
     })
-    assert.equal(parsed.promoVideoUrl, "https://youtu.be/dQw4w9WgXcQ")
+    assert.equal(
+      parsed.promoVideoUrl,
+      "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    )
     assert.deepEqual(parsed.galleryUrls, [
       "https://cdn.example/1.jpg",
       "https://cdn.example/2.jpg",
-      "not-a-url-but-kept-in-draft",
     ])
     assert.equal(parsed.restrictions, "+18")
     assert.equal(parsed.whatToBring, "DNI")

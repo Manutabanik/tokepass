@@ -72,6 +72,8 @@ export function storefrontLineToCartPayload(
     ticket_type_id: line.ticketTypeId ?? line.ticketTierId,
     sector_id: line.sectorId,
     seat_id: line.seatId,
+    element_id: line.elementId,
+    eventDateId: line.dateId,
     quantity: line.quantity,
   })
 }

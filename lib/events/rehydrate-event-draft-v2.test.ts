@@ -146,12 +146,80 @@ describe("rehydrateEventDraftV2", () => {
     assert.equal(draft.schedule[0]?.name, "Día 1")
     assert.ok(draft.schedule[0]?.startDate)
     assert.equal(draft.basicInfo.startDate, draft.schedule[0]?.startDate)
-    assert.equal(draft.promoVideoUrl, "https://youtu.be/dQw4w9WgXcQ")
+    assert.equal(
+      draft.promoVideoUrl,
+      "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    )
     assert.deepEqual(draft.galleryUrls, ["https://cdn.example/exp.jpg"])
     assert.equal(draft.restrictions, "+18")
     assert.equal(draft.whatToBring, "DNI")
     assert.equal(draft.lineup[0]?.name, "Wos")
     assert.equal(draft.lineup[0]?.source, "local")
+  })
+
+  it("restores per-day seatingMaps from published seating_maps rows", () => {
+    const dayA = "550e8400-e29b-41d4-a716-446655440010"
+    const dayB = "550e8400-e29b-41d4-a716-446655440011"
+    const mapA = {
+      version: 1,
+      sectors: [
+        {
+          id: "sector-a",
+          name: "Sala A",
+          color: "#22c55e",
+          price: 10000,
+          x: 0,
+          y: 0,
+          rows: 1,
+          seatsPerRow: 1,
+          curvature: 0,
+          aisle: false,
+          seats: [{ id: "a1", row: "1", number: 1, x: 0, y: 0, status: "available" }],
+        },
+      ],
+    }
+    const mapB = {
+      ...mapA,
+      sectors: [{ ...mapA.sectors[0], id: "sector-b", name: "Sala B" }],
+    }
+    const draft = rehydrateEventDraftV2({
+      event: {
+        title: "Festival",
+        date: "2026-09-01T22:00:00-03:00",
+        ends_at: "2026-09-02T04:00:00-03:00",
+        location: "Niceto",
+        description: null,
+        flyer_url: null,
+        image_url: null,
+        social_share_image_url: null,
+        visibility: "public",
+        refund_policy: "no_refunds",
+        province: null,
+        department: null,
+        delivery_mode: "PRESENCIAL",
+        venue_map: mapA,
+      },
+      venue: {
+        name: "Niceto",
+        location: "Niceto",
+        address: "Av. Córdoba 1234",
+        city: "CABA",
+        latitude: null,
+        longitude: null,
+        capacity: 200,
+        max_capacity: 200,
+        venue_map: null,
+      },
+      tickets: [],
+      seatingMaps: [
+        { event_date_id: dayA, map_config: mapA, pricing: {} },
+        { event_date_id: dayB, map_config: mapB, pricing: {} },
+      ],
+    })
+    assert.equal(draft.seatingMaps.length, 2)
+    assert.equal(draft.seatingMaps[0]?.dateId, dayA)
+    assert.equal(draft.seatingMaps[1]?.dateId, dayB)
+    assert.equal(draft.seatingMaps[1]?.mapConfig.sectors[0]?.id, "sector-b")
   })
 
   it("rebuilds a multi-day schedule from schedule_days", () => {

@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import type { CheckoutCartItem } from "@/lib/validations/checkout"
 
 import {
+  assertSeatedCartItemsHaveUnits,
   generalTierRemaining,
   partitionMixedCartItems,
   tierIsNumbered,
@@ -56,6 +57,22 @@ describe("mixed cart inventory split", () => {
     assert.deepEqual(
       split.generalItems.map((item) => item.tierId),
       [parkingTier],
+    )
+  })
+
+  it("rejects a numbered SKU sent as general without a seat", () => {
+    assert.deepEqual(
+      assertSeatedCartItemsHaveUnits([tableAsGeneral], [
+        { id: tableTier, layoutType: "table_combo" },
+      ]),
+      { ok: false, tierId: tableTier },
+    )
+    assert.deepEqual(
+      assertSeatedCartItemsHaveUnits([mapped, parking], [
+        { id: tableTier, layoutType: "table_combo" },
+        { id: parkingTier, layoutType: "general" },
+      ]),
+      { ok: true },
     )
   })
 

@@ -1,3 +1,28 @@
+import type { EventDraftV2 } from "@/lib/validations/event-draft-v2"
+
+export function draftInventoryIdentity(
+  draft: Pick<EventDraftV2, "tickets" | "extras">,
+): string {
+  return JSON.stringify({
+    tickets: draft.tickets.map((item) => [
+      item.id,
+      item.source,
+      item.sectorId,
+      item.layoutType,
+      item.slotId,
+      [...(item.validDayIds ?? [])].sort(),
+    ]),
+    extras: draft.extras.map((item) => [item.id, item.source, item.sectorId]),
+  })
+}
+
+export function draftInventoryDrifted(
+  current: Pick<EventDraftV2, "tickets" | "extras">,
+  saved: Pick<EventDraftV2, "tickets" | "extras">,
+): boolean {
+  return draftInventoryIdentity(current) !== draftInventoryIdentity(saved)
+}
+
 /** Idle window before Editor V2 writes `draft_state` to Supabase. */
 export const EDITOR_V2_AUTOSAVE_MS = 1500
 export const EDITOR_V2_AUTOSAVE_MIN_MS = 1500
@@ -6,7 +31,7 @@ export const EDITOR_V2_AUTOSAVE_MAX_MS = 2000
 export const EDITOR_V2_AUTOSAVE_TIMEOUT_MS = 10_000
 
 export const DRAFT_LEAVE_GUARD_MESSAGE =
-  "Hay un guardado en curso. Si salís ahora podés perder cambios del borrador."
+  "Tenés cambios sin guardar o un guardado en curso. Si salís ahora podés perder cambios del borrador."
 
 export const DRAFT_SAVE_TIMEOUT_MESSAGE =
   "Error al guardar. El servidor no respondió a tiempo. Reintentá."

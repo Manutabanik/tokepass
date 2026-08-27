@@ -6,7 +6,10 @@ import {
 } from "@/lib/event-schedule"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
 import { asTicketCommerceType, resolveTicketCommerceType } from "@/lib/events/ticket-commerce-type"
-import { toDraftSeatingMap } from "@/lib/events/draft-seating-map-v2"
+import {
+  parseDraftSeatingMaps,
+  toDraftSeatingMap,
+} from "@/lib/events/draft-seating-map-v2"
 import { parseEventRefundPolicy } from "@/lib/validations/event-form"
 import {
   emptyEventDraftV2LineItem,
@@ -78,6 +81,13 @@ export type LiveEventSnapshotV2 = {
     end_time: string
   }> | null
   lineup?: EventDraftV2LineupItem[] | null
+  seatingMaps?: Array<{
+    dateId?: string | null
+    event_date_id?: string | null
+    mapConfig?: unknown
+    map_config?: unknown
+    pricing?: unknown
+  }> | null
 }
 
 export function isEventDraftStateEmpty(raw: unknown): boolean {
@@ -158,6 +168,15 @@ export function rehydrateEventDraftV2(
           },
         ]
   const primary = schedule[0]
+  const seatingMaps = parseDraftSeatingMaps(
+    (snapshot.seatingMaps ?? []).map((row) => ({
+      dateId: row.dateId ?? row.event_date_id ?? "",
+      mapConfig: row.mapConfig ?? row.map_config,
+      pricing: row.pricing,
+    })),
+    event.venue_map ?? venue?.venue_map,
+    primary?.id ?? "",
+  )
 
   return parseEventDraftV2({
     archetype: "show",
@@ -192,7 +211,10 @@ export function rehydrateEventDraftV2(
       ),
     tickets,
     extras,
-    seatingMap: toDraftSeatingMap(event.venue_map ?? venue?.venue_map),
+    seatingMap:
+      seatingMaps[0]?.mapConfig ??
+      toDraftSeatingMap(event.venue_map ?? venue?.venue_map),
+    seatingMaps,
     settings: {
       isPublic: event.visibility === "public",
       absorbFees: false,

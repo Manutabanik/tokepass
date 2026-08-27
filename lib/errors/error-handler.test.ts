@@ -7,6 +7,8 @@ import {
   mapUnknownError,
 } from "@/lib/errors/error-handler"
 import { firstFieldErrorPath } from "@/lib/errors/form-field"
+import { toCheckoutUserError } from "@/lib/errors/commerce-errors"
+import { MISSING_EVENT_DATE_ID_MESSAGE } from "@/lib/checkout/seat-hold-day"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
 
 describe("error handler", () => {
@@ -31,6 +33,13 @@ describe("error handler", () => {
     assert.equal(
       mapUnknownError({ code: "MISSING_TICKETS" }).message,
       APP_ERRORS.MISSING_TICKETS.message,
+    )
+  })
+
+  it("maps a missing jornada to buyer-facing copy", () => {
+    assert.equal(
+      toCheckoutUserError("missing_event_date_id"),
+      MISSING_EVENT_DATE_ID_MESSAGE,
     )
   })
 

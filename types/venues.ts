@@ -61,6 +61,7 @@ export type EventSeatingUnit = {
   capacityPerUnit: number
   status: EventSeatingUnitStatus
   reservedUntil: string | null
+  eventDateId?: string | null
 }
 
 /** Totales de inventario por sector (carga inicial, sin unidades). */
@@ -76,4 +77,5 @@ export type SeatingSectorSummary = {
   sold: number
   blocked: number
   total: number
+  eventDateId?: string | null
 }

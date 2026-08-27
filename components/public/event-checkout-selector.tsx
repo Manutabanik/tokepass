@@ -35,7 +35,11 @@ import {
   type InventoryTierType,
 } from "@/lib/inventory/unified-inventory"
 import { purchaseCapForTier } from "@/lib/checkout-limits"
-import { resolveCategoryAvailability } from "@/lib/checkout/category-stock"
+import {
+  resolveCategoryAvailability,
+  sectorStockFromSummary,
+} from "@/lib/checkout/category-stock"
+import { pickSectorSummaryForDay } from "@/lib/seating/seating-sector-summary"
 import {
   SOLD_OUT_BADGE_CLASS,
   SOLD_OUT_TICKET_CARD_CLASS,
@@ -189,6 +193,34 @@ export function EventCheckoutSelector({
     listTiers.length > 0 ||
     grouped.bundle.length > 0 ||
     showSyntheticMapRow
+  const admissionTiersForDates = useMemo(
+    () => tiers.filter((tier) => resolveTicketCommerceType(tier) !== "extra"),
+    [tiers],
+  )
+  const dateCards = useMemo(
+    () => listCheckoutDateCards(scheduleDays, admissionTiersForDates),
+    [admissionTiersForDates, scheduleDays],
+  )
+  const defaultDateId = defaultCheckoutDateId(dateCards, standardTickets)
+  const [uncontrolledDateId, setUncontrolledDateId] = useState(defaultDateId)
+  const dateIsControlled = typeof onSelectedDateIdChange === "function"
+  const activeDateId = dateIsControlled
+    ? (selectedDateId ?? defaultDateId)
+    : uncontrolledDateId
+  const dateStillValid =
+    Boolean(activeDateId) &&
+    dateCards.some((card) => card.dateId === activeDateId)
+  if (!dateIsControlled && !dateStillValid && uncontrolledDateId !== defaultDateId) {
+    setUncontrolledDateId(defaultDateId)
+  }
+
+  function selectCheckoutDate(dateId: string) {
+    if (dateIsControlled) {
+      onSelectedDateIdChange?.(dateId)
+      return
+    }
+    setUncontrolledDateId(dateId)
+  }
 
   if (!hasInventory) {
     return (
@@ -218,13 +250,17 @@ export function EventCheckoutSelector({
       ? true
       : tierRequiresMap(tier)
     if (tier) {
-      const summary = seatSelection?.sectorSummaries?.find(
-        (row) =>
-          row.tierId === tier.id ||
-          row.sectorId === (tier.seatingSectorId ?? category.sectorId) ||
-          row.sectorName.trim().toLowerCase() ===
-            tier.name.trim().toLowerCase(),
+      const summary = pickSectorSummaryForDay(
+        seatSelection?.sectorSummaries ?? [],
+        {
+          sectorId: tier.seatingSectorId ?? category.sectorId,
+          sectorName: tier.name,
+          tierId: tier.id,
+          eventDateId: activeDateId,
+          scheduleDayCount: scheduleDays.length,
+        },
       )
+      const stock = sectorStockFromSummary(summary, scheduleDays.length)
       const availability = resolveCategoryAvailability({
         requiresMap,
         stock: selectableTicketStock(tier),
@@ -235,8 +271,8 @@ export function EventCheckoutSelector({
           ? flattenSeatsForAvailability(seatSelection.map)
           : [],
         occupancyBySeatId: seatSelection?.occupancyBySeatId,
-        summaryAvailable: summary?.available,
-        summaryTotal: summary?.total,
+        summaryAvailable: stock.available,
+        summaryTotal: stock.total,
         mapSectorIds: seatSelection?.map?.zones?.map((zone) => zone.id) ?? [],
         mapReady: Boolean(seatSelection?.map) && !mapLoading,
       })
@@ -322,8 +358,8 @@ export function EventCheckoutSelector({
             includesGeneralAccess={includesGeneralAccess}
             selectedItems={selectedItems}
             scheduleDays={scheduleDays}
-            selectedDateId={selectedDateId}
-            onSelectedDateIdChange={onSelectedDateIdChange}
+            selectedDateId={activeDateId}
+            onSelectedDateIdChange={selectCheckoutDate}
             showSyntheticMapRow={showSyntheticMapRow}
             hasInteractiveMap={hasInteractiveMap}
             seatSelection={seatSelection}
@@ -436,39 +472,23 @@ function TicketSelectionList({
     () => isSamePriceAnyDay(standardTickets, scheduleDays),
     [scheduleDays, standardTickets],
   )
-  const initialDateId = defaultCheckoutDateId(dateCards, standardTickets)
   const [accessTab, setAccessTab] = useState<"entradas" | "combos">("entradas")
-  const [uncontrolledDateId, setUncontrolledDateId] = useState<string | null>(
-    initialDateId,
-  )
   const reduceMotion = useReducedMotion()
-  const nextDate = defaultCheckoutDateId(dateCards, standardTickets)
-  const dateIsControlled = typeof onSelectedDateIdChange === "function"
-  const activeDateId = dateIsControlled
-    ? (selectedDateId ?? nextDate)
-    : uncontrolledDateId
-  const dateStillValid =
-    Boolean(activeDateId) &&
-    dateCards.some((card) => card.dateId === activeDateId)
-  if (!dateIsControlled && !dateStillValid && uncontrolledDateId !== nextDate) {
-    setUncontrolledDateId(nextDate)
-  }
+  const activeDateId = selectedDateId
 
   function selectDate(dateId: string) {
-    if (dateIsControlled) {
-      onSelectedDateIdChange?.(dateId)
-      return
-    }
-    setUncontrolledDateId(dateId)
+    onSelectedDateIdChange?.(dateId)
   }
 
   const showDateCards = accessTab === "entradas" && dateCards.length > 1
   const daySelectedItems = useMemo(
     () =>
       selectedItems.filter((item) =>
-        storefrontItemMatchesSchedule(item, activeDateId),
+        storefrontItemMatchesSchedule(item, activeDateId, {
+          scheduleDayCount: scheduleDays.length,
+        }),
       ),
-    [activeDateId, selectedItems],
+    [activeDateId, scheduleDays.length, selectedItems],
   )
 
   const displayedTickets = useMemo(() => {
@@ -552,6 +572,8 @@ function TicketSelectionList({
         mapReady={Boolean(seatSelection?.map) && !mapLoading}
         venueMap={seatSelection?.map ?? null}
         sectorSummaries={seatSelection?.sectorSummaries}
+        scheduleDayCount={scheduleDays.length}
+        selectedDateId={activeDateId}
         onQuantityChange={onQuantityChange}
         onOpenSeatSelection={() =>
           onOpenSeatSelection({
@@ -870,6 +892,8 @@ function UnifiedTicketCard({
   mapReady,
   venueMap,
   sectorSummaries,
+  scheduleDayCount = 0,
+  selectedDateId = null,
   onQuantityChange,
   onOpenSeatSelection,
 }: {
@@ -889,6 +913,8 @@ function UnifiedTicketCard({
   mapReady: boolean
   venueMap: SeatSelectionContext["map"]
   sectorSummaries?: SeatSelectionContext["sectorSummaries"]
+  scheduleDayCount?: number
+  selectedDateId?: string | null
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
   onOpenSeatSelection: () => void
 }) {
@@ -927,12 +953,14 @@ function UnifiedTicketCard({
   })
   const shownPrice = displayChargePrice(charge, unitPrice)
 
-  const summary = sectorSummaries?.find(
-    (row) =>
-      row.tierId === tier.id ||
-      row.sectorId === tier.seatingSectorId ||
-      row.sectorName.trim().toLowerCase() === tier.name.trim().toLowerCase(),
-  )
+  const summary = pickSectorSummaryForDay(sectorSummaries ?? [], {
+    sectorId: tier.seatingSectorId,
+    sectorName: tier.name,
+    tierId: tier.id,
+    eventDateId: selectedDateId,
+    scheduleDayCount,
+  })
+  const stock = sectorStockFromSummary(summary, scheduleDayCount)
   const availability = resolveCategoryAvailability({
     requiresMap,
     stock: skuLeft,
@@ -941,8 +969,8 @@ function UnifiedTicketCard({
     categoryName: tier.name,
     seats: mapSeats,
     occupancyBySeatId,
-    summaryAvailable: summary?.available,
-    summaryTotal: summary?.total,
+    summaryAvailable: stock.available,
+    summaryTotal: stock.total,
     mapSectorIds: venueMap?.zones?.map((zone) => zone.id) ?? [],
     mapReady,
   })

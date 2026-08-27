@@ -173,6 +173,32 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
     assert.equal(parsed.success, true)
   })
 
+  it("accepts a closed table by map element_id without a UUID seat", () => {
+    const parsed = CheckoutPayloadSchema.safeParse({
+      eventId,
+      buyer,
+      items: [
+        {
+          type: "mapped",
+          ticket_tier_id: seatedTierId,
+          quantity: 1,
+          element_id: "mesa-09",
+          sectorKey: "vip",
+          tableNumber: 9,
+          has_map: true,
+          is_numbered: true,
+        },
+      ],
+    })
+    assert.equal(parsed.success, true)
+    if (!parsed.success) return
+    const item = parsed.data.items?.[0]
+    assert.ok(item)
+    assert.equal(item.type, "mapped")
+    assert.equal(item.element_id, "mesa-09")
+    assert.equal(item.seatingUnitId, undefined)
+  })
+
   it("rejects a mapped item without seat_id or element_id", () => {
     const parsed = CheckoutPayloadSchema.safeParse({
       eventId,

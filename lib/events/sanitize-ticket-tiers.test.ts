@@ -197,14 +197,8 @@ describe("nullifyInvalidTicketSeatingSectors", () => {
           tier_type: "seated",
         },
         {
-          name: "Fantasma",
-          seating_sector_id: "grada-borrada",
-          layout_type: "numbered_seat",
-          tier_type: "seated",
-        },
-        {
           name: "General",
-          seating_sector_id: null,
+          seating_sector_id: "grada-borrada",
           layout_type: "general",
           tier_type: "general",
         },
@@ -215,8 +209,21 @@ describe("nullifyInvalidTicketSeatingSectors", () => {
     assert.equal(next[0]?.layout_type, "numbered_seat")
     assert.equal(next[1]?.seating_sector_id, null)
     assert.equal(next[1]?.layout_type, "general")
-    assert.equal(next[1]?.tier_type, "general")
-    assert.equal(next[2]?.seating_sector_id, null)
+    assert.throws(
+      () =>
+        nullifyInvalidTicketSeatingSectors(
+          [
+            {
+              name: "Fantasma",
+              seating_sector_id: "grada-borrada",
+              layout_type: "numbered_seat",
+              tier_type: "seated",
+            },
+          ],
+          valid,
+        ),
+      /Fantasma/,
+    )
   })
 
   it("lee IDs de seating_maps por jornada además del venue_map", () => {
@@ -610,6 +617,16 @@ describe("seatingPersistUserMessage", () => {
       ORPHAN_SEATING_SECTOR_MESSAGE,
     )
     assert.equal(seatingPersistUserMessage("PGRST204"), null)
+  })
+
+  it("traduce un mapa que borra asientos vendidos al mensaje de inmutabilidad", () => {
+    assert.equal(
+      seatingPersistUserMessage({
+        code: "23514",
+        message: "SEATING_LAYOUT_SOLD_ITEM_REMOVED",
+      }),
+      "No puedes eliminar asientos con ventas activas. Mantenlo en el mapa y márcalo como 'bloqueado'.",
+    )
   })
 
   it("traduce 23505 del unique de sector por día a un mensaje legible", () => {

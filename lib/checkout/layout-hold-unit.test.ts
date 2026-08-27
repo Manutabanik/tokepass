@@ -52,4 +52,17 @@ describe("layout-hold-unit", () => {
     assert.equal(pickSeatingUnitForLayoutHold(units, "platea", dayB)?.id, "u-b")
     assert.equal(pickSeatingUnitForLayoutHold(units, "platea", dayA)?.id, "u-a")
   })
+
+  it("does not pick an undated unit on a multi-day event", () => {
+    const dayB = "550e8400-e29b-41d4-a716-446655440002"
+    const units = [
+      { id: "u-undated", status: "available", sector_id: "platea" },
+    ]
+    assert.equal(
+      pickSeatingUnitForLayoutHold(units, "platea", dayB, {
+        scheduleDayCount: 2,
+      }),
+      null,
+    )
+  })
 })

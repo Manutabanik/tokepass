@@ -176,6 +176,8 @@ export function InteractiveSeatingCanvas({
   posWorkstation = false,
   buyerChrome = false,
   silentHover = false,
+  scheduleDayCount = 0,
+  eventDateId: eventDateIdProp = null,
 }: {
   map: InteractiveVenueMap
   eventId?: string | null
@@ -202,6 +204,8 @@ export function InteractiveSeatingCanvas({
   posStatusColors?: boolean
   posWorkstation?: boolean
   buyerChrome?: boolean
+  scheduleDayCount?: number
+  eventDateId?: string | null
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const tooltipHostRef = useRef<HTMLDivElement>(null)
@@ -221,20 +225,25 @@ export function InteractiveSeatingCanvas({
   const [revealedZoneId, setRevealedZoneId] = useState<string | null>(null)
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const selectedSeats = useStorefrontSeatStore((state) => state.layoutSeats)
-  const activeScheduleId = useCheckoutStore((state) => state.selectedScheduleId)
+  const storeScheduleId = useCheckoutStore((state) => state.selectedScheduleId)
+  const activeScheduleId = eventDateIdProp?.trim() || storeScheduleId
   const daySelectedItems = useMemo(
     () =>
       selectedItems.filter((item) =>
-        storefrontItemMatchesSchedule(item, activeScheduleId),
+        storefrontItemMatchesSchedule(item, activeScheduleId, {
+          scheduleDayCount,
+        }),
       ),
-    [activeScheduleId, selectedItems],
+    [activeScheduleId, scheduleDayCount, selectedItems],
   )
   const daySelectedSeats = useMemo(
     () =>
       selectedSeats.filter((seat) =>
-        storefrontItemMatchesSchedule(seat, activeScheduleId),
+        storefrontItemMatchesSchedule(seat, activeScheduleId, {
+          scheduleDayCount,
+        }),
       ),
-    [activeScheduleId, selectedSeats],
+    [activeScheduleId, scheduleDayCount, selectedSeats],
   )
   const focusedMapIds = useStorefrontSeatStore((state) => state.focusedMapIds)
   const focusTick = useStorefrontSeatStore((state) => state.focusTick)
@@ -258,9 +267,10 @@ export function InteractiveSeatingCanvas({
   const [liveOccupancy, setLiveOccupancy] = useState<Record<string, SeatStatus>>(
     {},
   )
-  const [occupancyEventId, setOccupancyEventId] = useState(eventId)
-  if (eventId !== occupancyEventId) {
-    setOccupancyEventId(eventId)
+  const occupancyScopeKey = `${eventId ?? ""}::${activeScheduleId ?? ""}`
+  const [occupancyScope, setOccupancyScope] = useState(occupancyScopeKey)
+  if (occupancyScopeKey !== occupancyScope) {
+    setOccupancyScope(occupancyScopeKey)
     setLiveOccupancy({})
   }
   const applyOccupancyPatch = useCallback((patch: Record<string, SeatStatus>) => {
@@ -270,8 +280,16 @@ export function InteractiveSeatingCanvas({
     readOnly ? null : eventId,
     applyOccupancyPatch,
     "canvas",
+    activeScheduleId,
+    scheduleDayCount,
   )
-  useSeatHoldsRealtime(eventId, applyOccupancyPatch, "canvas", activeScheduleId)
+  useSeatHoldsRealtime(
+    eventId,
+    applyOccupancyPatch,
+    "canvas",
+    activeScheduleId,
+    scheduleDayCount,
+  )
   const occupancy = useMemo(
     () => mergeInventoryOccupancy(occupancyBySeatId, liveOccupancy),
     [liveOccupancy, occupancyBySeatId],

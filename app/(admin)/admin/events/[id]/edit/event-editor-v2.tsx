@@ -13,7 +13,7 @@ import { EventEditorV2InfoStep } from "./event-editor-v2-info"
 import { EventEditorV2InventoryStep } from "./event-editor-v2-inventory"
 import { EventEditorV2LaunchStep } from "./event-editor-v2-launch"
 import { EventEditorV2SuccessDialog } from "./event-editor-v2-success"
-import { publishEventV2 } from "@/app/actions/events-v2"
+import { getEventDraftV2, publishEventV2 } from "@/app/actions/events-v2"
 import { persistErrorUserMessage } from "@/lib/errors/persist-error"
 import { Button } from "@/components/ui/button"
 import { useEventDraftV2Persist } from "@/hooks/use-event-draft-v2-persist"
@@ -22,6 +22,7 @@ import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
 import { getArchetypeConfig, resolveDraftArchetype } from "@/lib/events/archetypes.config"
 import {
   DRAFT_LEAVE_GUARD_MESSAGE,
+  draftInventoryDrifted,
   draftSaveBadge,
   eventPreviewPath,
   shouldBlockDraftLeave,
@@ -34,6 +35,7 @@ import {
 import { cn } from "@/lib/utils"
 import {
   eventPublishDisabledReason,
+  parseEventDraftV2,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
 
@@ -68,10 +70,27 @@ export function EventEditorV2({
   const watched = useWatch({ control })
   const markDraftClean = useCallback(
     (saved?: EventDraftV2) => {
+      if (saved && draftInventoryDrifted(getValues(), saved)) {
+        const current = getValues()
+        reset({
+          ...current,
+          tickets: saved.tickets,
+          extras: saved.extras,
+        })
+        return
+      }
       reset(saved ?? getValues(), { keepValues: true })
     },
     [getValues, reset],
   )
+  const permitLeave = useCallback(() => {
+    allowLeaveRef.current = true
+    setAllowLeave(true)
+  }, [])
+  const revokeLeave = useCallback(() => {
+    allowLeaveRef.current = false
+    setAllowLeave(false)
+  }, [])
   const { saveStatus, saveError, online, persistDraft, flushAndPause, resume } =
     useEventDraftV2Persist(eventId, getValues, watched, {
       onSaved: markDraftClean,
@@ -130,9 +149,13 @@ export function EventEditorV2({
         toast.error(result.error)
         return
       }
-      markDraftClean()
-      allowLeaveRef.current = true
-      setAllowLeave(true)
+      const latest = await getEventDraftV2(eventId)
+      if (latest.success) {
+        reset(parseEventDraftV2(latest.draftState))
+      } else {
+        markDraftClean()
+      }
+      permitLeave()
       redirected = true
       window.location.assign(result.previewPath)
     } catch (error) {
@@ -163,9 +186,12 @@ export function EventEditorV2({
         return
       }
       markDraftClean()
-      allowLeaveRef.current = true
-      setAllowLeave(true)
+      permitLeave()
       setNowPublished(true)
+      const latest = await getEventDraftV2(eventId)
+      if (latest.success) {
+        reset(parseEventDraftV2(latest.draftState))
+      }
       setSuccessUpdated(wasPublished)
       setSuccessUrl(result.publicUrl)
       setSuccessOpen(true)
@@ -282,7 +308,10 @@ export function EventEditorV2({
         eventId={eventId}
         publicUrl={successUrl}
         updated={successUpdated}
-        onOpenChange={setSuccessOpen}
+        onOpenChange={(open) => {
+          setSuccessOpen(open)
+          if (!open) revokeLeave()
+        }}
       />
     </FormProvider>
   )

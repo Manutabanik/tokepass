@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  asPublishScheduleId,
   asPublishUuid,
   buildPublishEventV2Payload,
   composePublishDescription,
@@ -592,6 +593,30 @@ describe("publish helpers", () => {
     assert.equal(asPublishUuid("550e8400-e29b-41d4-a716-446655440000"), "550e8400-e29b-41d4-a716-446655440000")
   })
 
+  it("binds a ticket to a non-uuid draft slot with a stable schedule id", () => {
+    const draft = publishableDraft()
+    draft.schedule = [
+      {
+        id: "day-a",
+        name: "Sábado",
+        date: "2026-09-05",
+        startDate: "",
+        endDate: "",
+        slots: [
+          { id: "slot-manana", startTime: "10:00", endTime: "12:00" },
+          { id: "slot-tarde", startTime: "14:00", endTime: "16:00" },
+        ],
+      },
+    ]
+    draft.tickets[0]!.slotId = "slot-manana"
+    const payload = buildPublishEventV2Payload(draft)
+    const morningId = asPublishScheduleId("slot-manana")
+    assert.equal(payload.schedule_days.length, 2)
+    assert.equal(payload.schedule_days[0]?.id, morningId)
+    assert.equal(payload.tickets[0]?.day_id, morningId)
+    assert.equal(buildPublishEventV2Payload(draft).schedule_days[0]?.id, morningId)
+  })
+
   it("converts datetime-local values to ISO", () => {
     const iso = draftDateToIso("2026-09-01T22:00")
     assert.equal(Number.isNaN(Date.parse(iso)), false)
@@ -729,13 +754,41 @@ describe("publish helpers", () => {
     assert.equal(payload.seating_maps[1]?.event_date_id, slotB)
   })
 
+  it("publishes one ticket per slot when a day chip covers several turnos", () => {
+    const draft = publishableDraft()
+    const dayId = "550e8400-e29b-41d4-a716-446655440010"
+    const slotA = "550e8400-e29b-41d4-a716-446655440011"
+    const slotB = "550e8400-e29b-41d4-a716-446655440012"
+    draft.schedule = [
+      {
+        id: dayId,
+        name: "Sábado",
+        date: "2026-09-05",
+        startDate: "2026-09-05T10:00",
+        endDate: "2026-09-05T18:00",
+        slots: [
+          { id: slotA, startTime: "10:00", endTime: "12:00" },
+          { id: slotB, startTime: "14:00", endTime: "18:00" },
+        ],
+      },
+    ]
+    draft.tickets[0]!.validDayIds = [dayId]
+    const payload = buildPublishEventV2Payload(draft)
+    const named = payload.tickets.filter((ticket) => ticket.name === "General")
+    assert.equal(named.length, 2)
+    assert.deepEqual(
+      named.map((ticket) => ticket.day_id).sort(),
+      [slotA, slotB].sort(),
+    )
+  })
+
   it("does not count paid tickets as free capacity", () => {
     const payload = buildPublishEventV2Payload(publishableDraft())
     assert.equal(freePublishCapacity(payload), 0)
   })
 
-  it("nulls ghost seating_sector_id immediately before the database write", () => {
-    const payload = sanitizePublishPayloadForDatabase({
+  it("keeps live numbered sectors and rejects ghost mesa/asiento sectors", () => {
+    const base = {
       ...buildPublishEventV2Payload(publishableDraft()),
       has_seating_plan: true,
       venue_map: {
@@ -756,6 +809,9 @@ describe("publish helpers", () => {
           },
         ],
       },
+    }
+    const live = sanitizePublishPayloadForDatabase({
+      ...base,
       tickets: [
         {
           id: null,
@@ -774,31 +830,38 @@ describe("publish helpers", () => {
           day_id: null,
           ticket_type: "standard",
         },
-        {
-          id: null,
-          name: "Fantasma",
-          description: null,
-          price: 8000,
-          base_price: 8000,
-          platform_fee: 0,
-          capacity: 10,
-          min_purchase_limit: 1,
-          max_purchase_limit: 4,
-          tier_type: "seated",
-          category: "standard",
-          layout_type: "numbered_seat",
-          seating_sector_id: "grada-borrada",
-          day_id: null,
-          ticket_type: "standard",
-        },
       ],
     })
-    const live = payload.tickets.find((ticket) => ticket.name === "Viva")
-    const ghost = payload.tickets.find((ticket) => ticket.name === "Fantasma")
-    assert.equal(live?.seating_sector_id, "grada-naranja")
-    assert.equal(ghost?.seating_sector_id, null)
-    assert.equal(ghost?.layout_type, "general")
-    assert.equal(ghost?.tier_type, "general")
+    assert.equal(
+      live.tickets.find((ticket) => ticket.name === "Viva")?.seating_sector_id,
+      "grada-naranja",
+    )
+    assert.throws(
+      () =>
+        sanitizePublishPayloadForDatabase({
+          ...base,
+          tickets: [
+            {
+              id: null,
+              name: "Fantasma",
+              description: null,
+              price: 8000,
+              base_price: 8000,
+              platform_fee: 0,
+              capacity: 10,
+              min_purchase_limit: 1,
+              max_purchase_limit: 4,
+              tier_type: "seated",
+              category: "standard",
+              layout_type: "numbered_seat",
+              seating_sector_id: "grada-borrada",
+              day_id: null,
+              ticket_type: "standard",
+            },
+          ],
+        }),
+      /Fantasma/,
+    )
   })
 
   it("falls back to the title when there is no checkout copy", () => {

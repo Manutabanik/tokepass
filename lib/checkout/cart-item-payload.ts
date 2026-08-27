@@ -5,6 +5,8 @@ export type CartItemPayload = {
   ticket_type_id?: string
   sector_id?: string
   seat_id?: string
+  element_id?: string
+  event_date_id?: string
   quantity: number
 }
 
@@ -40,6 +42,12 @@ export function toCartItemPayload(input: unknown): CartItemPayload {
     item.seatingUnitId,
     Array.isArray(item.seatingIds) ? item.seatingIds[0] : undefined,
   )
+  const elementId = firstNonEmpty(item.element_id, item.elementId)
+  const eventDateId = firstNonEmpty(
+    item.event_date_id,
+    item.eventDateId,
+    item.dateId,
+  )
   const quantityRaw = Number(item.quantity)
   const payload: CartItemPayload = {
     quantity: Number.isFinite(quantityRaw)
@@ -49,6 +57,8 @@ export function toCartItemPayload(input: unknown): CartItemPayload {
   if (ticketId) payload.ticket_type_id = ticketId
   if (sectorId) payload.sector_id = sectorId
   if (seatId) payload.seat_id = seatId
+  if (elementId) payload.element_id = elementId
+  if (eventDateId) payload.event_date_id = eventDateId
   return payload
 }
 
@@ -90,6 +100,11 @@ export function sanitizeCheckoutActionItem(
     item.isMappedSelection,
     item.is_mapped_selection,
   )
+  const eventDateId = firstNonEmpty(
+    item.eventDateId,
+    item.event_date_id,
+    item.dateId,
+  )
 
   return {
     type: isMapped ? "mapped" : "general",
@@ -114,6 +129,9 @@ export function sanitizeCheckoutActionItem(
     is_numbered: isNumbered,
     isMappedSelection,
     is_mapped_selection: isMappedSelection,
+    eventDateId,
+    event_date_id: eventDateId,
+    dateId: eventDateId,
   }
 }
 

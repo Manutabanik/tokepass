@@ -1,6 +1,8 @@
+import { createDraftScheduleDay } from "@/lib/events/draft-schedule-slots-v2"
 import {
   parseDraftSeatingMaps,
   seatingInstanceToVenueMap,
+  toDraftSeatingMap,
 } from "@/lib/events/draft-seating-map-v2"
 import {
   flattenSeatsForAvailability,
@@ -57,6 +59,28 @@ export function collectVenueMapLayoutItemIds(
   }
 
   return [...ids]
+}
+
+/**
+ * Single-day v1 map save uses the same immutability keys as editor drafts.
+ * Multi-day saves must not call this: one global map is not a per-day source.
+ */
+export function draftLayoutSourceFromSavedVenueMap(input: {
+  map: InteractiveVenueMap
+  scheduleDayIds: readonly string[]
+}): Pick<EventDraftV2, "seatingMaps" | "seatingMap" | "schedule"> {
+  const dateId = input.scheduleDayIds[0] ?? ""
+  return {
+    seatingMap: toDraftSeatingMap(input.map),
+    seatingMaps: [
+      {
+        dateId,
+        mapConfig: input.map,
+        pricing: { sectorPrices: {}, blockedSeatIds: [] },
+      },
+    ],
+    schedule: dateId ? [createDraftScheduleDay({ id: dateId })] : [],
+  }
 }
 
 export function collectDraftLayoutItemKeys(

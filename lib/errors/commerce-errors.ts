@@ -1,5 +1,9 @@
 import { CHECKOUT_NO_STOCK_MESSAGE } from "@/lib/checkout/checkout-feedback"
 import {
+  MISSING_EVENT_DATE_ID,
+  MISSING_EVENT_DATE_ID_MESSAGE,
+} from "@/lib/checkout/seat-hold-day"
+import {
   SEAT_SELECTION_REQUIRED,
   SEAT_UNAVAILABLE_MESSAGE,
   SECTOR_NOT_CONFIGURED,
@@ -43,6 +47,14 @@ const POS_RULES: Array<{ match: RegExp; message: string }> = [
   {
     match: /seating_not_found|seating_tier|seating_unit_unavailable/i,
     message: "Esa ubicación ya no está disponible. Recargá el mapa.",
+  },
+  {
+    match: /missing_event_date_id/i,
+    message: "Elegí el día del evento para cobrar esa ubicación.",
+  },
+  {
+    match: /SEAT_SELECTION_REQUIRED|seat_selection_required/i,
+    message: "Elegí una mesa o asiento en el plano para esa entrada.",
   },
   {
     match: /void_tickets_used/i,
@@ -91,6 +103,9 @@ export function toCheckoutUserError(
 ): string {
   const text = textFromUnknown(raw)
   if (text === "auth_required" || text === "phase_rollover") return text
+  if (text === MISSING_EVENT_DATE_ID || /missing_event_date_id/i.test(text)) {
+    return MISSING_EVENT_DATE_ID_MESSAGE
+  }
   if (text === TICKET_SALE_ENDED_ERROR || text === TICKET_SALE_UPCOMING_ERROR) {
     return text
   }

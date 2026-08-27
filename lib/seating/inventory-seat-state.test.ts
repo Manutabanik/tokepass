@@ -110,6 +110,34 @@ describe("inventory-seat-state", () => {
     assert.equal(occupancy["s-3"], undefined)
   })
 
+  it("ignores undated holds when viewing a jornada of a multi-day event", () => {
+    const occupancy = occupancyFromSeatHolds(
+      [
+        {
+          layoutItemId: "mesa-09",
+          expiresAt: "2099-01-01T00:00:00.000Z",
+        },
+      ],
+      {
+        eventDateId: "day-sat",
+        scheduleDayCount: 2,
+        nowMs: Date.parse("2026-08-16T00:00:00.000Z"),
+      },
+    )
+    assert.equal(occupancy["mesa-09"], undefined)
+    assert.equal(
+      seatHoldRealtimePatch(
+        "INSERT",
+        {
+          layout_item_id: "mesa-09",
+          expires_at: "2099-01-01T00:00:00.000Z",
+        },
+        { eventDateId: "day-sat", scheduleDayCount: 2 },
+      ),
+      null,
+    )
+  })
+
   it("patches INSERT to held and DELETE/expired to available", () => {
     assert.deepEqual(
       seatHoldRealtimePatch("INSERT", {

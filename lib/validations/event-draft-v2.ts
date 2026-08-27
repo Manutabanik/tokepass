@@ -23,6 +23,7 @@ import {
   asTicketCommerceType,
   type TicketCommerceType,
 } from "@/lib/events/ticket-commerce-type"
+import { parsePromoVideoUrl } from "@/lib/promo-video"
 
 export {
   EVENT_DRAFT_ARCHETYPES,
@@ -41,6 +42,13 @@ export {
 export const EVENT_DRAFT_NAME_MAX = 120
 export const EVENT_DRAFT_TEXT_MAX = 2000
 export const EVENT_DRAFT_TICKET_DESCRIPTION_MAX = 180
+
+function normalizeDraftPromoVideoUrl(value: unknown): string {
+  if (typeof value !== "string") return ""
+  const raw = value.trim()
+  if (!raw) return ""
+  return parsePromoVideoUrl(raw)?.canonicalUrl ?? raw
+}
 
 export function sanitizeDraftText(value: string, maxLen: number): string {
   return value
@@ -182,7 +190,10 @@ const eventDraftFieldsSchema = z.object({
   location: draftLocationSchema,
   flyerUrl: z.string().optional().default(""),
   bannerUrl: z.string().optional().default(""),
-  promoVideoUrl: z.string().url().optional().or(z.literal("")).default(""),
+  promoVideoUrl: z.preprocess(
+    normalizeDraftPromoVideoUrl,
+    z.string().optional().default(""),
+  ),
   galleryUrls: z.array(z.string().url()).default([]),
   restrictions: z.string().optional().default(""),
   whatToBring: z.string().optional().default(""),
@@ -304,7 +315,10 @@ export const eventPublishSchema = z
       .min(1, "Agregá al menos una entrada"),
     extras: z.array(draftLineItemSchema).optional(),
     lineup: z.array(draftLineupItemSchema).optional(),
-    promoVideoUrl: z.string().url().optional().or(z.literal("")),
+    promoVideoUrl: z.preprocess(
+      normalizeDraftPromoVideoUrl,
+      z.string().optional().or(z.literal("")),
+    ),
     galleryUrls: z.array(z.string().url()).optional().default([]),
     restrictions: z.string().max(EVENT_DRAFT_TEXT_MAX).optional(),
     whatToBring: z.string().max(EVENT_DRAFT_TEXT_MAX).optional(),
@@ -703,13 +717,22 @@ function parseDraftLineItems(
 
 export const EVENT_DRAFT_GALLERY_MAX = 4
 
+function isDraftHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+  } catch {
+    return false
+  }
+}
+
 function parseDraftGalleryUrls(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
   const urls: string[] = []
   for (const item of raw) {
     if (typeof item !== "string") continue
     const url = item.trim()
-    if (!url || urls.includes(url)) continue
+    if (!url || urls.includes(url) || !isDraftHttpUrl(url)) continue
     urls.push(url)
     if (urls.length >= EVENT_DRAFT_GALLERY_MAX) break
   }
@@ -884,7 +907,9 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
     },
     flyerUrl: asOptionalString(record.flyerUrl),
     bannerUrl: asOptionalString(record.bannerUrl),
-    promoVideoUrl: asOptionalString(record.promoVideoUrl ?? record.promo_video_url),
+    promoVideoUrl: normalizeDraftPromoVideoUrl(
+      record.promoVideoUrl ?? record.promo_video_url,
+    ),
     galleryUrls: parseDraftGalleryUrls(
       record.galleryUrls ?? record.gallery_urls,
     ),

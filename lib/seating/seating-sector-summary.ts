@@ -1,3 +1,4 @@
+import { seatingUnitMatchesEventDate } from "@/lib/checkout/seat-hold-day"
 import type { SeatingSectorSummary, VenueLayoutType } from "@/types/venues"
 
 export type SeatingSectorSummaryRpcRow = {
@@ -12,6 +13,7 @@ export type SeatingSectorSummaryRpcRow = {
   sold: number
   blocked: number
   total: number
+  event_date_id?: string | null
 }
 
 export type SeatingSummaryTierInput = {
@@ -56,7 +58,61 @@ export function mapSeatingSectorSummaryRows(
     sold: Number(row.sold) || 0,
     blocked: Number(row.blocked) || 0,
     total: Number(row.total) || 0,
+    eventDateId: row.event_date_id ?? null,
   }))
+}
+
+export function pickSectorSummaryForDay<
+  T extends {
+    sectorId: string
+    sectorName?: string | null
+    tierId?: string | null
+    eventDateId?: string | null
+  },
+>(
+  summaries: T[],
+  match: {
+    sectorId?: string | null
+    sectorName?: string | null
+    tierId?: string | null
+    eventDateId?: string | null
+    scheduleDayCount?: number
+  },
+): T | undefined {
+  const sectorId = match.sectorId?.trim() ?? ""
+  const sectorName = match.sectorName?.trim().toLowerCase() ?? ""
+  const tierId = match.tierId?.trim() ?? ""
+  const rows = summaries.filter((row) => {
+    if (tierId && row.tierId === tierId) return true
+    if (sectorId && row.sectorId === sectorId) return true
+    if (
+      sectorName &&
+      (row.sectorName ?? "").trim().toLowerCase() === sectorName
+    ) {
+      return true
+    }
+    return false
+  })
+  if (rows.length === 0) return undefined
+  const eventDateId = match.eventDateId?.trim() ?? ""
+  const dated = new Set(
+    rows.map((row) => row.eventDateId?.trim() || "").filter(Boolean),
+  )
+  const scheduleDayCount =
+    match.scheduleDayCount ?? (dated.size >= 2 ? 2 : 1)
+  if (scheduleDayCount >= 2 && !eventDateId) return undefined
+  const scoped = rows.filter((row) =>
+    seatingUnitMatchesEventDate(
+      { event_date_id: row.eventDateId },
+      eventDateId || null,
+      { scheduleDayCount },
+    ),
+  )
+  if (scoped.length === 0) return undefined
+  if (!eventDateId) return scoped[0]
+  return (
+    scoped.find((row) => row.eventDateId === eventDateId) ?? scoped[0]
+  )
 }
 
 /** Resumen aproximado cuando el RPC no está parcheado (min(uuid)). */

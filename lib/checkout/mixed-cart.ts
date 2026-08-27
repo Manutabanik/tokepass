@@ -1,4 +1,9 @@
-import { isMappedCheckoutItem } from "@/lib/checkout/hybrid-cart"
+import {
+  checkoutItemElementId,
+  checkoutItemSeatId,
+  checkoutItemTierId,
+  isMappedCheckoutItem,
+} from "@/lib/checkout/hybrid-cart"
 import {
   layoutRequiresSeatSelection,
 } from "@/lib/checkout/revalidate-seat-holds"
@@ -55,6 +60,25 @@ export function tierUsesMapInventory(
   if (layoutRequiresSeatSelection(tier.layoutType)) return true
   const sectorId = tier.seatingSectorId?.trim() ?? ""
   return sectorId.length > 0 && Boolean(linkedSectorIds?.has(sectorId))
+}
+
+/**
+ * Numbered seats and tables cannot be sold as GA. A crafted
+ * `{ type: "general", tierId: mesa }` payload has no seating_unit_id.
+ */
+export function assertSeatedCartItemsHaveUnits(
+  items: readonly CheckoutCartItem[],
+  tiers: readonly Pick<MixedCartTierHint, "id" | "layoutType" | "isNumbered">[],
+): { ok: true } | { ok: false; tierId: string } {
+  const byId = new Map(tiers.map((tier) => [tier.id, tier]))
+  for (const item of items) {
+    const tierId = checkoutItemTierId(item)
+    const tier = byId.get(tierId)
+    if (!tierIsNumbered(tier)) continue
+    if (checkoutItemSeatId(item) || checkoutItemElementId(item)) continue
+    return { ok: false, tierId }
+  }
+  return { ok: true }
 }
 
 export function partitionMixedCartItems<T extends CheckoutCartItem>(input: {
