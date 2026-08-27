@@ -1,11 +1,14 @@
 "use client"
 
+import { useMemo } from "react"
+
 import {
   EventCheckoutSelector,
   type SelectedNumberedSeat,
 } from "@/components/public/event-checkout-selector"
 import type { SeatSelectionContext } from "@/components/public/seat-selection-sheet"
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
+import { projectQuantitiesForSchedule } from "@/lib/checkout/cart-item-identity"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import type { ScheduleDay } from "@/types/events"
 
@@ -48,7 +51,17 @@ export function CheckoutTicketList({
   selectedDateId?: string | null
   onSelectedDateIdChange?: (dateId: string) => void
 }) {
-  const quantities = useCheckoutStore((state) => state.quantities)
+  const storeQuantities = useCheckoutStore((state) => state.quantities)
+  const storeLines = useCheckoutStore((state) => state.lines)
+  const quantities = useMemo(
+    () =>
+      projectQuantitiesForSchedule(
+        storeQuantities,
+        storeLines,
+        selectedDateId,
+      ),
+    [selectedDateId, storeLines, storeQuantities],
+  )
   const selectedSeat = useCheckoutStore((state) => state.selectedSeat)
   const seatSheetOpen = useCheckoutStore((state) => state.seatSheetOpen)
 

@@ -10,11 +10,7 @@ import {
   remainingHoldSeconds,
 } from "@/lib/checkout/cart-hold-clock"
 import { ABSOLUTE_MAX_ITEMS_PER_PURCHASE } from "@/lib/checkout-limits"
-import {
-  cartItemDateString,
-  cartItemScheduleId,
-  cartItemSeatLabel,
-} from "@/lib/checkout/cart-line-stamp"
+import { cartItemScheduleId } from "@/lib/checkout/cart-line-stamp"
 import {
   toCartItemPayload,
   type CartItemPayload,
@@ -26,9 +22,17 @@ import {
   toCartNumber,
 } from "@/lib/checkout/cart"
 import {
-  cartTicketLineId,
-  parseCartTicketLineId,
-} from "@/lib/checkout/cart-lines"
+  cartCompositeItemId,
+  cartLineSnapshot,
+  cartQuantityKey,
+  freezeCartLineSnapshot,
+  generalLineTierId,
+  isMapCartLine,
+  mergeImmutableCartLines,
+  parseCartCompositeItemId,
+  upsertGeneralCartLine,
+} from "@/lib/checkout/cart-item-identity"
+import { storefrontSelectionKey } from "@/lib/checkout/seat-hold-day"
 import type { CheckoutBuyerInfo } from "@/lib/checkout-buyer"
 import {
   isCheckoutGuest,
@@ -102,6 +106,7 @@ export type AddToCartInput = {
   elementId?: string | null
   scheduleId?: string | null
   dateString?: string | null
+  sectorName?: string | null
   seatLabel?: string | null
 }
 
@@ -232,17 +237,10 @@ function sameLines(left: StorefrontCartLine[], right: StorefrontCartLine[]) {
       line.seatId === other.seatId &&
       line.elementId === other.elementId &&
       line.seatLabel === other.seatLabel &&
-      line.placeLabel === other.placeLabel
+      line.placeLabel === other.placeLabel &&
+      line.sectorName === other.sectorName
     )
   })
-}
-
-function isMapCartLine(line: StorefrontCartLine) {
-  return Boolean(line.seatId?.trim() || line.elementId?.trim())
-}
-
-function generalLineTierId(line: StorefrontCartLine) {
-  return line.ticketTierId?.trim() || parseCartTicketLineId(line.id)
 }
 
 function cartTotalsFromLines(lines: StorefrontCartLine[]) {
@@ -289,50 +287,6 @@ function fillCatalogGaps(
     changed = true
   }
   return changed ? next : current
-}
-
-function upsertGeneralLine(
-  lines: StorefrontCartLine[],
-  input: {
-    ticketTierId: string
-    name: string
-    price: number
-    quantity: number
-    scheduleId?: string | null
-    dateString?: string | null
-    seatLabel?: string | null
-  },
-): StorefrontCartLine[] {
-  const existing = lines.find(
-    (line) => !isMapCartLine(line) && generalLineTierId(line) === input.ticketTierId,
-  )
-  const others = lines.filter((line) => {
-    if (isMapCartLine(line)) return true
-    return generalLineTierId(line) !== input.ticketTierId
-  })
-  if (input.quantity <= 0) return others
-  const scheduleId =
-    cartItemScheduleId(existing ?? {}) ?? cartItemScheduleId(input)
-  const dateString =
-    cartItemDateString(existing ?? {}) ?? cartItemDateString(input)
-  const seatLabel =
-    cartItemSeatLabel(existing ?? {}) ?? cartItemSeatLabel(input)
-  const stamped: StorefrontCartLine = {
-    id: cartTicketLineId(input.ticketTierId, scheduleId),
-    ticketTierId: input.ticketTierId,
-    ticketTypeId: input.ticketTierId,
-    name: input.name,
-    quantity: input.quantity,
-    price: input.price,
-    ...(scheduleId
-      ? { scheduleId, dateId: scheduleId }
-      : {}),
-    ...(dateString
-      ? { dateString, dateLabel: dateString }
-      : {}),
-    ...(seatLabel ? { seatLabel, placeLabel: seatLabel } : {}),
-  }
-  return [...others, stamped]
 }
 
 function withCartHoldClock(
@@ -630,9 +584,11 @@ export const useCheckoutStore = create<CheckoutState>()(
         set({ totalAmount, itemsCount })
       },
 
-      setCartLines: (lines) => {
+      setCartLines: (incoming) => {
+        const current = get()
+        const lines = mergeImmutableCartLines(current.lines, incoming)
         const catalog = fillCatalogGaps(
-          get().catalogByTierId,
+          current.catalogByTierId,
           lines
             .map((line) => {
               const id = line.ticketTierId?.trim()
@@ -641,10 +597,9 @@ export const useCheckoutStore = create<CheckoutState>()(
             })
             .filter((entry): entry is CheckoutCatalogEntry => entry != null),
         )
-        if (sameLines(get().lines, lines) && catalog === get().catalogByTierId) {
+        if (sameLines(current.lines, lines) && catalog === current.catalogByTierId) {
           return
         }
-        const current = get()
         set(
           withCartHoldClock(current, {
             lines,
@@ -665,9 +620,22 @@ export const useCheckoutStore = create<CheckoutState>()(
           0,
           Math.floor(toCartNumber(input.maxQuantity ?? ABSOLUTE_MAX_ITEMS_PER_PURCHASE)),
         )
+        const snapshot = cartLineSnapshot(input)
         if (seatId || elementId) {
-          const id = seatId || elementId!
-          const existing = get().lines.find((line) => line.id === id)
+          const unitId = seatId || elementId!
+          const id = cartCompositeItemId(
+            input.ticketTierId,
+            snapshot.scheduleId,
+            unitId,
+          )
+          const existing = get().lines.find((line) => {
+            if (line.id === id) return true
+            const unit = line.seatId?.trim() || line.elementId?.trim()
+            return (
+              unit === unitId &&
+              cartItemScheduleId(line) === snapshot.scheduleId
+            )
+          })
           const incomingQty =
             input.quantity == null
               ? null
@@ -675,23 +643,21 @@ export const useCheckoutStore = create<CheckoutState>()(
           const quantity = seatId
             ? 1
             : incomingQty ?? (existing ? existing.quantity + 1 : 1)
-          const others = get().lines.filter((line) => line.id !== id)
-          const scheduleId = cartItemScheduleId(input)
-          const dateString = cartItemDateString(input)
-          const seatLabel = input.seatLabel?.trim() || null
-          const line: StorefrontCartLine = {
-            id,
-            ticketTierId: input.ticketTierId,
-            ticketTypeId: input.ticketTierId,
-            name: input.name,
-            quantity,
-            price: unitPrice,
-            seatId,
-            elementId,
-            ...(scheduleId ? { scheduleId, dateId: scheduleId } : {}),
-            ...(dateString ? { dateString, dateLabel: dateString } : {}),
-            ...(seatLabel ? { seatLabel, placeLabel: seatLabel } : {}),
-          }
+          const others = get().lines.filter((line) => line.id !== existing?.id && line.id !== id)
+          const line = freezeCartLineSnapshot(
+            {
+              id,
+              ticketTierId: input.ticketTierId,
+              ticketTypeId: input.ticketTierId,
+              name: input.name,
+              quantity,
+              price: unitPrice,
+              seatId,
+              elementId,
+              sectorName: input.sectorName?.trim() || existing?.sectorName || null,
+            },
+            existing ? cartLineSnapshot(existing) : snapshot,
+          )
           const lines = [...others, line]
           const current = get()
           set(
@@ -711,7 +677,7 @@ export const useCheckoutStore = create<CheckoutState>()(
                     seatingUnitId: seatId,
                     sectorKey: null,
                     tableNumber: null,
-                    label: input.seatLabel?.trim() || input.name,
+                    label: snapshot.seatLabel || input.name,
                     price: unitPrice,
                   }
                 : current.selectedSeat,
@@ -720,19 +686,21 @@ export const useCheckoutStore = create<CheckoutState>()(
           return { ok: true, quantity }
         }
 
-        const currentQty = get().quantities[input.ticketTierId] ?? 0
+        const qtyKey = cartQuantityKey(input.ticketTierId, snapshot.scheduleId)
+        const currentQty = get().quantities[qtyKey] ?? 0
         const delta = input.quantity == null ? 1 : Math.floor(toCartNumber(input.quantity))
         const nextQty = Math.max(0, currentQty + delta)
         if (nextQty > maxQuantity) return { ok: false, reason: "limit" }
         const current = get()
-        const quantities = { ...current.quantities, [input.ticketTierId]: nextQty }
-        const lines = upsertGeneralLine(current.lines, {
+        const quantities = { ...current.quantities, [qtyKey]: nextQty }
+        const lines = upsertGeneralCartLine(current.lines, {
           ticketTierId: input.ticketTierId,
           name: input.name,
           price: unitPrice,
           quantity: nextQty,
           scheduleId: input.scheduleId,
           dateString: input.dateString,
+          sectorName: input.sectorName,
           seatLabel: input.seatLabel,
         })
         set(
@@ -760,19 +728,22 @@ export const useCheckoutStore = create<CheckoutState>()(
         const requested = Math.floor(toCartNumber(input.quantity))
         if (requested > maxQuantity) return { ok: false, reason: "limit" }
         const nextQty = Math.min(Math.max(0, requested), maxQuantity)
-        const quantities = { ...get().quantities, [input.ticketTierId]: nextQty }
+        const snapshot = cartLineSnapshot(input)
+        const qtyKey = cartQuantityKey(input.ticketTierId, snapshot.scheduleId)
+        const quantities = { ...get().quantities, [qtyKey]: nextQty }
         const unitPrice =
           input.price === undefined || input.price === null
             ? 0
             : toCartNumber(input.price)
         const current = get()
-        const lines = upsertGeneralLine(current.lines, {
+        const lines = upsertGeneralCartLine(current.lines, {
           ticketTierId: input.ticketTierId,
           name: input.name,
           price: unitPrice,
           quantity: nextQty,
           scheduleId: input.scheduleId,
           dateString: input.dateString,
+          sectorName: input.sectorName,
           seatLabel: input.seatLabel,
         })
         set(
@@ -811,28 +782,54 @@ export const useCheckoutStore = create<CheckoutState>()(
       },
 
       removeItem: (id) => {
-        const line = get().lines.find(
-          (item) => item.id === id || item.ticketTierId === id,
-        )
-        const ticketId = parseCartTicketLineId(id) || line?.ticketTierId || null
-        if (ticketId && (!line || !isMapCartLine(line))) {
-          const lines = get().lines.filter(
-            (item) => generalLineTierId(item) !== ticketId,
+        const current = get()
+        const line = current.lines.find((item) => item.id === id)
+        const parsed = parseCartCompositeItemId(id)
+        const ticketId =
+          (line ? generalLineTierId(line) : parsed?.ticketId) || null
+        const qtyKey =
+          line && ticketId && !isMapCartLine(line)
+            ? cartQuantityKey(ticketId, cartItemScheduleId(line))
+            : parsed && parsed.ticketId && !parsed.unitId
+              ? cartQuantityKey(parsed.ticketId, parsed.scheduleId)
+              : null
+        const lines = current.lines.filter((item) => item.id !== id)
+        const quantities = { ...current.quantities }
+        if (qtyKey) delete quantities[qtyKey]
+        if (
+          ticketId &&
+          !lines.some(
+            (item) =>
+              !isMapCartLine(item) && generalLineTierId(item) === ticketId,
           )
-          set(
-            withCartHoldClock(get(), {
-              quantities: { ...get().quantities, [ticketId]: 0 },
-              lines,
-              ...cartTotalsFromLines(lines),
+        ) {
+          delete quantities[ticketId]
+        }
+        set(
+          withCartHoldClock(current, {
+            quantities,
+            lines,
+            ...cartTotalsFromLines(lines),
+          }),
+        )
+        const seats = useStorefrontSeatStore.getState()
+        seats.removeSelectedItem(id)
+        const unitId = line?.seatId?.trim() || line?.elementId?.trim()
+        if (line && unitId) {
+          seats.removeSelectedItem(unitId)
+          seats.removeSelectedItem(
+            storefrontSelectionKey({
+              id: unitId,
+              eventDateId: cartItemScheduleId(line),
             }),
           )
-          return
         }
-        useStorefrontSeatStore.getState().removeSelectedItem(id)
         const seat = get().selectedSeat
         if (
           seat &&
-          (seat.seatingUnitId === id || seat.label === id)
+          (seat.seatingUnitId === id ||
+            seat.seatingUnitId === unitId ||
+            seat.label === id)
         ) {
           set({ selectedSeat: null })
         }

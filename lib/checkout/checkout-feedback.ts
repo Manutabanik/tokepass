@@ -1,3 +1,4 @@
+import { parseCartCompositeItemId } from "@/lib/checkout/cart-item-identity"
 import { CHECKOUT_PRICES_CHANGED_ERROR } from "@/lib/checkout/price-guard"
 import {
   GENERAL_STOCK_UNAVAILABLE,
@@ -194,7 +195,8 @@ export function inferCheckoutTicketId(
   }
   const selected = Object.entries(quantities)
     .filter(([, quantity]) => quantity > 0)
-    .map(([id]) => id)
-  if (selected.length === 1) return selected[0] ?? null
+    .map(([id]) => parseCartCompositeItemId(id)?.ticketId ?? id)
+  const unique = [...new Set(selected)]
+  if (unique.length === 1) return unique[0] ?? null
   return null
 }

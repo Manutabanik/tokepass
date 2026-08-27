@@ -36,6 +36,7 @@ import {
   SEAT_HELD_BY_OTHER_MESSAGE,
 } from "@/lib/seating/inventory-seat-state"
 import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
+import { cartPlaceLabel } from "@/lib/checkout/cart-lines"
 import {
   asHoldEventDateId,
   storefrontItemMatchesSchedule,
@@ -637,11 +638,27 @@ export function InteractiveSeatingCanvas({
     )
   }
 
-  function applyToggle(item: StorefrontSelectedItem) {
-    const stamped = withCheckoutEventDateId(
+  function canvasSeatLabel(item: StorefrontSelectedItem) {
+    return (
+      item.seatLabel?.trim() ||
+      item.displayName?.trim() ||
+      cartPlaceLabel(item) ||
+      item.name?.trim() ||
+      ""
+    )
+  }
+
+  function stampCanvasSelection(item: StorefrontSelectedItem) {
+    const seatLabel = canvasSeatLabel(item)
+    return withCheckoutEventDateId(
       item,
       useCheckoutStore.getState().selectedScheduleId,
+      { seatLabel },
     )
+  }
+
+  function applyToggle(item: StorefrontSelectedItem) {
+    const stamped = stampCanvasSelection(item)
     const result = toggleSelectedItem(stamped, maxSelectable)
     if (!result.ok) {
       toast.error(storefrontLimitMessage(result.reason))
@@ -659,13 +676,7 @@ export function InteractiveSeatingCanvas({
     if (!item) return
     const result = useStorefrontSeatStore
       .getState()
-      .incrementSelectedItem(
-        withCheckoutEventDateId(
-          item,
-          useCheckoutStore.getState().selectedScheduleId,
-        ),
-        maxSelectable,
-      )
+      .incrementSelectedItem(stampCanvasSelection(item), maxSelectable)
     if (!result.ok) {
       toast.error(storefrontLimitMessage(result.reason))
     }
@@ -814,6 +825,23 @@ export function InteractiveSeatingCanvas({
       })
       return
     }
+    const seatLabel =
+      seat.label?.trim() ||
+      cartPlaceLabel({
+        type: "seat",
+        row: seat.row,
+        number: seat.number,
+      }) ||
+      canvasSeatLabel({
+        id: seat.id,
+        name: seat.sectorName,
+        type: "seat",
+        price,
+        capacity: 1,
+        sectorName: seat.sectorName,
+        row: seat.row,
+        number: seat.number,
+      })
     const result = toggleLayoutSeat(
       {
         id: seat.id,
@@ -823,6 +851,7 @@ export function InteractiveSeatingCanvas({
         sectorName: seat.sectorName,
         price,
         color: seat.color,
+        label: seatLabel,
         eventDateId:
           asHoldEventDateId(
             useCheckoutStore.getState().selectedScheduleId,
@@ -942,13 +971,7 @@ export function InteractiveSeatingCanvas({
     if (live.type === "standing_zone") {
       const result = useStorefrontSeatStore
         .getState()
-        .incrementSelectedItem(
-          withCheckoutEventDateId(
-            item,
-            useCheckoutStore.getState().selectedScheduleId,
-          ),
-          maxSelectable,
-        )
+        .incrementSelectedItem(stampCanvasSelection(item), maxSelectable)
       if (!result.ok) {
         toast.error(storefrontLimitMessage(result.reason))
       }

@@ -347,6 +347,7 @@ export function resolveStorefrontItemFromMap(
       number: seat.number,
       sellMode: "per_seat",
       priceMode: "per_person",
+      seatLabel: name,
     }
   }
   return null

@@ -53,6 +53,14 @@ import {
   formatSelectionChargeDetail,
   storefrontLineSkuQuantity,
 } from "@/lib/checkout/charge-unit"
+import {
+  cartCompositeItemId,
+  cartQuantityKey,
+  generalLineTierId,
+  isMapCartLine,
+  parseCartCompositeItemId,
+  projectQuantitiesForSchedule,
+} from "@/lib/checkout/cart-item-identity"
 import { cartPlaceLabel, cartTicketLineId } from "@/lib/checkout/cart-lines"
 import {
   cartItemDateString,
@@ -554,7 +562,8 @@ export function CheckoutTunnel({
   const holdExpiresAt = useCheckoutStore((state) =>
     state.eventId === eventId ? state.holdExpiresAt : null,
   )
-  const quantities = useCheckoutStore((state) => state.quantities)
+  const storeQuantities = useCheckoutStore((state) => state.quantities)
+  const storeLines = useCheckoutStore((state) => state.lines)
   const setQuantities = useCheckoutStore((state) => state.setQuantities)
   const [tierOverrides, setTierOverrides] = useState<
     Record<string, Partial<TicketSelectorTier>>
@@ -593,7 +602,22 @@ export function CheckoutTunnel({
             delete next[tierId]
             return next
           })
-          setQuantities((qty) => ({ ...qty, [tierId]: 0 }))
+          const store = useCheckoutStore.getState()
+          for (const line of store.lines) {
+            if (isMapCartLine(line) || generalLineTierId(line) !== tierId) {
+              continue
+            }
+            store.setGeneralQuantity({
+              ticketTierId: tierId,
+              name: line.name,
+              price: line.price,
+              quantity: 0,
+              scheduleId: cartItemScheduleId(line),
+              dateString: cartItemDateString(line),
+              sectorName: line.sectorName,
+              seatLabel: cartItemSeatLabel(line),
+            })
+          }
           return
         }
         const patch = ticketSelectorPatchFromRow(row)
@@ -603,10 +627,23 @@ export function CheckoutTunnel({
           [tierId]: { ...prev[tierId], ...patch },
         }))
         if (typeof patch.available === "number") {
-          setQuantities((qty) => ({
-            ...qty,
-            [tierId]: Math.min(qty[tierId] ?? 0, patch.available ?? 0),
-          }))
+          const store = useCheckoutStore.getState()
+          const cap = patch.available ?? 0
+          for (const line of store.lines) {
+            if (isMapCartLine(line) || generalLineTierId(line) !== tierId) {
+              continue
+            }
+            store.setGeneralQuantity({
+              ticketTierId: tierId,
+              name: line.name,
+              price: line.price,
+              quantity: Math.min(line.quantity, cap),
+              scheduleId: cartItemScheduleId(line),
+              dateString: cartItemDateString(line),
+              sectorName: line.sectorName,
+              seatLabel: cartItemSeatLabel(line),
+            })
+          }
         }
       },
     },
@@ -630,6 +667,15 @@ export function CheckoutTunnel({
     checkoutDateCards.some((card) => card.dateId === storedScheduleId)
       ? storedScheduleId
       : defaultDateId
+  const quantities = useMemo(
+    () =>
+      projectQuantitiesForSchedule(
+        storeQuantities,
+        storeLines,
+        selectedDateId,
+      ),
+    [selectedDateId, storeLines, storeQuantities],
+  )
   const scheduleDayCount = scheduleDays.length
   const occupancyScopeKey = `${eventId}::${selectedDateId ?? ""}`
   const [occupancyScope, setOccupancyScope] = useState(occupancyScopeKey)
@@ -831,6 +877,7 @@ export function CheckoutTunnel({
     const counts: Record<string, number> = {}
     for (const item of selectedItems) {
       if (item.type === "seat" || item.type === "table") continue
+      if (!itemMatchesActiveDay(item)) continue
       const tierId = resolveItemTierId(item)
       if (!tierId) continue
       counts[tierId] =
@@ -854,31 +901,34 @@ export function CheckoutTunnel({
           Math.max(0, tier?.available ?? target),
         )
         const clamped = Math.min(target, max)
-        if ((next[tierId] ?? 0) !== clamped) {
-          next[tierId] = clamped
+        const key = cartQuantityKey(tierId, selectedDateId)
+        if ((next[key] ?? 0) !== clamped) {
+          next[key] = clamped
           changed = true
         }
       }
       for (const tierId of mapDrivenTierIds.current) {
-        if (!nextDriven.has(tierId) && (next[tierId] ?? 0) !== 0) {
-          next[tierId] = 0
+        const key = cartQuantityKey(tierId, selectedDateId)
+        if (!nextDriven.has(tierId) && (next[key] ?? 0) !== 0) {
+          next[key] = 0
           changed = true
         }
       }
       for (const tier of displayTiers) {
+        const key = cartQuantityKey(tier.id, selectedDateId)
         if (
           !isQuantityCheckoutTier(tier) &&
           !nextDriven.has(tier.id) &&
-          (next[tier.id] ?? 0) !== 0
+          (next[key] ?? 0) !== 0
         ) {
-          next[tier.id] = 0
+          next[key] = 0
           changed = true
         }
       }
       mapDrivenTierIds.current = nextDriven
       return changed ? next : current
     })
-  }, [checkoutTierInput, displayTiers, maxTicketsPerUser, resolveItemTierId, selectedItems, setQuantities, zoneTierPricing])
+  }, [checkoutTierInput, displayTiers, maxTicketsPerUser, resolveItemTierId, scheduleDayCount, selectedDateId, selectedItems, setQuantities, zoneTierPricing])
 
   useEffect(() => {
     function restoreIntent() {
@@ -1025,7 +1075,7 @@ export function CheckoutTunnel({
     useCheckoutStore.getState().rememberCart({
       eventId,
       eventSlug,
-      quantities,
+      quantities: storeQuantities,
       selectedSeat,
       buyer,
       subtotal: cartSubtotal,
@@ -1359,12 +1409,26 @@ export function CheckoutTunnel({
     }
     return ids
   }, [liveSelectedItems, resolveItemTierId, selectedItems])
-  const extraQuantitySubtotal = selection
-    .filter((tier) => !mapTierIds.has(tier.id) && isQuantityCheckoutTier(tier))
-    .reduce((sum, tier) => sum + toCartNumber(tier.subtotal), 0)
-  const extraQuantityCount = selection
-    .filter((tier) => !mapTierIds.has(tier.id) && isQuantityCheckoutTier(tier))
-    .reduce((sum, tier) => sum + cartLineQuantity(tier.quantity), 0)
+  const extraQuantitySubtotal = storeLines
+    .filter(
+      (line) =>
+        !isMapCartLine(line) &&
+        cartLineQuantity(line.quantity) > 0 &&
+        !mapTierIds.has(generalLineTierId(line)),
+    )
+    .reduce(
+      (sum, line) =>
+        sum + toCartNumber(line.price) * cartLineQuantity(line.quantity),
+      0,
+    )
+  const extraQuantityCount = storeLines
+    .filter(
+      (line) =>
+        !isMapCartLine(line) &&
+        cartLineQuantity(line.quantity) > 0 &&
+        !mapTierIds.has(generalLineTierId(line)),
+    )
+    .reduce((sum, line) => sum + cartLineQuantity(line.quantity), 0)
   const hasMapSelection =
     selectedItems.length > 0 || liveSelectedItems.length > 0
   const numberedExtra = hasMapSelection ? 0 : numberedSubtotal
@@ -1404,7 +1468,7 @@ export function CheckoutTunnel({
   const finalTotal = totalAmount
   const canProceedFromCart =
     cartHasPurchasableItems({
-      quantities,
+      quantities: storeQuantities,
       selectedCount: totalTickets,
       selectedItems:
         liveSelectedItems.length > 0 ? liveSelectedItems : selectedItems,
@@ -1414,7 +1478,7 @@ export function CheckoutTunnel({
     const places =
       liveSelectedItems.length > 0 ? liveSelectedItems : selectedItems
     const hasPlaces = cartHasPurchasableItems({
-      quantities,
+      quantities: storeQuantities,
       selectedCount: totalTickets,
       selectedItems: places,
       seats: places,
@@ -1483,8 +1547,11 @@ export function CheckoutTunnel({
       const lineName = isTableSku
         ? sectorName
         : dateSource?.name || item.displayName?.trim() || item.name
+      const ticketId = dateSource?.id ?? preferredId ?? ""
       return {
-        id: storefrontSelectionKey(item),
+        id: ticketId
+          ? cartCompositeItemId(ticketId, dateId, item.id)
+          : storefrontSelectionKey(item),
         ticketTierId: dateSource?.id ?? preferredId ?? null,
         name: lineName,
         displayName: lineName,
@@ -1526,6 +1593,7 @@ export function CheckoutTunnel({
           dateLabel: ticketDateCartLabel(tier, scheduleDays),
           scheduleId: meta.dateId,
           dateString: ticketDateCartLabel(tier, scheduleDays),
+          sectorName: tier.name,
           quantity,
           price: publicOfferPrice(tier),
         }
@@ -1570,7 +1638,7 @@ export function CheckoutTunnel({
     useCheckoutStore.getState().rememberCart({
       eventId,
       eventSlug,
-      quantities,
+      quantities: storeQuantities,
       selectedSeat,
       buyer,
       subtotal: finalTotal,
@@ -1582,8 +1650,8 @@ export function CheckoutTunnel({
     eventSlug,
     finalTotal,
     portalReady,
-    quantities,
     selectedSeat,
+    storeQuantities,
   ])
 
   useEffect(() => {
@@ -1649,13 +1717,14 @@ export function CheckoutTunnel({
         gaReleaseAfterEmpty.add(eventId)
         void releaseGaCartHolds(eventId)
       }
-      for (const [tierId, qty] of Object.entries(previous.quantities)) {
-        if (qty > 0 && (state.quantities[tierId] ?? 0) === 0) {
+      for (const [key, qty] of Object.entries(previous.quantities)) {
+        if (qty > 0 && (state.quantities[key] ?? 0) === 0) {
+          const ticketId = parseCartCompositeItemId(key)?.ticketId ?? key
           const related = useStorefrontSeatStore
             .getState()
             .selectedItems.filter(
               (item) =>
-                item.type !== "seat" && resolveItemTierId(item) === tierId,
+                item.type !== "seat" && resolveItemTierId(item) === ticketId,
             )
           for (const item of related) {
             useStorefrontSeatStore
@@ -1705,8 +1774,11 @@ export function CheckoutTunnel({
       price: tier ? publicOfferPrice(tier) : 0,
       quantity: clamped,
       maxQuantity: Math.min(max, stock),
-      scheduleId: tier ? resolveTicketDateMeta(tier).dateId : null,
-      dateString: tier ? ticketDateCartLabel(tier, scheduleDays) : null,
+      scheduleId: tier ? resolveTicketDateMeta(tier).dateId : selectedDateId,
+      dateString: tier
+        ? ticketDateCartLabel(tier, scheduleDays)
+        : scheduleDayCartLabel(selectedDateId, scheduleDays),
+      sectorName: tier?.name ?? null,
     })
     if (!result.ok) {
       toast.error(storefrontLimitMessage())
@@ -1748,10 +1820,16 @@ export function CheckoutTunnel({
         ),
       },
     }))
-    setQuantities((currentQty) => ({
-      ...currentQty,
-      [info.tierId]: Math.min(currentQty[info.tierId] ?? 0, nextAvailable),
-    }))
+    const currentQty = quantities[info.tierId] ?? 0
+    useCheckoutStore.getState().setGeneralQuantity({
+      ticketTierId: info.tierId,
+      name: current?.name ?? "",
+      price: info.price,
+      quantity: Math.min(currentQty, nextAvailable),
+      scheduleId: selectedDateId,
+      dateString: scheduleDayCartLabel(selectedDateId, scheduleDays),
+      sectorName: current?.name ?? null,
+    })
     toast.warning(info.message || PHASE_ROLLOVER_MESSAGE)
   }
 
@@ -1782,9 +1860,13 @@ export function CheckoutTunnel({
     initiatedCheckoutRef.current = true
     trackInitiateCheckout(
       pixelCommercePayload({
-        contentIds: displayTiers
-          .filter((tier) => (quantities[tier.id] ?? 0) > 0)
-          .map((tier) => tier.id),
+        contentIds: [
+          ...new Set(
+            Object.entries(storeQuantities)
+              .filter(([, qty]) => qty > 0)
+              .map(([key]) => parseCartCompositeItemId(key)?.ticketId ?? key),
+          ),
+        ],
         value: finalTotal,
         numItems: Math.max(1, totalTickets),
       }),
@@ -2021,16 +2103,25 @@ export function CheckoutTunnel({
   }
 
   function clearGeneralQuantities(tierIds?: string[]) {
-    const ids = tierIds ?? displayTiers.map((tier) => tier.id)
-    for (const tierId of ids) {
-      const quantity = useCheckoutStore.getState().quantities[tierId] ?? 0
+    const ids = new Set(tierIds ?? displayTiers.map((tier) => tier.id))
+    const store = useCheckoutStore.getState()
+    for (const [key, quantity] of Object.entries(store.quantities)) {
       if (quantity <= 0) continue
-      const tier = displayTiers.find((row) => row.id === tierId)
-      useCheckoutStore.getState().setGeneralQuantity({
-        ticketTierId: tierId,
-        name: tier?.name ?? "",
-        price: tier ? publicOfferPrice(tier) : 0,
+      const parsed = parseCartCompositeItemId(key)
+      const ticketId = parsed?.ticketId ?? key
+      if (!ids.has(ticketId)) continue
+      const tier = displayTiers.find((row) => row.id === ticketId)
+      const line = store.lines.find((item) => item.id === key)
+      store.setGeneralQuantity({
+        ticketTierId: ticketId,
+        name: line?.name ?? tier?.name ?? "",
+        price: line?.price ?? (tier ? publicOfferPrice(tier) : 0),
         quantity: 0,
+        scheduleId: parsed?.scheduleId ?? cartItemScheduleId(line ?? {}),
+        dateString:
+          cartItemDateString(line ?? {}) ||
+          (tier ? ticketDateCartLabel(tier, scheduleDays) : null),
+        sectorName: line?.sectorName ?? tier?.name ?? null,
       })
     }
   }

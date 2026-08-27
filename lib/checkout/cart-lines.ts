@@ -116,14 +116,19 @@ export function cartLineDisplayName(line: {
 }
 
 export function cartTicketLineId(tierId: string, dateId?: string | null) {
-  return `${CART_TICKET_LINE_PREFIX}${tierId}__${dateId ?? "all"}`
+  const day = dateId?.trim() || "all"
+  return `${tierId}_${day}`
 }
 
 export function parseCartTicketLineId(id: string): string | null {
-  if (!id.startsWith(CART_TICKET_LINE_PREFIX)) return null
-  const rest = id.slice(CART_TICKET_LINE_PREFIX.length)
-  const sep = rest.indexOf("__")
-  return sep === -1 ? rest : rest.slice(0, sep)
+  if (!id.trim()) return null
+  if (id.startsWith(CART_TICKET_LINE_PREFIX)) {
+    const rest = id.slice(CART_TICKET_LINE_PREFIX.length)
+    const sep = rest.indexOf("__")
+    return sep === -1 ? rest : rest.slice(0, sep)
+  }
+  const sep = id.indexOf("_")
+  return sep === -1 ? id : id.slice(0, sep)
 }
 
 /** Prefer the stamped line price so a later catalog mix-up cannot change it. */

@@ -72,4 +72,14 @@ describe("checkout feedback", () => {
     )
     assert.equal(id, TIER_ID)
   })
+
+  it("infers the ticket id from a composite cart key", () => {
+    const day = "550e8400-e29b-41d4-a716-446655440001"
+    const id = inferCheckoutTicketId(
+      resolveCheckoutFeedback("out_of_stock"),
+      [{ id: TIER_ID, name: "General" }],
+      { [`${TIER_ID}_${day}`]: 2 },
+    )
+    assert.equal(id, TIER_ID)
+  })
 })

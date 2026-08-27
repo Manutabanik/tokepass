@@ -140,6 +140,7 @@ function layoutSeatToItem(seat: StorefrontLayoutSeat): StorefrontSelectedItem {
     price: seat.price,
     capacity: 1,
     sectorId: seat.sectorId,
+    sectorName: seat.sectorName,
     color: seat.color,
     row: seat.row,
     number: seat.number,
@@ -166,6 +167,7 @@ function deriveLayoutSeats(items: StorefrontSelectedItem[]): StorefrontLayoutSea
       price: item.price,
       color: item.color ?? "#34d399",
       eventDateId: item.eventDateId ?? item.dateId,
+      label: item.seatLabel ?? item.name,
     }))
 }
 

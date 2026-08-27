@@ -127,8 +127,8 @@ describe("cartLineBreakdownLabel", () => {
 
 describe("cartTicketLineId", () => {
   it("keeps date identity in the line id", () => {
-    assert.equal(cartTicketLineId("tier-1", "d1"), "ticket:tier-1__d1")
-    assert.equal(cartTicketLineId("tier-1"), "ticket:tier-1__all")
+    assert.equal(cartTicketLineId("tier-1", "d1"), "tier-1_d1")
+    assert.equal(cartTicketLineId("tier-1"), "tier-1_all")
   })
 })
 
