@@ -43,10 +43,27 @@ export function storefrontItemMatchesSchedule(
 export function withCheckoutEventDateId(
   item: StorefrontSelectedItem,
   eventDateId?: string | null,
+  extras?: { dateString?: string | null; seatLabel?: string | null },
 ): StorefrontSelectedItem {
-  const id = asHoldEventDateId(eventDateId)
-  if (!id) return item
-  return { ...item, eventDateId: id, dateId: id }
+  const id =
+    asHoldEventDateId(eventDateId) ??
+    asHoldEventDateId(item.scheduleId) ??
+    asHoldEventDateId(item.eventDateId) ??
+    asHoldEventDateId(item.dateId)
+  const dateString = extras?.dateString?.trim() || item.dateString?.trim() || item.dateLabel?.trim() || ""
+  const seatLabel = extras?.seatLabel?.trim() || item.seatLabel?.trim() || ""
+  return {
+    ...item,
+    ...(id
+      ? {
+          eventDateId: id,
+          dateId: id,
+          scheduleId: id,
+        }
+      : {}),
+    ...(dateString ? { dateString, dateLabel: dateString } : {}),
+    ...(seatLabel ? { seatLabel } : {}),
+  }
 }
 
 export function seatingUnitMatchesEventDate(

@@ -50,6 +50,25 @@ describe("public ticket view", () => {
     )
   })
 
+  it("keeps a general without seating_sector_id as a quantity SKU", () => {
+    const general = toPublicTicketSelectorTier({
+      id: gaId,
+      name: "General",
+      price: 8000,
+      stock_available: 40,
+      status: "ACTIVE",
+      visibility: "public",
+      seating_sector_id: null,
+      layout_type: "general",
+      capacity: 40,
+      sold: 0,
+    })
+    assert.equal(general.hasMap, false)
+    assert.equal(general.isMapped, false)
+    assert.equal(general.seatingSectorId, null)
+    assert.equal(ticketUsesMapSelector(general), false)
+  })
+
   it("maps hybrid flags and stock aliases onto the selector tier", () => {
     const mapped = toPublicTicketSelectorTier({
       id: mapId,
@@ -73,5 +92,17 @@ describe("public ticket view", () => {
     assert.equal(isQuantityCheckoutTier({ layoutType: "general" }), true)
     assert.equal(isQuantityCheckoutTier({ layout_type: "table_combo" }), false)
     assert.equal(isQuantityCheckoutTier({ layoutType: "numbered_seat" }), false)
+    assert.equal(
+      ticketUsesMapSelector({
+        layoutType: "general",
+        seatingSectorId: null,
+      }),
+      false,
+    )
+    assert.equal(
+      ticketUsesMapSelector({ layoutType: "table_combo" }),
+      true,
+    )
   })
 })
+

@@ -41,6 +41,11 @@ export type StorefrontSelectedItem = {
   /** Jornada (`event_schedules.id`) del mapa instanciado. */
   eventDateId?: string
   dateId?: string
+  scheduleId?: string
+  dateString?: string
+  dateLabel?: string
+  /** Identificador exacto del asiento/mesa clickeado (ej. "Mesa 04"). */
+  seatLabel?: string
 }
 
 export type StorefrontLayoutSeat = {
@@ -144,6 +149,8 @@ function layoutSeatToItem(seat: StorefrontLayoutSeat): StorefrontSelectedItem {
     isMappedSelection: true,
     eventDateId: seat.eventDateId,
     dateId: seat.eventDateId,
+    scheduleId: seat.eventDateId,
+    seatLabel: name,
   }
 }
 

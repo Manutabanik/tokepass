@@ -224,7 +224,7 @@ export function TicketTierList({
                           : "bg-emerald-600 text-white hover:bg-emerald-700",
                       )}
                     >
-                      {selectedSeatName ? "Modificar" : "Elegir en plano"}
+                      {selectedSeatName ? "Modificar lugares" : "Elegir en plano"}
                     </Button>
                   ) : (
                     <QuantityCounter

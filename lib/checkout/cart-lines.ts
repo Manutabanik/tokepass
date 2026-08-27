@@ -47,20 +47,57 @@ export function cartPlaceLabel(item: {
   return ""
 }
 
+export function cartLineSeatTitle(line: {
+  name: string
+  displayName?: string | null
+  sectorName?: string | null
+  seatLabel?: string | null
+  placeLabel?: string | null
+}): string {
+  const ticket =
+    line.displayName?.trim() ||
+    line.sectorName?.trim() ||
+    line.name.trim()
+  const seat = (line.seatLabel ?? line.placeLabel)?.trim() || ""
+  if (seat && seat !== ticket && !ticket.includes(seat)) {
+    return `${ticket} - ${seat}`
+  }
+  return ticket
+}
+
+/**
+ * Qty 1: ticket name (+ seat). Qty > 1: `2x Name — $1.000 c/u`.
+ * Never append the active tab date; only stamped seat/name fields.
+ */
+export function cartLinePrimaryLabel(line: {
+  quantity?: number
+  name: string
+  displayName?: string | null
+  sectorName?: string | null
+  seatLabel?: string | null
+  placeLabel?: string | null
+  unitPriceLabel?: string | null
+}): string {
+  const qty = cartLineQuantity(line.quantity)
+  const title = cartLineSeatTitle(line)
+  if (qty <= 1) return title
+  const unit = line.unitPriceLabel?.trim()
+  return unit ? `${qty}x ${title} — ${unit} c/u` : `${qty}x ${title}`
+}
+
 export function cartLineBreakdownLabel(line: {
   quantity?: number
   name: string
   displayName?: string | null
   sectorName?: string | null
   placeLabel?: string | null
+  seatLabel?: string | null
   dateLabel?: string | null
+  dateString?: string | null
 }): string {
   const qty = Math.max(1, Math.floor(Number(line.quantity) || 1))
-  const sector =
-    line.sectorName?.trim() || line.displayName?.trim() || line.name.trim()
-  const place = line.placeLabel?.trim()
-  const date = line.dateLabel?.trim()
-  const title = place ? `${sector} (${place})` : sector
+  const title = cartLineSeatTitle(line)
+  const date = (line.dateString ?? line.dateLabel)?.trim()
   const withDate = date ? `${title} - ${date}` : title
   return `${qty}x ${withDate}`
 }

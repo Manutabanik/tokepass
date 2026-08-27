@@ -11,6 +11,11 @@ import {
 } from "@/lib/checkout/cart-hold-clock"
 import { ABSOLUTE_MAX_ITEMS_PER_PURCHASE } from "@/lib/checkout-limits"
 import {
+  cartItemDateString,
+  cartItemScheduleId,
+  cartItemSeatLabel,
+} from "@/lib/checkout/cart-line-stamp"
+import {
   toCartItemPayload,
   type CartItemPayload,
 } from "@/lib/checkout/cart-item-payload"
@@ -54,6 +59,8 @@ export type StorefrontCartLine = {
   detail?: string
   dateId?: string | null
   dateLabel?: string
+  scheduleId?: string | null
+  dateString?: string | null
   quantity: number
   /** Precio visual para el subtotal. Nunca se envía a reserva/checkout. */
   price: number
@@ -62,6 +69,7 @@ export type StorefrontCartLine = {
   sectorId?: string | null
   sectorName?: string | null
   placeLabel?: string | null
+  seatLabel?: string | null
   isMappedSelection?: boolean
 }
 
@@ -73,7 +81,7 @@ export function storefrontLineToCartPayload(
     sector_id: line.sectorId,
     seat_id: line.seatId,
     element_id: line.elementId,
-    eventDateId: line.dateId,
+    eventDateId: cartItemScheduleId(line),
     quantity: line.quantity,
   })
 }
@@ -92,6 +100,9 @@ export type AddToCartInput = {
   maxQuantity?: number
   seatId?: string | null
   elementId?: string | null
+  scheduleId?: string | null
+  dateString?: string | null
+  seatLabel?: string | null
 }
 
 export type AddToCartResult =
@@ -213,11 +224,15 @@ function sameLines(left: StorefrontCartLine[], right: StorefrontCartLine[]) {
       line.detail === other.detail &&
       line.dateId === other.dateId &&
       line.dateLabel === other.dateLabel &&
+      line.scheduleId === other.scheduleId &&
+      line.dateString === other.dateString &&
       line.quantity === other.quantity &&
       line.price === other.price &&
       line.ticketTierId === other.ticketTierId &&
       line.seatId === other.seatId &&
-      line.elementId === other.elementId
+      line.elementId === other.elementId &&
+      line.seatLabel === other.seatLabel &&
+      line.placeLabel === other.placeLabel
     )
   })
 }
@@ -283,24 +298,41 @@ function upsertGeneralLine(
     name: string
     price: number
     quantity: number
+    scheduleId?: string | null
+    dateString?: string | null
+    seatLabel?: string | null
   },
 ): StorefrontCartLine[] {
+  const existing = lines.find(
+    (line) => !isMapCartLine(line) && generalLineTierId(line) === input.ticketTierId,
+  )
   const others = lines.filter((line) => {
     if (isMapCartLine(line)) return true
     return generalLineTierId(line) !== input.ticketTierId
   })
   if (input.quantity <= 0) return others
-  return [
-    ...others,
-    {
-      id: cartTicketLineId(input.ticketTierId),
-      ticketTierId: input.ticketTierId,
-      ticketTypeId: input.ticketTierId,
-      name: input.name,
-      quantity: input.quantity,
-      price: input.price,
-    },
-  ]
+  const scheduleId =
+    cartItemScheduleId(existing ?? {}) ?? cartItemScheduleId(input)
+  const dateString =
+    cartItemDateString(existing ?? {}) ?? cartItemDateString(input)
+  const seatLabel =
+    cartItemSeatLabel(existing ?? {}) ?? cartItemSeatLabel(input)
+  const stamped: StorefrontCartLine = {
+    id: cartTicketLineId(input.ticketTierId, scheduleId),
+    ticketTierId: input.ticketTierId,
+    ticketTypeId: input.ticketTierId,
+    name: input.name,
+    quantity: input.quantity,
+    price: input.price,
+    ...(scheduleId
+      ? { scheduleId, dateId: scheduleId }
+      : {}),
+    ...(dateString
+      ? { dateString, dateLabel: dateString }
+      : {}),
+    ...(seatLabel ? { seatLabel, placeLabel: seatLabel } : {}),
+  }
+  return [...others, stamped]
 }
 
 function withCartHoldClock(
@@ -644,6 +676,9 @@ export const useCheckoutStore = create<CheckoutState>()(
             ? 1
             : incomingQty ?? (existing ? existing.quantity + 1 : 1)
           const others = get().lines.filter((line) => line.id !== id)
+          const scheduleId = cartItemScheduleId(input)
+          const dateString = cartItemDateString(input)
+          const seatLabel = input.seatLabel?.trim() || null
           const line: StorefrontCartLine = {
             id,
             ticketTierId: input.ticketTierId,
@@ -653,6 +688,9 @@ export const useCheckoutStore = create<CheckoutState>()(
             price: unitPrice,
             seatId,
             elementId,
+            ...(scheduleId ? { scheduleId, dateId: scheduleId } : {}),
+            ...(dateString ? { dateString, dateLabel: dateString } : {}),
+            ...(seatLabel ? { seatLabel, placeLabel: seatLabel } : {}),
           }
           const lines = [...others, line]
           const current = get()
@@ -673,7 +711,7 @@ export const useCheckoutStore = create<CheckoutState>()(
                     seatingUnitId: seatId,
                     sectorKey: null,
                     tableNumber: null,
-                    label: input.name,
+                    label: input.seatLabel?.trim() || input.name,
                     price: unitPrice,
                   }
                 : current.selectedSeat,
@@ -693,6 +731,9 @@ export const useCheckoutStore = create<CheckoutState>()(
           name: input.name,
           price: unitPrice,
           quantity: nextQty,
+          scheduleId: input.scheduleId,
+          dateString: input.dateString,
+          seatLabel: input.seatLabel,
         })
         set(
           withCartHoldClock(current, {
@@ -730,6 +771,9 @@ export const useCheckoutStore = create<CheckoutState>()(
           name: input.name,
           price: unitPrice,
           quantity: nextQty,
+          scheduleId: input.scheduleId,
+          dateString: input.dateString,
+          seatLabel: input.seatLabel,
         })
         set(
           withCartHoldClock(current, {

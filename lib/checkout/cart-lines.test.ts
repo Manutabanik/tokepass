@@ -5,6 +5,8 @@ import {
   cartLineAmount,
   cartLineBreakdownLabel,
   cartLineDisplayName,
+  cartLinePrimaryLabel,
+  cartLineSeatTitle,
   cartLineUnitPrice,
   cartPlaceLabel,
   cartTicketLineId,
@@ -62,8 +64,44 @@ describe("cartPlaceLabel", () => {
   })
 })
 
+describe("cartLineSeatTitle", () => {
+  it("appends the stamped seat label to the ticket name", () => {
+    assert.equal(
+      cartLineSeatTitle({
+        name: "Grada Naranja",
+        seatLabel: "Mesa 04",
+      }),
+      "Grada Naranja - Mesa 04",
+    )
+  })
+})
+
+describe("cartLinePrimaryLabel", () => {
+  it("hides qty and unit price when there is a single ticket", () => {
+    assert.equal(
+      cartLinePrimaryLabel({
+        quantity: 1,
+        name: "General Viernes",
+        unitPriceLabel: "$10.000",
+      }),
+      "General Viernes",
+    )
+  })
+
+  it("shows qty and unit price only when quantity is greater than 1", () => {
+    assert.equal(
+      cartLinePrimaryLabel({
+        quantity: 2,
+        name: "General Viernes",
+        unitPriceLabel: "$10.000",
+      }),
+      "2x General Viernes — $10.000 c/u",
+    )
+  })
+})
+
 describe("cartLineBreakdownLabel", () => {
-  it("renders quantity, sector, place and day", () => {
+  it("renders quantity, sector, place and stamped day", () => {
     assert.equal(
       cartLineBreakdownLabel({
         quantity: 1,
@@ -72,17 +110,17 @@ describe("cartLineBreakdownLabel", () => {
         placeLabel: "Fila A - Asiento 4",
         dateLabel: "Viernes 13 Nov",
       }),
-      "1x Grada Amarilla (Fila A - Asiento 4) - Viernes 13 Nov",
+      "1x Grada Amarilla - Fila A - Asiento 4 - Viernes 13 Nov",
     )
     assert.equal(
       cartLineBreakdownLabel({
         quantity: 1,
         name: "Grada Naranja",
         sectorName: "Grada Naranja",
-        placeLabel: "Mesa 02",
+        seatLabel: "Mesa 02",
         dateLabel: "Viernes 13 Nov",
       }),
-      "1x Grada Naranja (Mesa 02) - Viernes 13 Nov",
+      "1x Grada Naranja - Mesa 02 - Viernes 13 Nov",
     )
   })
 })

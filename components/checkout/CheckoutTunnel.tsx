@@ -54,6 +54,11 @@ import {
   storefrontLineSkuQuantity,
 } from "@/lib/checkout/charge-unit"
 import { cartPlaceLabel, cartTicketLineId } from "@/lib/checkout/cart-lines"
+import {
+  cartItemDateString,
+  cartItemScheduleId,
+  cartItemSeatLabel,
+} from "@/lib/checkout/cart-line-stamp"
 import { CheckoutUpsellStep } from "@/components/public/checkout-upsell-step"
 import {
   resolveCheckoutPaymentProvider,
@@ -1434,10 +1439,7 @@ export function CheckoutTunnel({
           (tier.seatingSectorId === item.sectorId ||
             tier.seatingSectorId === item.id),
       )
-      const itemDateId =
-        item.eventDateId ??
-        item.dateId ??
-        (byId ? resolveTicketDateMeta(byId).dateId : null)
+      const itemDateId = cartItemScheduleId(item)
       const datedMatch = itemDateId
         ? matched.filter((tier) => ticketMatchesTab(tier, itemDateId))
         : []
@@ -1450,10 +1452,12 @@ export function CheckoutTunnel({
             : null)
       const dateId =
         itemDateId ??
-        (dateSource ? resolveTicketDateMeta(dateSource).dateId : selectedDateId)
-      const dateLabel = dateSource
-        ? ticketDateCartLabel(dateSource, scheduleDays)
-        : scheduleDayCartLabel(dateId, scheduleDays)
+        (dateSource ? resolveTicketDateMeta(dateSource).dateId : null)
+      const dateLabel =
+        cartItemDateString(item) ||
+        (dateSource
+          ? ticketDateCartLabel(dateSource, scheduleDays)
+          : scheduleDayCartLabel(dateId, scheduleDays))
       const isTableSku =
         item.type === "table" || item.inventoryType === "TABLES"
       const skuQuantity = Math.max(1, storefrontLineSkuQuantity(item))
@@ -1472,7 +1476,10 @@ export function CheckoutTunnel({
         dateSource?.name ||
         item.displayName?.trim() ||
         item.name
-      const placeLabel = cartPlaceLabel(item)
+      const placeLabel =
+        cartItemSeatLabel(item) ||
+        cartPlaceLabel(item) ||
+        null
       const lineName = isTableSku
         ? sectorName
         : dateSource?.name || item.displayName?.trim() || item.name
@@ -1492,6 +1499,8 @@ export function CheckoutTunnel({
         }),
         dateId,
         dateLabel,
+        scheduleId: dateId,
+        dateString: dateLabel,
         quantity: skuQuantity,
         price: unitPrice,
         seatId: item.type === "seat" ? item.id : null,
@@ -1499,6 +1508,7 @@ export function CheckoutTunnel({
         sectorId: item.sectorId ?? item.id,
         sectorName,
         placeLabel,
+        seatLabel: placeLabel,
         isMappedSelection: item.isMappedSelection !== false,
       }
     })
@@ -1514,6 +1524,8 @@ export function CheckoutTunnel({
           detail: `${quantity} ${quantity === 1 ? "entrada" : "entradas"}`,
           dateId: meta.dateId,
           dateLabel: ticketDateCartLabel(tier, scheduleDays),
+          scheduleId: meta.dateId,
+          dateString: ticketDateCartLabel(tier, scheduleDays),
           quantity,
           price: publicOfferPrice(tier),
         }
@@ -1525,7 +1537,6 @@ export function CheckoutTunnel({
     mapTierIds,
     resolveItemTierId,
     scheduleDays,
-    selectedDateId,
     selection,
   ])
   useEffect(() => {
@@ -1694,6 +1705,8 @@ export function CheckoutTunnel({
       price: tier ? publicOfferPrice(tier) : 0,
       quantity: clamped,
       maxQuantity: Math.min(max, stock),
+      scheduleId: tier ? resolveTicketDateMeta(tier).dateId : null,
+      dateString: tier ? ticketDateCartLabel(tier, scheduleDays) : null,
     })
     if (!result.ok) {
       toast.error(storefrontLimitMessage())
@@ -1887,11 +1900,9 @@ export function CheckoutTunnel({
         isNumbered: tierNeedsNumberedPlace(tier),
         isMappedSelection: false,
         is_mapped_selection: false,
-        eventDateId:
-          resolveTicketDateMeta(tier).dateId ?? selectedDateId,
-        event_date_id:
-          resolveTicketDateMeta(tier).dateId ?? selectedDateId,
-        dateId: resolveTicketDateMeta(tier).dateId ?? selectedDateId,
+        eventDateId: resolveTicketDateMeta(tier).dateId,
+        event_date_id: resolveTicketDateMeta(tier).dateId,
+        dateId: resolveTicketDateMeta(tier).dateId,
       })),
     ]
     const covered = new Set(items.map((item) => item.tierId))
@@ -1901,10 +1912,9 @@ export function CheckoutTunnel({
     > = {}
     for (const item of selectedItems) {
       if (item.type === "seat" || item.type === "table") continue
-      if (!itemMatchesActiveDay(item)) continue
       const tierId = resolveItemTierId(item)
       if (!tierId || covered.has(tierId)) continue
-      const ownDate = item.eventDateId ?? item.dateId
+      const ownDate = cartItemScheduleId(item)
       const eventDateId =
         ownDate ?? (scheduleDayCount >= 2 ? null : selectedDateId)
       if (scheduleDayCount >= 2 && !eventDateId) continue
@@ -1941,6 +1951,10 @@ export function CheckoutTunnel({
       const existing = items.find((item) => item.tierId === extraAddonId)
       if (existing) existing.quantity += 1
       else {
+        const extraTier = displayTiers.find((tier) => tier.id === extraAddonId)
+        const extraDateId = extraTier
+          ? resolveTicketDateMeta(extraTier).dateId
+          : null
         items.push({
           type: "general",
           ticket_type_id: extraAddonId,
@@ -1956,9 +1970,9 @@ export function CheckoutTunnel({
           isNumbered: false,
           isMappedSelection: false,
           is_mapped_selection: false,
-          eventDateId: selectedDateId,
-          event_date_id: selectedDateId,
-          dateId: selectedDateId,
+          eventDateId: extraDateId,
+          event_date_id: extraDateId,
+          dateId: extraDateId,
         })
       }
     }
@@ -2416,8 +2430,13 @@ export function CheckoutTunnel({
             ticketTierId: resolvedZoneTierId ?? previous?.ticketTierId,
             price: catalogPrice,
             capacity: Math.max(1, quantity),
+            seatLabel: fromZone?.seatLabel ?? zone.name,
           },
           selectedDateId,
+          {
+            dateString: scheduleDayCartLabel(selectedDateId, scheduleDays),
+            seatLabel: fromZone?.seatLabel ?? zone.name,
+          },
         ),
         selectionCapForItem({
           id: zone.id,
@@ -2498,6 +2517,14 @@ export function CheckoutTunnel({
     const datedSeats = seats.map((seat) => ({
       ...seat,
       eventDateId: seat.eventDateId ?? selectedDateId ?? undefined,
+      label:
+        seat.label?.trim() ||
+        cartPlaceLabel({
+          type: "seat",
+          row: seat.row,
+          number: seat.number,
+        }) ||
+        seat.label,
     }))
     const result = store.setLayoutSeats(datedSeats, maxTicketsPerUser)
     if (!result.ok) {
@@ -2554,8 +2581,13 @@ export function CheckoutTunnel({
             ...item,
             ticketTierId: tierId ?? item.ticketTierId,
             price: mapSelectionUnitPrice(item.price, tierId, dayTiers),
+            seatLabel: item.seatLabel ?? item.name,
           },
           selectedDateId,
+          {
+            dateString: scheduleDayCartLabel(selectedDateId, scheduleDays),
+            seatLabel: item.seatLabel ?? item.name,
+          },
         ),
         selectionCapForItem(item),
       )
@@ -2834,19 +2866,26 @@ export function CheckoutTunnel({
         price: selectionPayload.unitPrice,
       })
       const store = useStorefrontSeatStore.getState()
+      const unitDateId = unit.eventDateId ?? selectedDateId
+      const unitLabel = unit.label || "Ubicación numerada"
       const upserted = store.upsertSelectedItem(
         withCheckoutEventDateId(
           {
             id: unit.layoutItemId || unit.id,
-            name: unit.label || "Ubicación numerada",
+            name: unitLabel,
             type: unit.layoutType === "table_combo" ? "table" : "seat",
             price: selectionPayload.unitPrice,
             capacity: Math.max(1, unit.capacityPerUnit || 1),
             sectorId: unit.sectorId,
             sectorName: unit.sectorName,
             color: unit.color,
+            seatLabel: unitLabel,
           },
-          unit.eventDateId ?? selectedDateId,
+          unitDateId,
+          {
+            dateString: scheduleDayCartLabel(unitDateId, scheduleDays),
+            seatLabel: unitLabel,
+          },
         ),
         mapPlaceSelectionCap({
           layoutType: unit.layoutType,

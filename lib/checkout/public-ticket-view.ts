@@ -90,6 +90,11 @@ export function ticketUsesMapSelector(tier: {
   if (tier.isMapped === true || tier.is_mapped === true) return true
   if (tier.hasMap === false || tier.has_map === false) return false
   if (tier.isMapped === false || tier.is_mapped === false) return false
+  if (
+    layoutRequiresSeatSelection(tier.layoutType ?? tier.layout_type)
+  ) {
+    return true
+  }
   return isMapBackedTicket({
     seatingSectorId: tier.seatingSectorId ?? tier.seating_sector_id,
     layoutType: tier.layoutType ?? tier.layout_type,

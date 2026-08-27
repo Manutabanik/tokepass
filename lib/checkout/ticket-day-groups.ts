@@ -222,7 +222,8 @@ export function ticketVisibleOnCheckoutDay(
   const days = ticketValidDayIds(tier)
   if (days.includes(dateId)) return true
   if (days.length > 0) return false
-  return scheduleDays.length <= 1
+  // Unbound generals (no day_id / seating day) stay visible on every jornada.
+  return true
 }
 
 export function listCheckoutDayTabs(

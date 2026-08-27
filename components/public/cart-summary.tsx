@@ -5,12 +5,13 @@ import { Trash2, X } from "lucide-react"
 import {
   CART_TICKET_LINE_PREFIX,
   cartLineAmount,
-  cartLineBreakdownLabel,
   cartLineDisplayName,
+  cartLinePrimaryLabel,
   cartLineUnitPrice,
   cartTicketLineId,
   parseCartTicketLineId,
 } from "@/lib/checkout/cart-lines"
+import { cartItemDateString } from "@/lib/checkout/cart-line-stamp"
 import { formatTicketPrice } from "@/lib/format"
 import {
   useCheckoutStore,
@@ -85,12 +86,15 @@ export function CartSummary({
           })
           const unit = cartLineUnitPrice(item, catalog)
           const unitPrice = formatTicketPrice(unit)
-          const breakdown = cartLineBreakdownLabel({
+          const qty = Math.max(1, Math.floor(Number(item.quantity) || 1))
+          const title = cartLinePrimaryLabel({
             ...item,
             name: catalog?.name ?? item.name,
             sectorName: item.sectorName ?? catalog?.name ?? item.name,
+            seatLabel: item.seatLabel ?? item.placeLabel,
+            unitPriceLabel: qty > 1 ? unitPrice : null,
           })
-          const qtyLabel = `${breakdown} — ${unitPrice}`
+          const dateLabel = cartItemDateString(item)
           const rowKey = item.ticketTierId
             ? `${item.ticketTierId}:${item.id}`
             : item.id
@@ -107,14 +111,24 @@ export function CartSummary({
               {compact ? (
                 <div className="min-w-0">
                   <p className="line-clamp-2 break-words text-xs font-medium text-foreground">
-                    {qtyLabel}
+                    {title}
                   </p>
+                  {dateLabel ? (
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {dateLabel}
+                    </p>
+                  ) : null}
                 </div>
               ) : (
                 <div className="min-w-0">
                   <p className="line-clamp-2 break-words text-sm font-semibold text-foreground">
-                    {qtyLabel}
+                    {title}
                   </p>
+                  {dateLabel ? (
+                    <p className="truncate text-xs text-muted-foreground">
+                      {dateLabel}
+                    </p>
+                  ) : null}
                 </div>
               )}
               <div className="flex shrink-0 items-center gap-1.5">

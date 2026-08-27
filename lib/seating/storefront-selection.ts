@@ -47,6 +47,7 @@ export function addSelectedSeatToCartItem(
     sellMode: "per_seat",
     priceMode: "per_person",
     isMappedSelection: true,
+    seatLabel: displayName,
   }
 }
 
@@ -235,6 +236,7 @@ export function storefrontItemFromElement(
         ? "SEATED_NUMERATED"
         : "GENERAL_ADMISSION",
     isMappedSelection: true,
+    seatLabel: element.customLabel?.trim() || element.label?.trim() || name,
   }
 }
 
@@ -262,6 +264,7 @@ export function storefrontItemFromZone(
     priceMode: zone.priceMode ?? venuePriceModeFromSellMode(zone.sellMode),
     inventoryType: "GENERAL_ADMISSION",
     isMappedSelection: true,
+    seatLabel: name,
   }
 }
 
@@ -295,6 +298,7 @@ export function storefrontItemFromElementSeat(
     inventoryType: "SEATED_NUMERATED",
     sectorName: element.sectorName?.trim() || undefined,
     isMappedSelection: true,
+    seatLabel: name,
   }
 }
 
@@ -368,16 +372,24 @@ export function hydrateStorefrontItemsFromMap(
     const ticketTierId = item.ticketTierId ?? live.ticketTierId
     const livePrice = Number(live.price)
     const keepGratis = isValidPublicPrice(livePrice) && livePrice === 0
+    const stamped =
+      Boolean(item.eventDateId || item.dateId || item.scheduleId || item.seatLabel)
     const keepStampedPrice =
-      Boolean(item.eventDateId || item.dateId) && isValidPublicPrice(item.price)
+      stamped && isValidPublicPrice(item.price)
     return {
       ...item,
       ...live,
       ticketTierId,
       eventDateId: item.eventDateId,
       dateId: item.dateId ?? item.eventDateId,
-      name: live.name,
-      displayName: live.displayName ?? live.name,
+      scheduleId: item.scheduleId ?? item.eventDateId ?? item.dateId,
+      dateString: item.dateString,
+      dateLabel: item.dateLabel ?? item.dateString,
+      seatLabel: item.seatLabel ?? live.seatLabel ?? live.name,
+      name: stamped ? item.name || live.name : live.name || item.name,
+      displayName: stamped
+        ? item.displayName || live.displayName || live.name
+        : live.displayName || item.displayName || live.name,
       price: keepGratis
         ? 0
         : keepStampedPrice
