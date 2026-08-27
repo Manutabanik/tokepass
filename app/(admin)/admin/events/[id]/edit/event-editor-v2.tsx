@@ -121,9 +121,8 @@ export function EventEditorV2({
     : eventPublishDisabledReason(getValues())
   const publishLabel = draftLaunchSubmitLabel(nowPublished, busy === "publish")
   const fieldErrorSteps = editorStepsWithFieldErrors(formState.errors)
-  const schemaIssueSteps = useMemo(
-    () => editorStepsWithIssues(collectDraftPublishIssues(getValues())),
-    [getValues, watched],
+  const schemaIssueSteps = editorStepsWithIssues(
+    collectDraftPublishIssues(getValues()),
   )
   const tabAlerts = useMemo(() => {
     const alerts: Partial<Record<EditorV2StepId, EditorTabAlert>> = {}

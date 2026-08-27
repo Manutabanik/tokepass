@@ -700,12 +700,13 @@ export function CheckoutTunnel({
       }),
     [fallbackMap, scheduleDayCount, seatingMaps, selectedDateId],
   )
-  function itemMatchesActiveDay(
-    item: { eventDateId?: string | null; dateId?: string | null },
-    dateId: string | null | undefined = selectedDateId,
-  ) {
-    return storefrontItemMatchesSchedule(item, dateId, { scheduleDayCount })
-  }
+  const itemMatchesActiveDay = useCallback(
+    (
+      item: { eventDateId?: string | null; dateId?: string | null },
+      dateId: string | null | undefined = selectedDateId,
+    ) => storefrontItemMatchesSchedule(item, dateId, { scheduleDayCount }),
+    [scheduleDayCount, selectedDateId],
+  )
   useSeatHoldsRealtime(
     eventId,
     applyOccupancyPatch,
@@ -928,7 +929,7 @@ export function CheckoutTunnel({
       mapDrivenTierIds.current = nextDriven
       return changed ? next : current
     })
-  }, [checkoutTierInput, displayTiers, maxTicketsPerUser, resolveItemTierId, scheduleDayCount, selectedDateId, selectedItems, setQuantities, zoneTierPricing])
+  }, [checkoutTierInput, displayTiers, itemMatchesActiveDay, maxTicketsPerUser, resolveItemTierId, scheduleDayCount, selectedDateId, selectedItems, setQuantities, zoneTierPricing])
 
   useEffect(() => {
     function restoreIntent() {
@@ -1198,7 +1199,7 @@ export function CheckoutTunnel({
     }
 
     applyHydratedItems(useStorefrontSeatStore.getState().selectedItems)
-  }, [currentUserId, eventId, intentRestored, liveMap, priceBySectorId])
+  }, [currentUserId, eventId, intentRestored, itemMatchesActiveDay, liveMap, priceBySectorId])
 
   const resolvedSeatingLayout = useMemo(() => {
     if (seatingLayout.length > 0) return seatingLayout
@@ -1326,7 +1327,7 @@ export function CheckoutTunnel({
       if (unit?.layoutItemId) ids.add(unit.layoutItemId)
     }
     return [...ids]
-  }, [layoutSeats, mergedSeatingUnits, selectedDateId, selectedItems, selectedSeat])
+  }, [itemMatchesActiveDay, layoutSeats, mergedSeatingUnits, selectedItems, selectedSeat])
 
   const universalPayload = useMemo(() => {
     if (!hasSeatingFlow) return null

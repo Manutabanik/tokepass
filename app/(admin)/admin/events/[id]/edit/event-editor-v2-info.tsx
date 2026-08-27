@@ -1,7 +1,7 @@
 "use client"
 
 import { ImagePlus, Type } from "lucide-react"
-import { useLayoutEffect, useState } from "react"
+import { useState } from "react"
 import { useFormContext, useWatch } from "react-hook-form"
 
 import { EventEditorV2ArchetypePicker, useDraftArchetype } from "./event-editor-v2-archetype"
@@ -61,16 +61,17 @@ export function EventEditorV2InfoStep({
     resolveInfoSuperPanel(errors, revealField),
   ])
   const locationErrors = infoLocationErrorsOpenLogistics(errors)
-
-  useLayoutEffect(() => {
-    if (revealField?.trim()) {
-      setOpenPanel([infoSuperPanelForFieldPath(revealField)])
-      return
-    }
-    if (locationErrors) {
+  const revealKey = revealField?.trim() ?? ""
+  const panelSyncKey = `${revealKey}::${locationErrors}`
+  const [lastPanelSyncKey, setLastPanelSyncKey] = useState(panelSyncKey)
+  if (panelSyncKey !== lastPanelSyncKey) {
+    setLastPanelSyncKey(panelSyncKey)
+    if (revealKey) {
+      setOpenPanel([infoSuperPanelForFieldPath(revealKey)])
+    } else if (locationErrors) {
       setOpenPanel(["logistics"])
     }
-  }, [locationErrors, revealField])
+  }
 
   function setVirtual(checked: boolean) {
     setValue("isVirtual", checked, { shouldDirty: true, shouldTouch: true })

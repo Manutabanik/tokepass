@@ -217,6 +217,7 @@ export function ticketVisibleOnCheckoutDay(
   dateId: string | null | undefined,
   scheduleDays: ScheduleDay[] = [],
 ): boolean {
+  void scheduleDays
   if (isComboOrPassOffer(tier)) return false
   if (!dateId) return true
   const days = ticketValidDayIds(tier)

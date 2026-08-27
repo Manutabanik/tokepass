@@ -1,7 +1,7 @@
 "use client"
 
 import { MapPinned, Package, Plus, Ticket, Users } from "lucide-react"
-import { useLayoutEffect, useState } from "react"
+import { useState } from "react"
 import { useFieldArray, useFormContext, useWatch } from "react-hook-form"
 
 import { useDraftArchetype } from "./event-editor-v2-archetype"
@@ -84,16 +84,17 @@ export function EventEditorV2InventoryStep({
     resolveInventorySuperPanel(errors, revealField),
   ])
   const extrasErrors = inventoryExtrasErrorsOpenPanel(errors)
-
-  useLayoutEffect(() => {
-    if (revealField?.trim()) {
-      setOpenPanel([inventorySuperPanelForFieldPath(revealField)])
-      return
-    }
-    if (extrasErrors) {
+  const revealKey = revealField?.trim() ?? ""
+  const panelSyncKey = `${revealKey}::${extrasErrors}`
+  const [lastPanelSyncKey, setLastPanelSyncKey] = useState(panelSyncKey)
+  if (panelSyncKey !== lastPanelSyncKey) {
+    setLastPanelSyncKey(panelSyncKey)
+    if (revealKey) {
+      setOpenPanel([inventorySuperPanelForFieldPath(revealKey)])
+    } else if (extrasErrors) {
       setOpenPanel(["extras"])
     }
-  }, [extrasErrors, revealField])
+  }
 
   return (
     <div className={cn(BENTO_INVENTORY_GRID_CLASS, "flex w-full flex-col")}>

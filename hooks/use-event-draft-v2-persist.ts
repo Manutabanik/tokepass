@@ -125,8 +125,7 @@ export function useEventDraftV2Persist(
       }
       busy.current = true
       try {
-        let pendingForce = shouldForce
-        let result = await runWrite(pendingForce)
+        let result = await runWrite(shouldForce)
         for (;;) {
           const next = queued.current
           if (!next) return result

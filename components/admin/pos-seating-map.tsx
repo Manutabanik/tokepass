@@ -67,11 +67,16 @@ export function PosSeatingMap({
     [event.tiers],
   )
 
-  useEffect(() => {
-    let cancelled = false
+  const [catalogEventId, setCatalogEventId] = useState(event.id)
+  if (catalogEventId !== event.id) {
+    setCatalogEventId(event.id)
     setCatalog(null)
     setSelectedDateId(null)
     setSnapshot(null)
+  }
+
+  useEffect(() => {
+    let cancelled = false
     void getPosSeatingCatalog(event.id).then((next) => {
       if (cancelled || !next) return
       setCatalog(next)
@@ -96,12 +101,18 @@ export function PosSeatingMap({
     [catalog, scheduleDayCount, selectedDateId],
   )
 
+  if (
+    catalog &&
+    scheduleDayCount >= 2 &&
+    !selectedDateId &&
+    (snapshot?.eventId !== event.id || snapshot.dateId !== null)
+  ) {
+    setSnapshot({ eventId: event.id, dateId: null, occupancy: {} })
+  }
+
   useEffect(() => {
     if (!catalog) return
-    if (scheduleDayCount >= 2 && !selectedDateId) {
-      setSnapshot({ eventId: event.id, dateId: null, occupancy: {} })
-      return
-    }
+    if (scheduleDayCount >= 2 && !selectedDateId) return
     let cancelled = false
     void getEventSeatingAvailability(event.id, selectedDateId).then((units) => {
       if (cancelled) return
