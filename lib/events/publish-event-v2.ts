@@ -170,6 +170,38 @@ export function asPublishScheduleId(value: unknown): string | null {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
+export function publishedScheduleUpsertRows(
+  eventId: string,
+  days: PublishEventV2ScheduleDay[],
+): Array<{
+  id: string
+  event_id: string
+  title: string
+  start_time: string
+  end_time: string
+}> {
+  return days.flatMap((day) => {
+    const id = day.id?.trim() ?? ""
+    if (!id) return []
+    return [
+      {
+        id,
+        event_id: eventId,
+        title: day.title.trim() || "Jornada",
+        start_time: day.start_time,
+        end_time: day.end_time,
+      },
+    ]
+  })
+}
+
+/** RPC core still blanks ticket_tiers.day_id before rebinding. Multi-day map tickets collide. */
+export function shouldPublishEventV2Sequentially(
+  payload: Pick<PublishEventV2Payload, "schedule_days">,
+): boolean {
+  return payload.schedule_days.filter((day) => Boolean(day.id?.trim())).length >= 2
+}
+
 export function isPublishScheduleForeignKeyError(error: {
   code?: string
   message?: string

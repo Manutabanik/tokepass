@@ -12,8 +12,10 @@ import {
   formatEventPublishIssues,
   freePublishCapacity,
   isPublishScheduleForeignKeyError,
+  publishedScheduleUpsertRows,
   resolvePublishedTicketDayIds,
   sanitizePublishPayloadForDatabase,
+  shouldPublishEventV2Sequentially,
 } from "@/lib/events/publish-event-v2"
 import { emptyEventDraftV2, eventPublishSchema } from "@/lib/validations/event-draft-v2"
 
@@ -738,6 +740,71 @@ describe("buildPublishEventV2Payload", () => {
         ],
       ),
       [dayA],
+    )
+  })
+
+  it("writes Friday and Saturday map tickets without a null day_id window", () => {
+    const dayA = "550e8400-e29b-41d4-a716-446655440001"
+    const dayB = "550e8400-e29b-41d4-a716-446655440002"
+    const rows = publishedScheduleUpsertRows("event-1", [
+      {
+        id: dayA,
+        title: "Viernes",
+        start_time: "2026-11-13T18:00:00",
+        end_time: "2026-11-13T23:00:00",
+      },
+      {
+        id: dayB,
+        title: "Sábado",
+        start_time: "2026-11-14T18:00:00",
+        end_time: "2026-11-14T23:00:00",
+      },
+    ])
+    assert.deepEqual(
+      rows.map((row) => row.id),
+      [dayA, dayB],
+    )
+    assert.equal(
+      shouldPublishEventV2Sequentially({
+        schedule_days: [
+          { id: dayA, title: "Viernes", start_time: "", end_time: "" },
+          { id: dayB, title: "Sábado", start_time: "", end_time: "" },
+        ],
+      }),
+      true,
+    )
+    assert.equal(
+      shouldPublishEventV2Sequentially({
+        schedule_days: [],
+      }),
+      false,
+    )
+    assert.doesNotThrow(() =>
+      assertPublishedSeatedTicketsBoundToDays(
+        [
+          {
+            seating_sector_id: "grada-naranja",
+            layout_type: "table_combo",
+            day_id: dayA,
+          },
+          {
+            seating_sector_id: "grada-amarilla",
+            layout_type: "table_combo",
+            day_id: dayA,
+          },
+          {
+            seating_sector_id: "grada-naranja",
+            layout_type: "table_combo",
+            day_id: dayB,
+          },
+          {
+            seating_sector_id: "grada-amarilla",
+            layout_type: "table_combo",
+            day_id: dayB,
+          },
+        ],
+        [{ id: dayA }, { id: dayB }],
+      ),
     )
   })
 

@@ -27,7 +27,9 @@ import {
   freePublishCapacity,
   isPublishScheduleForeignKeyError,
   publishedExperienceColumns,
+  publishedScheduleUpsertRows,
   sanitizePublishPayloadForDatabase,
+  shouldPublishEventV2Sequentially,
   type PublishEventV2Issue,
   type PublishEventV2Payload,
   type PublishEventV2TierPayload,
@@ -771,12 +773,29 @@ async function writePublishedTicketRow(
   return { id: written.data.id }
 }
 
-async function unlinkPublishedTicketDays(eventId: string) {
+async function ensurePublishedScheduleRows(
+  eventId: string,
+  payload: PublishEventV2Payload,
+) {
+  const rows = publishedScheduleUpsertRows(eventId, payload.schedule_days)
+  if (rows.length === 0) return
   const admin = createAdminClient()
-  const written = await admin
-    .from("ticket_tiers")
-    .update({ day_id: null } as never)
-    .eq("event_id", eventId)
+  const existing = await admin
+    .from("event_schedules")
+    .select("id, event_id")
+    .in(
+      "id",
+      rows.map((row) => row.id),
+    )
+  if (existing.error) throw new Error(formatSupabaseError(existing.error))
+  if ((existing.data ?? []).some((row) => row.event_id !== eventId)) {
+    throw new Error(
+      "Hay una jornada con un identificador que no pertenece a este evento. Recargá e intentá de nuevo.",
+    )
+  }
+  const written = await admin.from("event_schedules").upsert(rows, {
+    onConflict: "id",
+  })
   if (written.error) throw new Error(formatSupabaseError(written.error))
 }
 
@@ -959,16 +978,16 @@ async function unpackPublishEventV2Sequential(input: {
     venueMap: payload.venue_map,
     persistVenueLayout: payload.schedule_days.length < 2,
   })
-  // Unlink day_id so leftover jornadas can be replaced, write schedules,
-  // then persist tickets already bound to those jornadas. Avoids 23503
-  // and two undated map tickets colliding on the same sector.
-  await unlinkPublishedTicketDays(input.eventId)
-  await unpackPublishedSchedule(input.eventId, payload)
+  // Create jornadas first, write tickets already bound to those days,
+  // then mirror schedule_days so leftover days can drop without a null
+  // day_id window (two map tickets on the same sector would collide).
+  await ensurePublishedScheduleRows(input.eventId, payload)
   const ticketDays = await syncPublishedTickets(input.eventId, payload.tickets, {
     venueMap: payload.venue_map,
     seatingMaps: payload.seating_maps,
   })
   await bindPublishedTicketDays(input.eventId, ticketDays)
+  await unpackPublishedSchedule(input.eventId, payload)
   await hardReplacePublishedSeatingMaps({
     eventId: input.eventId,
     maps: payload.seating_maps,
@@ -1183,16 +1202,34 @@ export async function publishEventV2(
         return { success: false, error: publishActionError(error) }
       }
     }
-    const rpc = await gate.supabase.rpc("publish_event_v2", {
-      p_event_id: id,
-      p_payload: payload as unknown as Json,
-    })
+    const publishSequentially = shouldPublishEventV2Sequentially(payload)
+    let usedRpc = false
+    if (!publishSequentially) {
+      const rpc = await gate.supabase.rpc("publish_event_v2", {
+        p_event_id: id,
+        p_payload: payload as unknown as Json,
+      })
 
-    if (rpc.error && !shouldFallbackPublishRpc(rpc.error)) {
-      return { success: false, error: publishActionError(rpc.error) }
+      if (rpc.error && !shouldFallbackPublishRpc(rpc.error)) {
+        return { success: false, error: publishActionError(rpc.error) }
+      }
+
+      if (!rpc.error) {
+        usedRpc = true
+        try {
+          // publish_event_v2 already wrote tickets, maps and units in one TX.
+          await hardReplacePublishedEventArtists({ eventId: id, lineup })
+          await unpackPublishedExperience(id, payload)
+        } catch (error) {
+          return {
+            success: false,
+            error: publishActionError(error),
+          }
+        }
+      }
     }
 
-    if (rpc.error) {
+    if (!usedRpc) {
       try {
         const written = await unpackPublishEventV2Sequential({
           eventId: id,
@@ -1205,17 +1242,6 @@ export async function publishEventV2(
           lineup,
         })
         slug = written.slug
-      } catch (error) {
-        return {
-          success: false,
-          error: publishActionError(error),
-        }
-      }
-    } else {
-      try {
-        // publish_event_v2 already wrote tickets, maps and units in one TX.
-        await hardReplacePublishedEventArtists({ eventId: id, lineup })
-        await unpackPublishedExperience(id, payload)
       } catch (error) {
         return {
           success: false,
