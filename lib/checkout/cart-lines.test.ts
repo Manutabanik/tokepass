@@ -6,6 +6,7 @@ import {
   cartLineBreakdownLabel,
   cartLineDisplayName,
   cartLinePrimaryLabel,
+  cartLineSnapshotLabel,
   cartLineSeatTitle,
   cartLineUnitPrice,
   cartPlaceLabel,
@@ -96,6 +97,26 @@ describe("cartLinePrimaryLabel", () => {
         unitPriceLabel: "$10.000",
       }),
       "2x General Viernes — $10.000 c/u",
+    )
+  })
+})
+
+describe("cartLineSnapshotLabel", () => {
+  it("joins name, seat and stamped day without the active tab", () => {
+    assert.equal(
+      cartLineSnapshotLabel({
+        name: "Entrada General",
+        seatLabel: "Mesa 04",
+        dateString: "Viernes 13 Nov",
+      }),
+      "Entrada General - Mesa 04 - Viernes 13 Nov",
+    )
+    assert.equal(
+      cartLineSnapshotLabel({
+        name: "Entrada General",
+        dateString: "Sábado 14 Nov",
+      }),
+      "Entrada General - Sábado 14 Nov",
     )
   })
 })

@@ -16,8 +16,8 @@ import { PromoCodeInput } from "@/components/public/promo-code-input"
 import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-clickwrap"
 import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import type { CheckoutBuyerInfo } from "@/lib/checkout-buyer"
-import { formatTicketPrice } from "@/lib/format"
-import { cartLineAmount, cartLineDisplayName } from "@/lib/checkout/cart-lines"
+import { formatCartTotal } from "@/lib/format"
+import { cartLineAmount, cartLineSnapshotLabel } from "@/lib/checkout/cart-lines"
 import {
   useCheckoutStore,
   type StorefrontCartLine,
@@ -296,7 +296,7 @@ function PaymentOrderSummary({
             Entradas · {totalTickets}
           </span>
           <span className="shrink-0 tabular-nums text-card-foreground">
-            {formatTicketPrice(ticketsSubtotal)}
+            {formatCartTotal(ticketsSubtotal)}
           </span>
         </div>
       )}
@@ -325,7 +325,7 @@ function PaymentOrderSummary({
         <div className="flex items-center justify-between text-sm text-emerald-600 dark:text-emerald-400">
           <span>Descuento ({appliedPromo.code})</span>
           <span className="tabular-nums">
-            −{formatTicketPrice(discountAmount)}
+            −{formatCartTotal(discountAmount)}
           </span>
         </div>
       ) : null}
@@ -341,7 +341,7 @@ function PaymentOrderSummary({
           </p>
         </div>
         <span className="shrink-0 text-xl font-black tabular-nums text-card-foreground">
-          {formatTicketPrice(finalTotal)}
+          {formatCartTotal(finalTotal)}
         </span>
       </div>
       <TokepassGuaranteeBadge variant="full" isOnline={isOnline} />
@@ -351,9 +351,13 @@ function PaymentOrderSummary({
 
 function PaymentTicketRow({ item }: { item: StorefrontCartLine }) {
   const quantity = Math.max(1, Math.floor(item.quantity) || 1)
-  const displayName = cartLineDisplayName(item)
-  const name = quantity > 1 ? `${quantity}x ${displayName}` : displayName
-  const dateLabel = item.dateLabel?.trim() || ""
+  const title = cartLineSnapshotLabel({
+    name: item.name,
+    displayName: item.displayName,
+    seatLabel: item.seatLabel,
+    dateString: item.dateString,
+  })
+  const name = quantity > 1 ? `${quantity}x ${title}` : title
 
   return (
     <li className="flex min-w-0 items-start justify-between gap-3">
@@ -362,13 +366,11 @@ function PaymentTicketRow({ item }: { item: StorefrontCartLine }) {
           {name}
         </p>
         <p className="mt-0.5 line-clamp-2 break-words text-xs text-muted-foreground">
-          {dateLabel
-            ? `${lineAccessLabel(item)} · ${dateLabel}`
-            : lineAccessLabel(item)}
+          {lineAccessLabel(item)}
         </p>
       </div>
       <span className="shrink-0 text-sm font-bold tabular-nums text-card-foreground">
-        {formatTicketPrice(cartLineAmount(item))}
+        {formatCartTotal(cartLineAmount(item))}
       </span>
     </li>
   )

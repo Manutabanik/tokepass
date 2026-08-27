@@ -233,7 +233,7 @@ import {
   storefrontItemFromElement,
   storefrontItemFromZone,
 } from "@/lib/seating/storefront-selection"
-import { formatTicketPrice } from "@/lib/format"
+import { formatCartTotal } from "@/lib/format"
 import { centsToMoney, moneyToCents } from "@/lib/money/cents"
 import { roundMoney } from "@/lib/pricing/all-in"
 import { cn } from "@/lib/utils"
@@ -3181,7 +3181,7 @@ export function CheckoutTunnel({
             ? "Simular Pago (Modo Prueba)"
             : isFreeCheckout
               ? "Obtener entrada gratis"
-              : `Confirmar y Pagar ${formatTicketPrice(finalTotal)}`
+              : `Confirmar y Pagar ${formatCartTotal(finalTotal)}`
 
   const seatSelection = hasInteractiveMap
     ? {

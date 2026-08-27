@@ -11,7 +11,7 @@ import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-cli
 import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import { Button } from "@/components/ui/button"
 import { cartLineAmount } from "@/lib/checkout/cart-lines"
-import { formatTicketPrice } from "@/lib/format"
+import { formatCartTotal } from "@/lib/format"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import {
   storefrontSelectionCount,
@@ -179,7 +179,7 @@ export function CheckoutSelectionSidebar({
             ) : null}
           </div>
           <p className="text-2xl font-black tabular-nums text-foreground">
-            {formatTicketPrice(total)}
+            {formatCartTotal(total)}
           </p>
         </div>
         <TokepassGuaranteeBadge variant="full" className="mt-3" />

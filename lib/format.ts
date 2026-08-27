@@ -70,12 +70,18 @@ export function formatCurrency(
   if (options?.freeLabel && Number.isFinite(value) && value === 0) {
     return "Gratis"
   }
-  return normalizeIntlOutput(currencyFormatter.format(value))
+  const amount = Number.isFinite(value) ? value : 0
+  return normalizeIntlOutput(currencyFormatter.format(amount))
 }
 
-/** Precio de entrada al público. Cero se muestra como Gratis. */
+/** Precio de catálogo. Cero se muestra como Gratis. */
 export function formatTicketPrice(value: number): string {
   return formatCurrency(value, { freeLabel: true })
+}
+
+/** Totales de carrito/checkout. Cero es $ 0, nunca Gratis. */
+export function formatCartTotal(value: number): string {
+  return formatCurrency(value)
 }
 
 export function formatCompactCurrency(value: number): string {

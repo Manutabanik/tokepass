@@ -85,6 +85,25 @@ export function cartLinePrimaryLabel(line: {
   return unit ? `${qty}x ${title} — ${unit} c/u` : `${qty}x ${title}`
 }
 
+/**
+ * Desglose inmutable: `Nombre - seatLabel - dateString`.
+ * Only stamped fields. No active tab. Omit seat dash when there is no seatLabel.
+ */
+export function cartLineSnapshotLabel(line: {
+  name: string
+  displayName?: string | null
+  seatLabel?: string | null
+  dateString?: string | null
+}): string {
+  const ticket = line.displayName?.trim() || line.name.trim()
+  const seat = line.seatLabel?.trim() || ""
+  const date = line.dateString?.trim() || ""
+  const parts = [ticket]
+  if (seat && seat !== ticket && !ticket.includes(seat)) parts.push(seat)
+  if (date && !parts.some((part) => part.includes(date))) parts.push(date)
+  return parts.filter(Boolean).join(" - ")
+}
+
 export function cartLineBreakdownLabel(line: {
   quantity?: number
   name: string
@@ -96,10 +115,13 @@ export function cartLineBreakdownLabel(line: {
   dateString?: string | null
 }): string {
   const qty = Math.max(1, Math.floor(Number(line.quantity) || 1))
-  const title = cartLineSeatTitle(line)
-  const date = (line.dateString ?? line.dateLabel)?.trim()
-  const withDate = date ? `${title} - ${date}` : title
-  return `${qty}x ${withDate}`
+  const title = cartLineSnapshotLabel({
+    name: line.displayName?.trim() || line.sectorName?.trim() || line.name,
+    displayName: line.displayName,
+    seatLabel: line.seatLabel ?? line.placeLabel,
+    dateString: line.dateString ?? line.dateLabel,
+  })
+  return `${qty}x ${title}`
 }
 
 export function cartLineDisplayName(line: {

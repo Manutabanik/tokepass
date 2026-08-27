@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  formatCartTotal,
   formatCurrency,
   formatEventDay,
   formatEventTime,
@@ -12,6 +13,8 @@ import {
 describe("ticket prices", () => {
   it("keeps money formatting for admin totals", () => {
     assert.equal(formatCurrency(0), "$ 0")
+    assert.equal(formatCartTotal(0), "$ 0")
+    assert.equal(formatCartTotal(Number.NaN), "$ 0")
   })
 
   it("shows free tickets as Gratis", () => {

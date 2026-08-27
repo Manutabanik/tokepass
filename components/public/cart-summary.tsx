@@ -5,14 +5,12 @@ import { Trash2, X } from "lucide-react"
 import {
   CART_TICKET_LINE_PREFIX,
   cartLineAmount,
-  cartLineDisplayName,
-  cartLinePrimaryLabel,
+  cartLineSnapshotLabel,
   cartLineUnitPrice,
   cartTicketLineId,
   parseCartTicketLineId,
 } from "@/lib/checkout/cart-lines"
-import { cartItemDateString } from "@/lib/checkout/cart-line-stamp"
-import { formatTicketPrice } from "@/lib/format"
+import { formatCartTotal } from "@/lib/format"
 import {
   useCheckoutStore,
   type StorefrontCartLine,
@@ -34,7 +32,6 @@ export function CartSummary({
   compact?: boolean
 }) {
   const liveLines = useCheckoutStore((state) => state.lines)
-  const catalogByTierId = useCheckoutStore((state) => state.catalogByTierId)
   const rows = liveLines
   const removeItem = useCheckoutStore((state) => state.removeItem)
   const clearCart = useCheckoutStore((state) => state.clearCart)
@@ -77,24 +74,18 @@ export function CartSummary({
         )}
       >
         {rows.map((item) => {
-          const catalog = item.ticketTierId
-            ? catalogByTierId[item.ticketTierId]
-            : undefined
-          const displayName = cartLineDisplayName({
-            ...item,
-            name: catalog?.name ?? item.name,
+          const title = cartLineSnapshotLabel({
+            name: item.name,
+            displayName: item.displayName,
+            seatLabel: item.seatLabel,
+            dateString: item.dateString,
           })
-          const unit = cartLineUnitPrice(item, catalog)
-          const unitPrice = formatTicketPrice(unit)
-          const qty = Math.max(1, Math.floor(Number(item.quantity) || 1))
-          const title = cartLinePrimaryLabel({
-            ...item,
-            name: catalog?.name ?? item.name,
-            sectorName: item.sectorName ?? catalog?.name ?? item.name,
-            seatLabel: item.seatLabel ?? item.placeLabel,
-            unitPriceLabel: qty > 1 ? unitPrice : null,
-          })
-          const dateLabel = cartItemDateString(item)
+          const amount = formatCartTotal(
+            cartLineAmount({
+              price: cartLineUnitPrice(item),
+              quantity: item.quantity,
+            }),
+          )
           const rowKey = item.ticketTierId
             ? `${item.ticketTierId}:${item.id}`
             : item.id
@@ -108,29 +99,18 @@ export function CartSummary({
                   : "flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 px-3 py-3"
               }
             >
-              {compact ? (
-                <div className="min-w-0">
-                  <p className="line-clamp-2 break-words text-xs font-medium text-foreground">
-                    {title}
-                  </p>
-                  {dateLabel ? (
-                    <p className="truncate text-[11px] text-muted-foreground">
-                      {dateLabel}
-                    </p>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="min-w-0">
-                  <p className="line-clamp-2 break-words text-sm font-semibold text-foreground">
-                    {title}
-                  </p>
-                  {dateLabel ? (
-                    <p className="truncate text-xs text-muted-foreground">
-                      {dateLabel}
-                    </p>
-                  ) : null}
-                </div>
-              )}
+              <div className="min-w-0">
+                <p
+                  className={cn(
+                    "line-clamp-2 break-words text-foreground",
+                    compact
+                      ? "text-xs font-medium"
+                      : "text-sm font-semibold",
+                  )}
+                >
+                  {title}
+                </p>
+              </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 <span
                   className={cn(
@@ -140,9 +120,7 @@ export function CartSummary({
                       : "text-sm font-bold text-foreground",
                   )}
                 >
-                  {formatTicketPrice(
-                    cartLineAmount({ price: unit, quantity: item.quantity }),
-                  )}
+                  {amount}
                 </span>
                 <button
                   type="button"
@@ -153,7 +131,7 @@ export function CartSummary({
                       ? "grid size-7 place-items-center rounded-md text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive"
                       : "grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive",
                   )}
-                  aria-label={`Quitar ${displayName}`}
+                  aria-label={`Quitar ${title}`}
                 >
                   {compact ? (
                     <Trash2 className="size-3.5" aria-hidden="true" />

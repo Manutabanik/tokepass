@@ -17,7 +17,7 @@ import {
   sumCartQuantities,
   toCartNumber,
 } from "@/lib/checkout/cart"
-import { formatTicketPrice } from "@/lib/format"
+import { formatCartTotal } from "@/lib/format"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 
@@ -144,7 +144,7 @@ export function CheckoutFloatingBar({
                   totalBump && "text-emerald-400",
                 )}
               >
-                {formatTicketPrice(resolvedTotal)}
+                {formatCartTotal(resolvedTotal)}
               </span>
               <button
                 type="button"
@@ -278,13 +278,13 @@ export function CheckoutFloatingBar({
                 <div className="flex items-center justify-between gap-3 text-muted-foreground">
                   <span>Subtotal</span>
                   <span className="tabular-nums">
-                    {formatTicketPrice(linesSubtotal)}
+                    {formatCartTotal(linesSubtotal)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3 text-muted-foreground">
                   <span>Cargos y ajustes</span>
                   <span className="tabular-nums">
-                    {formatTicketPrice(extraCharges)}
+                    {formatCartTotal(extraCharges)}
                   </span>
                 </div>
               </div>
@@ -294,7 +294,7 @@ export function CheckoutFloatingBar({
                 Total
               </span>
               <span className="text-xl font-black whitespace-nowrap tabular-nums text-foreground">
-                {formatTicketPrice(resolvedTotal)}
+                {formatCartTotal(resolvedTotal)}
               </span>
             </div>
             <Button
