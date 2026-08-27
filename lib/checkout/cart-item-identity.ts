@@ -253,6 +253,22 @@ export function cartQuantityKey(
   return cartCompositeItemId(ticketId, scheduleId)
 }
 
+/** Exact composite key for this ticket + jornada. No match → 0. */
+export function cartQuantityOnSchedule(
+  quantities: Record<string, number> | null | undefined,
+  ticketId: string,
+  scheduleId?: string | null,
+): number {
+  const ticket = ticketId.trim()
+  if (!ticket) return 0
+  const exact = cartQuantityKey(ticket, scheduleId)
+  if (quantities && Object.prototype.hasOwnProperty.call(quantities, exact)) {
+    return cartLineQuantity(quantities[exact])
+  }
+  if (asHoldEventDateId(scheduleId)) return 0
+  return cartLineQuantity(quantities?.[ticket])
+}
+
 export function projectQuantitiesForSchedule(
   quantities: Record<string, number>,
   lines: readonly CartIdentityLine[],
@@ -263,7 +279,7 @@ export function projectQuantitiesForSchedule(
   for (const line of lines) {
     if (isMapCartLine(line)) continue
     const day = cartItemScheduleId(line)
-    if (active && day && day !== active) continue
+    if (active && day !== active) continue
     const tierId = generalLineTierId(line)
     if (!tierId) continue
     projected[tierId] = cartLineQuantity(line.quantity)
@@ -271,16 +287,42 @@ export function projectQuantitiesForSchedule(
   for (const [key, qty] of Object.entries(quantities)) {
     const amount = cartLineQuantity(qty)
     const parsed = parseCartCompositeItemId(key)
-    if (parsed?.ticketId && (parsed.scheduleId || key.includes("_"))) {
-      if (active && parsed.scheduleId && parsed.scheduleId !== active) continue
-      if (parsed.unitId) continue
-      projected[parsed.ticketId] = amount
+    if (parsed?.unitId) continue
+    const ticketId = parsed?.ticketId || key
+    if (active) {
+      if (parsed?.scheduleId === active) {
+        projected[ticketId] = amount
+      }
       continue
     }
-    const tierId = parsed?.ticketId || key
-    if (projected[tierId] == null) {
-      projected[tierId] = amount
+    projected[ticketId] = amount
+  }
+  if (active) {
+    for (const [key, qty] of Object.entries(quantities)) {
+      const parsed = parseCartCompositeItemId(key)
+      if (parsed?.unitId || parsed?.scheduleId) continue
+      const ticketId = parsed?.ticketId || key
+      if (projected[ticketId] != null) continue
+      if (key === cartQuantityKey(ticketId, null)) {
+        projected[ticketId] = cartLineQuantity(qty)
+      }
     }
   }
   return projected
+}
+
+export function cartMapUnitIdsForSchedule(
+  lines: readonly CartIdentityLine[],
+  scheduleId?: string | null,
+): string[] {
+  const active = asHoldEventDateId(scheduleId)
+  const ids: string[] = []
+  for (const line of lines) {
+    if (!isMapCartLine(line)) continue
+    const day = cartItemScheduleId(line)
+    if (active && day !== active) continue
+    const unit = line.seatId?.trim() || line.elementId?.trim()
+    if (unit) ids.push(unit)
+  }
+  return ids
 }

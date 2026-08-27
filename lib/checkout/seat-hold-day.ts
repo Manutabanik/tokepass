@@ -28,12 +28,18 @@ export function storefrontSelectionKey(item: {
 }
 
 export function storefrontItemMatchesSchedule(
-  item: { eventDateId?: string | null; dateId?: string | null },
+  item: {
+    eventDateId?: string | null
+    dateId?: string | null
+    scheduleId?: string | null
+  },
   scheduleId?: string | null,
   options?: { scheduleDayCount?: number },
 ): boolean {
   const itemDate =
-    asHoldEventDateId(item.eventDateId) ?? asHoldEventDateId(item.dateId)
+    asHoldEventDateId(item.scheduleId) ??
+    asHoldEventDateId(item.eventDateId) ??
+    asHoldEventDateId(item.dateId)
   const active = asHoldEventDateId(scheduleId)
   if (!active) return true
   if (!itemDate) return (options?.scheduleDayCount ?? 0) < 2

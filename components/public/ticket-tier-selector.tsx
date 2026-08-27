@@ -10,6 +10,7 @@ import {
 import { useMemo, useState } from "react"
 
 import { QuantityCounter } from "@/components/public/quantity-counter"
+import { cartQuantityOnSchedule } from "@/lib/checkout/cart-item-identity"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { isFullPassDayId } from "@/lib/event-schedule"
@@ -178,6 +179,7 @@ export function TicketTierSelector({
           return tier.dayId === dayFilter
         })}
         quantities={quantities}
+        scheduleId={dayFilter === "all" ? null : dayFilter}
         scheduleDays={days}
         isPending={isPending}
         hasSeatingFlow={hasSeatingFlow}
@@ -311,6 +313,7 @@ function DayChip({
 function TierList({
   tiers,
   quantities,
+  scheduleId = null,
   scheduleDays,
   isPending,
   hasSeatingFlow,
@@ -320,6 +323,7 @@ function TierList({
 }: {
   tiers: TicketSelectorTier[]
   quantities: Record<string, number>
+  scheduleId?: string | null
   scheduleDays: ScheduleDay[]
   isPending: boolean
   hasSeatingFlow: boolean
@@ -339,11 +343,21 @@ function TierList({
   return (
     <div className="space-y-3">
       {tiers.map((tier) => {
-        const quantity = quantities[tier.id] ?? 0
+        const quantity = cartQuantityOnSchedule(
+          quantities,
+          tier.id,
+          scheduleId,
+        )
+        const dayQuantities = Object.fromEntries(
+          tiers.map((item) => [
+            item.id,
+            cartQuantityOnSchedule(quantities, item.id, scheduleId),
+          ]),
+        )
         const maxSelectable = generalTicketMaxQuantity({
           tier,
           siblings: tiers,
-          quantities,
+          quantities: dayQuantities,
           selectedCount: Object.values(quantities).reduce(
             (sum, value) => sum + Math.max(0, value),
             0,

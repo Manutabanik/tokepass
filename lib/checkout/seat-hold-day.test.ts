@@ -97,6 +97,18 @@ describe("storefrontItemMatchesSchedule", () => {
       }),
       false,
     )
+    assert.equal(
+      storefrontItemMatchesSchedule({ scheduleId: dayA }, dayB, {
+        scheduleDayCount: 2,
+      }),
+      false,
+    )
+    assert.equal(
+      storefrontItemMatchesSchedule({ scheduleId: dayA }, dayA, {
+        scheduleDayCount: 2,
+      }),
+      true,
+    )
   })
 })
 

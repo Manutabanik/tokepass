@@ -4,6 +4,8 @@ import { describe, it } from "node:test"
 import {
   cartCompositeItemId,
   cartLineSnapshot,
+  cartMapUnitIdsForSchedule,
+  cartQuantityOnSchedule,
   freezeCartLineSnapshot,
   mergeImmutableCartLines,
   parseCartCompositeItemId,
@@ -234,6 +236,76 @@ describe("projectQuantitiesForSchedule", () => {
     assert.equal(
       projectQuantitiesForSchedule(quantities, [], saturday)[general],
       4,
+    )
+  })
+
+  it("reads 0 when the active jornada has no composite match", () => {
+    const quantities = {
+      [cartCompositeItemId(general, friday)]: 2,
+    }
+    assert.equal(cartQuantityOnSchedule(quantities, general, saturday), 0)
+    assert.equal(cartQuantityOnSchedule(quantities, general, friday), 2)
+    assert.equal(
+      projectQuantitiesForSchedule(quantities, [], saturday)[general] ?? 0,
+      0,
+    )
+    assert.equal(
+      projectQuantitiesForSchedule(
+        { [general]: 9, ...quantities },
+        [],
+        saturday,
+      )[general] ?? 0,
+      0,
+    )
+  })
+
+  it("does not leak an undated line onto a selected jornada", () => {
+    const lines = [
+      {
+        id: general,
+        ticketTierId: general,
+        name: "General",
+        quantity: 3,
+        price: 1,
+      },
+    ]
+    assert.equal(
+      projectQuantitiesForSchedule({}, lines, friday)[general] ?? 0,
+      0,
+    )
+  })
+})
+
+describe("cartMapUnitIdsForSchedule", () => {
+  it("keeps only map places stamped on the rendered jornada", () => {
+    const lines = [
+      {
+        id: cartCompositeItemId(general, friday, "mesa-04"),
+        ticketTierId: general,
+        name: "Grada",
+        quantity: 1,
+        price: 1,
+        seatId: "mesa-04",
+        scheduleId: friday,
+      },
+      {
+        id: cartCompositeItemId(general, saturday, "mesa-04"),
+        ticketTierId: general,
+        name: "Grada",
+        quantity: 1,
+        price: 1,
+        seatId: "mesa-04",
+        scheduleId: saturday,
+      },
+    ]
+    assert.deepEqual(cartMapUnitIdsForSchedule(lines, friday), ["mesa-04"])
+    assert.deepEqual(cartMapUnitIdsForSchedule(lines, saturday), ["mesa-04"])
+    assert.deepEqual(
+      cartMapUnitIdsForSchedule(
+        lines.filter((line) => line.scheduleId === friday),
+        saturday,
+      ),
+      [],
     )
   })
 })

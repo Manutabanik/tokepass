@@ -1146,10 +1146,13 @@ export function CheckoutTunnel({
 
   const availableExtras = extraTickets.filter((tier) => tier.available > 0)
 
+  const daySelectedItems = selectedItems.filter((item) =>
+    itemMatchesActiveDay(item),
+  )
   const visibleZoneId =
-    focusedZoneId && selectedItems.some((item) => item.id === focusedZoneId)
+    focusedZoneId && daySelectedItems.some((item) => item.id === focusedZoneId)
       ? focusedZoneId
-      : (selectedItems.find((item) => item.type === "zone")?.id ?? null)
+      : (daySelectedItems.find((item) => item.type === "zone")?.id ?? null)
 
   const priceBySectorId = useMemo(
     () => buildTierUnitPriceIndex(dayTiers),
@@ -1307,7 +1310,15 @@ export function CheckoutTunnel({
         ids.add(seat.id)
       }
     }
-    if (selectedSeat) {
+    if (
+      selectedSeat &&
+      selectedItems.some(
+        (item) =>
+          itemMatchesActiveDay(item) &&
+          (item.id === selectedSeat.seatingUnitId ||
+            item.id === selectedSeat.sectorKey),
+      )
+    ) {
       ids.add(selectedSeat.seatingUnitId)
       const unit = mergedSeatingUnits.find(
         (item) => item.id === selectedSeat.seatingUnitId,
@@ -3272,7 +3283,9 @@ export function CheckoutTunnel({
                   resolvedSeatingLayout.length === 0 &&
                   (universalPayload?.sectors.length ?? 0) === 0
                 }
-                selectedPlaceCount={storefrontSelectionCount(liveSelectedItems)}
+                selectedPlaceCount={storefrontSelectionCount(
+                  liveSelectedItems.filter((item) => itemMatchesActiveDay(item)),
+                )}
                 onQuantityChange={updateQuantity}
                 onOpenSeatFlow={openSeatFlow}
                 seatSelection={seatSelection}

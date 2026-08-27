@@ -66,6 +66,7 @@ import {
   partitionCheckoutTickets,
   resolveTicketCommerceType,
 } from "@/lib/events/ticket-commerce-type"
+import { cartQuantityOnSchedule } from "@/lib/checkout/cart-item-identity"
 import { storefrontItemMatchesSchedule } from "@/lib/checkout/seat-hold-day"
 import { ticketUsesMapSelector } from "@/lib/checkout/public-ticket-view"
 import { flattenSeatsForAvailability } from "@/lib/seating/venue-map-geometry"
@@ -233,7 +234,8 @@ export function EventCheckoutSelector({
   const hasMapSelection = selectedPlaceCount > 0
   const placeLabel = selectedSeat?.label?.trim() || null
   const generalQty = grouped.general.reduce(
-    (sum, tier) => sum + (quantities[tier.id] ?? 0),
+    (sum, tier) =>
+      sum + cartQuantityOnSchedule(quantities, tier.id, activeDateId),
     0,
   )
   const showInclusionWarning =
@@ -558,7 +560,7 @@ function TicketSelectionList({
         key={tier.id}
         tier={tier}
         siblingTiers={listTiers}
-        quantity={quantities[tier.id] ?? 0}
+        quantity={cartQuantityOnSchedule(quantities, tier.id, activeDateId)}
         isPending={isPending}
         focused={focusedTierId === tier.id}
         maxTicketsPerUser={maxTicketsPerUser}
@@ -740,6 +742,7 @@ function TicketSelectionList({
                           tiers={generalTickets}
                           siblingTiers={listTiers}
                           quantities={quantities}
+                          scheduleId={activeDateId ?? group.dateId}
                           selectedCount={selectedCount}
                           maxTicketsPerUser={maxTicketsPerUser}
                           isPending={isPending}

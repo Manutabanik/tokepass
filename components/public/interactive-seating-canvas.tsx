@@ -36,6 +36,7 @@ import {
   SEAT_HELD_BY_OTHER_MESSAGE,
 } from "@/lib/seating/inventory-seat-state"
 import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
+import { cartMapUnitIdsForSchedule } from "@/lib/checkout/cart-item-identity"
 import { cartPlaceLabel } from "@/lib/checkout/cart-lines"
 import {
   asHoldEventDateId,
@@ -226,25 +227,27 @@ export function InteractiveSeatingCanvas({
   const [revealedZoneId, setRevealedZoneId] = useState<string | null>(null)
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const selectedSeats = useStorefrontSeatStore((state) => state.layoutSeats)
+  const cartLines = useCheckoutStore((state) => state.lines)
   const storeScheduleId = useCheckoutStore((state) => state.selectedScheduleId)
   const activeScheduleId = eventDateIdProp?.trim() || storeScheduleId
+  const mapScheduleId = asHoldEventDateId(activeScheduleId)
   const daySelectedItems = useMemo(
     () =>
       selectedItems.filter((item) =>
-        storefrontItemMatchesSchedule(item, activeScheduleId, {
+        storefrontItemMatchesSchedule(item, mapScheduleId, {
           scheduleDayCount,
         }),
       ),
-    [activeScheduleId, scheduleDayCount, selectedItems],
+    [mapScheduleId, scheduleDayCount, selectedItems],
   )
   const daySelectedSeats = useMemo(
     () =>
       selectedSeats.filter((seat) =>
-        storefrontItemMatchesSchedule(seat, activeScheduleId, {
+        storefrontItemMatchesSchedule(seat, mapScheduleId, {
           scheduleDayCount,
         }),
       ),
-    [activeScheduleId, scheduleDayCount, selectedSeats],
+    [mapScheduleId, scheduleDayCount, selectedSeats],
   )
   const focusedMapIds = useStorefrontSeatStore((state) => state.focusedMapIds)
   const focusTick = useStorefrontSeatStore((state) => state.focusTick)
@@ -295,19 +298,26 @@ export function InteractiveSeatingCanvas({
     () => mergeInventoryOccupancy(occupancyBySeatId, liveOccupancy),
     [liveOccupancy, occupancyBySeatId],
   )
-  const heldSet = useMemo(() => new Set(heldSeatIds), [heldSeatIds])
   const selectedIds = useMemo(() => {
-    const ids = new Set(daySelectedSeats.map((seat) => seat.id))
+    const ids = new Set(cartMapUnitIdsForSchedule(cartLines, mapScheduleId))
+    for (const seat of daySelectedSeats) {
+      if (seat.id) ids.add(seat.id)
+    }
     for (const item of liveSelectedItems) {
+      if (item.id) ids.add(item.id)
       if (item.type !== "table") continue
-      ids.add(item.id)
       const element = (map.elements ?? []).find((entry) => entry.id === item.id)
       for (const seat of element?.seats ?? []) {
         if (seat.id) ids.add(seat.id)
       }
     }
     return ids
-  }, [daySelectedSeats, liveSelectedItems, map.elements])
+  }, [cartLines, daySelectedSeats, liveSelectedItems, map.elements, mapScheduleId])
+  const dayHeldSeatIds = useMemo(
+    () => heldSeatIds.filter((id) => selectedIds.has(id)),
+    [heldSeatIds, selectedIds],
+  )
+  const heldSet = useMemo(() => new Set(dayHeldSeatIds), [dayHeldSeatIds])
   const hoverSeats = useMemo(() => flattenVenueMapSeats(map), [map])
   const buyerOccupancy = !posStatusColors
   const selectedElementIds = useMemo(
@@ -1304,8 +1314,8 @@ export function InteractiveSeatingCanvas({
             <VenueMapElementLayer
               elements={revealElements}
               occupancyBySeatId={occupancy}
-              selectedIds={[...selectedElementIds, ...heldSeatIds]}
-              selectedSeatIds={[...selectedIds, ...heldSeatIds]}
+              selectedIds={[...selectedElementIds, ...dayHeldSeatIds]}
+              selectedSeatIds={[...selectedIds, ...dayHeldSeatIds]}
               highlightedIds={focusedMapIds}
               spotlight={spotlight}
               showSeats
