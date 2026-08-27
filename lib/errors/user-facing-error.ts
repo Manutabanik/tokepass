@@ -25,10 +25,10 @@ export function toUserFacingError(
   const seatingMessage = seatingPersistUserMessage(text)
   if (seatingMessage) return seatingMessage
   if (classifyPersistError(text) === "network") return NETWORK_SAVE_MESSAGE
-  if (isUnmaskedSupabaseError(text)) return text
   const safeFallback = isSafeUserFacingCopy(fallback)
     ? fallback
     : GENERIC_PUBLIC_ERROR
+  if (isUnmaskedSupabaseError(text)) return safeFallback
   const message = mapUnknownError(text, {
     code: "SAVE_FAILED",
     title: "No pudimos guardar los cambios",

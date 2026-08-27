@@ -8,6 +8,7 @@ import {
   seatingPersistUserMessage,
 } from "@/lib/events/sanitize-ticket-tiers"
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
+import { toUserFacingError } from "@/lib/errors/user-facing-error"
 import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
 import { assertDraftMapLayoutImmutable } from "@/lib/events/assert-draft-map-immutability"
 import { sanitizeEventDraftForPersist } from "@/lib/events/draft-seating-map-v2"
@@ -77,9 +78,9 @@ export type GetEventDraftV2Result =
   | { success: false; error: string; code?: string }
 
 function publishActionError(error: unknown): string {
-  return (
-    seatingPersistUserMessage(error) ??
-    (error instanceof Error ? error.message : formatSupabaseError(error))
+  return toUserFacingError(
+    error,
+    "No se pudo publicar el evento. Revisá el mapa y las entradas e intentá de nuevo.",
   )
 }
 
@@ -695,7 +696,7 @@ function relationalTierRow(
     tier_type: ticket.tier_type as TicketTier["tier_type"],
     layout_type: ticket.layout_type as TicketTier["layout_type"],
     seating_sector_id: ticket.seating_sector_id?.trim() || null,
-    day_id: null,
+    day_id: ticket.day_id,
     visibility: "public" as const,
     capacity_per_unit: 1,
     admit_count: 1,
@@ -958,14 +959,15 @@ async function unpackPublishEventV2Sequential(input: {
     venueMap: payload.venue_map,
     persistVenueLayout: payload.schedule_days.length < 2,
   })
-  // Children first: unlink ticket_tiers.day_id, sync tickets, write
-  // event_schedules / schedule_days, then rebind days. Avoids 23503.
+  // Unlink day_id so leftover jornadas can be replaced, write schedules,
+  // then persist tickets already bound to those jornadas. Avoids 23503
+  // and two undated map tickets colliding on the same sector.
   await unlinkPublishedTicketDays(input.eventId)
+  await unpackPublishedSchedule(input.eventId, payload)
   const ticketDays = await syncPublishedTickets(input.eventId, payload.tickets, {
     venueMap: payload.venue_map,
     seatingMaps: payload.seating_maps,
   })
-  await unpackPublishedSchedule(input.eventId, payload)
   await bindPublishedTicketDays(input.eventId, ticketDays)
   await hardReplacePublishedSeatingMaps({
     eventId: input.eventId,
@@ -982,7 +984,10 @@ async function unpackPublishEventV2Sequential(input: {
       p_event_id: input.eventId,
     })
     if (materialized.error) {
-      throw new Error(formatSupabaseError(materialized.error))
+      throw new Error(
+        seatingPersistUserMessage(materialized.error) ??
+          formatSupabaseError(materialized.error),
+      )
     }
   }
   const written = await admin

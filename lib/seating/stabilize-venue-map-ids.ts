@@ -74,10 +74,11 @@ export function healTicketSeatingSector<
   if (liveSectors.some((sector) => sector.id === current)) return ticket
   const name = normalizeMapSectorLabel(ticket.name)
   if (!name) return ticket
-  const match = liveSectors.find(
+  const matches = liveSectors.filter(
     (sector) => normalizeMapSectorLabel(sector.name) === name,
   )
-  if (!match) return ticket
+  if (matches.length !== 1) return ticket
+  const match = matches[0]!
   return {
     ...ticket,
     sectorId: match.id,
@@ -111,8 +112,13 @@ function resolveStableId(
   incoming: NamedId,
   catalog: Map<string, string>,
   claimed: Set<string>,
+  previousIds: Set<string>,
 ): string {
   const incomingId = incoming.id.trim()
+  if (incomingId && previousIds.has(incomingId) && !claimed.has(incomingId)) {
+    claimed.add(incomingId)
+    return incomingId
+  }
   if (incomingId && claimed.has(incomingId) === false && [...catalog.values()].includes(incomingId)) {
     claimed.add(incomingId)
     return incomingId
@@ -187,12 +193,29 @@ export function stabilizeVenueMapIds(
   const claimedZones = new Set<string>()
   const claimedElements = new Set<string>()
   const claimedGroups = new Set<string>()
+  const previousSectorIds = new Set(
+    sources.flatMap((map) => (map.sectors ?? []).map((sector) => sector.id.trim())),
+  )
+  const previousZoneIds = new Set(
+    sources.flatMap((map) => (map.zones ?? []).map((zone) => zone.id.trim())),
+  )
+  const previousElementIds = new Set(
+    sources.flatMap((map) => (map.elements ?? []).map((element) => element.id.trim())),
+  )
+  const previousGroupIds = new Set(
+    sources.flatMap((map) =>
+      (map.elements ?? [])
+        .map((element) => element.groupId?.trim() ?? "")
+        .filter(Boolean),
+    ),
+  )
 
   const sectors: VenueMapSector[] = (next.sectors ?? []).map((sector) => {
     const nextId = resolveStableId(
       { id: sector.id, name: sector.name },
       sectorCatalog,
       claimedSectors,
+      previousSectorIds,
     )
     return {
       ...sector,
@@ -207,6 +230,7 @@ export function stabilizeVenueMapIds(
       { id: zone.id, name: zone.name },
       zoneCatalog,
       claimedZones,
+      previousZoneIds,
     ),
   }))
 
@@ -215,6 +239,7 @@ export function stabilizeVenueMapIds(
       { id: element.id, name: element.label || element.sectorName },
       elementCatalog,
       claimedElements,
+      previousElementIds,
     )
     const groupId = element.groupId?.trim()
     const stableGroupId = groupId
@@ -225,6 +250,7 @@ export function stabilizeVenueMapIds(
           },
           groupCatalog,
           claimedGroups,
+          previousGroupIds,
         )
       : element.groupId
     return {

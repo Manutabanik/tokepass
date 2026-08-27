@@ -30,6 +30,14 @@ describe("classifyPersistError", () => {
     assert.equal(classifyPersistError("PGRST204"), "sql")
     assert.equal(
       classifyPersistError({
+        code: "PGRST204",
+        message: "Could not find the 'capacity' column",
+        details: "schema cache",
+      }),
+      "sql",
+    )
+    assert.equal(
+      classifyPersistError({
         message: 'duplicate key value violates unique constraint "ticket_tiers_pkey"',
       }),
       "sql",
@@ -40,7 +48,7 @@ describe("classifyPersistError", () => {
         message: "Could not find the 'capacity' column",
         details: "schema cache",
       }),
-      "[SUPABASE ERROR - Code: PGRST204]: Could not find the 'capacity' column. Details: schema cache",
+      "No se pudieron guardar los cambios.",
     )
   })
 
@@ -73,6 +81,21 @@ describe("classifyPersistError", () => {
     assert.equal(
       persistErrorUserMessage(new TypeError("Failed to fetch")),
       "No pudimos conectar con el servidor. Recargá la página e intentá de nuevo.",
+    )
+  })
+
+  it("keeps a Spanish app error and hides leftover English SQL copy", () => {
+    assert.equal(
+      persistErrorUserMessage(
+        new Error(
+          "Cada entrada de mapa tiene que estar atada a un día del cronograma.",
+        ),
+      ),
+      "Cada entrada de mapa tiene que estar atada a un día del cronograma.",
+    )
+    assert.equal(
+      persistErrorUserMessage("Could not find the function public.publish_event_v2"),
+      "No se pudieron guardar los cambios.",
     )
   })
 

@@ -302,29 +302,73 @@ function mapLineItemToTier(
   }
 }
 
+/** Draft map tickets are `map:{dateId}:{sectorId}` when they still lack a UUID. */
+export function dayIdFromMapTicketId(ticketId: unknown): string | null {
+  if (typeof ticketId !== "string") return null
+  const match = /^map:([^:]+):.+$/i.exec(ticketId.trim())
+  const raw = match?.[1]?.trim() ?? ""
+  return raw || null
+}
+
 export function resolvePublishedTicketDayIds(
-  item: { slotId?: string; validDayIds?: string[] },
+  item: { id?: string; slotId?: string; validDayIds?: string[] },
   publishedDayIds: Set<string>,
   occurrences: DraftScheduleOccurrence[],
 ): string[] {
-  const slotId = asPublishScheduleId(item.slotId)
+  const fromMapId = dayIdFromMapTicketId(item.id)
+  const slotRaw = item.slotId?.trim() || fromMapId || ""
+  const slotId = asPublishScheduleId(slotRaw)
   if (slotId && publishedDayIds.has(slotId)) return [slotId]
 
   const valid = (item.validDayIds ?? [])
     .map((id) => id.trim())
     .filter((id) => id.length > 0)
-  if (valid.length !== 1) return []
-
-  const only = asPublishScheduleId(valid[0])
-  if (only && publishedDayIds.has(only)) return [only]
+  const bound = valid.length > 0 ? valid : fromMapId ? [fromMapId] : []
+  if (bound.length === 1) {
+    const only = asPublishScheduleId(bound[0])
+    if (only && publishedDayIds.has(only)) return [only]
+  }
 
   return [
     ...new Set(
-      occurrenceIdsForDraftTicket(item, occurrences)
+      occurrenceIdsForDraftTicket(
+        { slotId: slotRaw, validDayIds: bound },
+        occurrences,
+      )
         .map((id) => asPublishScheduleId(id))
         .filter((id): id is string => id != null && publishedDayIds.has(id)),
     ),
   ]
+}
+
+export function assertPublishedSeatedTicketsBoundToDays(
+  tickets: Array<{
+    seating_sector_id?: string | null
+    layout_type?: string | null
+    day_id?: string | null
+  }>,
+  scheduleDays: Array<{ id: string | null }>,
+) {
+  const dayCount = scheduleDays.filter((day) => Boolean(day.id?.trim())).length
+  if (dayCount < 2) return
+  const seen = new Set<string>()
+  for (const ticket of tickets) {
+    const sector = ticket.seating_sector_id?.trim() ?? ""
+    if (!sector || ticket.layout_type === "general") continue
+    const day = ticket.day_id?.trim() ?? ""
+    if (!day) {
+      throw new Error(
+        "Cada entrada de mapa tiene que estar atada a un día del cronograma. Guardá el mapa de cada jornada e intentá de nuevo.",
+      )
+    }
+    const key = `${sector}::${day}`
+    if (seen.has(key)) {
+      throw new Error(
+        "Ese sector del mapa ya tiene una entrada para el mismo día. Revisá las jornadas o el nombre de la tarifa.",
+      )
+    }
+    seen.add(key)
+  }
 }
 
 export function composePublishDescription(input: {
@@ -512,7 +556,7 @@ export function buildPublishEventV2Payload(
     throw new Error("Agregá al menos una entrada")
   }
 
-  return {
+  const payload: PublishEventV2Payload = {
     title,
     date: draftDateToIso(firstDay.startDateTime),
     ends_at: lastEnd ? draftDateToIso(lastEnd) : null,
@@ -555,6 +599,8 @@ export function buildPublishEventV2Payload(
       collectPublishedLiveSectors(publishedMaps),
     ),
   }
+  assertPublishedSeatedTicketsBoundToDays(payload.tickets, payload.schedule_days)
+  return payload
 }
 
 /**
@@ -609,12 +655,41 @@ function publishSeatingMapsFromDraft(
   }
   if (uniqueMaps.length === 0) {
     const published = publishVenueMapFromDraft(draft.seatingMap)
+    if (!published.venue_map) {
+      return {
+        seating_maps: [],
+        venue_map: undefined,
+        has_seating_plan: false,
+      }
+    }
+    if (occurrences.length >= 2) {
+      const seating_maps = occurrences.flatMap((occurrence) => {
+        const event_date_id = asPublishScheduleId(occurrence.id)
+        if (!event_date_id) return []
+        return [
+          seatingMapPayload(
+            event_date_id,
+            published.venue_map as Json,
+            {} as Json,
+          ),
+        ]
+      })
+      return {
+        seating_maps,
+        venue_map: published.venue_map,
+        has_seating_plan: seating_maps.length > 0,
+      }
+    }
     return {
-      seating_maps: published.venue_map
-        ? [seatingMapPayload(null, published.venue_map, {} as Json)]
-        : [],
+      seating_maps: [
+        seatingMapPayload(
+          asPublishScheduleId(occurrences[0]?.id) ?? null,
+          published.venue_map as Json,
+          {} as Json,
+        ),
+      ],
       venue_map: published.venue_map,
-      has_seating_plan: published.has_seating_plan,
+      has_seating_plan: true,
     }
   }
   return {
@@ -643,7 +718,9 @@ function resolvePublishedMapDayIds(
       ).filter((value): value is string => Boolean(value)),
     ),
   ]
-  return published.length > 0 ? published : [null]
+  if (published.length > 0) return published
+  if (occurrences.length >= 2) return []
+  return [asPublishScheduleId(id) ?? null]
 }
 
 export function freePublishCapacity(payload: PublishEventV2Payload): number {

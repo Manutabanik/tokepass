@@ -341,6 +341,29 @@ describe("draft seating map isolation", () => {
     )
   })
 
+  it("updates the ticket name when the sector is renamed and keeps the sector id", () => {
+    const previous = {
+      ...emptyEventDraftV2LineItem("550e8400-e29b-41d4-a716-446655440099"),
+      name: "Grada Naranja",
+      source: "map",
+      sectorId: "sector-platea",
+      validDayIds: ["day-a"],
+    }
+    const renamed = {
+      ...plateaMap(),
+      sectors: plateaMap().sectors.map((sector) =>
+        sector.id === "sector-platea"
+          ? { ...sector, name: "Grada Coral" }
+          : sector,
+      ),
+    }
+    const merged = mergeDraftTicketsWithDayMap([previous], renamed, "day-a")
+    assert.equal(merged.length, 1)
+    assert.equal(merged[0]?.id, previous.id)
+    assert.equal(merged[0]?.sectorId, "sector-platea")
+    assert.equal(merged[0]?.name, "Grada Coral")
+  })
+
   it("rebinds a map ticket by sector name when the id changed", () => {
     const stale = {
       ...emptyEventDraftV2LineItem("map-old"),

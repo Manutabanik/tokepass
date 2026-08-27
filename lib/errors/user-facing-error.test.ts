@@ -35,6 +35,12 @@ describe("toUserFacingError", () => {
     assert.equal(toUserFacingError("PGRST204"), INVENTORY_SYNC_MESSAGE)
     assert.equal(
       toUserFacingError(
+        "[SUPABASE ERROR - Code: PGRST204]: Could not find the 'capacity' column. Details: schema cache",
+      ),
+      INVENTORY_SYNC_MESSAGE,
+    )
+    assert.equal(
+      toUserFacingError(
         'column "day_id" is of type uuid but expression is of type text',
       ),
       APP_ERRORS.INVALID_DAY_SELECTION.message,

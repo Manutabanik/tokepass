@@ -736,6 +736,25 @@ export function InteractiveVenueMapEditor({
     const ids = new Set(selectedElementIds)
     return (map.elements ?? []).filter((item) => ids.has(item.id))
   }, [map.elements, selectedElementIds])
+  const selectedGroupId = useMemo(() => {
+    const fromOne = selectedElement?.groupId?.trim() ?? ""
+    if (fromOne) return fromOne
+    const groupIds = [
+      ...new Set(
+        selectedElements
+          .map((item) => item.groupId?.trim() ?? "")
+          .filter(Boolean),
+      ),
+    ]
+    return groupIds.length === 1 ? groupIds[0]! : ""
+  }, [selectedElement, selectedElements])
+  const selectedGroupName = useMemo(() => {
+    if (!selectedGroupId) return ""
+    const head = (map.elements ?? []).find(
+      (item) => item.groupId?.trim() === selectedGroupId,
+    )
+    return head?.groupName?.trim() || head?.sectorName?.trim() || ""
+  }, [map.elements, selectedGroupId])
   const selectedIdSet = useMemo(
     () => new Set(selectedElementIds),
     [selectedElementIds],
@@ -2347,9 +2366,29 @@ export function InteractiveVenueMapEditor({
 
   function patchPriceGroup(
     group: VenuePriceGroup,
-    patch: { price?: number; color?: string },
+    patch: { price?: number; color?: string; name?: string },
   ) {
     commit(applyVenuePriceGroupPatch(mapRef.current, group, patch))
+  }
+
+  function renameSelectedGroup(name: string) {
+    if (!selectedGroupId) return
+    commit(
+      applyVenuePriceGroupPatch(
+        mapRef.current,
+        {
+          key: `group:${selectedGroupId}`,
+          name,
+          color: "#000000",
+          count: 0,
+          unit: "",
+          price: 0,
+          priceHint: "",
+          match: { kind: "group", groupId: selectedGroupId },
+        },
+        { name },
+      ),
+    )
   }
 
   function applyGridBlock(values: {
@@ -4791,7 +4830,7 @@ export function InteractiveVenueMapEditor({
                     Datos
                   </AccordionTrigger>
                   <AccordionContent className="space-y-3 pb-3">
-                    <Field label="Zona">
+                    <Field label="Nombre del sector">
                       <Input
                         value={selectedSector.name}
                         onChange={(event) =>
@@ -5054,7 +5093,15 @@ export function InteractiveVenueMapEditor({
                   />
                 </Field>
               ) : null}
-              <Field label="Nombre">
+              {selectedGroupId ? (
+                <Field label="Nombre del sector">
+                  <Input
+                    value={selectedGroupName}
+                    onChange={(event) => renameSelectedGroup(event.target.value)}
+                  />
+                </Field>
+              ) : null}
+              <Field label={selectedGroupId ? "Nombre de la mesa" : "Nombre"}>
                 <Input
                   value={selectedElement.label}
                   onChange={(event) =>
@@ -5129,6 +5176,14 @@ export function InteractiveVenueMapEditor({
             </div>
           ) : selection?.kind === "elements" ? (
             <div className="space-y-4">
+              {selectedGroupId ? (
+                <Field label="Nombre del sector">
+                  <Input
+                    value={selectedGroupName}
+                    onChange={(event) => renameSelectedGroup(event.target.value)}
+                  />
+                </Field>
+              ) : null}
               <VenueBulkEditPanel
                 elements={selectedElements}
                 allElements={ensureElements(map)}

@@ -28,6 +28,60 @@ function grada(id: string) {
 }
 
 describe("stabilize-venue-map-ids", () => {
+  it("keeps the sector id when the organizer only renames it", () => {
+    const previous = { ...emptyVenueMap(), sectors: [grada("grada-naranja")] }
+    const incoming = {
+      ...emptyVenueMap(),
+      sectors: [{ ...grada("grada-naranja"), name: "Grada Coral" }],
+    }
+    const stable = stabilizeVenueMapIds(previous, incoming)
+    assert.equal(stable.sectors[0]?.id, "grada-naranja")
+    assert.equal(stable.sectors[0]?.name, "Grada Coral")
+  })
+
+  it("keeps a furniture group id when only the display name changes", () => {
+    const table = {
+      id: "mesa-1",
+      type: "round_table" as const,
+      x: 10,
+      y: 10,
+      rotation: 0,
+      label: "Mesa 01",
+      seats: [],
+      capacity: 8,
+      price: 70000,
+      color: "#f97316",
+      groupId: "grada-naranja",
+      groupName: "Grada Naranja",
+      sectorName: "Grada Naranja",
+    }
+    const previous = { ...emptyVenueMap(), elements: [table] }
+    const incoming = {
+      ...emptyVenueMap(),
+      elements: [{ ...table, groupName: "Grada Coral", sectorName: "Grada Coral" }],
+    }
+    const stable = stabilizeVenueMapIds(previous, incoming)
+    assert.equal(stable.elements[0]?.groupId, "grada-naranja")
+    assert.equal(stable.elements[0]?.groupName, "Grada Coral")
+  })
+
+  it("does not heal a ticket onto another sector when two names collide", () => {
+    const live = collectNamedMapSectorIds({
+      ...emptyVenueMap(),
+      sectors: [grada("grada-naranja"), { ...grada("otra"), name: "Naranja" }],
+    })
+    const healed = healTicketSeatingSector(
+      {
+        name: "Grada Naranja",
+        source: "map",
+        sectorId: "sec-viejo",
+        seating_sector_id: "sec-viejo",
+      },
+      live,
+    )
+    assert.equal(healed.sectorId, "sec-viejo")
+  })
+
   it("keeps the original sector id when the name still matches", () => {
     const previous = { ...emptyVenueMap(), sectors: [grada("sector-grada")] }
     const incoming = { ...emptyVenueMap(), sectors: [grada("sec-newid")] }

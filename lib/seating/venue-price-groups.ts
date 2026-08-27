@@ -187,14 +187,15 @@ export function matchPriceGroupFromSelection(
 export function applyVenuePriceGroupPatch(
   map: InteractiveVenueMap,
   group: VenuePriceGroup,
-  patch: { price?: number; color?: string },
+  patch: { price?: number; color?: string; name?: string },
 ): InteractiveVenueMap {
   const nextPrice =
     patch.price != null
       ? Math.max(0, Number.isFinite(patch.price) ? patch.price : 0)
       : null
   const nextColor = patch.color?.trim() || null
-  if (nextPrice == null && !nextColor) return map
+  const nextName = patch.name != null ? patch.name.trim() : null
+  if (nextPrice == null && !nextColor && nextName == null) return map
 
   if (group.match.kind === "sector") {
     const sectorId = group.match.id
@@ -206,6 +207,7 @@ export function applyVenuePriceGroupPatch(
               ...sector,
               ...(nextPrice != null ? { price: nextPrice } : {}),
               ...(nextColor ? { color: nextColor } : {}),
+              ...(nextName != null ? { name: nextName || sector.name } : {}),
             }
           : sector,
       ),
@@ -222,6 +224,7 @@ export function applyVenuePriceGroupPatch(
               ...zone,
               ...(nextPrice != null ? { price: nextPrice } : {}),
               ...(nextColor ? { color: nextColor } : {}),
+              ...(nextName != null ? { name: nextName || zone.name } : {}),
             }
           : zone,
       ),
@@ -245,6 +248,12 @@ export function applyVenuePriceGroupPatch(
         ...element,
         ...(nextPrice != null ? { price: nextPrice } : {}),
         ...(nextColor ? { color: nextColor } : {}),
+        ...(nextName != null
+          ? {
+              groupName: nextName || element.groupName,
+              sectorName: nextName || element.sectorName,
+            }
+          : {}),
       }
     }),
   }

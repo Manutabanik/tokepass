@@ -2,6 +2,7 @@
 
 import { Palette } from "lucide-react"
 
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PriceInput } from "@/components/ui/price-input"
 import { formatCurrency } from "@/lib/format"
@@ -22,7 +23,10 @@ export function VenueHeatmapPanel({
   map: InteractiveVenueMap
   activeKey?: string | null
   onSelectGroup: (group: VenuePriceGroup) => void
-  onPatchGroup: (group: VenuePriceGroup, patch: { price?: number; color?: string }) => void
+  onPatchGroup: (
+    group: VenuePriceGroup,
+    patch: { price?: number; color?: string; name?: string },
+  ) => void
 }) {
   const groups = listVenuePriceGroups(map)
   const range = venueMapPriceRange(map)
@@ -46,9 +50,8 @@ export function VenueHeatmapPanel({
         <p className="text-sm font-semibold text-foreground">Heatmap de tarifas</p>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
           El lienzo es de solo lectura. Elegí un sector acá o en el mapa para
-          editar precio y color. En este modo el mapa se pinta por precio
-          (verde barato, rojo caro); el color del sector se usa al volver a
-          Arquitectura.
+          editar nombre, precio y color. El identificador interno no cambia:
+          podés renombrar Grada Naranja sin romper las entradas.
         </p>
       </div>
       <div className="space-y-1.5">
@@ -67,7 +70,15 @@ export function VenueHeatmapPanel({
       </div>
       {active ? (
         <div className="space-y-3 rounded-xl border border-border bg-background p-3">
-          <p className="text-sm font-medium text-foreground">{active.name}</p>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Nombre</Label>
+            <Input
+              value={active.name}
+              onChange={(event) =>
+                onPatchGroup(active, { name: event.target.value })
+              }
+            />
+          </div>
           <p className="text-[11px] text-muted-foreground">
             {active.count} {active.unit} · {active.priceHint}
           </p>

@@ -5,7 +5,10 @@ import {
   formatSupabaseError,
   isUnmaskedSupabaseError,
 } from "@/lib/errors/supabase-error"
-import { toUserFacingError } from "@/lib/errors/user-facing-error"
+import {
+  INVENTORY_SYNC_MESSAGE,
+  toUserFacingError,
+} from "@/lib/errors/user-facing-error"
 
 describe("formatSupabaseError", () => {
   it("keeps code, message and details from a PostgREST error", () => {
@@ -21,9 +24,9 @@ describe("formatSupabaseError", () => {
     assert.equal(isUnmaskedSupabaseError(formatted), true)
   })
 
-  it("does not remap an already unmasked persist error", () => {
+  it("never shows an already formatted persist leak to the organizer", () => {
     const raw =
       "[SUPABASE ERROR - Code: 42501]: permission denied for table ticket_tiers. Details: RLS"
-    assert.equal(toUserFacingError(raw), raw)
+    assert.equal(toUserFacingError(raw), INVENTORY_SYNC_MESSAGE)
   })
 })

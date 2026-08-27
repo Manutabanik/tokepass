@@ -4,12 +4,15 @@ import { describe, it } from "node:test"
 import {
   asPublishScheduleId,
   asPublishUuid,
+  assertPublishedSeatedTicketsBoundToDays,
   buildPublishEventV2Payload,
   composePublishDescription,
+  dayIdFromMapTicketId,
   draftDateToIso,
   formatEventPublishIssues,
   freePublishCapacity,
   isPublishScheduleForeignKeyError,
+  resolvePublishedTicketDayIds,
   sanitizePublishPayloadForDatabase,
 } from "@/lib/events/publish-event-v2"
 import { emptyEventDraftV2, eventPublishSchema } from "@/lib/validations/event-draft-v2"
@@ -542,6 +545,199 @@ describe("buildPublishEventV2Payload", () => {
     assert.deepEqual(
       mapTickets.map((ticket) => ticket.day_id).sort(),
       [dayA, dayB],
+    )
+  })
+
+  it("recovers the jornada from map:{date}:{sector} when validDayIds is missing", () => {
+    const dayA = "550e8400-e29b-41d4-a716-446655440001"
+    const dayB = "550e8400-e29b-41d4-a716-446655440002"
+    assert.equal(dayIdFromMapTicketId(`map:${dayA}:grada-naranja`), dayA)
+    const draft = publishableDraft()
+    const gradaMap = {
+      version: 1,
+      url: "",
+      sectors: [
+        {
+          id: "grada-naranja",
+          name: "Grada Naranja",
+          color: "#f97316",
+          price: 40000,
+          x: 0,
+          y: 0,
+          rows: 1,
+          seatsPerRow: 1,
+          curvature: 0,
+          aisle: false,
+          seats: [
+            { id: "grada-naranja-r1-n1", row: "1", number: 1, x: 0, y: 0, status: "available" },
+          ],
+        },
+      ],
+    }
+    draft.seatingMaps = [
+      { dateId: dayA, mapConfig: gradaMap, pricing: {} },
+      { dateId: dayB, mapConfig: gradaMap, pricing: {} },
+    ]
+    draft.schedule = [
+      {
+        id: dayA,
+        name: "Viernes",
+        date: "2026-11-13",
+        startDate: "2026-11-13T18:00",
+        endDate: "2026-11-13T23:00",
+        slots: [],
+      },
+      {
+        id: dayB,
+        name: "Sábado",
+        date: "2026-11-14",
+        startDate: "2026-11-14T18:00",
+        endDate: "2026-11-14T23:00",
+        slots: [],
+      },
+    ]
+    draft.tickets = [
+      {
+        id: `map:${dayA}:grada-naranja`,
+        name: "Grada Naranja",
+        description: "",
+        price: 40000,
+        stock: 27,
+        minOrder: 1,
+        maxOrder: 4,
+        source: "map",
+        sectorId: "grada-naranja",
+        layoutType: "table_combo",
+      },
+      {
+        id: `map:${dayB}:grada-naranja`,
+        name: "Grada Naranja",
+        description: "",
+        price: 70000,
+        stock: 27,
+        minOrder: 1,
+        maxOrder: 4,
+        source: "map",
+        sectorId: "grada-naranja",
+        layoutType: "table_combo",
+      },
+    ]
+    const payload = buildPublishEventV2Payload(draft)
+    const mapTickets = payload.tickets.filter(
+      (ticket) => ticket.seating_sector_id === "grada-naranja",
+    )
+    assert.equal(mapTickets.length, 2)
+    assert.deepEqual(
+      mapTickets.map((ticket) => ticket.day_id).sort(),
+      [dayA, dayB],
+    )
+  })
+
+  it("refuses a multi-day map ticket without a jornada", () => {
+    const dayA = "550e8400-e29b-41d4-a716-446655440001"
+    const dayB = "550e8400-e29b-41d4-a716-446655440002"
+    const draft = publishableDraft()
+    draft.schedule = [
+      {
+        id: dayA,
+        name: "Viernes",
+        date: "2026-11-13",
+        startDate: "2026-11-13T18:00",
+        endDate: "2026-11-13T23:00",
+        slots: [],
+      },
+      {
+        id: dayB,
+        name: "Sábado",
+        date: "2026-11-14",
+        startDate: "2026-11-14T18:00",
+        endDate: "2026-11-14T23:00",
+        slots: [],
+      },
+    ]
+    draft.seatingMap = {
+      version: 1,
+      url: "",
+      sectors: [
+        {
+          id: "grada-naranja",
+          name: "Grada Naranja",
+          color: "#f97316",
+          price: 40000,
+          x: 0,
+          y: 0,
+          rows: 1,
+          seatsPerRow: 1,
+          curvature: 0,
+          aisle: false,
+          seats: [
+            { id: "grada-naranja-r1-n1", row: "1", number: 1, x: 0, y: 0, status: "available" },
+          ],
+        },
+      ],
+    }
+    draft.tickets.push({
+      id: "map-huérfano",
+      name: "Grada Naranja",
+      description: "",
+      price: 40000,
+      stock: 27,
+      minOrder: 1,
+      maxOrder: 4,
+      source: "map",
+      sectorId: "grada-naranja",
+      layoutType: "table_combo",
+    })
+    assert.throws(
+      () => buildPublishEventV2Payload(draft),
+      /atada a un día/,
+    )
+  })
+
+  it("keeps the same sector on two days without treating it as a collision", () => {
+    const dayA = "550e8400-e29b-41d4-a716-446655440001"
+    const dayB = "550e8400-e29b-41d4-a716-446655440002"
+    assert.doesNotThrow(() =>
+      assertPublishedSeatedTicketsBoundToDays(
+        [
+          {
+            seating_sector_id: "grada-naranja",
+            layout_type: "table_combo",
+            day_id: dayA,
+          },
+          {
+            seating_sector_id: "grada-naranja",
+            layout_type: "table_combo",
+            day_id: dayB,
+          },
+        ],
+        [{ id: dayA }, { id: dayB }],
+      ),
+    )
+    assert.deepEqual(
+      resolvePublishedTicketDayIds(
+        { id: `map:${dayA}:grada-naranja` },
+        new Set([dayA, dayB]),
+        [
+          {
+            id: dayA,
+            dayId: dayA,
+            title: "Día 1",
+            date: "2026-11-13",
+            startDateTime: "2026-11-13T18:00",
+            endDateTime: "2026-11-13T23:00",
+          },
+          {
+            id: dayB,
+            dayId: dayB,
+            title: "Día 2",
+            date: "2026-11-14",
+            startDateTime: "2026-11-14T18:00",
+            endDateTime: "2026-11-14T23:00",
+          },
+        ],
+      ),
+      [dayA],
     )
   })
 

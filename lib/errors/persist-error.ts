@@ -5,8 +5,11 @@ import {
   isDraftPersistTimeoutError,
 } from "@/lib/events/editor-v2-ux"
 import { seatingPersistUserMessage } from "@/lib/events/sanitize-ticket-tiers"
-import { containsInternalErrorCode } from "@/lib/errors/error-handler"
-import { formatSupabaseError } from "@/lib/errors/supabase-error"
+import {
+  containsInternalErrorCode,
+  isSafeUserFacingCopy,
+} from "@/lib/errors/error-handler"
+import { isUnmaskedSupabaseError } from "@/lib/errors/supabase-error"
 
 export type PersistErrorSource = "zod" | "sql" | "network" | "app"
 
@@ -60,10 +63,17 @@ function persistErrorText(error: unknown): string {
 export function classifyPersistError(error: unknown): PersistErrorSource {
   if (isZodLikeError(error)) return "zod"
   const text = persistErrorText(error)
+  const code =
+    error && typeof error === "object"
+      ? String((error as { code?: unknown }).code ?? "")
+      : ""
   if (NETWORK_RE.test(text)) return "network"
   if (error instanceof TypeError && /fetch/i.test(error.message)) return "network"
-  if (SQL_RE.test(text)) return "sql"
-  if (containsInternalErrorCode(text) && /supabase|postgrest|postgres|PGRST|SQLSTATE/i.test(text)) {
+  if (SQL_RE.test(text) || SQL_RE.test(code)) return "sql"
+  if (
+    containsInternalErrorCode(text) &&
+    /supabase|postgrest|postgres|PGRST|SQLSTATE/i.test(text)
+  ) {
     return "sql"
   }
   return "app"
@@ -90,8 +100,15 @@ export function persistErrorUserMessage(
   const seatingMessage = seatingPersistUserMessage(error)
   if (seatingMessage) return seatingMessage
   if (classifyPersistError(error) === "network") return NETWORK_SAVE_MESSAGE
-  const formatted = formatSupabaseError(error)
-  return formatted || fallback
+  const text = persistErrorText(error).trim()
+  if (
+    classifyPersistError(error) === "sql" ||
+    isUnmaskedSupabaseError(text) ||
+    !isSafeUserFacingCopy(text)
+  ) {
+    return fallback
+  }
+  return text || fallback
 }
 
 export function logPersistError(context: string, error: unknown): PersistErrorSource {

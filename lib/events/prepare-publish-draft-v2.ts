@@ -1,6 +1,7 @@
 import { expandDraftTicketsForSchedule } from "@/lib/events/draft-schedule-bindings"
 import { flattenDraftScheduleOccurrences } from "@/lib/events/draft-schedule-slots-v2"
 import {
+  assertPublishedSeatedTicketsBoundToDays,
   buildPublishEventV2Payload,
   sanitizePublishPayloadForDatabase,
   type PublishEventV2Payload,
@@ -62,5 +63,6 @@ export function preparePublishDraftV2(input: {
     buildPublishEventV2Payload(rematched, input.fee),
   )
   assertPublishedMapsMatchSchedule(payload.seating_maps, payload.schedule_days)
+  assertPublishedSeatedTicketsBoundToDays(payload.tickets, payload.schedule_days)
   return payload
 }
