@@ -33,6 +33,8 @@ import {
 } from "@/lib/events/draft-schedule-slots-v2"
 import {
   draftNumberValue,
+  isMapDraftTicket,
+  resolveDraftHasMap,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
 
@@ -68,14 +70,21 @@ export function InventorySummaryTable({
   const extras = useWatch({ control, name: "extras" }) ?? []
   const sectors = useWatch({ control, name: "seatingMap.sectors" }) ?? []
   const seatingMaps = useWatch({ control, name: "seatingMaps" }) ?? []
+  const seatingMap = useWatch({ control, name: "seatingMap" })
+  const hasMapFlag = useWatch({ control, name: "hasMap" })
+  const hasMap = resolveDraftHasMap({
+    hasMap: hasMapFlag,
+    seatingMaps,
+    seatingMap,
+  })
   const schedule = useWatch({ control, name: "schedule" }) ?? []
   const slotOptions = listDraftScheduleSlots(schedule)
   const showSlots = hasMultipleDraftSlots(schedule)
   const rows = buildInventorySummaryRows({
-    tickets,
+    tickets: hasMap ? tickets : tickets.filter((ticket) => !isMapDraftTicket(ticket)),
     extras,
-    sectors,
-    seatingMaps,
+    sectors: hasMap ? sectors : [],
+    seatingMaps: hasMap ? seatingMaps : [],
   })
   const totals = inventorySummaryTotals(rows)
 

@@ -10,6 +10,7 @@ import {
   isEventDraftPublishable,
   parseDraftLineup,
   parseEventDraftV2,
+  resolveDraftHasMap,
   toEventDraftV2Payload,
   toggleDraftLineupDay,
 } from "@/lib/validations/event-draft-v2"
@@ -61,6 +62,7 @@ describe("eventDraftSchema", () => {
     assert.equal(parsed.settings.deliveryMode, "PRESENCIAL")
     assert.equal(parsed.archetype, "show")
     assert.equal(parsed.isVirtual, false)
+    assert.equal(parsed.hasMap, false)
     assert.equal(parsed.virtualLink, "")
     assert.equal(parsed.schedule.length, 0)
     assert.deepEqual(parsed.lineup, [])
@@ -77,6 +79,7 @@ describe("eventDraftSchema", () => {
     assert.equal(draft.schedule[0]?.startDate, "")
     assert.ok(draft.schedule[0]?.id)
     assert.deepEqual(draft.lineup, [])
+    assert.equal(draft.hasMap, false)
   })
 
   it("defaults ticketType to standard on tickets and extra on parsed extras", () => {
@@ -589,6 +592,61 @@ describe("toEventDraftV2Payload", () => {
     assert.equal(payload.location.address, "")
     assert.equal(payload.location.lat, undefined)
     assert.equal(payload.virtualLink, "https://meet.example/clase")
+  })
+
+  it("keeps the hasMap flag on the persisted payload", () => {
+    const payload = toEventDraftV2Payload({
+      ...emptyEventDraftV2(),
+      hasMap: true,
+    })
+    assert.equal(payload.hasMap, true)
+  })
+})
+
+describe("resolveDraftHasMap", () => {
+  it("defaults off when the draft has no map and no flag", () => {
+    assert.equal(resolveDraftHasMap({}), false)
+    assert.equal(parseEventDraftV2({}).hasMap, false)
+  })
+
+  it("infers on when a stored draft already has a seating map", () => {
+    const seatingMap = {
+      sectors: [
+        {
+          id: "sector-platea",
+          name: "Platea",
+          seats: [{ id: "s1", row: "1", number: 1, x: 0, y: 0, status: "available" }],
+        },
+      ],
+    }
+    assert.equal(resolveDraftHasMap({ seatingMap }), true)
+    assert.equal(parseEventDraftV2({ seatingMap }).hasMap, true)
+    assert.equal(parseEventDraftV2({ has_map: true }).hasMap, true)
+  })
+
+  it("keeps an explicit off even if leftover map JSON is still in the draft", () => {
+    assert.equal(
+      resolveDraftHasMap({
+        hasMap: false,
+        seatingMap: {
+          sectors: [
+            {
+              id: "sector-platea",
+              name: "Platea",
+              seats: [{ id: "s1", status: "available" }],
+            },
+          ],
+        },
+      }),
+      false,
+    )
+    assert.equal(
+      parseEventDraftV2({
+        hasMap: false,
+        seatingMap: { sectors: [{ id: "a", seats: [{ id: "s1" }] }] },
+      }).hasMap,
+      false,
+    )
   })
 })
 

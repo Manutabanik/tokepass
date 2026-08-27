@@ -1,6 +1,6 @@
 "use client"
 
-import { Package, Plus, Ticket, Users } from "lucide-react"
+import { MapPinned, Package, Plus, Ticket, Users } from "lucide-react"
 import { useLayoutEffect, useState } from "react"
 import { useFieldArray, useFormContext, useWatch } from "react-hook-form"
 
@@ -22,6 +22,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
@@ -40,6 +42,7 @@ import {
   draftCapacityThermometer,
   draftNumberValue,
   isMapDraftTicket,
+  resolveDraftHasMap,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
 
@@ -52,12 +55,21 @@ export function EventEditorV2InventoryStep({
 }) {
   const {
     register,
+    setValue,
     formState: { errors },
   } = useFormContext<EventDraftV2>()
   const { labels } = useDraftArchetype()
   const tickets = useWatch({ name: "tickets" }) ?? []
   const extras = useWatch({ name: "extras" }) ?? []
   const venueCapacity = useWatch({ name: "venueCapacity" })
+  const seatingMaps = useWatch({ name: "seatingMaps" })
+  const seatingMap = useWatch({ name: "seatingMap" })
+  const hasMapFlag = useWatch({ name: "hasMap" })
+  const hasMap = resolveDraftHasMap({
+    hasMap: hasMapFlag,
+    seatingMaps,
+    seatingMap,
+  })
   const schedule = useWatch({ name: "schedule" }) ?? []
   const slotCount = explicitDraftSlotCount(schedule)
   const meter = draftCapacityThermometer({
@@ -128,6 +140,33 @@ export function EventEditorV2InventoryStep({
         </div>
       </section>
 
+      <section className="flex w-full items-start justify-between gap-4 rounded-2xl border border-border/50 bg-card px-4 py-3 shadow-sm">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <MapPinned className="size-4 shrink-0 text-emerald-400" aria-hidden />
+            <Label
+              htmlFor="event-v2-has-map"
+              className="text-sm font-bold text-slate-800 dark:text-zinc-100"
+            >
+              ¿Tu evento tiene ubicaciones o mesas numeradas?
+            </Label>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Activalo para dibujar un mapa interactivo. Si solo vendés entradas
+            generales, dejalo apagado.
+          </p>
+        </div>
+        <Switch
+          id="event-v2-has-map"
+          checked={hasMap}
+          onCheckedChange={(checked) => {
+            setValue("hasMap", checked, { shouldDirty: true, shouldTouch: true })
+          }}
+          className="mt-0.5 shrink-0 data-checked:bg-emerald-500"
+          aria-label="Usar mapa interactivo"
+        />
+      </section>
+
       <Accordion
         type="single"
         collapsible
@@ -160,7 +199,9 @@ export function EventEditorV2InventoryStep({
               emptyIcon={Ticket}
               emptyItemTitle={`Nuevo: ${ticketsLabel}`}
             />
-            <EventEditorV2SeatingMap eventId={eventId} embedded />
+            {hasMap ? (
+              <EventEditorV2SeatingMap eventId={eventId} embedded />
+            ) : null}
             <InventorySummaryTable embedded />
           </AccordionContent>
         </AccordionItem>

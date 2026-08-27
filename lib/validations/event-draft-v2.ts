@@ -6,6 +6,7 @@ import {
   resolveDraftArchetype,
 } from "@/lib/events/archetypes.config"
 import {
+  draftHasActiveSeatingMap,
   emptyDraftSeatingMap,
   isMapDraftTicket,
   parseDraftSeatingMaps,
@@ -198,6 +199,7 @@ const eventDraftFieldsSchema = z.object({
   restrictions: z.string().optional().default(""),
   whatToBring: z.string().optional().default(""),
   venueCapacity: z.coerce.number().min(0).optional().default(0),
+  hasMap: z.boolean().optional().default(false),
   schedule: z.array(draftScheduleDaySchema).default([]),
   lineup: z.array(draftLineupItemSchema).default([]),
   tickets: z.array(draftLineItemSchema).default([]),
@@ -298,6 +300,7 @@ export const eventPublishSchema = z
     flyerUrl: z.string().optional(),
     bannerUrl: z.string().optional(),
     venueCapacity: z.coerce.number().min(1, "Definí el aforo del recinto"),
+    hasMap: z.boolean().optional(),
     schedule: z
       .array(
         z.object({
@@ -486,6 +489,34 @@ export function emptyEventDraftV2LineItem(
   }
 }
 
+function asOptionalBoolean(...values: unknown[]): boolean | undefined {
+  for (const value of values) {
+    if (value === true) return true
+    if (value === false) return false
+  }
+  return undefined
+}
+
+/** Explicit flag wins. Missing flag infers true only if the draft already has a map. */
+export function resolveDraftHasMap(input: {
+  hasMap?: unknown
+  has_map?: unknown
+  use_seating_chart?: unknown
+  seatingMaps?: Array<{ mapConfig?: unknown }> | null
+  seatingMap?: unknown
+}): boolean {
+  const explicit = asOptionalBoolean(
+    input.hasMap,
+    input.has_map,
+    input.use_seating_chart,
+  )
+  if (explicit != null) return explicit
+  return draftHasActiveSeatingMap({
+    seatingMaps: input.seatingMaps,
+    seatingMap: input.seatingMap,
+  })
+}
+
 export function emptyEventDraftV2Location(): EventDraftV2Location {
   return { venueName: "", address: "", province: "", city: "" }
 }
@@ -510,6 +541,7 @@ export function emptyEventDraftV2(): EventDraftV2 {
     restrictions: "",
     whatToBring: "",
     venueCapacity: 0,
+    hasMap: false,
     schedule: [firstDay],
     lineup: [],
     tickets: [],
@@ -922,6 +954,13 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
       EVENT_DRAFT_TEXT_MAX,
     ),
     venueCapacity: Math.max(0, asFiniteNumber(record.venueCapacity)),
+    hasMap: resolveDraftHasMap({
+      hasMap: record.hasMap,
+      has_map: record.has_map,
+      use_seating_chart: record.use_seating_chart,
+      seatingMaps,
+      seatingMap: seatingRaw,
+    }),
     lineup: parseDraftLineup(record.lineup),
     tickets: parseDraftLineItems(record.tickets).map((ticket) =>
       withResolvedTicketValidDays(ticket, schedule),
