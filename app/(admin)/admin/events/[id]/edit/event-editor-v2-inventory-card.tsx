@@ -1,8 +1,8 @@
 "use client"
 
 import { ChevronDown, Settings2, Trash2 } from "lucide-react"
-import { useState } from "react"
-import { useFormContext, useWatch } from "react-hook-form"
+import { useLayoutEffect, useState } from "react"
+import { useFormContext, useWatch, type UseFormRegister } from "react-hook-form"
 
 import {
   DRAFT_FIELD_CLASS,
@@ -28,13 +28,12 @@ import {
   TICKET_COMMERCE_TYPE_LABELS,
 } from "@/lib/events/ticket-commerce-type"
 import {
-  applyDraftDayPriceStock,
-  draftDayPriceStockRows,
+  ensureDraftDayRates,
   generalTicketNeedsDayPricing,
+  sameDraftDayRateIds,
 } from "@/lib/events/draft-day-priced-tickets"
 import {
   draftNumberValue,
-  isMapDraftTicket,
   toggleDraftLineupDay,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
@@ -64,7 +63,6 @@ export function DraftInventoryAccordionCard({
     formState: { errors },
   } = useFormContext<EventDraftV2>()
   const schedule = useWatch({ control, name: "schedule" }) ?? []
-  const tickets = useWatch({ control, name: "tickets" }) ?? []
   const slotId = useWatch({ control, name: `${name}.${index}.slotId` })
   const validDayIds =
     useWatch({ control, name: `${name}.${index}.validDayIds` }) ?? []
@@ -77,6 +75,10 @@ export function DraftInventoryAccordionCard({
       { source, validDayIds, sectorId },
       schedule.length,
     )
+  const scheduleDayKey = schedule
+    .map((day) => day.id?.trim())
+    .filter(Boolean)
+    .join("|")
   const slotOptions = listDraftScheduleSlots(schedule)
   const showSlots = name === "tickets" && hasMultipleDraftSlots(schedule)
   const itemName = useWatch({ control, name: `${name}.${index}.name` })
@@ -101,6 +103,32 @@ export function DraftInventoryAccordionCard({
   const panelId = `event-v2-${name}-${index}-panel`
   const advancedId = `${panelId}-advanced`
   const scheduled = hasDraftPresale({ startDate, endDate })
+  const dayRows = pricedByDay
+    ? schedule.flatMap((day, dayIndex) => {
+        const dayId = day.id?.trim()
+        if (!dayId) return []
+        return [
+          {
+            dayId,
+            label: draftScheduleDayChipLabel(day, dayIndex),
+          },
+        ]
+      })
+    : []
+
+  useLayoutEffect(() => {
+    if (!pricedByDay || name !== "tickets") return
+    const current = getValues(`${name}.${index}`)
+    if (!current) return
+    const synced = ensureDraftDayRates(current, getValues("schedule") ?? [])
+    if (sameDraftDayRateIds(current.dayRates, synced.dayRates)) return
+    setValue(`${name}.${index}.dayRates`, synced.dayRates, {
+      shouldDirty: false,
+      shouldTouch: false,
+    })
+    setValue(`${name}.${index}.price`, synced.price, { shouldDirty: false })
+    setValue(`${name}.${index}.stock`, synced.stock, { shouldDirty: false })
+  }, [getValues, index, name, pricedByDay, scheduleDayKey, setValue])
 
   function toggleValidDay(dayId: string) {
     const nextDays = toggleDraftLineupDay(validDayIds, dayId)
@@ -114,24 +142,18 @@ export function DraftInventoryAccordionCard({
     })
   }
 
-  function writeDayRate(dayId: string, field: "price" | "stock", raw: string) {
-    const currentTickets = getValues("tickets")
-    const current = currentTickets[index]
-    if (!current || isMapDraftTicket(current)) return
-    const rows = draftDayPriceStockRows(
-      current,
-      currentTickets,
-      index,
-      schedule,
-    ).map((row) =>
-      row.dayId === dayId
-        ? { ...row, [field]: draftNumberValue(raw) }
-        : row,
+  function syncHeadlineFromDayRates() {
+    const rates = getValues(`${name}.${index}.dayRates`) ?? []
+    if (rates.length === 0) return
+    setValue(
+      `${name}.${index}.price`,
+      draftNumberValue(rates[0]?.price),
+      { shouldDirty: true },
     )
     setValue(
-      "tickets",
-      applyDraftDayPriceStock(currentTickets, index, schedule, rows),
-      { shouldDirty: true, shouldTouch: true },
+      `${name}.${index}.stock`,
+      rates.reduce((sum, rate) => sum + draftNumberValue(rate.stock), 0),
+      { shouldDirty: true },
     )
   }
 
@@ -194,7 +216,14 @@ export function DraftInventoryAccordionCard({
             <p className="text-xs text-muted-foreground tabular-nums sm:hidden">
               Precio: {formatCurrency(priceValue)} | Stock: {formatNumber(stockValue)}
             </p>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_11rem_8rem_8rem]">
+            <div
+              className={cn(
+                "grid grid-cols-1 gap-3",
+                pricedByDay
+                  ? "md:grid-cols-[minmax(0,1fr)_11rem]"
+                  : "md:grid-cols-[minmax(0,1fr)_11rem_8rem_8rem]",
+              )}
+            >
               <div className="grid gap-1.5">
                 <DraftFieldLabel
                   htmlFor={`event-v2-${name}-${index}-name`}
@@ -226,117 +255,75 @@ export function DraftInventoryAccordionCard({
                   ))}
                 </select>
               </div>
-              <div className="grid gap-1.5">
-                <DraftFieldLabel
-                  htmlFor={`event-v2-${name}-${index}-price`}
-                  required
-                >
-                  ¿Cuánto sale?
-                </DraftFieldLabel>
-                <Input
-                  id={`event-v2-${name}-${index}-price`}
-                  type="number"
-                  min={0}
-                  step={1}
-                  inputMode="numeric"
-                  className={DRAFT_FIELD_CLASS}
-                  {...register(`${name}.${index}.price`, {
-                    setValueAs: draftNumberValue,
-                  })}
-                />
-                <DraftFieldError message={itemErrors?.price?.message} />
-              </div>
-              <div className="grid gap-1.5">
-                <DraftFieldLabel
-                  htmlFor={`event-v2-${name}-${index}-stock`}
-                  required
-                >
-                  ¿Cuántas hay?
-                </DraftFieldLabel>
-                <Input
-                  id={`event-v2-${name}-${index}-stock`}
-                  type="number"
-                  min={0}
-                  step={1}
-                  inputMode="numeric"
-                  className={DRAFT_FIELD_CLASS}
-                  {...register(`${name}.${index}.stock`, {
-                    setValueAs: draftNumberValue,
-                  })}
-                />
-                <DraftFieldError message={itemErrors?.stock?.message} />
-              </div>
+              {pricedByDay ? (
+                <>
+                  <input
+                    type="hidden"
+                    {...register(`${name}.${index}.price`, {
+                      setValueAs: draftNumberValue,
+                    })}
+                  />
+                  <input
+                    type="hidden"
+                    {...register(`${name}.${index}.stock`, {
+                      setValueAs: draftNumberValue,
+                    })}
+                  />
+                </>
+              ) : (
+                <>
+                  <div className="grid gap-1.5">
+                    <DraftFieldLabel
+                      htmlFor={`event-v2-${name}-${index}-price`}
+                      required
+                    >
+                      ¿Cuánto sale?
+                    </DraftFieldLabel>
+                    <Input
+                      id={`event-v2-${name}-${index}-price`}
+                      type="number"
+                      min={0}
+                      step={1}
+                      inputMode="numeric"
+                      className={DRAFT_FIELD_CLASS}
+                      {...register(`${name}.${index}.price`, {
+                        setValueAs: draftNumberValue,
+                      })}
+                    />
+                    <DraftFieldError message={itemErrors?.price?.message} />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <DraftFieldLabel
+                      htmlFor={`event-v2-${name}-${index}-stock`}
+                      required
+                    >
+                      ¿Cuántas hay?
+                    </DraftFieldLabel>
+                    <Input
+                      id={`event-v2-${name}-${index}-stock`}
+                      type="number"
+                      min={0}
+                      step={1}
+                      inputMode="numeric"
+                      className={DRAFT_FIELD_CLASS}
+                      {...register(`${name}.${index}.stock`, {
+                        setValueAs: draftNumberValue,
+                      })}
+                    />
+                    <DraftFieldError message={itemErrors?.stock?.message} />
+                  </div>
+                </>
+              )}
             </div>
 
             {pricedByDay ? (
-              <div className="grid gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
-                <DraftFieldLabel>
-                  Precio y stock por día
-                </DraftFieldLabel>
-                <DraftHint>
-                  El viernes y el sábado son entradas distintas. Cada jornada
-                  tiene su precio y su cupo.
-                </DraftHint>
-                <div className="grid gap-2">
-                  {tickets[index]
-                    ? draftDayPriceStockRows(
-                        tickets[index],
-                        tickets,
-                        index,
-                        schedule,
-                      ).map((row) => (
-                    <div
-                      key={row.dayId}
-                      className="grid grid-cols-1 gap-2 sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)] sm:items-end"
-                    >
-                      <p className="text-sm font-semibold text-slate-800 dark:text-zinc-100">
-                        {row.label}
-                      </p>
-                      <div className="grid gap-1.5">
-                        <DraftFieldLabel
-                          htmlFor={`event-v2-${name}-${index}-price-${row.dayId}`}
-                          required
-                        >
-                          Precio
-                        </DraftFieldLabel>
-                        <Input
-                          id={`event-v2-${name}-${index}-price-${row.dayId}`}
-                          type="number"
-                          min={0}
-                          step={1}
-                          inputMode="numeric"
-                          className={DRAFT_FIELD_CLASS}
-                          value={row.price}
-                          onChange={(event) =>
-                            writeDayRate(row.dayId, "price", event.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="grid gap-1.5">
-                        <DraftFieldLabel
-                          htmlFor={`event-v2-${name}-${index}-stock-${row.dayId}`}
-                          required
-                        >
-                          Stock
-                        </DraftFieldLabel>
-                        <Input
-                          id={`event-v2-${name}-${index}-stock-${row.dayId}`}
-                          type="number"
-                          min={0}
-                          step={1}
-                          inputMode="numeric"
-                          className={DRAFT_FIELD_CLASS}
-                          value={row.stock}
-                          onChange={(event) =>
-                            writeDayRate(row.dayId, "stock", event.target.value)
-                          }
-                        />
-                      </div>
-                    </div>
-                  ))
-                    : null}
-                </div>
-              </div>
+              <DraftDayRateFields
+                name={name}
+                index={index}
+                rows={dayRows}
+                register={register}
+                onRateChange={syncHeadlineFromDayRates}
+              />
             ) : null}
 
             <div className="grid gap-1.5">
@@ -522,5 +509,89 @@ export function DraftInventoryAccordionCard({
         </div>
       </div>
     </li>
+  )
+}
+
+function DraftDayRateFields({
+  name,
+  index,
+  rows,
+  register,
+  onRateChange,
+}: {
+  name: "tickets" | "extras"
+  index: number
+  rows: Array<{ dayId: string; label: string }>
+  register: UseFormRegister<EventDraftV2>
+  onRateChange: () => void
+}) {
+  return (
+    <div className="grid gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+      <DraftFieldLabel>Precio y stock por día</DraftFieldLabel>
+      <DraftHint>
+        El viernes y el sábado son entradas distintas. Cada jornada tiene su
+        precio y su cupo.
+      </DraftHint>
+      <div className="grid gap-2">
+        {rows.map((row, rowIndex) => (
+          <div
+            key={row.dayId}
+            className="grid grid-cols-1 gap-2 sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)] sm:items-end"
+          >
+            <input
+              type="hidden"
+              {...register(`${name}.${index}.dayRates.${rowIndex}.dayId`)}
+            />
+            <input
+              type="hidden"
+              {...register(`${name}.${index}.dayRates.${rowIndex}.ticketId`)}
+            />
+            <p className="text-sm font-semibold text-slate-800 dark:text-zinc-100">
+              {row.label}
+            </p>
+            <div className="grid gap-1.5">
+              <DraftFieldLabel
+                htmlFor={`event-v2-${name}-${index}-price-${row.dayId}`}
+                required
+              >
+                Precio
+              </DraftFieldLabel>
+              <Input
+                id={`event-v2-${name}-${index}-price-${row.dayId}`}
+                type="number"
+                min={0}
+                step={1}
+                inputMode="numeric"
+                className={DRAFT_FIELD_CLASS}
+                {...register(`${name}.${index}.dayRates.${rowIndex}.price`, {
+                  setValueAs: draftNumberValue,
+                  onChange: onRateChange,
+                })}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <DraftFieldLabel
+                htmlFor={`event-v2-${name}-${index}-stock-${row.dayId}`}
+                required
+              >
+                Stock
+              </DraftFieldLabel>
+              <Input
+                id={`event-v2-${name}-${index}-stock-${row.dayId}`}
+                type="number"
+                min={0}
+                step={1}
+                inputMode="numeric"
+                className={DRAFT_FIELD_CLASS}
+                {...register(`${name}.${index}.dayRates.${rowIndex}.stock`, {
+                  setValueAs: draftNumberValue,
+                  onChange: onRateChange,
+                })}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }

@@ -11,6 +11,7 @@ export function draftInventoryIdentity(
       item.layoutType,
       item.slotId,
       [...(item.validDayIds ?? [])].sort(),
+      (item.dayRates ?? []).map((rate) => [rate.dayId, rate.ticketId]),
     ]),
     extras: draft.extras.map((item) => [item.id, item.source, item.sectorId]),
   })

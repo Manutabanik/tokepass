@@ -150,4 +150,46 @@ describe("rematchDraftTicketIds", () => {
     )
     assert.equal(rematched[0]?.id, liveId)
   })
+
+  it("rematches dayRates of a visual multi-day general without rewriting the card", () => {
+    const fridayLive = "550e8400-e29b-41d4-a716-446655440021"
+    const saturdayLive = "550e8400-e29b-41d4-a716-446655440022"
+    const rematched = rematchDraftTicketIds(
+      [
+        {
+          ...emptyEventDraftV2LineItem("visual-general"),
+          name: "General",
+          source: "general",
+          dayRates: [
+            { dayId, price: 20000, stock: 100, ticketId: "" },
+            {
+              dayId: "550e8400-e29b-41d4-a716-446655440011",
+              price: 30000,
+              stock: 80,
+              ticketId: "",
+            },
+          ],
+        },
+      ],
+      [
+        {
+          id: fridayLive,
+          name: "General Viernes",
+          seating_sector_id: null,
+          day_id: dayId,
+          tier_type: "general",
+        },
+        {
+          id: saturdayLive,
+          name: "General Sábado",
+          seating_sector_id: null,
+          day_id: "550e8400-e29b-41d4-a716-446655440011",
+          tier_type: "general",
+        },
+      ],
+    )
+    assert.equal(rematched[0]?.dayRates[0]?.ticketId, fridayLive)
+    assert.equal(rematched[0]?.dayRates[1]?.ticketId, saturdayLive)
+    assert.equal(rematched[0]?.id, fridayLive)
+  })
 })

@@ -9,7 +9,10 @@ import {
   nextCartHoldExpiresAt,
   remainingHoldSeconds,
 } from "@/lib/checkout/cart-hold-clock"
-import { ABSOLUTE_MAX_ITEMS_PER_PURCHASE } from "@/lib/checkout-limits"
+import {
+  ABSOLUTE_MAX_ITEMS_PER_PURCHASE,
+  type StorefrontLimitReason,
+} from "@/lib/checkout-limits"
 import { cartItemScheduleId } from "@/lib/checkout/cart-line-stamp"
 import {
   toCartItemPayload,
@@ -114,7 +117,7 @@ export type AddToCartInput = {
 
 export type AddToCartResult =
   | { ok: true; quantity: number }
-  | { ok: false; reason: "limit" }
+  | { ok: false; reason: StorefrontLimitReason }
 
 export const EMPTY_CHECKOUT_BUYER: CheckoutBuyerInfo = {
   buyerName: "",
@@ -715,7 +718,7 @@ export const useCheckoutStore = create<CheckoutState>()(
         const currentQty = get().quantities[qtyKey] ?? 0
         const delta = input.quantity == null ? 1 : Math.floor(toCartNumber(input.quantity))
         const nextQty = Math.max(0, currentQty + delta)
-        if (nextQty > maxQuantity) return { ok: false, reason: "limit" }
+        if (nextQty > maxQuantity) return { ok: false, reason: "ticket_limit" }
         const current = get()
         const stamped = dropUndatedGeneralState(
           { ...current.quantities, [qtyKey]: nextQty },
@@ -755,7 +758,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           Math.floor(input.maxQuantity ?? ABSOLUTE_MAX_ITEMS_PER_PURCHASE) || 0,
         )
         const requested = Math.floor(toCartNumber(input.quantity))
-        if (requested > maxQuantity) return { ok: false, reason: "limit" }
+        if (requested > maxQuantity) return { ok: false, reason: "ticket_limit" }
         const nextQty = Math.min(Math.max(0, requested), maxQuantity)
         const snapshot = cartLineSnapshot(input)
         const qtyKey = cartQuantityKey(input.ticketTierId, snapshot.scheduleId)

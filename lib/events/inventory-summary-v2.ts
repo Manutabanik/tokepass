@@ -39,6 +39,7 @@ type DraftSummaryItem = {
   sectorId?: unknown
   startDate?: unknown
   endDate?: unknown
+  dayRates?: Array<{ price?: unknown; stock?: unknown }> | null
 }
 
 export function hasDraftPresale(item?: {
@@ -122,8 +123,14 @@ export function buildInventorySummaryRows(input: {
       key: `tickets:${index}`,
       type: "general",
       name: itemName(ticket.name, `Entrada ${index + 1}`),
-      price: draftNumberValue(ticket.price),
-      stock: draftNumberValue(ticket.stock),
+      price: draftNumberValue(ticket.dayRates?.[0]?.price ?? ticket.price),
+      stock:
+        Array.isArray(ticket.dayRates) && ticket.dayRates.length > 0
+          ? ticket.dayRates.reduce(
+              (sum, rate) => sum + draftNumberValue(rate.stock),
+              0,
+            )
+          : draftNumberValue(ticket.stock),
       stockReadOnly: false,
       hasPresale: hasDraftPresale(ticket),
       source: { field: "tickets", index },

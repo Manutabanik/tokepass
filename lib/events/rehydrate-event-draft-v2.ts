@@ -11,6 +11,7 @@ import {
   toDraftSeatingMap,
 } from "@/lib/events/draft-seating-map-v2"
 import { parseEventRefundPolicy } from "@/lib/validations/event-form"
+import { collapseDayPricedTicketsForEditor } from "@/lib/events/draft-day-priced-tickets"
 import {
   emptyEventDraftV2LineItem,
   parseEventDraftV2,
@@ -178,7 +179,7 @@ export function rehydrateEventDraftV2(
     primary?.id ?? "",
   )
 
-  return parseEventDraftV2({
+  const parsed = parseEventDraftV2({
     archetype: "show",
     isVirtual: online,
     virtualLink: "",
@@ -223,6 +224,10 @@ export function rehydrateEventDraftV2(
       deliveryMode: online ? "ONLINE" : "PRESENCIAL",
     },
   })
+  return {
+    ...parsed,
+    tickets: collapseDayPricedTicketsForEditor(parsed.tickets, parsed.schedule),
+  }
 }
 
 function liveTierToDraftItem(

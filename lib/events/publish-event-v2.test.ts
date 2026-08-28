@@ -244,6 +244,60 @@ describe("buildPublishEventV2Payload", () => {
     assert.equal(payload.tickets[1]?.day_id, null)
   })
 
+  it("expands a visual general with dayRates into one ticket_tiers row per jornada", () => {
+    const fridayId = "550e8400-e29b-41d4-a716-446655440001"
+    const saturdayId = "550e8400-e29b-41d4-a716-446655440002"
+    const fridayTicketId = "550e8400-e29b-41d4-a716-446655440021"
+    const saturdayTicketId = "550e8400-e29b-41d4-a716-446655440022"
+    const draft = publishableDraft()
+    draft.schedule = [
+      {
+        id: fridayId,
+        name: "Viernes",
+        date: "2026-09-04",
+        startDate: "2026-09-04T18:00",
+        endDate: "2026-09-04T23:00",
+        slots: [],
+      },
+      {
+        id: saturdayId,
+        name: "Sábado",
+        date: "2026-09-05",
+        startDate: "2026-09-05T18:00",
+        endDate: "2026-09-05T23:00",
+        slots: [],
+      },
+    ]
+    draft.tickets = [
+      {
+        ...draft.tickets[0]!,
+        id: fridayTicketId,
+        name: "General",
+        price: 20000,
+        stock: 15000,
+        validDayIds: [],
+        slotId: "",
+        dayRates: [
+          { dayId: fridayId, price: 20000, stock: 10000, ticketId: fridayTicketId },
+          { dayId: saturdayId, price: 30000, stock: 5000, ticketId: saturdayTicketId },
+        ],
+      },
+    ]
+    const payload = buildPublishEventV2Payload(draft)
+    const generals = payload.tickets.filter((ticket) =>
+      ticket.name.startsWith("General"),
+    )
+    assert.equal(generals.length, 2)
+    assert.equal(generals[0]?.id, fridayTicketId)
+    assert.equal(generals[0]?.day_id, fridayId)
+    assert.equal(generals[0]?.price, 20000)
+    assert.equal(generals[0]?.capacity, 10000)
+    assert.equal(generals[1]?.id, saturdayTicketId)
+    assert.equal(generals[1]?.day_id, saturdayId)
+    assert.equal(generals[1]?.price, 30000)
+    assert.equal(generals[1]?.capacity, 5000)
+  })
+
   it("keeps general tickets off the seating map and skips nameless extras", () => {
     const draft = publishableDraft()
     draft.seatingMap = {

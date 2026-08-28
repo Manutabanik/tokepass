@@ -1,3 +1,4 @@
+import { expandDayPricedTicketsForPersist } from "@/lib/events/draft-day-priced-tickets"
 import { expandDraftTicketsForSchedule } from "@/lib/events/draft-schedule-bindings"
 import { flattenDraftScheduleOccurrences } from "@/lib/events/draft-schedule-slots-v2"
 import {
@@ -55,7 +56,10 @@ export function preparePublishDraftV2(input: {
   const rematched = rematchEventDraftTicketIds(
     {
       ...draft,
-      tickets: expandDraftTicketsForSchedule(draft.tickets, occurrences),
+      tickets: expandDraftTicketsForSchedule(
+        expandDayPricedTicketsForPersist(draft.tickets, draft.schedule),
+        occurrences,
+      ),
     },
     input.liveTickets ?? [],
   )

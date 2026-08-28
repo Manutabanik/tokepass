@@ -97,6 +97,13 @@ const draftLineupItemSchema = z.object({
   dayIds: z.array(z.string()).default([]),
 })
 
+const draftDayRateSchema = z.object({
+  dayId: z.string().optional().default(""),
+  price: z.coerce.number().min(0).optional().default(0),
+  stock: z.coerce.number().min(0).optional().default(0),
+  ticketId: z.string().optional().default(""),
+})
+
 const draftLineItemSchema = z.object({
   id: z.string().optional().default(""),
   name: z.string().optional().default(""),
@@ -114,6 +121,7 @@ const draftLineItemSchema = z.object({
   layoutType: z.string().optional().default("general"),
   slotId: z.string().optional().default(""),
   validDayIds: z.array(z.string()).default([]),
+  dayRates: z.array(draftDayRateSchema).default([]),
   ticketType: z.enum(TICKET_COMMERCE_TYPES).optional().default("standard"),
 })
 
@@ -255,7 +263,7 @@ const publishLineItemSchema = z
     name: z.string().min(1, "Requerido").max(EVENT_DRAFT_NAME_MAX),
     description: z.string().max(EVENT_DRAFT_TICKET_DESCRIPTION_MAX).optional(),
     price: z.coerce.number().min(0),
-    stock: z.coerce.number().min(1, "El stock debe ser mayor a 0"),
+    stock: z.coerce.number().min(0),
     minOrder: z.coerce.number().min(1).optional(),
     maxOrder: z.coerce.number().min(1).optional(),
     startDate: z.string().optional(),
@@ -267,10 +275,29 @@ const publishLineItemSchema = z
     layoutType: z.string().optional(),
     slotId: z.string().optional(),
     validDayIds: z.array(z.string()).optional().default([]),
+    dayRates: z.array(draftDayRateSchema).optional().default([]),
     ticketType: z.enum(TICKET_COMMERCE_TYPES).optional().default("standard"),
   })
   .superRefine((item, ctx) => {
     refineLineItemWindowAndLimits(item, ctx, [])
+    const rates = (item.dayRates ?? []).filter((rate) => rate.dayId.trim())
+    if (rates.length > 0) {
+      if (rates.every((rate) => draftNumberValue(rate.stock) < 1)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["dayRates", 0, "stock"],
+          message: "El stock debe ser mayor a 0",
+        })
+      }
+      return
+    }
+    if (draftNumberValue(item.stock) < 1) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["stock"],
+        message: "El stock debe ser mayor a 0",
+      })
+    }
   })
 
 export const eventPublishSchema = z
@@ -485,6 +512,7 @@ export function emptyEventDraftV2LineItem(
     layoutType: "general",
     slotId: "",
     validDayIds: [],
+    dayRates: [],
     ticketType: "standard",
   }
 }
@@ -739,6 +767,7 @@ function parseDraftLineItems(
       layoutType: asOptionalString(record.layoutType) || "general",
       slotId: asOptionalString(record.slotId ?? record.dayId ?? record.day_id),
       validDayIds: parseDraftValidDayIds(record.validDayIds),
+      dayRates: parseDraftDayRates(record.dayRates ?? record.day_rates),
       ticketType: asTicketCommerceType(
         record.ticketType ?? record.ticket_type,
         fallbackTicketType,
@@ -778,6 +807,28 @@ function parseDraftValidDayIds(raw: unknown): string[] {
       raw.filter((id): id is string => typeof id === "string" && Boolean(id.trim())),
     ),
   ]
+}
+
+function parseDraftDayRates(
+  raw: unknown,
+): EventDraftV2LineItem["dayRates"] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  const next: EventDraftV2LineItem["dayRates"] = []
+  for (const item of raw) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue
+    const record = item as Record<string, unknown>
+    const dayId = asOptionalString(record.dayId ?? record.day_id)
+    if (!dayId || seen.has(dayId)) continue
+    seen.add(dayId)
+    next.push({
+      dayId,
+      price: Math.max(0, asFiniteNumber(record.price)),
+      stock: Math.max(0, asFiniteNumber(record.stock)),
+      ticketId: asOptionalString(record.ticketId ?? record.ticket_id),
+    })
+  }
+  return next
 }
 
 function withResolvedTicketValidDays(
@@ -998,6 +1049,13 @@ export function draftCapacityThermometer(input: {
 }) {
   const used = (input.tickets ?? []).reduce((sum, ticket) => {
     if (isMapDraftTicket(ticket)) return sum
+    const rates = (ticket as { dayRates?: Array<{ stock?: unknown }> }).dayRates
+    if (Array.isArray(rates) && rates.length > 0) {
+      return (
+        sum +
+        rates.reduce((total, rate) => total + asFiniteNumber(rate.stock), 0)
+      )
+    }
     return sum + asFiniteNumber(ticket.stock)
   }, 0)
   const explicitSlots =

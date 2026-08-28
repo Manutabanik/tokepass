@@ -43,9 +43,9 @@ import {
   draftLaunchSubmitLabel,
   isDraftLaunchReady,
 } from "@/lib/events/launch-center-v2"
+import { hydrateEventDraftV2ForEditor } from "@/lib/events/draft-day-priced-tickets"
 import {
   eventPublishDisabledReason,
-  parseEventDraftV2,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
 
@@ -76,23 +76,39 @@ export function EventEditorV2({
     mode: "onTouched",
     shouldUnregister: false,
   })
-  const { control, getValues, formState, reset } = form
+  const { control, getValues, setValue, formState, reset } = form
   const { isDirty } = formState
   const watched = useWatch({ control })
   const markDraftClean = useCallback(
     (saved?: EventDraftV2) => {
       if (saved && draftInventoryDrifted(getValues(), saved)) {
         const current = getValues()
-        reset({
-          ...current,
-          tickets: saved.tickets,
-          extras: saved.extras,
+        current.tickets.forEach((ticket, index) => {
+          const next = saved.tickets[index]
+          if (!next) return
+          if (next.id && next.id !== ticket.id) {
+            setValue(`tickets.${index}.id`, next.id, { shouldDirty: false })
+          }
+          ;(next.dayRates ?? []).forEach((rate, rateIndex) => {
+            if (!rate.ticketId) return
+            if (rate.ticketId === ticket.dayRates?.[rateIndex]?.ticketId) return
+            setValue(
+              `tickets.${index}.dayRates.${rateIndex}.ticketId`,
+              rate.ticketId,
+              { shouldDirty: false },
+            )
+          })
         })
-        return
+        current.extras.forEach((extra, index) => {
+          const next = saved.extras[index]
+          if (next?.id && next.id !== extra.id) {
+            setValue(`extras.${index}.id`, next.id, { shouldDirty: false })
+          }
+        })
       }
-      reset(saved ?? getValues(), { keepValues: true })
+      reset(getValues(), { keepValues: true })
     },
-    [getValues, reset],
+    [getValues, reset, setValue],
   )
   const permitLeave = useCallback(() => {
     allowLeaveRef.current = true
@@ -174,7 +190,7 @@ export function EventEditorV2({
       }
       const latest = await getEventDraftV2(eventId)
       if (latest.success) {
-        reset(parseEventDraftV2(latest.draftState))
+        reset(hydrateEventDraftV2ForEditor(latest.draftState))
       } else {
         markDraftClean()
       }
@@ -225,7 +241,7 @@ export function EventEditorV2({
       setNowPublished(true)
       const latest = await getEventDraftV2(eventId)
       if (latest.success) {
-        reset(parseEventDraftV2(latest.draftState))
+        reset(hydrateEventDraftV2ForEditor(latest.draftState))
       }
       setSuccessUpdated(wasPublished)
       setSuccessUrl(result.publicUrl)

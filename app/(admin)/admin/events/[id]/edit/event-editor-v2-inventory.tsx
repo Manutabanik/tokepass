@@ -379,7 +379,7 @@ function DraftLineItemList({
           {fields.map((field, index) => {
             if (name === "tickets" && isMapDraftTicket(field)) {
               return (
-                <li key={field._rowId} className="hidden">
+                <li key={field.id || field._rowId} className="hidden">
                   <input type="hidden" {...register(`${name}.${index}.id`)} />
                   <input type="hidden" {...register(`${name}.${index}.name`)} />
                   <input type="hidden" {...register(`${name}.${index}.description`)} />
@@ -399,7 +399,7 @@ function DraftLineItemList({
             }
             return (
               <DraftInventoryAccordionCard
-                key={field._rowId}
+                key={field.id || field._rowId}
                 name={name}
                 index={index}
                 initialName={field.name}

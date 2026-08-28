@@ -3,9 +3,11 @@ import { describe, it } from "node:test"
 
 import {
   applyDraftDayPriceStock,
+  collapseDayPricedTicketsForEditor,
   createDraftLineItemsForScheduleDays,
   draftDayPriceStockRows,
   draftTicketNameWithoutDay,
+  expandDayPricedTicketsForPersist,
   generalTicketNeedsDayPricing,
 } from "@/lib/events/draft-day-priced-tickets"
 import {
@@ -130,27 +132,34 @@ describe("draft-day-priced-tickets", () => {
     assert.equal(next[1]?.stock, 4000)
   })
 
-  it("creates one unbound ticket on a single day and one per jornada on multi-day", () => {
+  it("creates one visual general on multi-day with a rate row per jornada", () => {
     const single = createDraftLineItemsForScheduleDays([friday])
     assert.equal(single.length, 1)
     assert.deepEqual(single[0]?.validDayIds, [])
     const multi = createDraftLineItemsForScheduleDays([friday, saturday])
-    assert.equal(multi.length, 2)
+    assert.equal(multi.length, 1)
+    assert.deepEqual(multi[0]?.validDayIds, [])
+    assert.equal(multi[0]?.name, "General")
     assert.deepEqual(
-      multi.map((ticket) => ticket.validDayIds),
-      [[friday.id], [saturday.id]],
+      multi[0]?.dayRates.map((rate) => rate.dayId),
+      [friday.id, saturday.id],
     )
-    assert.match(multi[0]?.name ?? "", /Viernes/i)
-    assert.match(multi[1]?.name ?? "", /Sábado/i)
   })
 
-  it("asks for per-day pricing only when a general covers more than one jornada", () => {
+  it("asks for per-day pricing only on unbound generals of a multi-day event", () => {
+    assert.equal(
+      generalTicketNeedsDayPricing(
+        { source: "general", validDayIds: [], sectorId: "" },
+        2,
+      ),
+      true,
+    )
     assert.equal(
       generalTicketNeedsDayPricing(
         { source: "general", validDayIds: [friday.id, saturday.id], sectorId: "" },
         2,
       ),
-      true,
+      false,
     )
     assert.equal(
       generalTicketNeedsDayPricing(
@@ -166,5 +175,66 @@ describe("draft-day-priced-tickets", () => {
       ),
       false,
     )
+  })
+
+  it("collapses sibling daily tickets into one editor card and expands them back", () => {
+    const fridayTicket = {
+      ...emptyEventDraftV2LineItem("t-vie"),
+      name: "General Viernes",
+      price: 20000,
+      stock: 10000,
+      validDayIds: [friday.id],
+      slotId: friday.id,
+    }
+    const saturdayTicket = {
+      ...emptyEventDraftV2LineItem("t-sab"),
+      name: "General Sábado",
+      price: 30000,
+      stock: 5000,
+      validDayIds: [saturday.id],
+      slotId: saturday.id,
+    }
+    const visual = collapseDayPricedTicketsForEditor(
+      [fridayTicket, saturdayTicket],
+      [friday, saturday],
+    )
+    assert.equal(visual.length, 1)
+    assert.equal(visual[0]?.name, "General")
+    assert.deepEqual(visual[0]?.validDayIds, [])
+    assert.deepEqual(
+      visual[0]?.dayRates.map((rate) => [
+        rate.dayId,
+        rate.price,
+        rate.stock,
+        rate.ticketId,
+      ]),
+      [
+        [friday.id, 20000, 10000, "t-vie"],
+        [saturday.id, 30000, 5000, "t-sab"],
+      ],
+    )
+
+    const persist = expandDayPricedTicketsForPersist(visual, [friday, saturday])
+    assert.equal(persist.length, 2)
+    assert.equal(persist[0]?.id, "t-vie")
+    assert.equal(persist[1]?.id, "t-sab")
+    assert.equal(persist[0]?.price, 20000)
+    assert.equal(persist[1]?.price, 30000)
+    assert.deepEqual(persist[0]?.validDayIds, [friday.id])
+    assert.deepEqual(persist[1]?.validDayIds, [saturday.id])
+  })
+
+  it("does not expand an abono into daily tickets", () => {
+    const abono = {
+      ...emptyEventDraftV2LineItem("t-abono"),
+      name: "Abono",
+      price: 45000,
+      stock: 200,
+      validDayIds: [friday.id, saturday.id],
+    }
+    const persist = expandDayPricedTicketsForPersist([abono], [friday, saturday])
+    assert.equal(persist.length, 1)
+    assert.equal(persist[0]?.id, "t-abono")
+    assert.deepEqual(persist[0]?.validDayIds, [friday.id, saturday.id])
   })
 })

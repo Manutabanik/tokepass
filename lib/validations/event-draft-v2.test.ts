@@ -729,6 +729,23 @@ describe("draftCapacityThermometer", () => {
     assert.equal(seated?.sectorId, "sector-platea")
   })
 
+  it("sums per-day rates on a visual multi-day general", () => {
+    const snap = draftCapacityThermometer({
+      tickets: [
+        {
+          stock: 0,
+          source: "general",
+          dayRates: [
+            { stock: 10000 },
+            { stock: 5000 },
+          ],
+        },
+      ],
+      venueCapacity: 20000,
+    })
+    assert.equal(snap.used, 15000)
+  })
+
   it("never counts map-backed tickets toward the thermometer", () => {
     const snap = draftCapacityThermometer({
       tickets: [

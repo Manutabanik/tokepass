@@ -21,6 +21,7 @@ import {
   sumFreeTicketCapacity,
   type EventFeeConfig,
 } from "@/lib/pricing/event-fees"
+import { expandDayPricedTicketsForPersist } from "@/lib/events/draft-day-priced-tickets"
 import { occurrenceIdsForDraftTicket } from "@/lib/events/draft-schedule-bindings"
 import {
   flattenDraftScheduleOccurrences,
@@ -566,7 +567,11 @@ export function buildPublishEventV2Payload(
       .map((day) => day.id)
       .filter((id): id is string => Boolean(id)),
   )
-  const tickets = parsed.tickets.flatMap((item): PublishEventV2TierPayload[] => {
+  const persistTickets = expandDayPricedTicketsForPersist(
+    parsed.tickets,
+    resolveDraftSchedule(parsed),
+  )
+  const tickets = persistTickets.flatMap((item): PublishEventV2TierPayload[] => {
     const mapped = mapLineItemToTier(item, "ticket", fee, absorbFees)
     if (!mapped) return []
     const dayIds = resolvePublishedTicketDayIds(

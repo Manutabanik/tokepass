@@ -64,11 +64,12 @@ export function rematchDraftTicketIds(
   }
 
   return draftTickets.map((ticket) => {
+    const rematchedRates = rematchDayRates(ticket, unused, claimed)
     if (UUID_RE.test(ticket.id)) {
       const liveHit = unused.find((row) => row.id === ticket.id)
       if (liveHit) {
         claimed.add(ticket.id)
-        return ticket
+        return rematchedRates
       }
     }
 
@@ -101,9 +102,46 @@ export function rematchDraftTicketIds(
               return sameDay(day, liveTicketDayId(row))
             })
 
-    if (!matched) return ticket
-    return { ...ticket, id: matched }
+    if (!matched) return rematchedRates
+    return { ...rematchedRates, id: matched }
   })
+}
+
+function rematchDayRates(
+  ticket: EventDraftV2LineItem,
+  unused: LiveTicketIdSnapshot[],
+  claimed: Set<string>,
+): EventDraftV2LineItem {
+  const rates = ticket.dayRates ?? []
+  if (rates.length === 0) return ticket
+  const family = ticket.name.trim().toLowerCase()
+  const nextRates = rates.map((rate) => {
+    const existing = rate.ticketId.trim()
+    if (existing && UUID_RE.test(existing)) {
+      const liveHit = unused.find((row) => row.id === existing)
+      if (liveHit) {
+        claimed.add(existing)
+        return rate
+      }
+    }
+    const day = rate.dayId.trim()
+    const found = unused.find((row) => {
+      if (claimed.has(row.id) || liveIsSeated(row) || liveIsExtra(row)) {
+        return false
+      }
+      if (!sameDay(day, liveTicketDayId(row))) return false
+      const rowName = (row.name ?? "").trim().toLowerCase()
+      return Boolean(family) && (rowName === family || rowName.startsWith(family))
+    })
+    if (!found) return rate
+    claimed.add(found.id)
+    return { ...rate, ticketId: found.id }
+  })
+  return {
+    ...ticket,
+    dayRates: nextRates,
+    id: nextRates[0]?.ticketId?.trim() || ticket.id,
+  }
 }
 
 export function rematchEventDraftTicketIds(
