@@ -208,31 +208,33 @@ export function CartSummary({
 
   return (
     <div className={cn("flex min-h-0 flex-col", className)}>
-      <div
-        className={cn(
-          "flex shrink-0 items-center justify-between gap-3",
-          compact ? "mb-1" : "mb-2",
-        )}
-      >
-        {heading ? (
-          <h4 className="text-sm font-bold text-foreground">{heading}</h4>
-        ) : (
-          <span />
-        )}
-        {showClear ? (
-          <button
-            type="button"
-            onClick={clearCart}
-            className={cn(
-              tapFeedbackClass,
-              "inline-flex items-center gap-1 text-xs font-medium text-destructive hover:underline",
-            )}
-          >
-            <Trash2 className="size-3" aria-hidden="true" />
-            Vaciar
-          </button>
-        ) : null}
-      </div>
+      {heading || showClear ? (
+        <div
+          className={cn(
+            "flex shrink-0 items-center justify-between gap-3",
+            compact ? "mb-1" : "mb-2",
+          )}
+        >
+          {heading ? (
+            <h4 className="text-sm font-bold text-foreground">{heading}</h4>
+          ) : (
+            <span />
+          )}
+          {showClear ? (
+            <button
+              type="button"
+              onClick={clearCart}
+              className={cn(
+                tapFeedbackClass,
+                "inline-flex items-center gap-1 text-xs font-medium text-destructive hover:underline",
+              )}
+            >
+              <Trash2 className="size-3" aria-hidden="true" />
+              Vaciar
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <ul
         className={cn(
           "flex min-h-0 flex-col",

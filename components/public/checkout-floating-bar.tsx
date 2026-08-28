@@ -1,19 +1,11 @@
 "use client"
 
-import { ArrowRight, ChevronUp, LoaderCircle, Map, Trash2, X } from "lucide-react"
+import { ArrowRight, ChevronUp, LoaderCircle } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
-import { CartSummary } from "@/components/public/cart-summary"
+import { CheckoutCartBottomSheet } from "@/components/checkout/checkout-cart-bottom-sheet"
 import { Button } from "@/components/ui/button"
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import {
-  sumCartAmounts,
   sumCartQuantities,
   toCartNumber,
 } from "@/lib/checkout/cart"
@@ -60,8 +52,6 @@ export function CheckoutFloatingBar({
   const cartTotal = useCheckoutStore((state) => state.totalAmount)
   const cartCount = useCheckoutStore((state) => state.itemsCount)
   const cartLines = useCheckoutStore((state) => state.lines)
-  const clearCart = useCheckoutStore((state) => state.clearCart)
-  const linesSubtotal = sumCartAmounts(cartLines)
   const lineCount = sumCartQuantities(cartLines)
   const passedTotal =
     typeof totalAmount === "number" ? toCartNumber(totalAmount) : null
@@ -85,9 +75,6 @@ export function CheckoutFloatingBar({
       ? "Continuar"
       : actionLabel
   const ctaShowArrow = skipOptional ? false : optionalStep || showArrow
-  const extraCharges = resolvedTotal - linesSubtotal
-  const showChargeSplit = cartLines.length > 0 && extraCharges > 0.009
-
   useEffect(() => {
     if (hidden || !showTotal || lastTotal.current === resolvedTotal) return
     lastTotal.current = resolvedTotal
@@ -209,131 +196,20 @@ export function CheckoutFloatingBar({
         </div>
       </div>
 
-      <Sheet open={isSummaryOpen} onOpenChange={setSummaryOpen}>
-        <SheetContent
-          side="bottom"
-          showCloseButton={false}
-          overlayClassName="z-[100] lg:hidden"
-          className="z-[100] max-h-[min(80dvh,100dvh)] gap-0 overflow-hidden rounded-t-3xl p-0 lg:hidden"
-        >
-          <SheetHeader className="flex-none border-b border-border/60 px-4 py-3 text-left">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <SheetTitle className="truncate text-base font-bold text-foreground">
-                  Resumen de tu compra
-                </SheetTitle>
-                {onEditMap ? (
-                  <button
-                    type="button"
-                    onClick={handleEditMap}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-400 hover:bg-emerald-500/20"
-                  >
-                    <Map className="size-3" aria-hidden="true" />
-                    Ver en mapa
-                  </button>
-                ) : null}
-                <SheetDescription className="sr-only">
-                  Revisá, quitá o vaciá los ítems de tu carrito.
-                </SheetDescription>
-              </div>
-
-              <div className="flex shrink-0 items-center gap-1">
-                {cartLines.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={clearCart}
-                    className={cn(
-                      tapFeedbackClass,
-                      "inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-medium text-destructive hover:underline",
-                    )}
-                  >
-                    <Trash2 className="size-3" aria-hidden="true" />
-                    Vaciar
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setSummaryOpen(false)}
-                  className="grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  aria-label="Cerrar"
-                >
-                  <X className="size-4" aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-          </SheetHeader>
-
-          <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-2">
-            <CartSummary
-              items={cartLines}
-              heading=""
-              showClear={false}
-              compact
-            />
-          </div>
-
-          <div className="flex-none border-t border-border/60 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-            {showChargeSplit ? (
-              <div className="mb-2 space-y-1 text-xs">
-                <div className="flex items-center justify-between gap-3 text-muted-foreground">
-                  <span>Subtotal</span>
-                  <span className="tabular-nums">
-                    {formatCartTotal(linesSubtotal)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-3 text-muted-foreground">
-                  <span>Cargos y ajustes</span>
-                  <span className="tabular-nums">
-                    {formatCartTotal(extraCharges)}
-                  </span>
-                </div>
-              </div>
-            ) : null}
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <span className="text-sm font-medium text-muted-foreground">
-                Total
-              </span>
-              <span className="text-xl font-black whitespace-nowrap tabular-nums text-foreground">
-                {formatCartTotal(resolvedTotal)}
-              </span>
-            </div>
-            <Button
-              type={formId ? "submit" : "button"}
-              form={formId}
-              disabled={pending || locked || !canContinue}
-              aria-busy={pending}
-              onClick={() => {
-                if (formId) {
-                  setSummaryOpen(false)
-                  return
-                }
-                handleContinueFromSummary()
-              }}
-              className={cn(
-                tapFeedbackClass,
-                skipOptional
-                  ? "h-12 w-full rounded-xl border-white/20 text-sm text-foreground"
-                  : "h-12 w-full rounded-xl bg-emerald-500 text-sm font-extrabold text-black hover:bg-emerald-400 disabled:scale-100 disabled:opacity-70",
-              )}
-              variant={skipOptional ? "outline" : "default"}
-            >
-              {pending ? (
-                <span className="flex items-center gap-2">
-                  <LoaderCircle className="size-5 animate-spin" aria-hidden="true" />
-                  {pendingLabel}
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-2">
-                  {ctaLabel}
-                  {ctaShowArrow ? (
-                    <ArrowRight className="size-4" aria-hidden="true" />
-                  ) : null}
-                </span>
-              )}
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+      <CheckoutCartBottomSheet
+        open={isSummaryOpen}
+        onOpenChange={setSummaryOpen}
+        totalAmount={resolvedTotal}
+        formId={formId}
+        onContinue={formId ? undefined : handleContinueFromSummary}
+        continueLabel={ctaLabel}
+        continuePending={pending}
+        continueDisabled={locked || !canContinue}
+        continuePendingLabel={pendingLabel}
+        continueVariant={skipOptional ? "outline" : "default"}
+        showContinueArrow={ctaShowArrow}
+        onEditMap={onEditMap ? handleEditMap : undefined}
+      />
     </>
   )
 }

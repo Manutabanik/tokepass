@@ -1,11 +1,12 @@
 "use client"
 
-import { ChevronDown } from "lucide-react"
-import { useMemo, useState, type FormEvent } from "react"
+import { ChevronRight } from "lucide-react"
+import { useState, type FormEvent } from "react"
 import type { FieldErrors } from "react-hook-form"
 
 import type { ValidatedPromo } from "@/app/actions/coupons"
 import type { CheckoutPromoterPreview } from "@/app/actions/promoters"
+import { CheckoutCartBottomSheet } from "@/components/checkout/checkout-cart-bottom-sheet"
 import { CheckoutBuyerFields } from "@/components/public/checkout-buyer-fields"
 import { CheckoutPromoterCodeInput } from "@/components/public/checkout-promoter-code-input"
 import {
@@ -17,19 +18,7 @@ import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-cli
 import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import type { CheckoutBuyerInfo } from "@/lib/checkout-buyer"
 import { formatCartTotal } from "@/lib/format"
-import { isMapCartLine } from "@/lib/checkout/cart-item-identity"
-import {
-  cartLineAmount,
-  cartLineOfferTitle,
-  cartLinePlaceBadge,
-} from "@/lib/checkout/cart-lines"
-import {
-  useCheckoutStore,
-  type StorefrontCartLine,
-} from "@/lib/stores/checkout-store"
-import { cn } from "@/lib/utils"
-
-const PREVIEW_CART_LINES = 2
+import { useCheckoutStore } from "@/lib/stores/checkout-store"
 
 export function CheckoutPaymentForm({
   step,
@@ -223,13 +212,6 @@ export function CheckoutPaymentForm({
   )
 }
 
-function lineAccessLabel(item: StorefrontCartLine): string {
-  const detail = item.detail?.trim()
-  if (detail) return detail
-  const quantity = Math.max(1, Math.floor(item.quantity) || 1)
-  return quantity === 1 ? "1 acceso" : `${quantity} accesos`
-}
-
 function PaymentOrderSummary({
   lines,
   totalTickets,
@@ -239,7 +221,7 @@ function PaymentOrderSummary({
   appliedPromo,
   isOnline = false,
 }: {
-  lines: StorefrontCartLine[]
+  lines: { id: string }[]
   totalTickets: number
   ticketsSubtotal: number
   discountAmount: number
@@ -247,16 +229,8 @@ function PaymentOrderSummary({
   appliedPromo: ValidatedPromo | null
   isOnline?: boolean
 }) {
-  const [isCartExpanded, setIsCartExpanded] = useState(false)
-  const hasOverflow = lines.length > PREVIEW_CART_LINES
-  const previewLines = useMemo(
-    () => lines.slice(0, PREVIEW_CART_LINES),
-    [lines],
-  )
-  const extraLines = useMemo(
-    () => lines.slice(PREVIEW_CART_LINES),
-    [lines],
-  )
+  const [isCartOpen, setIsCartOpen] = useState(false)
+  const canOpenDesglose = lines.length > 0
 
   return (
     <div className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-card p-4 text-card-foreground shadow-sm lg:hidden">
@@ -264,58 +238,25 @@ function PaymentOrderSummary({
         Resumen de compra
       </p>
 
-      {lines.length > 0 ? (
-        <ul className="flex max-h-[40vh] min-w-0 flex-col gap-2 overflow-y-auto overscroll-contain">
-          {previewLines.map((item) => (
-            <PaymentTicketRow key={item.id} item={item} />
-          ))}
-          {hasOverflow ? (
-            <li
-              className={cn(
-                "grid transition-all duration-200",
-                isCartExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-              )}
-            >
-              <div className="min-h-0 overflow-hidden">
-                <ul className="flex flex-col gap-2">
-                  {extraLines.map((item) => (
-                    <PaymentTicketRow key={item.id} item={item} />
-                  ))}
-                </ul>
-              </div>
-            </li>
+      <button
+        type="button"
+        disabled={!canOpenDesglose}
+        aria-expanded={isCartOpen}
+        onClick={() => setIsCartOpen(true)}
+        className="flex min-h-11 min-w-0 items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-left disabled:opacity-70"
+      >
+        <span className="min-w-0 text-sm font-semibold text-card-foreground">
+          {canOpenDesglose
+            ? `${totalTickets} ${totalTickets === 1 ? "entrada" : "entradas"}`
+            : `Entradas · ${totalTickets}`}
+        </span>
+        <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-emerald-400">
+          {canOpenDesglose ? "Ver desglose" : formatCartTotal(ticketsSubtotal)}
+          {canOpenDesglose ? (
+            <ChevronRight className="size-4" aria-hidden="true" />
           ) : null}
-        </ul>
-      ) : (
-        <div className="flex min-w-0 items-center justify-between gap-3 text-sm text-muted-foreground">
-          <span className="min-w-0 break-words">
-            Entradas · {totalTickets}
-          </span>
-          <span className="shrink-0 tabular-nums text-card-foreground">
-            {formatCartTotal(ticketsSubtotal)}
-          </span>
-        </div>
-      )}
-
-      {hasOverflow ? (
-        <button
-          type="button"
-          aria-expanded={isCartExpanded}
-          onClick={() => setIsCartExpanded((open) => !open)}
-          className="inline-flex min-h-11 items-center justify-center gap-1 self-start text-sm font-semibold text-primary transition-all duration-200 hover:text-primary/80"
-        >
-          {isCartExpanded
-            ? "Ocultar entradas"
-            : `Ver las ${lines.length} entradas`}
-          <ChevronDown
-            className={cn(
-              "size-4 transition-transform duration-200",
-              isCartExpanded && "rotate-180",
-            )}
-            aria-hidden="true"
-          />
-        </button>
-      ) : null}
+        </span>
+      </button>
 
       {appliedPromo && discountAmount > 0 ? (
         <div className="flex items-center justify-between text-sm text-emerald-600 dark:text-emerald-400">
@@ -342,6 +283,12 @@ function PaymentOrderSummary({
         </span>
       </div>
       <TokepassGuaranteeBadge variant="full" isOnline={isOnline} />
+
+      <CheckoutCartBottomSheet
+        open={isCartOpen}
+        onOpenChange={setIsCartOpen}
+        totalAmount={finalTotal}
+      />
     </div>
   )
 }
@@ -357,28 +304,3 @@ function PaymentServiceFeeRow() {
   )
 }
 
-function PaymentTicketRow({ item }: { item: StorefrontCartLine }) {
-  const title = cartLineOfferTitle(item)
-  const badge = isMapCartLine(item) ? cartLinePlaceBadge(item) : ""
-
-  return (
-    <li className="flex min-w-0 items-start justify-between gap-3">
-      <div className="min-w-0">
-        <p className="flex min-w-0 items-center gap-2 text-sm font-semibold text-card-foreground">
-          {badge ? (
-            <span className="inline-flex max-w-[7.5rem] shrink-0 truncate rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-semibold text-secondary-foreground">
-              {badge}
-            </span>
-          ) : null}
-          <span className="min-w-0 truncate">{title}</span>
-        </p>
-        <p className="mt-0.5 line-clamp-2 break-words text-xs text-muted-foreground">
-          {lineAccessLabel(item)}
-        </p>
-      </div>
-      <span className="shrink-0 text-sm font-bold tabular-nums text-card-foreground">
-        {formatCartTotal(cartLineAmount(item))}
-      </span>
-    </li>
-  )
-}
