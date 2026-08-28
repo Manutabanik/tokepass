@@ -115,6 +115,25 @@ describe("storefrontItemMatchesSchedule", () => {
       true,
     )
   })
+
+  it("keeps combo packs visible on every jornada tab", () => {
+    assert.equal(
+      storefrontItemMatchesSchedule(
+        { id: "mesa-09", comboTierId: "pack-1", eventDateId: dayA },
+        dayB,
+        { scheduleDayCount: 2 },
+      ),
+      true,
+    )
+    assert.equal(
+      storefrontItemMatchesSchedule(
+        { id: "mesa-09", comboTierId: "pack-1" },
+        dayA,
+        { scheduleDayCount: 2 },
+      ),
+      true,
+    )
+  })
 })
 
 describe("seatingUnitMatchesEventDate", () => {

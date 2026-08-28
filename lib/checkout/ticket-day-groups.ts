@@ -297,6 +297,7 @@ export function ticketVisibleOnCheckoutDay(
   scheduleDays: ScheduleDay[] = [],
 ): boolean {
   void scheduleDays
+  if (dateId === COMBO_PACKS_TAB_ID) return isComboPackOffer(tier)
   if (isComboOrPassOffer(tier)) return false
   if (!dateId) return true
   const days = ticketValidDayIds(tier)

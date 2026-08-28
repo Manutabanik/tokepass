@@ -1,4 +1,4 @@
-import { seatingUnitMatchesEventDate } from "@/lib/checkout/seat-hold-day"
+import { asHoldEventDateId, seatingUnitMatchesEventDate } from "@/lib/checkout/seat-hold-day"
 import {
   inventoryStateToSeatStatus,
   resolveInventorySeatState,
@@ -46,6 +46,49 @@ export function effectiveSeatingUnitStatus(
     return "available"
   }
   return status
+}
+
+function occupancyRank(status: string, reservedUntil?: string | null): number {
+  const effective = effectiveSeatingUnitStatus(status, reservedUntil)
+  if (effective === "sold") return 3
+  if (effective === "reserved") return 2
+  return 1
+}
+
+/**
+ * Combo / pack: a seat is blocked if it is taken on any jornada of the pack.
+ * Collapses to the worst unit per layout_item_id.
+ */
+export function seatingUnitsForComboDays<
+  T extends {
+    layoutItemId?: string | null
+    eventDateId?: string | null
+    status: string
+    reservedUntil?: string | null
+  },
+>(units: readonly T[], comboDayIds: readonly string[]): T[] {
+  const days = new Set(
+    comboDayIds
+      .map((id) => asHoldEventDateId(id))
+      .filter((id): id is string => Boolean(id)),
+  )
+  if (days.size === 0) return []
+  const byLayout = new Map<string, T>()
+  for (const unit of units) {
+    const day = asHoldEventDateId(unit.eventDateId)
+    if (!day || !days.has(day)) continue
+    const key = unit.layoutItemId?.trim() || ""
+    if (!key) continue
+    const current = byLayout.get(key)
+    if (
+      !current ||
+      occupancyRank(unit.status, unit.reservedUntil) >
+        occupancyRank(current.status, current.reservedUntil)
+    ) {
+      byLayout.set(key, unit)
+    }
+  }
+  return [...byLayout.values()]
 }
 
 /** Drop units that belong to another jornada before collapsing by layout_item_id. */

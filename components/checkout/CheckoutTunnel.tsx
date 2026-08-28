@@ -109,6 +109,7 @@ import {
 import {
   MISSING_EVENT_DATE_ID,
   MISSING_EVENT_DATE_ID_MESSAGE,
+  asHoldEventDateId,
   seatingUnitMatchesEventDate,
   storefrontItemMatchesSchedule,
   storefrontSelectionKey,
@@ -225,6 +226,7 @@ import { mergeInventoryOccupancy } from "@/lib/seating/inventory-seat-state"
 import {
   occupancyFromSeatingUnits,
   resolveLiveVenueSeatStatus,
+  seatingUnitsForComboDays,
   seatingUnitsForOccupancyDay,
 } from "@/lib/seating/venue-map-occupancy"
 import { useOptimisticSeatHolds } from "@/hooks/use-optimistic-seat-holds"
@@ -1262,13 +1264,23 @@ export function CheckoutTunnel({
     return [...byId.values()]
   }, [loadedUnitsBySector, seatingUnits])
 
+  const focusedComboDays = useMemo(() => {
+    if (!focusedTierId) return []
+    const tier = displayTiers.find((item) => item.id === focusedTierId)
+    if (!tier || !isComboPackOffer(tier)) return []
+    return comboScheduleIdsFromTier(tier, scheduleDays)
+  }, [displayTiers, focusedTierId, scheduleDays])
+
   const occupancyBySeatId = useMemo(() => {
     const dayTierIds = new Set(dayTiers.map((tier) => tier.id))
-    const units = seatingUnitsForOccupancyDay(mergedSeatingUnits, {
-      eventDateId: selectedDateId,
-      dayTierIds,
-      scheduleDayCount,
-    })
+    const units =
+      focusedComboDays.length > 1
+        ? seatingUnitsForComboDays(mergedSeatingUnits, focusedComboDays)
+        : seatingUnitsForOccupancyDay(mergedSeatingUnits, {
+            eventDateId: selectedDateId,
+            dayTierIds,
+            scheduleDayCount,
+          })
     return mergeInventoryOccupancy(
       occupancyFromSeatingUnits(
         units.map((unit) => ({
@@ -1281,11 +1293,39 @@ export function CheckoutTunnel({
     )
   }, [
     dayTiers,
+    focusedComboDays,
     liveOccupancy,
     mergedSeatingUnits,
     scheduleDayCount,
     selectedDateId,
   ])
+
+  useEffect(() => {
+    if (focusedComboDays.length < 2) return
+    let cancelled = false
+    void Promise.all(
+      focusedComboDays.map((day) => getEventSeatingAvailability(eventId, day)),
+    ).then((batches) => {
+      if (cancelled) return
+      setLoadedUnitsBySector((current) => {
+        let changed = false
+        const next = { ...current }
+        for (const units of batches) {
+          for (const unit of units) {
+            const key = `${unit.sectorId || "_sector"}::${unit.eventDateId ?? ""}`
+            const list = next[key] ?? []
+            if (list.some((row) => row.id === unit.id)) continue
+            next[key] = [...list, unit]
+            changed = true
+          }
+        }
+        return changed ? next : current
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [eventId, focusedComboDays])
 
   const soldOutZoneIds = useMemo(() => {
     const zones = liveMap?.zones ?? []
@@ -2970,15 +3010,32 @@ export function CheckoutTunnel({
       return
     }
 
-    async function applyNumbered(unit: EventSeatingUnit) {
+    async function applyNumbered(
+      unit: EventSeatingUnit,
+      existingHold?: {
+        reservedUntil: string
+        seatingUnitId?: string
+        seatingUnitIds?: string[]
+      },
+    ) {
       if (!(await ensureGuestAuthForHold())) return false
-      if (unit.status !== "available" && unit.status !== "reserved") {
+      if (
+        !existingHold &&
+        unit.status !== "available" &&
+        unit.status !== "reserved"
+      ) {
         toast.error("El lugar seleccionado ya no está disponible.")
         router.refresh()
         return false
       }
-      const hold =
-        comboTierId && (unit.layoutItemId || unit.id)
+      const hold = existingHold
+        ? {
+            success: true as const,
+            reservedUntil: existingHold.reservedUntil,
+            seatingUnitId: existingHold.seatingUnitId ?? unit.id,
+            seatingUnitIds: existingHold.seatingUnitIds,
+          }
+        : comboTierId && (unit.layoutItemId || unit.id)
           ? await holdSeatingUnitForCartByLayoutItem(
               eventId,
               unit.sectorId,
@@ -3014,7 +3071,7 @@ export function CheckoutTunnel({
       }
       const tableMatch = String(unit.label ?? "").match(/(\d+)/)
       setSelectedSeat({
-        tierId: unit.tierId,
+        tierId: comboTierId ?? unit.tierId,
         seatingUnitId: unit.id,
         sectorKey: unit.sectorId,
         tableNumber: tableMatch ? Number(tableMatch[1]) : null,
@@ -3024,6 +3081,13 @@ export function CheckoutTunnel({
       const store = useStorefrontSeatStore.getState()
       const unitDateId = unit.eventDateId ?? selectedDateId
       const unitLabel = unit.label || "Ubicación numerada"
+      const heldIds =
+        ("seatingUnitIds" in hold && hold.seatingUnitIds?.length
+          ? hold.seatingUnitIds
+          : null) ??
+        ("seatingUnitId" in hold && hold.seatingUnitId
+          ? [hold.seatingUnitId]
+          : [unit.id])
       const upserted = store.upsertSelectedItem(
         withCheckoutEventDateId(
           {
@@ -3035,14 +3099,18 @@ export function CheckoutTunnel({
             sectorId: unit.sectorId,
             sectorName: unit.sectorName,
             color: unit.color,
-            ticketTierId: unit.tierId,
+            ticketTierId: comboTierId ?? unit.tierId,
             comboTierId: comboTierId ?? undefined,
             comboScheduleIds: comboDays.length > 1 ? comboDays : undefined,
+            heldSeatingUnitIds: heldIds,
             seatLabel: unitLabel,
           },
           unitDateId,
           {
-            dateString: scheduleDayCartLabel(unitDateId, scheduleDays),
+            dateString:
+              comboDays.length > 1
+                ? "Todos los días"
+                : scheduleDayCartLabel(unitDateId, scheduleDays),
             seatLabel: unitLabel,
           },
         ),
@@ -3060,7 +3128,7 @@ export function CheckoutTunnel({
         useCheckoutStore.getState().setHoldExpiresAt(hold.reservedUntil)
       }
       setFocusedZoneId(selectionPayload.sectorId)
-      setFocusedTierId(unit.tierId)
+      setFocusedTierId(comboTierId ?? unit.tierId)
       return true
     }
 
@@ -3106,12 +3174,17 @@ export function CheckoutTunnel({
           router.refresh()
           return
         }
+        const holdDateId =
+          asHoldEventDateId(hold.eventDateId) ??
+          asHoldEventDateId(selectedDateId) ??
+          comboDays[0] ??
+          null
         const units = await getEventSeatingUnitsForSector(
           eventId,
           selectionPayload.sectorId,
-          selectedDateId,
+          holdDateId,
         )
-        const cacheKey = `${selectionPayload.sectorId}::${selectedDateId ?? ""}`
+        const cacheKey = `${selectionPayload.sectorId}::${holdDateId ?? selectedDateId ?? ""}`
         setLoadedUnitsBySector((current) => ({
           ...current,
           [cacheKey]: units,
@@ -3123,7 +3196,7 @@ export function CheckoutTunnel({
               item.layoutItemId === seat.id &&
               seatingUnitMatchesEventDate(
                 { event_date_id: item.eventDateId },
-                selectedDateId,
+                holdDateId,
                 { scheduleDayCount },
               ),
           )
@@ -3135,7 +3208,11 @@ export function CheckoutTunnel({
           router.refresh()
           return
         }
-        const ok = await applyNumbered(unit)
+        const ok = await applyNumbered(unit, {
+          reservedUntil: hold.reservedUntil,
+          seatingUnitId: hold.seatingUnitId,
+          seatingUnitIds: hold.seatingUnitIds,
+        })
         if (!ok) return
       }
       if (!options?.keepOpen && !hasInteractiveMap) returnToCheckout()
@@ -3364,6 +3441,7 @@ export function CheckoutTunnel({
                 }}
                 selectedDateId={selectedDateId}
                 onSelectedDateIdChange={handleSelectedDateIdChange}
+                onFocusedTierIdChange={setFocusedTierId}
               />
               </motion.div>
             </motion.div>

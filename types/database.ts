@@ -4082,6 +4082,20 @@ export type Database = {
         }
         Returns: Json
       }
+      restore_combo_parent_sold_for_order: {
+        Args: {
+          p_order_id: string
+        }
+        Returns: undefined
+      }
+      restore_combo_parent_sold_after_losing_ticket: {
+        Args: {
+          p_order_id: string
+          p_source_combo_tier_id: string
+          p_ticket_id: string
+        }
+        Returns: undefined
+      }
       is_ticket_admission_eligible: {
         Args: {
           p_ticket_id: string

@@ -119,6 +119,7 @@ type Props = {
   scheduleDays?: ScheduleDay[]
   selectedDateId?: string | null
   onSelectedDateIdChange?: (dateId: string) => void
+  onFocusedTierIdChange?: (tierId: string | null) => void
   seatSheetOpen?: boolean
   onSeatSheetOpenChange?: (open: boolean) => void
 }
@@ -145,6 +146,7 @@ export function EventCheckoutSelector({
   scheduleDays = [],
   selectedDateId = null,
   onSelectedDateIdChange,
+  onFocusedTierIdChange,
   seatSheetOpen,
   onSeatSheetOpenChange,
 }: Props) {
@@ -299,6 +301,7 @@ export function EventCheckoutSelector({
       if (!requiresMap && selectableTicketStock(tier) <= 0) return
     }
     if (hasInteractiveMap && seatSelection) {
+      onFocusedTierIdChange?.(tier?.id ?? category.id)
       setSeatSheetMode("map")
       setActiveSeatCategory({
         id: category.id,
@@ -308,10 +311,12 @@ export function EventCheckoutSelector({
       setIsSeatSelectionOpen(true)
       return
     }
+    onFocusedTierIdChange?.(tier?.id ?? category.id)
     onOpenSeatFlow()
   }
 
   function openGlobalMap() {
+    onFocusedTierIdChange?.(null)
     setActiveSeatCategory(null)
     setSeatSheetMode("map")
     onOpenSeatFlow()
@@ -384,6 +389,7 @@ export function EventCheckoutSelector({
             onPurchaseIntent={onPurchaseIntent}
             onOpenSeatSelection={openSeatSelection}
             onOpenGlobalMap={openGlobalMap}
+            onFocusedTierIdChange={onFocusedTierIdChange}
           />
         </div>
 
@@ -443,6 +449,7 @@ function TicketSelectionList({
   onPurchaseIntent,
   onOpenSeatSelection,
   onOpenGlobalMap,
+  onFocusedTierIdChange,
 }: {
   listTiers: TicketSelectorTier[]
   allTiers: TicketSelectorTier[]
@@ -469,6 +476,7 @@ function TicketSelectionList({
     sectorId?: string | null
   }) => void
   onOpenGlobalMap: () => void
+  onFocusedTierIdChange?: (tierId: string | null) => void
 }) {
   const admissionTiers = useMemo(
     () =>
@@ -490,6 +498,7 @@ function TicketSelectionList({
 
   function selectDate(dateId: string) {
     setAccessTab("entradas")
+    onFocusedTierIdChange?.(null)
     onSelectedDateIdChange?.(dateId)
   }
 

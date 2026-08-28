@@ -44,7 +44,7 @@ export function storefrontItemMatchesSchedule(
   scheduleId?: string | null,
   options?: { scheduleDayCount?: number },
 ): boolean {
-  if (item.comboTierId?.trim()) return !asHoldEventDateId(scheduleId)
+  if (item.comboTierId?.trim()) return true
   const itemDate =
     asHoldEventDateId(item.scheduleId) ??
     asHoldEventDateId(item.eventDateId) ??

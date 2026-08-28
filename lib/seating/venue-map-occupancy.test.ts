@@ -6,6 +6,7 @@ import {
   hexToRgba,
   occupancyFromSeatingUnits,
   resolveLiveVenueSeatStatus,
+  seatingUnitsForComboDays,
   seatingUnitsForOccupancyDay,
 } from "./venue-map-occupancy"
 
@@ -202,5 +203,29 @@ describe("venue-map-occupancy", () => {
       { eventDateId: saturday, scheduleDayCount: 2 },
     )
     assert.equal(units.length, 0)
+  })
+})
+
+describe("seatingUnitsForComboDays", () => {
+  it("marks a seat occupied if any jornada of the pack is sold", () => {
+    const friday = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    const saturday = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    const units = seatingUnitsForComboDays(
+      [
+        {
+          layoutItemId: "mesa-09",
+          eventDateId: friday,
+          status: "available",
+        },
+        {
+          layoutItemId: "mesa-09",
+          eventDateId: saturday,
+          status: "sold",
+        },
+      ],
+      [friday, saturday],
+    )
+    assert.equal(units.length, 1)
+    assert.equal(units[0]?.status, "sold")
   })
 })

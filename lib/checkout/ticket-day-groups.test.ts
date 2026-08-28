@@ -117,6 +117,15 @@ describe("ticketVisibleOnCheckoutDay", () => {
     assert.equal(ticketVisibleOnCheckoutDay(unbound, "d2", days), true)
     assert.equal(ticketVisibleOnCheckoutDay(unbound, "d1", [days[0]!]), true)
     assert.equal(ticketVisibleOnCheckoutDay(pass, "d2", days), false)
+    const combo = tier({
+      id: "pack",
+      name: "Pack",
+      isFullPass: false,
+      ticketType: "combo",
+      dayId: null,
+    })
+    assert.equal(ticketVisibleOnCheckoutDay(combo, COMBO_PACKS_TAB_ID, days), true)
+    assert.equal(ticketVisibleOnCheckoutDay(friday, COMBO_PACKS_TAB_ID, days), false)
     const stale = tier({
       id: "stale",
       name: "General",

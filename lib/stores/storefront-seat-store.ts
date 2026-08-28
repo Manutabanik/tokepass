@@ -46,6 +46,8 @@ export type StorefrontSelectedItem = {
   /** Combo / pack que cubre varias jornadas con el mismo asiento. */
   comboTierId?: string
   comboScheduleIds?: string[]
+  /** Unidades ya reservadas; el hold optimista no vuelve a llamar al RPC. */
+  heldSeatingUnitIds?: string[]
   dateString?: string
   dateLabel?: string
   /** Identificador exacto del asiento/mesa clickeado (ej. "Mesa 04"). */

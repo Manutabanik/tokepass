@@ -1533,6 +1533,7 @@ export async function holdSeat(
       seatingUnitId: string
       holdId?: string
       eventId?: string
+      eventDateId?: string
       seatingUnitIds?: string[]
     }
   | { success: false; error: "auth_required" | "out_of_stock" | string }
@@ -1605,9 +1606,13 @@ export async function holdSeat(
         : combo.data
           ? [combo.data]
           : []
-      const first = rows[0]
-      const reservedUntil = first?.expires_at
-      const seatingUnitId = first?.seating_unit_id
+      const requestedDay = asHoldEventDateId(parsed.data.eventDateId)
+      const preferred =
+        (requestedDay
+          ? rows.find((row) => row.event_date_id === requestedDay)
+          : null) ?? rows[0]
+      const reservedUntil = preferred?.expires_at
+      const seatingUnitId = preferred?.seating_unit_id
       if (!reservedUntil || !seatingUnitId) {
         return { success: false, error: "out_of_stock" }
       }
@@ -1615,8 +1620,9 @@ export async function holdSeat(
         success: true,
         reservedUntil,
         seatingUnitId,
-        holdId: first?.hold_id,
-        eventId: first?.event_id,
+        holdId: preferred?.hold_id,
+        eventId: preferred?.event_id,
+        eventDateId: preferred?.event_date_id ?? undefined,
         seatingUnitIds: rows
           .map((row) => row.seating_unit_id)
           .filter((id): id is string => Boolean(id)),
@@ -1893,7 +1899,11 @@ export async function holdSeatingUnitForCartByLayoutItem(
   sessionId?: string | null,
   comboTierId?: string | null,
 ): Promise<
-  CartSeatingHoldResult & { seatingUnitId?: string; seatingUnitIds?: string[] }
+  CartSeatingHoldResult & {
+    seatingUnitId?: string
+    seatingUnitIds?: string[]
+    eventDateId?: string
+  }
 > {
   const parsed = CheckoutLayoutHoldSchema.safeParse({
     eventId,
@@ -1990,14 +2000,19 @@ export async function holdSeatingUnitForCartByLayoutItem(
         : combo.data
           ? [combo.data]
           : []
-      const first = rows[0]
-      if (!first?.reserved_until || !first?.seating_unit_id) {
+      const requestedDay = asHoldEventDateId(eventDateId)
+      const preferred =
+        (requestedDay
+          ? rows.find((row) => row.event_date_id === requestedDay)
+          : null) ?? rows[0]
+      if (!preferred?.reserved_until || !preferred?.seating_unit_id) {
         return { success: false, error: "out_of_stock" }
       }
       return {
         success: true,
-        reservedUntil: first.reserved_until,
-        seatingUnitId: first.seating_unit_id,
+        reservedUntil: preferred.reserved_until,
+        seatingUnitId: preferred.seating_unit_id,
+        eventDateId: preferred.event_date_id ?? undefined,
         seatingUnitIds: rows
           .map((row) => row.seating_unit_id)
           .filter((id): id is string => Boolean(id)),

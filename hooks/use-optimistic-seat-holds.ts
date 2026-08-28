@@ -91,6 +91,14 @@ export function useOptimisticSeatHolds({
       for (const item of holdable) {
         const selectionKey = storefrontSelectionKey(item)
         if (held.has(selectionKey) || inFlightRef.current.has(selectionKey)) continue
+        if (item.heldSeatingUnitIds?.length) {
+          held.set(
+            selectionKey,
+            item.heldSeatingUnitIds.filter(Boolean).join(","),
+          )
+          applyOccupancyPatch({ [item.id]: "held" })
+          continue
+        }
         applyOccupancyPatch({ [item.id]: "held" })
 
         const eventDateId =

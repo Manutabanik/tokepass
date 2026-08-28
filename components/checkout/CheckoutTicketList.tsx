@@ -28,6 +28,7 @@ export function CheckoutTicketList({
   seatSelection,
   selectedDateId,
   onSelectedDateIdChange,
+  onFocusedTierIdChange,
 }: {
   tiers: TicketSelectorTier[]
   isPending: boolean
@@ -47,6 +48,7 @@ export function CheckoutTicketList({
   seatSelection: SeatSelectionContext | null
   selectedDateId?: string | null
   onSelectedDateIdChange?: (dateId: string) => void
+  onFocusedTierIdChange?: (tierId: string | null) => void
 }) {
   const quantities = useCheckoutStore((state) => state.quantities)
   const selectedSeat = useCheckoutStore((state) => state.selectedSeat)
@@ -78,6 +80,7 @@ export function CheckoutTicketList({
       }
       selectedDateId={selectedDateId}
       onSelectedDateIdChange={onSelectedDateIdChange}
+      onFocusedTierIdChange={onFocusedTierIdChange}
     />
   )
 
