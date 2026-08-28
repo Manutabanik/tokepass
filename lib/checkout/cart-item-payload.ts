@@ -47,6 +47,7 @@ export function toCartItemPayload(input: unknown): CartItemPayload {
     item.event_date_id,
     item.eventDateId,
     item.dateId,
+    item.scheduleId,
   )
   const quantityRaw = Number(item.quantity)
   const payload: CartItemPayload = {
@@ -104,6 +105,7 @@ export function sanitizeCheckoutActionItem(
     item.eventDateId,
     item.event_date_id,
     item.dateId,
+    item.scheduleId,
   )
 
   return {

@@ -11,7 +11,10 @@ import { venuePriceModeFromSellMode } from "@/types/venue-map"
 import { elementBelongsToZone } from "@/lib/seating/venue-map-lod"
 import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
 import { isValidPublicPrice } from "@/lib/checkout/public-price"
-import { storefrontSelectionKey } from "@/lib/checkout/seat-hold-day"
+import {
+  asHoldEventDateId,
+  storefrontSelectionKey,
+} from "@/lib/checkout/seat-hold-day"
 import {
   getSeatDisplayName,
   getVenueElementDisplayName,
@@ -357,10 +360,17 @@ export function hydrateStorefrontItemsFromMap(
   items: StorefrontSelectedItem[],
   map: InteractiveVenueMap | null | undefined,
   priceBySectorId: Record<string, number> = {},
+  activeScheduleId?: string | null,
 ): StorefrontSelectedItem[] {
   const unique = dedupeStorefrontItemsById(items)
   if (!map) return unique
+  const activeDay = asHoldEventDateId(activeScheduleId)
   return unique.map((item) => {
+    const itemDay =
+      asHoldEventDateId(item.scheduleId) ??
+      asHoldEventDateId(item.eventDateId) ??
+      asHoldEventDateId(item.dateId)
+    if (itemDay && activeDay && itemDay !== activeDay) return item
     const live = resolveStorefrontItemFromMap(map, item.id, priceBySectorId)
     if (!live) return item
     const liveCapacity = Math.max(0, Math.floor(Number(live.capacity) || 0))
@@ -381,9 +391,10 @@ export function hydrateStorefrontItemsFromMap(
       ...item,
       ...live,
       ticketTierId,
-      eventDateId: item.eventDateId,
-      dateId: item.dateId ?? item.eventDateId,
-      scheduleId: item.scheduleId ?? item.eventDateId ?? item.dateId,
+      eventDateId: item.eventDateId ?? itemDay ?? undefined,
+      dateId: item.dateId ?? item.eventDateId ?? itemDay ?? undefined,
+      scheduleId:
+        item.scheduleId ?? item.eventDateId ?? item.dateId ?? itemDay ?? undefined,
       dateString: item.dateString,
       dateLabel: item.dateLabel ?? item.dateString,
       seatLabel: item.seatLabel ?? live.seatLabel ?? live.name,

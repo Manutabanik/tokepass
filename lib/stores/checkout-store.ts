@@ -25,12 +25,14 @@ import {
   cartCompositeItemId,
   cartLineSnapshot,
   cartQuantityKey,
+  dropUndatedGeneralState,
   freezeCartLineSnapshot,
   generalLineTierId,
   isMapCartLine,
   mergeImmutableCartLines,
   parseCartCompositeItemId,
   upsertGeneralCartLine,
+  type MergeCartLinesOptions,
 } from "@/lib/checkout/cart-item-identity"
 import { storefrontSelectionKey } from "@/lib/checkout/seat-hold-day"
 import type { CheckoutBuyerInfo } from "@/lib/checkout-buyer"
@@ -188,7 +190,10 @@ type CheckoutState = {
       | ((current: CheckoutBuyerInfo) => CheckoutBuyerInfo),
   ) => void
   setCartTotals: (input: { totalAmount: number; itemsCount: number }) => void
-  setCartLines: (lines: StorefrontCartLine[]) => void
+  setCartLines: (
+    lines: StorefrontCartLine[],
+    options?: MergeCartLinesOptions,
+  ) => void
   addToCart: (input: AddToCartInput) => AddToCartResult
   setGeneralQuantity: (input: AddToCartInput & { quantity: number }) => AddToCartResult
   setSelectedScheduleId: (scheduleId: string | null) => void
@@ -584,9 +589,24 @@ export const useCheckoutStore = create<CheckoutState>()(
         set({ totalAmount, itemsCount })
       },
 
-      setCartLines: (incoming) => {
+      setCartLines: (incoming, options) => {
         const current = get()
-        const lines = mergeImmutableCartLines(current.lines, incoming)
+        let lines = mergeImmutableCartLines(current.lines, incoming, options)
+        let quantities = current.quantities
+        for (const line of incoming) {
+          if (isMapCartLine(line)) continue
+          const ticketId = generalLineTierId(line)
+          const day = cartItemScheduleId(line)
+          if (!ticketId || !day) continue
+          const cleaned = dropUndatedGeneralState(
+            quantities,
+            lines,
+            ticketId,
+            day,
+          )
+          quantities = cleaned.quantities
+          lines = cleaned.lines
+        }
         const catalog = fillCatalogGaps(
           current.catalogByTierId,
           lines
@@ -597,12 +617,17 @@ export const useCheckoutStore = create<CheckoutState>()(
             })
             .filter((entry): entry is CheckoutCatalogEntry => entry != null),
         )
-        if (sameLines(current.lines, lines) && catalog === current.catalogByTierId) {
+        if (
+          sameLines(current.lines, lines) &&
+          catalog === current.catalogByTierId &&
+          sameQuantities(current.quantities, quantities)
+        ) {
           return
         }
         set(
           withCartHoldClock(current, {
             lines,
+            quantities,
             catalogByTierId: catalog,
             ...cartTotalsFromLines(lines),
           }),
@@ -692,21 +717,25 @@ export const useCheckoutStore = create<CheckoutState>()(
         const nextQty = Math.max(0, currentQty + delta)
         if (nextQty > maxQuantity) return { ok: false, reason: "limit" }
         const current = get()
-        const quantities = { ...current.quantities, [qtyKey]: nextQty }
-        const lines = upsertGeneralCartLine(current.lines, {
-          ticketTierId: input.ticketTierId,
-          name: input.name,
-          price: unitPrice,
-          quantity: nextQty,
-          scheduleId: input.scheduleId,
-          dateString: input.dateString,
-          sectorName: input.sectorName,
-          seatLabel: input.seatLabel,
-        })
+        const stamped = dropUndatedGeneralState(
+          { ...current.quantities, [qtyKey]: nextQty },
+          upsertGeneralCartLine(current.lines, {
+            ticketTierId: input.ticketTierId,
+            name: input.name,
+            price: unitPrice,
+            quantity: nextQty,
+            scheduleId: input.scheduleId,
+            dateString: input.dateString,
+            sectorName: input.sectorName,
+            seatLabel: input.seatLabel,
+          }),
+          input.ticketTierId,
+          snapshot.scheduleId,
+        )
         set(
           withCartHoldClock(current, {
-            quantities,
-            lines,
+            quantities: stamped.quantities,
+            lines: stamped.lines,
             catalogByTierId: mergeCatalog(current.catalogByTierId, [
               {
                 id: input.ticketTierId,
@@ -714,7 +743,7 @@ export const useCheckoutStore = create<CheckoutState>()(
                 price: unitPrice,
               },
             ]),
-            ...cartTotalsFromLines(lines),
+            ...cartTotalsFromLines(stamped.lines),
           }),
         )
         return { ok: true, quantity: nextQty }
@@ -730,26 +759,30 @@ export const useCheckoutStore = create<CheckoutState>()(
         const nextQty = Math.min(Math.max(0, requested), maxQuantity)
         const snapshot = cartLineSnapshot(input)
         const qtyKey = cartQuantityKey(input.ticketTierId, snapshot.scheduleId)
-        const quantities = { ...get().quantities, [qtyKey]: nextQty }
         const unitPrice =
           input.price === undefined || input.price === null
             ? 0
             : toCartNumber(input.price)
         const current = get()
-        const lines = upsertGeneralCartLine(current.lines, {
-          ticketTierId: input.ticketTierId,
-          name: input.name,
-          price: unitPrice,
-          quantity: nextQty,
-          scheduleId: input.scheduleId,
-          dateString: input.dateString,
-          sectorName: input.sectorName,
-          seatLabel: input.seatLabel,
-        })
+        const stamped = dropUndatedGeneralState(
+          { ...current.quantities, [qtyKey]: nextQty },
+          upsertGeneralCartLine(current.lines, {
+            ticketTierId: input.ticketTierId,
+            name: input.name,
+            price: unitPrice,
+            quantity: nextQty,
+            scheduleId: input.scheduleId,
+            dateString: input.dateString,
+            sectorName: input.sectorName,
+            seatLabel: input.seatLabel,
+          }),
+          input.ticketTierId,
+          snapshot.scheduleId,
+        )
         set(
           withCartHoldClock(current, {
-            quantities,
-            lines,
+            quantities: stamped.quantities,
+            lines: stamped.lines,
             catalogByTierId: mergeCatalog(current.catalogByTierId, [
               {
                 id: input.ticketTierId,
@@ -757,7 +790,7 @@ export const useCheckoutStore = create<CheckoutState>()(
                 price: unitPrice,
               },
             ]),
-            ...cartTotalsFromLines(lines),
+            ...cartTotalsFromLines(stamped.lines),
           }),
         )
         return { ok: true, quantity: nextQty }

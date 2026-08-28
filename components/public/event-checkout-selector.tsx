@@ -54,9 +54,10 @@ import { resolveSectorAssignMeta } from "@/lib/seating/assign-best-seats"
 import {
   FULL_PASS_TAB_ID,
   defaultCheckoutDateId,
-  groupTicketsByDate,
+  checkoutTicketsForSelectedDay,
   isSamePriceAnyDay,
   listCheckoutDateCards,
+  quantityForPublicTier,
   ticketDateSectionLabel,
   ticketMatchesTab,
   ticketVisibleOnCheckoutDay,
@@ -66,7 +67,6 @@ import {
   partitionCheckoutTickets,
   resolveTicketCommerceType,
 } from "@/lib/events/ticket-commerce-type"
-import { cartQuantityOnSchedule } from "@/lib/checkout/cart-item-identity"
 import { storefrontItemMatchesSchedule } from "@/lib/checkout/seat-hold-day"
 import { ticketUsesMapSelector } from "@/lib/checkout/public-ticket-view"
 import { flattenSeatsForAvailability } from "@/lib/seating/venue-map-geometry"
@@ -235,7 +235,11 @@ export function EventCheckoutSelector({
   const placeLabel = selectedSeat?.label?.trim() || null
   const generalQty = grouped.general.reduce(
     (sum, tier) =>
-      sum + cartQuantityOnSchedule(quantities, tier.id, activeDateId),
+      sum +
+      quantityForPublicTier(quantities, tier, {
+        selectedDateId: activeDateId,
+        scheduleDays,
+      }),
     0,
   )
   const showInclusionWarning =
@@ -523,13 +527,15 @@ function TicketSelectionList({
           ]
         : []
     }
-    const grouped = groupTicketsByDate(displayedTickets, scheduleDays)
-    return grouped.ticketsByDate.map((group) => ({
-      ...group,
-      dateLabel:
-        ticketDateSectionLabel(group.dateId, scheduleDays) || group.dateLabel,
-    }))
-  }, [accessTab, displayedTickets, scheduleDays])
+    if (activeDateId) {
+      return checkoutTicketsForSelectedDay(
+        displayedTickets,
+        activeDateId,
+        scheduleDays,
+      )
+    }
+    return checkoutTicketsForSelectedDay(displayedTickets, null, scheduleDays)
+  }, [accessTab, activeDateId, displayedTickets, scheduleDays])
   const showDateHeaders = accessTab === "entradas" && ticketGroups.length > 1
 
   const selectorTitle =
@@ -560,7 +566,10 @@ function TicketSelectionList({
         key={tier.id}
         tier={tier}
         siblingTiers={listTiers}
-        quantity={cartQuantityOnSchedule(quantities, tier.id, activeDateId)}
+        quantity={quantityForPublicTier(quantities, tier, {
+          selectedDateId: activeDateId,
+          scheduleDays,
+        })}
         isPending={isPending}
         focused={focusedTierId === tier.id}
         maxTicketsPerUser={maxTicketsPerUser}
@@ -1168,7 +1177,9 @@ export function QuantityList({
       {tiers.map((tier) => {
         const sale = resolveSalePhases(tier.phases)
         const current = sale.current
-        const quantity = quantities[tier.id] ?? 0
+        const quantity = quantityForPublicTier(quantities, tier, {
+          undated: true,
+        })
         const remaining = purchaseCapForTier({
           layoutType: tier.layoutType,
           maxPurchaseLimit: tier.maxPurchaseLimit,

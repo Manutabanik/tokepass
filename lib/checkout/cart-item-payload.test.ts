@@ -90,6 +90,26 @@ describe("cart item payload", () => {
     assert.equal("price" in payload, false)
   })
 
+  it("reads scheduleId when eventDateId is missing", () => {
+    const dayId = "550e8400-e29b-41d4-a716-446655440002"
+    const payload = toCartItemPayload({
+      ticket_tier_id: tierId,
+      element_id: "mesa-09",
+      scheduleId: dayId,
+      quantity: 1,
+    })
+    assert.equal(payload.event_date_id, dayId)
+    const item = sanitizeCheckoutActionItem({
+      type: "mapped",
+      ticket_tier_id: tierId,
+      quantity: 1,
+      element_id: "mesa-09",
+      scheduleId: dayId,
+    })
+    assert.equal(item.eventDateId, dayId)
+    assert.equal(item.event_date_id, dayId)
+  })
+
   it("keeps the jornada on a mapped mesa line", () => {
     const dayId = "550e8400-e29b-41d4-a716-446655440001"
     const item = sanitizeCheckoutActionItem({

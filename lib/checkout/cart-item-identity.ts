@@ -26,14 +26,31 @@ export type CartIdentityLine = {
   dateLabel?: string | null
   seatLabel?: string | null
   placeLabel?: string | null
+  isMappedSelection?: boolean
+}
+
+export type MergeCartLinesOptions = {
+  /** Generals on these jornadas are rebuilt by `incoming` (missing = removed). */
+  replaceGeneralDays?: Array<string | null>
 }
 
 const LEGACY_SEP = "__"
 const DAY_OR_ALL =
   /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|all)$/i
 
+const REJECTED_SCHEDULE_TOKENS = new Set(["all", "full_pass", "sin-fecha"])
+
+/** Real jornada id, or null for undated extras / poison tab tokens. */
+export function normalizeCartScheduleId(
+  scheduleId?: string | null,
+): string | null {
+  const raw = scheduleId?.trim() || ""
+  if (!raw || REJECTED_SCHEDULE_TOKENS.has(raw)) return null
+  return asHoldEventDateId(raw) ?? raw
+}
+
 export function cartScheduleToken(scheduleId?: string | null): string {
-  return asHoldEventDateId(scheduleId) ?? (scheduleId?.trim() || "all")
+  return normalizeCartScheduleId(scheduleId) ?? "all"
 }
 
 /** `ticketId_scheduleId` — and `_unitId` when the line is a map place. */
@@ -89,7 +106,9 @@ export function parseCartCompositeItemId(id: string): {
 export function isMapCartLine(line: {
   seatId?: string | null
   elementId?: string | null
+  isMappedSelection?: boolean
 }): boolean {
+  if (line.isMappedSelection === false) return false
   return Boolean(line.seatId?.trim() || line.elementId?.trim())
 }
 
@@ -207,7 +226,7 @@ export function sameCartPlace(
   const rightUnit = cartLineUnitId(right)
   const leftDay = cartItemScheduleId(left)
   const rightDay = cartItemScheduleId(right)
-  const sameDay = !leftDay || !rightDay || leftDay === rightDay
+  const sameDay = leftDay === rightDay
   if (leftUnit && leftUnit === rightUnit) return sameDay
   if (
     !isMapCartLine(left) &&
@@ -223,18 +242,30 @@ export function sameCartPlace(
 export function mergeImmutableCartLines<T extends CartIdentityLine>(
   current: T[],
   incoming: T[],
+  options?: MergeCartLinesOptions,
 ): T[] {
-  const incomingDays = new Set(
+  const incomingMapDays = new Set(
     incoming
+      .filter((line) => isMapCartLine(line))
       .map((line) => cartItemScheduleId(line))
       .filter((id): id is string => Boolean(id)),
   )
+  const incomingGeneralDays = new Set(
+    incoming
+      .filter((line) => !isMapCartLine(line))
+      .map((line) => cartItemScheduleId(line)),
+  )
+  const replaceGeneralDays = new Set(options?.replaceGeneralDays ?? [])
   const kept = current.filter((line) => {
     if (incoming.some((item) => item.id === line.id || sameCartPlace(line, item))) {
       return false
     }
     const day = cartItemScheduleId(line)
-    if (day && incomingDays.has(day)) return false
+    if (isMapCartLine(line)) {
+      return !(day && incomingMapDays.has(day))
+    }
+    if (incomingGeneralDays.has(day)) return false
+    if (replaceGeneralDays.size > 0 && replaceGeneralDays.has(day)) return false
     return true
   })
   const nextIncoming = incoming.map((line) => {
@@ -309,6 +340,30 @@ export function projectQuantitiesForSchedule(
     }
   }
   return projected
+}
+
+/** Drop leftover `_all` / bare ticket keys when a jornada-stamped qty exists. */
+export function dropUndatedGeneralState<T extends CartIdentityLine>(
+  quantities: Record<string, number>,
+  lines: T[],
+  ticketId: string,
+  keepScheduleId?: string | null,
+): { quantities: Record<string, number>; lines: T[] } {
+  const ticket = ticketId.trim()
+  const keepDay = cartScheduleToken(keepScheduleId)
+  if (!ticket || keepDay === "all") {
+    return { quantities, lines }
+  }
+  const keepKey = cartQuantityKey(ticket, keepScheduleId)
+  const nextQuantities = { ...quantities }
+  delete nextQuantities[cartQuantityKey(ticket, null)]
+  delete nextQuantities[ticket]
+  const nextLines = lines.filter((line) => {
+    if (isMapCartLine(line) || generalLineTierId(line) !== ticket) return true
+    if (line.id === keepKey) return true
+    return Boolean(cartItemScheduleId(line))
+  })
+  return { quantities: nextQuantities, lines: nextLines }
 }
 
 export function cartMapUnitIdsForSchedule(

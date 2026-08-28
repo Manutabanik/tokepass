@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import {
   asTicketCommerceType,
+  isUndatedCheckoutOffer,
   partitionCheckoutTickets,
   resolveTicketCommerceType,
 } from "./ticket-commerce-type"
@@ -59,5 +60,11 @@ describe("ticket commerce type", () => {
       grouped.extraTickets.map((item) => item.id),
       ["c", "d"],
     )
+  })
+
+  it("treats extras and combos as undated, not jornada-scoped generals", () => {
+    assert.equal(isUndatedCheckoutOffer({ name: "General", tierType: "general" }), false)
+    assert.equal(isUndatedCheckoutOffer({ ticketType: "extra" }), true)
+    assert.equal(isUndatedCheckoutOffer({ ticketType: "combo" }), true)
   })
 })

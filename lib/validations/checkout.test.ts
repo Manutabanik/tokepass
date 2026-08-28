@@ -300,6 +300,18 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
     assert.equal("saleStartsAt" in parsed.data, false)
   })
 
+  it("accepts scheduleId as the jornada when eventDateId is missing", () => {
+    const dayId = "550e8400-e29b-41d4-a716-446655440001"
+    const parsed = CheckoutPayloadSchema.safeParse({
+      eventId,
+      buyer,
+      items: [{ tierId: generalId, quantity: 1, scheduleId: dayId }],
+    })
+    assert.equal(parsed.success, true)
+    if (!parsed.success) return
+    assert.equal(parsed.data.items?.[0]?.eventDateId, dayId)
+  })
+
   it("rejects a 9-digit DNI", () => {
     const longDni = CheckoutPayloadSchema.safeParse({
       eventId,

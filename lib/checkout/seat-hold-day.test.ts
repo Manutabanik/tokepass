@@ -77,6 +77,10 @@ describe("storefrontSelectionKey", () => {
       `seat-1::${dayB}`,
     )
     assert.equal(storefrontSelectionKey({ id: "seat-1" }), "seat-1")
+    assert.equal(
+      storefrontSelectionKey({ id: "seat-1", scheduleId: dayA }),
+      `seat-1::${dayA}`,
+    )
   })
 })
 

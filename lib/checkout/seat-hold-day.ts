@@ -20,10 +20,14 @@ export function storefrontSelectionKey(item: {
   id?: string | null
   eventDateId?: string | null
   dateId?: string | null
+  scheduleId?: string | null
 }): string {
   const id = item.id?.trim() ?? ""
   const date =
-    asHoldEventDateId(item.eventDateId) ?? asHoldEventDateId(item.dateId) ?? ""
+    asHoldEventDateId(item.scheduleId) ??
+    asHoldEventDateId(item.eventDateId) ??
+    asHoldEventDateId(item.dateId) ??
+    ""
   return date ? `${id}::${date}` : id
 }
 

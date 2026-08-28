@@ -10,7 +10,7 @@ import {
 import { useMemo, useState } from "react"
 
 import { QuantityCounter } from "@/components/public/quantity-counter"
-import { cartQuantityOnSchedule } from "@/lib/checkout/cart-item-identity"
+import { quantityForPublicTier } from "@/lib/checkout/ticket-day-groups"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { isFullPassDayId } from "@/lib/event-schedule"
@@ -343,15 +343,17 @@ function TierList({
   return (
     <div className="space-y-3">
       {tiers.map((tier) => {
-        const quantity = cartQuantityOnSchedule(
-          quantities,
-          tier.id,
-          scheduleId,
-        )
+        const quantity = quantityForPublicTier(quantities, tier, {
+          selectedDateId: scheduleId,
+          scheduleDays,
+        })
         const dayQuantities = Object.fromEntries(
           tiers.map((item) => [
             item.id,
-            cartQuantityOnSchedule(quantities, item.id, scheduleId),
+            quantityForPublicTier(quantities, item, {
+              selectedDateId: scheduleId,
+              scheduleDays,
+            }),
           ]),
         )
         const maxSelectable = generalTicketMaxQuantity({

@@ -10,7 +10,7 @@ import type { SeatSelectionContext } from "@/components/public/seat-selection-sh
 import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-clickwrap"
 import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import { Button } from "@/components/ui/button"
-import { cartLineAmount } from "@/lib/checkout/cart-lines"
+import { cartLineAmount, cartLineQuantity } from "@/lib/checkout/cart-lines"
 import { formatCartTotal } from "@/lib/format"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import {
@@ -92,9 +92,14 @@ export function CheckoutSelectionSidebar({
   const cartLines = useCheckoutStore((state) => state.lines)
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const placeCount = storefrontSelectionCount(selectedItems)
+  const cartCount = cartLines.reduce(
+    (sum, line) => sum + cartLineQuantity(line.quantity),
+    0,
+  )
   const placeTotal = storefrontSelectionTotal(selectedItems)
   const cartTotal = cartLines.reduce((sum, line) => sum + cartLineAmount(line), 0)
-  const total = Math.max(placeTotal, cartTotal)
+  const itemCount = cartLines.length > 0 ? cartCount : placeCount
+  const total = cartLines.length > 0 ? cartTotal : placeTotal
   const [isMapZoomed, setIsMapZoomed] = useState(false)
   const portalReady = useSyncExternalStore(
     () => () => {},
@@ -172,9 +177,9 @@ export function CheckoutSelectionSidebar({
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Total
             </p>
-            {placeCount > 0 ? (
+            {itemCount > 0 ? (
               <p className="text-xs text-muted-foreground">
-                {placeCount} {placeCount === 1 ? "lugar" : "lugares"}
+                {itemCount} {itemCount === 1 ? "entrada" : "entradas"}
               </p>
             ) : null}
           </div>

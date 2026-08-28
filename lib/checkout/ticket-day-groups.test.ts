@@ -21,6 +21,9 @@ import {
   listCheckoutDateCards,
   listCheckoutDayTabs,
   shouldShowCheckoutKindTabs,
+  checkoutTicketsForSelectedDay,
+  generalQuantityScheduleStamp,
+  quantityForPublicTier,
   ticketDateCartLabel,
   ticketDateSectionLabel,
   ticketDayBadgeLabel,
@@ -250,6 +253,108 @@ describe("groupTicketsByDate", () => {
     )
     assert.equal(grouped.ticketsByDate.length, 1)
     assert.equal(grouped.ticketsByDate[0]?.tickets[0]?.id, "gen")
+  })
+})
+
+describe("generalQuantityScheduleStamp", () => {
+  it("stamps unbound generals with the active jornada, not the catalog day", () => {
+    const general = tier({
+      id: "gen",
+      name: "Entrada General",
+      isFullPass: false,
+      dayId: null,
+      dateId: null,
+      tierType: "general",
+    })
+    const stamp = generalQuantityScheduleStamp({
+      selectedDateId: "d1",
+      scheduleDays: days,
+      tier: general,
+    })
+    assert.equal(stamp.scheduleId, "d1")
+    assert.equal(stamp.dateString, formatEventCartDateLong(days[0].start_time))
+  })
+
+  it("keeps extras undated so they are not tied to a day tab", () => {
+    const extra = tier({
+      id: "park",
+      name: "Estacionamiento",
+      isFullPass: false,
+      dayId: null,
+    })
+    const stamp = generalQuantityScheduleStamp({
+      selectedDateId: "d1",
+      scheduleDays: days,
+      tier: extra,
+      undated: true,
+    })
+    assert.equal(stamp.scheduleId, null)
+    assert.equal(stamp.dateString, null)
+  })
+
+  it("reads friday and saturday as independent counters for the same general", () => {
+    const general = tier({
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      name: "Entrada General",
+      isFullPass: false,
+      dayId: null,
+      dateId: null,
+      ticketType: "standard",
+      tierType: "general",
+    })
+    const friday = "550e8400-e29b-41d4-a716-446655440001"
+    const saturday = "550e8400-e29b-41d4-a716-446655440002"
+    const quantities = {
+      [`${general.id}_${friday}`]: 2,
+      [`${general.id}_${saturday}`]: 1,
+    }
+    assert.equal(
+      quantityForPublicTier(quantities, general, { selectedDateId: friday }),
+      2,
+    )
+    assert.equal(
+      quantityForPublicTier(quantities, general, { selectedDateId: saturday }),
+      1,
+    )
+  })
+
+  it("does not read a jornada key for an extra even if a day tab is selected", () => {
+    const extra = tier({
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      name: "Estacionamiento",
+      ticketType: "extra",
+      dayId: null,
+    })
+    const friday = "550e8400-e29b-41d4-a716-446655440001"
+    const quantities = {
+      [`${extra.id}_all`]: 3,
+      [`${extra.id}_${friday}`]: 9,
+    }
+    assert.equal(
+      quantityForPublicTier(quantities, extra, { selectedDateId: friday }),
+      3,
+    )
+  })
+})
+
+describe("checkoutTicketsForSelectedDay", () => {
+  it("places unbound generals on the selected jornada instead of sin-fecha", () => {
+    const general = tier({
+      id: "gen",
+      name: "Entrada General",
+      isFullPass: false,
+      dayId: null,
+      dateId: null,
+      tierType: "general",
+    })
+    const groups = checkoutTicketsForSelectedDay([general], "d1", days)
+    assert.equal(groups.length, 1)
+    assert.equal(groups[0]?.dateId, "d1")
+    assert.equal(groups[0]?.tickets[0]?.id, "gen")
+    assert.equal(
+      groups[0]?.dateLabel,
+      ticketDateSectionLabel("d1", days),
+    )
   })
 })
 

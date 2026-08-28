@@ -1,5 +1,10 @@
+import { cartQuantityOnSchedule, normalizeCartScheduleId } from "@/lib/checkout/cart-item-identity"
+import { isUndatedCheckoutOffer } from "@/lib/events/ticket-commerce-type"
 import { isFullPassDayId, normalizeDayId } from "@/lib/event-schedule"
-import { isComboOrPassOffer } from "@/lib/checkout/ticket-offer-kind"
+import {
+  isComboOrPassOffer,
+  type PublicTicketOfferInput,
+} from "@/lib/checkout/ticket-offer-kind"
 import { isDaySpecificTicket } from "@/lib/inventory/day-ticket-coverage"
 import {
   formatEventCartDate,
@@ -119,6 +124,77 @@ export function scheduleDayCartLabel(
   if (!dateId) return ""
   const day = scheduleDays.find((item) => item.id === dateId)
   return day ? formatEventCartDateLong(day.start_time) : ""
+}
+
+/**
+ * Stamp for +/- of generals: the active jornada, not the catalog day_id.
+ * Extras / combos / abonos stay undated so they are not tied to a tab.
+ */
+export function generalQuantityScheduleStamp(input: {
+  selectedDateId?: string | null
+  scheduleDays?: ScheduleDay[]
+  tier?: PublicTicketOfferInput | null
+  undated?: boolean
+}): { scheduleId: string | null; dateString: string | null } {
+  const tier = input.tier ?? {}
+  const meta = resolveTicketDateMeta(tier)
+  const comboOrPass = meta.isFullPass || isComboOrPassOffer(tier)
+  const undated = input.undated || comboOrPass || isUndatedCheckoutOffer(tier)
+  if (undated) {
+    return {
+      scheduleId: null,
+      dateString: comboOrPass ? "Todos los días" : null,
+    }
+  }
+  const scheduleId =
+    normalizeCartScheduleId(input.selectedDateId) ??
+    normalizeCartScheduleId(meta.dateId)
+  const dateString =
+    scheduleDayCartLabel(scheduleId, input.scheduleDays ?? []) ||
+    ticketDateCartLabel(tier, input.scheduleDays ?? []) ||
+    null
+  return { scheduleId, dateString: dateString || null }
+}
+
+/** Read the same key `updateQuantity` / `setGeneralQuantity` write. */
+export function quantityForPublicTier(
+  quantities: Record<string, number> | null | undefined,
+  tier: { id: string } & PublicTicketOfferInput,
+  ctx: {
+    selectedDateId?: string | null
+    scheduleDays?: ScheduleDay[]
+    undated?: boolean
+  } = {},
+): number {
+  const stamp = generalQuantityScheduleStamp({
+    selectedDateId: ctx.selectedDateId,
+    scheduleDays: ctx.scheduleDays,
+    tier,
+    undated: ctx.undated,
+  })
+  return cartQuantityOnSchedule(quantities, tier.id, stamp.scheduleId)
+}
+
+/** One jornada group: unbound generals belong to the selected day, not "sin-fecha". */
+export function checkoutTicketsForSelectedDay(
+  tickets: TicketSelectorTier[],
+  activeDateId: string | null,
+  scheduleDays: ScheduleDay[] = [],
+): TicketDayGroup[] {
+  const visible = tickets.filter((tier) =>
+    ticketVisibleOnCheckoutDay(tier, activeDateId, scheduleDays),
+  )
+  if (visible.length === 0) return []
+  const dateId = normalizeCartScheduleId(activeDateId)
+  return [
+    {
+      dateId: dateId ?? FULL_PASS_TAB_ID,
+      dateLabel: dateId
+        ? ticketDateSectionLabel(dateId, scheduleDays)
+        : "",
+      tickets: visible,
+    },
+  ]
 }
 
 export const FULL_PASS_TAB_ID = "full_pass"

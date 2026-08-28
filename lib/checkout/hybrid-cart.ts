@@ -33,8 +33,18 @@ export function checkoutItemElementId(item: CheckoutCartItem): string | null {
   return item.elementId || item.element_id || null
 }
 
-export function checkoutItemEventDateId(item: CheckoutCartItem): string | null {
-  const dateId = item.eventDateId || item.event_date_id || item.dateId || null
+export function checkoutItemEventDateId(item: {
+  eventDateId?: string | null
+  event_date_id?: string | null
+  dateId?: string | null
+  scheduleId?: string | null
+}): string | null {
+  const dateId =
+    item.eventDateId ||
+    item.event_date_id ||
+    item.dateId ||
+    item.scheduleId ||
+    null
   return dateId?.trim() || null
 }
 
@@ -117,16 +127,20 @@ export function toReserveRpcItem(
 export function quoteHybridCartTotal(input: {
   items: CheckoutCartItem[]
   unitPriceByTier: Map<string, number>
+  unitPriceByIndex?: Array<number | undefined>
   phasesByTier?: Map<string, PublicTicketPhase[]>
 }): { ok: true; total: number } | { ok: false; error: string } {
   let totalCents = 0
-  for (const item of input.items) {
+  for (const [index, item] of input.items.entries()) {
     const tierId = checkoutItemTierId(item)
     const phases = input.phasesByTier?.get(tierId) ?? []
     const decision = decidePhaseCart(phases, item.quantity)
     const phasePrice =
       decision.kind === "ok" ? Number(decision.phase.price) : null
-    const unit = phasePrice ?? input.unitPriceByTier.get(tierId)
+    const unit =
+      input.unitPriceByIndex?.[index] ??
+      phasePrice ??
+      input.unitPriceByTier.get(tierId)
     if (unit == null || !Number.isFinite(unit) || unit < 0) {
       return { ok: false, error: CHECKOUT_PRICES_CHANGED_ERROR }
     }

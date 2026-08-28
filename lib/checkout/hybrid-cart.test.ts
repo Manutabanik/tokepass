@@ -42,6 +42,26 @@ describe("hybrid cart quote", () => {
     assert.equal(amountsMatch(55000, 55000), true)
   })
 
+  it("keeps a per-line zone price when two seats share a tier", () => {
+    const fridaySeat = {
+      ...mapped,
+      seatingUnitId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      seat_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    }
+    const saturdaySeat = {
+      ...mapped,
+      seatingUnitId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      seat_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    }
+    const quoted = quoteHybridCartTotal({
+      items: [fridaySeat, saturdaySeat],
+      unitPriceByTier: new Map([[mapped.tierId, 30000]]),
+      unitPriceByIndex: [30000, 100000],
+    })
+    assert.equal(quoted.ok, true)
+    if (quoted.ok) assert.equal(quoted.total, 130000)
+  })
+
   it("rejects a cart whose live ticket_tiers price is gone", () => {
     const quoted = quoteHybridCartTotal({
       items: [general],
@@ -90,6 +110,15 @@ describe("hybrid cart quote", () => {
     })
     assert.equal(rpc.event_date_id, friday)
     assert.equal(rpc.eventDateId, friday)
+  })
+
+  it("reads scheduleId when eventDateId is missing", () => {
+    const friday = "550e8400-e29b-41d4-a716-446655440001"
+    const rpc = toReserveRpcItem({
+      ...mapped,
+      scheduleId: friday,
+    } as typeof mapped & { scheduleId: string })
+    assert.equal(rpc.event_date_id, friday)
   })
 })
 

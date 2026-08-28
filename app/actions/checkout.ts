@@ -962,7 +962,8 @@ async function quoteCheckoutFromDatabase(
     }
   }
 
-  for (const item of items) {
+  const unitPriceByIndex: Array<number | undefined> = items.map(() => undefined)
+  for (const [index, item] of items.entries()) {
     const tierId = checkoutItemTierId(item)
     const seatId = checkoutItemSeatId(item)
     const hints = trustedReserveZoneHints({
@@ -982,7 +983,7 @@ async function quoteCheckoutFromDatabase(
     if (error || data == null || !Number.isFinite(Number(data))) {
       continue
     }
-    unitPriceByTier.set(tierId, Number(data))
+    unitPriceByIndex[index] = Number(data)
   }
 
   if (unitPriceByTier.size < tierIds.length) {
@@ -992,6 +993,7 @@ async function quoteCheckoutFromDatabase(
   return quoteHybridCartTotal({
     items,
     unitPriceByTier,
+    unitPriceByIndex,
     phasesByTier,
   })
 }

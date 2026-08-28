@@ -167,9 +167,24 @@ function normalizeIncomingCartItem(raw: unknown) {
       item.is_mapped_selection,
       item.isMappedSelection,
     ),
-    eventDateId: firstString(item.eventDateId, item.event_date_id, item.dateId),
-    event_date_id: firstString(item.event_date_id, item.eventDateId, item.dateId),
-    dateId: firstString(item.dateId, item.eventDateId, item.event_date_id),
+    eventDateId: firstString(
+      item.eventDateId,
+      item.event_date_id,
+      item.dateId,
+      item.scheduleId,
+    ),
+    event_date_id: firstString(
+      item.event_date_id,
+      item.eventDateId,
+      item.dateId,
+      item.scheduleId,
+    ),
+    dateId: firstString(
+      item.dateId,
+      item.eventDateId,
+      item.event_date_id,
+      item.scheduleId,
+    ),
   }
 }
 
@@ -486,6 +501,7 @@ export type CheckoutCartItemInput = {
   eventDateId?: string | null
   event_date_id?: string | null
   dateId?: string | null
+  scheduleId?: string | null
 }
 export type CheckoutAddonItem = CheckoutPayload["addons"][number]
 

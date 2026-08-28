@@ -87,6 +87,15 @@ export function resolveTicketCommerceType(
   return "standard"
 }
 
+/** Extras / combos / abonos are not scoped to the jornada tab. */
+export function isUndatedCheckoutOffer(
+  ticket: TicketCommerceSource | null | undefined,
+): boolean {
+  if (!ticket) return false
+  const kind = resolveTicketCommerceType(ticket)
+  return kind === "extra" || kind === "combo"
+}
+
 export function partitionCheckoutTickets<T extends TicketCommerceSource>(
   tickets: readonly T[],
 ): {

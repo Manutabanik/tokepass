@@ -458,6 +458,58 @@ describe("storefront-selection", () => {
     assert.equal(hydrated[0]?.eventDateId, dayA)
   })
 
+  it("does not overlay the active map onto a seat from another jornada", () => {
+    const dayA = "550e8400-e29b-41d4-a716-446655440001"
+    const dayB = "550e8400-e29b-41d4-a716-446655440002"
+    const map = emptyVenueMap()
+    map.elements = [
+      {
+        id: "tbl-18",
+        type: "round_table",
+        label: "Mesa 18",
+        category: "commercial",
+        sectorName: "Platea",
+        groupName: "Platea",
+        x: 10,
+        y: 10,
+        width: 28,
+        height: 28,
+        rotation: 0,
+        price: 8000,
+        color: "#22d3ee",
+        opacity: 1,
+        chairCount: 4,
+        sideA: 0,
+        sideB: 0,
+        sellMode: "group",
+        capacity: 4,
+        seats: [],
+        ticketTypeId: "tier-viernes",
+      },
+    ]
+    const hydrated = hydrateStorefrontItemsFromMap(
+      [
+        {
+          id: "tbl-18",
+          name: "Grada Amarilla Sabado",
+          type: "table",
+          price: 100000,
+          capacity: 1,
+          ticketTierId: "tier-sabado",
+          scheduleId: dayB,
+          eventDateId: dayB,
+          dateId: dayB,
+        },
+      ],
+      map,
+      { "tier-viernes": 30000 },
+      dayA,
+    )
+    assert.equal(hydrated[0]?.price, 100000)
+    assert.equal(hydrated[0]?.ticketTierId, "tier-sabado")
+    assert.equal(hydrated[0]?.eventDateId, dayB)
+  })
+
   it("agrupa asientos por sector y fila sin repetir numeros", () => {
     const groups = formatStorefrontSelectionGroups([
       {

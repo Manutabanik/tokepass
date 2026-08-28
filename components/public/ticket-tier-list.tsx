@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { QuantityCounter } from "@/components/public/quantity-counter"
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
-import { cartQuantityOnSchedule } from "@/lib/checkout/cart-item-identity"
+import { quantityForPublicTier } from "@/lib/checkout/ticket-day-groups"
 import { generalTicketMaxQuantity } from "@/lib/checkout/general-ticket-quantity"
 import { resolveStockScarcity } from "@/lib/checkout/stock-scarcity"
 import { ticketUsesMapSelector } from "@/lib/checkout/public-ticket-view"
@@ -60,6 +60,7 @@ export function TicketTierList({
   maxTicketsPerUser = null,
   isPending,
   scheduleId = null,
+  scheduleDays = [],
   onQuantityChange,
   onSelectSeat,
   selectedSeatMap = {},
@@ -106,15 +107,17 @@ export function TicketTierList({
             </h4>
           ) : null}
           {group.tiers.map((tier) => {
-            const quantity = cartQuantityOnSchedule(
-              quantities,
-              tier.id,
-              scheduleId,
-            )
+            const quantity = quantityForPublicTier(quantities, tier, {
+              selectedDateId: scheduleId,
+              scheduleDays,
+            })
             const dayQuantities = Object.fromEntries(
               pool.map((item) => [
                 item.id,
-                cartQuantityOnSchedule(quantities, item.id, scheduleId),
+                quantityForPublicTier(quantities, item, {
+                  selectedDateId: scheduleId,
+                  scheduleDays,
+                }),
               ]),
             )
             const max = generalTicketMaxQuantity({

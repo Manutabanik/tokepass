@@ -10,6 +10,7 @@ import {
   type BundleType,
 } from "@/lib/inventory/flexible-bundles"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
+import { quantityForPublicTier } from "@/lib/checkout/ticket-day-groups"
 import { isTicketSoldOut } from "@/lib/checkout/ticket-stock"
 import { cn } from "@/lib/utils"
 
@@ -47,7 +48,9 @@ export function BundleCardSelector({
           <li key={bundle.id}>
             <BundlePromoCard
               bundle={bundle}
-              selected={ (quantities[bundle.id] ?? 0) > 0 }
+              selected={
+                quantityForPublicTier(quantities, bundle, { undated: true }) > 0
+              }
               isPending={isPending}
               onBuy={() => onBuy(bundle.id)}
             />

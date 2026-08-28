@@ -6,6 +6,8 @@ import {
   cartLineSnapshot,
   cartMapUnitIdsForSchedule,
   cartQuantityOnSchedule,
+  cartScheduleToken,
+  dropUndatedGeneralState,
   freezeCartLineSnapshot,
   mergeImmutableCartLines,
   parseCartCompositeItemId,
@@ -16,6 +18,15 @@ import {
 const friday = "550e8400-e29b-41d4-a716-446655440001"
 const saturday = "550e8400-e29b-41d4-a716-446655440002"
 const general = "550e8400-e29b-41d4-a716-446655440099"
+
+describe("cartScheduleToken", () => {
+  it("collapses poison tab tokens so they cannot diverge from _all", () => {
+    assert.equal(cartScheduleToken("sin-fecha"), "all")
+    assert.equal(cartScheduleToken("full_pass"), "all")
+    assert.equal(cartScheduleToken("all"), "all")
+    assert.equal(cartScheduleToken(friday), friday)
+  })
+})
 
 describe("cartCompositeItemId", () => {
   it("joins ticket and schedule ids", () => {
@@ -97,6 +108,32 @@ describe("upsertGeneralCartLine", () => {
 })
 
 describe("mergeImmutableCartLines", () => {
+  it("does not replace a dated general with an undated rebuild", () => {
+    const current = [
+      {
+        id: cartCompositeItemId(general, friday),
+        ticketTierId: general,
+        name: "General",
+        quantity: 2,
+        price: 10000,
+        scheduleId: friday,
+        dateString: "Viernes 13 Nov",
+      },
+    ]
+    const incoming = [
+      {
+        id: cartCompositeItemId(general, null),
+        ticketTierId: general,
+        name: "General",
+        quantity: 1,
+        price: 10000,
+      },
+    ]
+    const merged = mergeImmutableCartLines(current, incoming)
+    assert.equal(merged.length, 2)
+    assert.ok(merged.some((line) => line.scheduleId === friday && line.quantity === 2))
+  })
+
   it("keeps the other day's lines when the active tab rebuilds", () => {
     const current = [
       {
@@ -158,6 +195,62 @@ describe("mergeImmutableCartLines", () => {
     assert.equal(merged[0]?.id, cartCompositeItemId(general, friday, "seat-1"))
     assert.equal(merged[0]?.dateString, "Viernes 13 Nov")
     assert.equal(merged[0]?.seatLabel, "Mesa 04")
+  })
+
+  it("does not drop another day's general when a map place arrives", () => {
+    const current = [
+      {
+        id: cartCompositeItemId(general, friday),
+        ticketTierId: general,
+        name: "General",
+        quantity: 2,
+        price: 10000,
+        scheduleId: friday,
+        dateString: "Viernes 13 Nov",
+      },
+      {
+        id: cartCompositeItemId(general, saturday),
+        ticketTierId: general,
+        name: "General",
+        quantity: 1,
+        price: 10000,
+        scheduleId: saturday,
+        dateString: "Sábado 14 Nov",
+      },
+    ]
+    const incoming = [
+      {
+        id: cartCompositeItemId(general, saturday, "tablon-16"),
+        ticketTierId: general,
+        name: "Grada",
+        quantity: 1,
+        price: 30000,
+        elementId: "tablon-16",
+        scheduleId: saturday,
+      },
+      current[0]!,
+    ]
+    const merged = mergeImmutableCartLines(current, incoming)
+    assert.ok(merged.some((line) => line.scheduleId === friday && !line.elementId))
+    assert.ok(merged.some((line) => line.scheduleId === saturday && !line.elementId))
+    assert.ok(merged.some((line) => line.elementId === "tablon-16"))
+  })
+
+  it("drops a cleared general when that jornada is rebuilt", () => {
+    const current = [
+      {
+        id: cartCompositeItemId(general, friday),
+        ticketTierId: general,
+        name: "General",
+        quantity: 2,
+        price: 10000,
+        scheduleId: friday,
+      },
+    ]
+    const merged = mergeImmutableCartLines(current, [], {
+      replaceGeneralDays: [friday],
+    })
+    assert.equal(merged.length, 0)
   })
 })
 
@@ -273,6 +366,44 @@ describe("projectQuantitiesForSchedule", () => {
       projectQuantitiesForSchedule({}, lines, friday)[general] ?? 0,
       0,
     )
+  })
+})
+
+describe("dropUndatedGeneralState", () => {
+  it("removes leftover _all qty and lines once a jornada key exists", () => {
+    const dated = upsertGeneralCartLine([], {
+      ticketTierId: general,
+      name: "General",
+      price: 1,
+      quantity: 2,
+      scheduleId: friday,
+      dateString: "Vie",
+    })
+    const mixed = [
+      ...dated,
+      {
+        id: cartCompositeItemId(general, null),
+        ticketTierId: general,
+        name: "General",
+        quantity: 1,
+        price: 1,
+      },
+    ]
+    const cleaned = dropUndatedGeneralState(
+      {
+        [cartCompositeItemId(general, friday)]: 2,
+        [cartCompositeItemId(general, null)]: 1,
+        [general]: 1,
+      },
+      mixed,
+      general,
+      friday,
+    )
+    assert.equal(cleaned.quantities[cartCompositeItemId(general, friday)], 2)
+    assert.equal(cleaned.quantities[cartCompositeItemId(general, null)], undefined)
+    assert.equal(cleaned.quantities[general], undefined)
+    assert.equal(cleaned.lines.length, 1)
+    assert.equal(cleaned.lines[0]?.scheduleId, friday)
   })
 })
 

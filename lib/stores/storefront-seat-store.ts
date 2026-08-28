@@ -3,6 +3,7 @@
 import { create } from "zustand"
 import { createJSONStorage, persist } from "zustand/middleware"
 
+import { cartItemScheduleId } from "@/lib/checkout/cart-line-stamp"
 import { storefrontSelectionKey } from "@/lib/checkout/seat-hold-day"
 import {
   evaluateStorefrontSelectionLimit,
@@ -166,7 +167,7 @@ function deriveLayoutSeats(items: StorefrontSelectedItem[]): StorefrontLayoutSea
       sectorName: item.sectorName ?? item.name,
       price: item.price,
       color: item.color ?? "#34d399",
-      eventDateId: item.eventDateId ?? item.dateId,
+      eventDateId: cartItemScheduleId(item) ?? undefined,
       label: item.seatLabel ?? item.name,
     }))
 }
@@ -364,7 +365,7 @@ export const useStorefrontSeatStore = create<StorefrontSeatState>()(
     const others = get().selectedItems.filter((item) => {
       if (item.type !== "seat") return true
       if (!incomingDate) return false
-      return (item.eventDateId ?? item.dateId) !== incomingDate
+      return cartItemScheduleId(item) !== incomingDate
     })
     const seen = new Set<string>()
     const nextSeats = seats
