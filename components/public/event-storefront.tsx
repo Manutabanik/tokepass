@@ -59,11 +59,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll"
-import {
-  releaseGaCartHolds,
-  releaseSeatingUnitCartHold,
-} from "@/app/actions/checkout"
-import { releaseWaitingRoomPass } from "@/app/actions/waiting-room"
+import { releaseCheckoutCartHolds } from "@/lib/checkout/release-cart-holds"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import { useStorefrontChromeStore } from "@/lib/stores/storefront-chrome-store"
 import {
@@ -330,10 +326,7 @@ export function EventStorefront({
 
   function leaveCheckout() {
     const checkout = useCheckoutStore.getState()
-    const seat = checkout.selectedSeat
-    void releaseGaCartHolds(event.id)
-    if (seat) void releaseSeatingUnitCartHold(event.id, seat.seatingUnitId)
-    void releaseWaitingRoomPass()
+    releaseCheckoutCartHolds(event.id)
     checkout.clearCart()
     checkout.clearBuyerData()
     checkout.setViewMode("info")

@@ -1095,14 +1095,6 @@ export function CheckoutTunnel({
     })
   }
 
-  function requestIdentity(action: "open_map" | "pay" | "continue") {
-    persistCheckoutCart()
-    // Mapeamos "continue" a "pay" para mantener compatibilidad con CheckoutPendingAction
-    const pendingAction = action === "continue" ? "pay" : action
-    useCheckoutStore.getState().setPendingAction(pendingAction)
-    useCheckoutStore.getState().setIdentityOpen(true)
-  }
-
   async function ensureGuestAuthForHold(): Promise<boolean> {
     const store = useCheckoutStore.getState()
     if (!hasCheckoutIdentity(currentUserId, store.mode)) {
@@ -2795,7 +2787,7 @@ export function CheckoutTunnel({
     }
     setShowSeatFlow(true)
     if (!identityReady) {
-      requestIdentity("open_map")
+      useCheckoutStore.getState().chooseGuest(eventId, eventSlug)
     }
   }
 
@@ -2959,7 +2951,7 @@ export function CheckoutTunnel({
         previewKey,
         checkoutSessionId(),
       )
-      if (!hold.success && hold.error !== "auth_required") {
+      if (!hold.success) {
         if (hold.error === HIGH_DEMAND_LOCK_TIMEOUT) {
           toast.error(HIGH_DEMAND_LOCK_MESSAGE)
           return false
@@ -2969,6 +2961,7 @@ export function CheckoutTunnel({
             hold.error === "not_materialized"
             ? SECTOR_NOT_CONFIGURED_MESSAGE
             : hold.error === "out_of_stock" ||
+                hold.error === "auth_required" ||
                 isSeatUnavailableError(hold.error)
               ? SEAT_UNAVAILABLE_MESSAGE
               : hold.error,
@@ -3064,8 +3057,7 @@ export function CheckoutTunnel({
                 ? SEAT_UNAVAILABLE_MESSAGE
                 : hold.error,
           )
-          if (hold.error === "auth_required") requestIdentity("open_map")
-          else router.refresh()
+          router.refresh()
           return
         }
         const units = await getEventSeatingUnitsForSector(

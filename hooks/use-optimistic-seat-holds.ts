@@ -8,7 +8,6 @@ import {
   releaseSeatingUnitCartHold,
 } from "@/app/actions/checkout"
 import { holdableStorefrontItems } from "@/lib/checkout/holdable-selection"
-import { hasCheckoutAuthSession } from "@/lib/checkout/guest-session"
 import {
   CHECKOUT_NO_STOCK_TOAST,
   CHECKOUT_TOAST_ERROR_STYLE,
@@ -25,7 +24,10 @@ import {
   storefrontSelectionKey,
 } from "@/lib/checkout/seat-hold-day"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
-import { useCheckoutStore } from "@/lib/stores/checkout-store"
+import {
+  getCheckoutHoldSessionId,
+  useCheckoutStore,
+} from "@/lib/stores/checkout-store"
 import {
   useStorefrontSeatStore,
   type StorefrontSelectedItem,
@@ -71,20 +73,19 @@ export function useOptimisticSeatHolds({
     const holdable = holdableStorefrontItems(selectedItems)
     const nextIds = new Set(holdable.map((item) => storefrontSelectionKey(item)))
     const held = heldByLayoutIdRef.current
+    const sessionId = getCheckoutHoldSessionId()
 
     for (const [selectionKey, unitId] of [...held.entries()]) {
       if (nextIds.has(selectionKey)) continue
       const layoutId = selectionKey.split("::")[0] ?? selectionKey
       held.delete(selectionKey)
       applyOccupancyPatch({ [layoutId]: "available" })
-      void releaseSeatingUnitCartHold(eventId, unitId)
+      void releaseSeatingUnitCartHold(eventId, unitId, sessionId)
     }
 
     if (holdable.length === 0) return
 
     void (async () => {
-      if (!(await hasCheckoutAuthSession())) return
-
       for (const item of holdable) {
         const selectionKey = storefrontSelectionKey(item)
         if (held.has(selectionKey) || inFlightRef.current.has(selectionKey)) continue
@@ -100,20 +101,18 @@ export function useOptimisticSeatHolds({
           item.id,
           previewKey,
           eventDateId,
+          sessionId,
         )
           .then((hold) => {
             if (!hold.success || !hold.seatingUnitId) {
-              if (hold.success === false && hold.error === "auth_required") {
-                applyOccupancyPatch({ [item.id]: "available" })
-                return null
-              }
               applyOccupancyPatch({
-                [item.id]: hold.success === false && hold.error === "out_of_stock"
-                  ? "occupied"
-                  : "available",
+                [item.id]:
+                  hold.success === false && hold.error === "out_of_stock"
+                    ? "occupied"
+                    : "available",
               })
               useStorefrontSeatStore.getState().removeSelectedItem(selectionKey)
-              if (hold.success === false && hold.error !== "auth_required") {
+              if (hold.success === false) {
                 useCheckoutStore.getState().removeItem(selectionKey)
                 console.error("[optimistic-seat-hold] reserva rechazada", {
                   layoutItemId: item.id,
@@ -134,7 +133,11 @@ export function useOptimisticSeatHolds({
                 (entry) => storefrontSelectionKey(entry) === selectionKey,
               )
             if (!stillSelected) {
-              void releaseSeatingUnitCartHold(eventId, hold.seatingUnitId)
+              void releaseSeatingUnitCartHold(
+                eventId,
+                hold.seatingUnitId,
+                sessionId,
+              )
               applyOccupancyPatch({ [item.id]: "available" })
               return null
             }
@@ -162,10 +165,11 @@ export function useOptimisticSeatHolds({
     if (previousEventId === eventId) return
     eventIdRef.current = eventId
     const held = heldByLayoutIdRef.current
+    const sessionId = getCheckoutHoldSessionId()
     for (const [selectionKey, unitId] of held.entries()) {
       const layoutId = selectionKey.split("::")[0] ?? selectionKey
       applyOccupancyPatch({ [layoutId]: "available" })
-      void releaseSeatingUnitCartHold(previousEventId, unitId)
+      void releaseSeatingUnitCartHold(previousEventId, unitId, sessionId)
     }
     held.clear()
     inFlightRef.current.clear()

@@ -15,10 +15,19 @@ async function findProfileIdByEmail(
   admin: AdminClient,
   email: string,
 ): Promise<string | null> {
+  const exact = await admin
+    .from("profiles")
+    .select("id")
+    .eq("email", email)
+    .limit(1)
+    .maybeSingle()
+  if (exact.data?.id) return exact.data.id
+
   const { data } = await admin
     .from("profiles")
     .select("id")
     .ilike("email", email)
+    .limit(1)
     .maybeSingle()
   return data?.id ?? null
 }
@@ -76,15 +85,10 @@ export async function resolveInvisibleCheckoutBuyer(
 
   try {
     const admin = createAdminClient()
-    const { data: existing } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("email", email)
-      .maybeSingle()
-
-    if (existing?.id) {
-      await backfillInvisibleProfile(admin, existing.id, buyer, email)
-      return { ok: true, userId: existing.id, signedIn: false }
+    const existingId = await findProfileIdByEmail(admin, email)
+    if (existingId) {
+      await backfillInvisibleProfile(admin, existingId, buyer, email)
+      return { ok: true, userId: existingId, signedIn: false }
     }
 
     const password = `G.${crypto.randomUUID()}${crypto.randomUUID()}`
@@ -110,9 +114,14 @@ export async function resolveInvisibleCheckoutBuyer(
         message: "guest_user_create_failed",
         error: createError?.message,
       })
+      const alreadyRegistered = /already|registered|exists/i.test(
+        createError?.message ?? "",
+      )
       return {
         ok: false,
-        error: "No se pudo preparar tu compra. Probá de nuevo.",
+        error: alreadyRegistered
+          ? "Ese mail ya tiene cuenta. Ingresá para pagar."
+          : "No se pudo preparar tu compra. Probá de nuevo.",
       }
     }
 

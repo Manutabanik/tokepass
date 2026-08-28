@@ -476,11 +476,16 @@ async function transferGuestHoldsToBuyer(input: {
   eventId: string
   sessionId?: string | null
   buyerId: string
-}) {
+}): Promise<{ ok: true } | { ok: false; error: string }> {
   const session = normalizeCheckoutHoldSessionId(input.sessionId)
-  if (!session || session === input.buyerId) return
+  if (!session || session === input.buyerId) return { ok: true }
   const admin = tryCreateAdminClient()
-  if (!admin) return
+  if (!admin) {
+    return {
+      ok: false,
+      error: "No se pudo abrir la reserva temporal. Probá de nuevo.",
+    }
+  }
 
   const { error } = await admin.rpc("transfer_guest_cart_holds", {
     p_event_id: input.eventId,
@@ -491,24 +496,11 @@ async function transferGuestHoldsToBuyer(input: {
     error &&
     /could not find|schema cache|does not exist|pgrst202/i.test(error.message)
   ) {
-    await Promise.all([
-      admin
-        .from("event_ga_cart_holds")
-        .update({ owner_id: input.buyerId })
-        .eq("event_id", input.eventId)
-        .eq("owner_id", session),
-      admin
-        .from("seat_holds")
-        .update({ owner_id: input.buyerId })
-        .eq("event_id", input.eventId)
-        .eq("user_session_id", session),
-      admin
-        .from("event_seating_units")
-        .update({ reserved_by: input.buyerId })
-        .eq("event_id", input.eventId)
-        .eq("reserved_by", session),
-    ])
-    return
+    return fallbackTransferGuestHolds(admin, {
+      eventId: input.eventId,
+      session,
+      buyerId: input.buyerId,
+    })
   }
   if (error) {
     logger.error({
@@ -517,7 +509,114 @@ async function transferGuestHoldsToBuyer(input: {
       eventId: input.eventId,
       error: error.message,
     })
+    return {
+      ok: false,
+      error: "No se pudo vincular tu reserva. Probá de nuevo.",
+    }
   }
+  return { ok: true }
+}
+
+async function fallbackTransferGuestHolds(
+  admin: NonNullable<ReturnType<typeof tryCreateAdminClient>>,
+  input: { eventId: string; session: string; buyerId: string },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data: guestHolds, error: listError } = await admin
+    .from("event_ga_cart_holds")
+    .select("id, tier_id, quantity, reserved_until")
+    .eq("event_id", input.eventId)
+    .eq("owner_id", input.session)
+  if (listError) {
+    logger.error({
+      context: "checkout/guest-hold",
+      message: "transfer_ga_list_failed",
+      eventId: input.eventId,
+      error: listError.message,
+    })
+    return {
+      ok: false,
+      error: "No se pudo vincular tu reserva. Probá de nuevo.",
+    }
+  }
+
+  for (const hold of guestHolds ?? []) {
+    const { data: existing } = await admin
+      .from("event_ga_cart_holds")
+      .select("id, quantity, reserved_until")
+      .eq("event_id", input.eventId)
+      .eq("owner_id", input.buyerId)
+      .eq("tier_id", hold.tier_id)
+      .maybeSingle()
+    if (existing?.id) {
+      const { error: mergeError } = await admin
+        .from("event_ga_cart_holds")
+        .update({
+          quantity: existing.quantity + hold.quantity,
+          reserved_until:
+            existing.reserved_until > hold.reserved_until
+              ? existing.reserved_until
+              : hold.reserved_until,
+        })
+        .eq("id", existing.id)
+      if (mergeError) {
+        return {
+          ok: false,
+          error: "No se pudo vincular tu reserva. Probá de nuevo.",
+        }
+      }
+      await admin.from("event_ga_cart_holds").delete().eq("id", hold.id)
+      continue
+    }
+    const { error: moveError } = await admin
+      .from("event_ga_cart_holds")
+      .update({ owner_id: input.buyerId })
+      .eq("id", hold.id)
+    if (moveError) {
+      return {
+        ok: false,
+        error: "No se pudo vincular tu reserva. Probá de nuevo.",
+      }
+    }
+  }
+
+  const [seats, units] = await Promise.all([
+    admin
+      .from("seat_holds")
+      .update({ owner_id: input.buyerId })
+      .eq("event_id", input.eventId)
+      .eq("user_session_id", input.session),
+    admin
+      .from("event_seating_units")
+      .update({ reserved_by: input.buyerId })
+      .eq("event_id", input.eventId)
+      .eq("reserved_by", input.session),
+  ])
+  if (seats.error || units.error) {
+    logger.error({
+      context: "checkout/guest-hold",
+      message: "transfer_seat_fallback_failed",
+      eventId: input.eventId,
+      error: seats.error?.message ?? units.error?.message,
+    })
+    return {
+      ok: false,
+      error: "No se pudo vincular tu reserva. Probá de nuevo.",
+    }
+  }
+  return { ok: true }
+}
+
+async function adoptGuestHoldsForUser(input: {
+  eventId?: string | null
+  sessionId?: string | null
+  userId: string
+}) {
+  if (!input.eventId) return { ok: true as const }
+  return transferGuestHoldsToBuyer({
+    eventId: input.eventId,
+    sessionId: input.sessionId,
+    buyerId: input.userId,
+  })
 }
 
 async function resolveCheckoutEventAccess(input: {
@@ -1318,6 +1417,16 @@ export async function holdSeatingUnitForCart(
   if (!owner.ok) {
     return { success: false, error: owner.error }
   }
+  if (owner.userId) {
+    const adopted = await adoptGuestHoldsForUser({
+      eventId,
+      sessionId,
+      userId: owner.userId,
+    })
+    if (!adopted.ok) {
+      return { success: false, error: adopted.error }
+    }
+  }
 
   const access = await resolveCheckoutEventAccess({
     eventId,
@@ -1420,6 +1529,16 @@ export async function holdSeat(
   const owner = await resolveHoldOwner(parsed.data.sessionId)
   if (!owner.ok) {
     return { success: false, error: owner.error }
+  }
+  if (owner.userId) {
+    const adopted = await adoptGuestHoldsForUser({
+      eventId: parsed.data.eventId,
+      sessionId: parsed.data.sessionId,
+      userId: owner.userId,
+    })
+    if (!adopted.ok) {
+      return { success: false, error: adopted.error }
+    }
   }
 
   const allowed = !(await cartHoldRateLimited(owner.ownerId))
@@ -1713,6 +1832,16 @@ export async function holdSeatingUnitForCartByLayoutItem(
   const owner = await resolveHoldOwner(sessionId)
   if (!owner.ok) {
     return { success: false, error: owner.error }
+  }
+  if (owner.userId) {
+    const adopted = await adoptGuestHoldsForUser({
+      eventId,
+      sessionId,
+      userId: owner.userId,
+    })
+    if (!adopted.ok) {
+      return { success: false, error: adopted.error }
+    }
   }
 
   const access = await resolveCheckoutEventAccess({
@@ -2087,6 +2216,16 @@ async function executeLockTickets(
   const owner = await resolveHoldOwner(sessionId)
   if (!owner.ok) {
     return { success: false, error: owner.error }
+  }
+  if (owner.userId) {
+    const adopted = await adoptGuestHoldsForUser({
+      eventId,
+      sessionId,
+      userId: owner.userId,
+    })
+    if (!adopted.ok) {
+      return { success: false, error: adopted.error }
+    }
   }
 
   const access = await resolveCheckoutEventAccess({
@@ -3088,11 +3227,15 @@ export async function startCheckoutWithPayment(
   const seatingItems = cartItems.filter((item) => isMappedCheckoutItem(item))
 
   const user = { id: invisible.userId }
-  await transferGuestHoldsToBuyer({
+  const transferred = await transferGuestHoldsToBuyer({
     eventId: payload.eventId,
     sessionId: payload.cartSessionId,
     buyerId: user.id,
   })
+  if (!transferred.ok) {
+    await recordCheckoutFailure(ctx)
+    return { success: false, error: transferred.error }
+  }
 
   const checkoutAllowed = await consumeNamedRateLimit("checkoutUser", user.id)
   if (!checkoutAllowed) {
@@ -3546,7 +3689,8 @@ export async function startCheckoutWithPayment(
       const purchased = await db.rpc("purchase_held_seats_tx", {
         p_event_id: payload.eventId,
         p_owner_id: user.id,
-        p_session_id: user.id,
+        p_session_id:
+          normalizeCheckoutHoldSessionId(payload.cartSessionId) ?? user.id,
         p_items: rpcItems,
         p_promoter_id: promoterId,
         p_holder_dni: buyer.buyerDni,

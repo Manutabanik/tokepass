@@ -957,6 +957,10 @@ export const useCheckoutStore = create<CheckoutState>()(
   ),
 )
 
+export function getCheckoutHoldSessionId() {
+  return useCheckoutStore.getState().ensureCartSessionId()
+}
+
 export function useIsGuestCheckout(currentUserId?: string | null) {
   const mode = useCheckoutStore((state) => state.mode)
   const isGuest = useCheckoutStore((state) => state.isGuest)

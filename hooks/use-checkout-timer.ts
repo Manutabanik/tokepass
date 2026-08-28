@@ -2,13 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 
-import {
-  listCartHolds,
-  releaseGaCartHolds,
-  releaseSeatHolds,
-  releaseSeatingUnitCartHold,
-} from "@/app/actions/checkout"
-import { releaseWaitingRoomPass } from "@/app/actions/waiting-room"
+import { releaseCheckoutCartHolds } from "@/lib/checkout/release-cart-holds"
 import {
   cartHasHoldableItems,
   formatCartHoldClock,
@@ -17,31 +11,6 @@ import {
   remainingHoldSeconds,
 } from "@/lib/checkout/cart-hold-clock"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
-
-function releaseCartHoldsInBackground(eventId: string | null) {
-  if (!eventId) {
-    void releaseSeatHolds()
-    void releaseWaitingRoomPass()
-    return
-  }
-
-  const seat = useCheckoutStore.getState().selectedSeat
-  void releaseGaCartHolds(eventId)
-  if (seat) void releaseSeatingUnitCartHold(eventId, seat.seatingUnitId)
-  void listCartHolds(eventId).then((result) => {
-    if (!result.success) return
-    const released = new Set<string>()
-    if (seat?.seatingUnitId) released.add(seat.seatingUnitId)
-    for (const hold of result.holds) {
-      const unitId = hold.seating_unit_id?.trim()
-      if (!unitId || released.has(unitId)) continue
-      released.add(unitId)
-      void releaseSeatingUnitCartHold(eventId, unitId)
-    }
-  })
-  void releaseSeatHolds(eventId)
-  void releaseWaitingRoomPass()
-}
 
 export function useCheckoutTimer(options?: { onExpire?: () => void }) {
   const holdExpiresAt = useCheckoutStore((state) => state.holdExpiresAt)
@@ -78,7 +47,7 @@ export function useCheckoutTimer(options?: { onExpire?: () => void }) {
       const marked = useCheckoutStore.getState().markHoldExpired()
       if (!marked) return
       const currentEventId = useCheckoutStore.getState().eventId
-      releaseCartHoldsInBackground(currentEventId)
+      releaseCheckoutCartHolds(currentEventId)
       useCheckoutStore.getState().clearCart()
       onExpireRef.current?.()
     }, 1000)
