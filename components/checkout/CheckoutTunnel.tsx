@@ -3519,7 +3519,7 @@ export function CheckoutTunnel({
         </div>
       </div>
 
-      <div className="mt-auto shrink-0 border-t border-white/10 bg-card/95 p-4 shadow-2xl backdrop-blur-xl pb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden">
+      <div className="mt-auto shrink-0 lg:hidden">
         <CheckoutFloatingBar
           variant="panel"
           actionLabel={stepCta}

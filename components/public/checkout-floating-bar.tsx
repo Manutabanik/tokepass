@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowRight, ChevronUp, LoaderCircle } from "lucide-react"
+import { ChevronUp, LoaderCircle } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 import { CheckoutCartBottomSheet } from "@/components/checkout/checkout-cart-bottom-sheet"
@@ -25,7 +25,6 @@ export function CheckoutFloatingBar({
   itemsCount,
   onPay,
   onEditMap,
-  prominentCta = false,
   optionalStep = false,
   hasAddedItems = false,
   variant = "page",
@@ -75,6 +74,8 @@ export function CheckoutFloatingBar({
       ? "Continuar"
       : actionLabel
   const ctaShowArrow = skipOptional ? false : optionalStep || showArrow
+  const itemLabel = resolvedCount === 1 ? "ítem" : "ítems"
+
   useEffect(() => {
     if (hidden || !showTotal || lastTotal.current === resolvedTotal) return
     lastTotal.current = resolvedTotal
@@ -106,93 +107,62 @@ export function CheckoutFloatingBar({
     <>
       <div
         className={cn(
+          "flex w-full flex-col",
           variant === "panel"
-            ? "w-full min-w-0"
-            : "fixed right-0 bottom-0 left-0 z-40 lg:hidden",
-          variant === "panel"
-            ? null
-            : "border-t border-white/10 bg-card/95 p-4 shadow-2xl backdrop-blur-xl",
-          variant === "panel"
-            ? null
-            : "pb-[max(1rem,env(safe-area-inset-bottom))]",
+            ? "min-w-0"
+            : "fixed inset-x-0 bottom-0 z-40 lg:hidden",
+          "border-t border-white/10 bg-card/95 shadow-2xl backdrop-blur-xl",
+          "pb-[max(0.75rem,env(safe-area-inset-bottom))]",
         )}
       >
-        <div
-          className={cn(
-            "flex items-center justify-between gap-3",
-            prominentCta && "lg:flex-col lg:gap-4",
-          )}
+        <button
+          type="button"
+          disabled={!canShowSummary}
+          onClick={() => setSummaryOpen(true)}
+          className="flex w-full cursor-pointer items-center justify-center gap-1 bg-secondary/50 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {showTotal ? (
-            <div className="min-w-0 flex-1 overflow-hidden pr-2">
+          <span>Ver desglose ({resolvedCount} {itemLabel})</span>
+          <ChevronUp className="size-3.5 shrink-0" aria-hidden="true" />
+        </button>
+
+        <div className="w-full pt-3 px-4">
+          <Button
+            type={formId ? "submit" : "button"}
+            form={formId}
+            variant={skipOptional ? "outline" : "default"}
+            disabled={pending || locked || (skipOptional ? disabled : !canContinue)}
+            aria-busy={pending}
+            onClick={formId ? undefined : handlePay}
+            className={cn(
+              tapFeedbackClass,
+              "flex h-14 w-full flex-row items-center justify-between px-6 text-sm disabled:scale-100 disabled:opacity-70",
+              skipOptional
+                ? "rounded-xl border-white/20 text-foreground"
+                : "rounded-xl bg-emerald-500 font-extrabold text-black hover:bg-emerald-400",
+              !skipOptional && !canContinue && "cursor-not-allowed opacity-70",
+            )}
+          >
+            <span className="inline-flex min-w-0 items-center gap-2 truncate">
+              {pending ? (
+                <>
+                  <LoaderCircle className="size-5 shrink-0 animate-spin" aria-hidden="true" />
+                  {pendingLabel}
+                </>
+              ) : (
+                ctaLabel
+              )}
+            </span>
+            {showTotal ? (
               <span
                 className={cn(
-                  "block truncate whitespace-nowrap text-xl font-black tracking-tight text-foreground tabular-nums",
-                  totalBump && "text-emerald-400",
+                  "shrink-0 tabular-nums",
+                  totalBump && !skipOptional && "text-emerald-900",
                 )}
               >
                 {formatCartTotal(resolvedTotal)}
               </span>
-              <button
-                type="button"
-                disabled={!canShowSummary}
-                onClick={() => setSummaryOpen(true)}
-                className="mt-0.5 flex max-w-full min-w-0 items-center gap-1 text-xs font-semibold text-emerald-400 underline-offset-2 hover:text-emerald-300 hover:underline disabled:text-muted-foreground disabled:no-underline"
-              >
-                <span className="truncate whitespace-nowrap">
-                  {resolvedCount}{" "}
-                  {resolvedCount === 1 ? "ítem" : "ítems"} (Ver detalle)
-                </span>
-                <ChevronUp className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              </button>
-            </div>
-          ) : null}
-
-          {skipOptional ? (
-            <Button
-              type={formId ? "submit" : "button"}
-              form={formId}
-              variant="outline"
-              disabled={pending || locked || disabled}
-              aria-busy={pending}
-              onClick={formId ? undefined : handlePay}
-              className={cn(
-                tapFeedbackClass,
-                "h-12 shrink-0 rounded-xl border-white/20 px-5 text-sm text-foreground",
-                prominentCta && "lg:w-full",
-              )}
-            >
-              {pending ? pendingLabel : ctaLabel}
-            </Button>
-          ) : (
-            <Button
-              type={formId ? "submit" : "button"}
-              form={formId}
-              disabled={pending || locked || !canContinue}
-              aria-busy={pending}
-              onClick={formId ? undefined : handlePay}
-              className={cn(
-                tapFeedbackClass,
-                "flex h-12 shrink-0 items-center gap-2 rounded-xl bg-emerald-500 px-6 text-sm font-extrabold whitespace-nowrap text-black hover:bg-emerald-400 disabled:scale-100 disabled:opacity-70",
-                prominentCta && "lg:w-full",
-                !canContinue && "cursor-not-allowed opacity-70",
-              )}
-            >
-              {pending ? (
-                <span className="flex items-center gap-2">
-                  <LoaderCircle className="size-5 animate-spin" aria-hidden="true" />
-                  {pendingLabel}
-                </span>
-              ) : (
-                <>
-                  {ctaLabel}
-                  {ctaShowArrow ? (
-                    <ArrowRight className="size-4" aria-hidden="true" />
-                  ) : null}
-                </>
-              )}
-            </Button>
-          )}
+            ) : null}
+          </Button>
         </div>
       </div>
 
