@@ -107,6 +107,14 @@ export function ticketUsesMapSelector(tier: {
   })
 }
 
+/** Assigned seating sector → the map CTA, never a quantity card. */
+export function ticketHasSeatingSector(tier: {
+  seatingSectorId?: string | null
+  seating_sector_id?: string | null
+}): boolean {
+  return Boolean((tier.seatingSectorId ?? tier.seating_sector_id)?.trim())
+}
+
 /** General / extras van por cantidad. Mesa o butaca van por el plano. */
 export function isQuantityCheckoutTier(tier: {
   layoutType?: string | null

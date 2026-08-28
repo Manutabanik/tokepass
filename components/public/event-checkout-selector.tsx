@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Clock,
   Info,
+  Map,
 } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useMemo, useState } from "react"
@@ -13,7 +14,6 @@ import { QuantityCounter } from "@/components/public/quantity-counter"
 import { BundleCardSelector } from "@/components/public/bundle-card-selector"
 import {
   SeatSelectionSheet,
-  selectedPlacesForCategory,
   type SeatSelectionContext,
 } from "@/components/public/seat-selection-sheet"
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
@@ -68,7 +68,14 @@ import {
   resolveTicketCommerceType,
 } from "@/lib/events/ticket-commerce-type"
 import { storefrontItemMatchesSchedule } from "@/lib/checkout/seat-hold-day"
-import { ticketUsesMapSelector } from "@/lib/checkout/public-ticket-view"
+import {
+  ticketHasSeatingSector,
+  ticketUsesMapSelector,
+} from "@/lib/checkout/public-ticket-view"
+import {
+  cartMapUnitIdsForSchedule,
+  isMapCartLine,
+} from "@/lib/checkout/cart-item-identity"
 import { flattenSeatsForAvailability } from "@/lib/seating/venue-map-geometry"
 import { classifyZoneClick } from "@/lib/seating/map-click-target"
 import type { VenueMapZone } from "@/types/venue-map"
@@ -110,8 +117,6 @@ type Props = {
   onSeatSheetOpenChange?: (open: boolean) => void
 }
 
-const SYNTHETIC_MAP_TIER_ID = "__interactive-map__"
-
 function tierRequiresMap(tier: TicketSelectorTier): boolean {
   return ticketUsesMapSelector(tier)
 }
@@ -122,7 +127,6 @@ export function EventCheckoutSelector({
   isPending,
   hasInteractiveMap = false,
   mapLoading = false,
-  focusedTierId = null,
   selectedSeat,
   selectedPlaceCount = 0,
   includesGeneralAccess = false,
@@ -168,9 +172,6 @@ export function EventCheckoutSelector({
     })
     return type !== "bundle"
   })
-  const hasSeatedRow = listTiers.some((tier) =>
-    tierRequiresMap(tier),
-  )
   const mapSeatSelection = useMemo(() => {
     if (!seatSelection) return null
     return {
@@ -189,11 +190,11 @@ export function EventCheckoutSelector({
       },
     }
   }, [seatSelection, setIsSeatSelectionOpen])
-  const showSyntheticMapRow = hasInteractiveMap && !hasSeatedRow
+  const showGlobalMapCta = hasInteractiveMap
   const hasInventory =
     listTiers.length > 0 ||
     grouped.bundle.length > 0 ||
-    showSyntheticMapRow
+    showGlobalMapCta
   const admissionTiersForDates = useMemo(
     () => tiers.filter((tier) => resolveTicketCommerceType(tier) !== "extra"),
     [tiers],
@@ -304,6 +305,12 @@ export function EventCheckoutSelector({
     onOpenSeatFlow()
   }
 
+  function openGlobalMap() {
+    setActiveSeatCategory(null)
+    setSeatSheetMode("map")
+    onOpenSeatFlow()
+  }
+
   return (
     <section
       className="flex h-full w-full flex-col space-y-5"
@@ -357,21 +364,20 @@ export function EventCheckoutSelector({
             bundleTiers={grouped.bundle}
             quantities={quantities}
             isPending={isPending}
-            focusedTierId={focusedTierId}
             maxTicketsPerUser={maxTicketsPerUser}
             selectedCount={selectedCount}
             mapLoading={mapLoading}
-            includesGeneralAccess={includesGeneralAccess}
             selectedItems={selectedItems}
             scheduleDays={scheduleDays}
             selectedDateId={activeDateId}
             onSelectedDateIdChange={selectCheckoutDate}
-            showSyntheticMapRow={showSyntheticMapRow}
+            showGlobalMapCta={showGlobalMapCta}
             hasInteractiveMap={hasInteractiveMap}
             seatSelection={seatSelection}
             onQuantityChange={onQuantityChange}
             onPurchaseIntent={onPurchaseIntent}
             onOpenSeatSelection={openSeatSelection}
+            onOpenGlobalMap={openGlobalMap}
           />
         </div>
 
@@ -394,11 +400,7 @@ export function EventCheckoutSelector({
               : null) ??
             "Seleccionar lugares"
           }
-          sectorId={
-            activeSeatCategory?.sectorId ??
-            mapSeatSelection.selectedZoneId ??
-            null
-          }
+          sectorId={activeSeatCategory?.sectorId ?? null}
           pending={isPending}
           loading={mapLoading}
           maxTicketsPerUser={maxTicketsPerUser}
@@ -421,21 +423,20 @@ function TicketSelectionList({
   bundleTiers,
   quantities,
   isPending,
-  focusedTierId,
   maxTicketsPerUser,
   selectedCount,
   mapLoading,
-  includesGeneralAccess,
   selectedItems,
   scheduleDays,
   selectedDateId,
   onSelectedDateIdChange,
-  showSyntheticMapRow,
+  showGlobalMapCta,
   hasInteractiveMap,
   seatSelection,
   onQuantityChange,
   onPurchaseIntent,
   onOpenSeatSelection,
+  onOpenGlobalMap,
 }: {
   listTiers: TicketSelectorTier[]
   allTiers: TicketSelectorTier[]
@@ -444,16 +445,14 @@ function TicketSelectionList({
   bundleTiers: TicketSelectorTier[]
   quantities: Record<string, number>
   isPending: boolean
-  focusedTierId: string | null
   maxTicketsPerUser: number | null
   selectedCount: number
   mapLoading: boolean
-  includesGeneralAccess: boolean
   selectedItems: StorefrontSelectedItem[]
   scheduleDays: ScheduleDay[]
   selectedDateId: string | null
   onSelectedDateIdChange?: (dateId: string) => void
-  showSyntheticMapRow: boolean
+  showGlobalMapCta: boolean
   hasInteractiveMap: boolean
   seatSelection: SeatSelectionContext | null
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
@@ -463,6 +462,7 @@ function TicketSelectionList({
     name: string
     sectorId?: string | null
   }) => void
+  onOpenGlobalMap: () => void
 }) {
   const admissionTiers = useMemo(
     () =>
@@ -498,12 +498,15 @@ function TicketSelectionList({
   )
 
   const displayedTickets = useMemo(() => {
+    const withoutSectors = listTiers.filter(
+      (tier) => !ticketHasSeatingSector(tier),
+    )
     if (accessTab === "combos") {
-      return listTiers.filter(
+      return withoutSectors.filter(
         (tier) => resolveTicketCommerceType(tier) === "combo",
       )
     }
-    const entradas = listTiers.filter(
+    const entradas = withoutSectors.filter(
       (tier) => resolveTicketCommerceType(tier) === "standard",
     )
     if (activeDateId) {
@@ -546,91 +549,17 @@ function TicketSelectionList({
     accessTab === "combos" ? "combos" : (activeDateId ?? "entradas")
 
   const seatMap = seatSelection?.map ?? null
-  const mapSeats = useMemo(
-    () => (seatMap ? flattenSeatsForAvailability(seatMap) : []),
-    [seatMap],
-  )
-  const occupancyBySeatId = seatSelection?.occupancyBySeatId ?? {}
-
-  const ticketNeedsSeatModal = (tier: TicketSelectorTier) =>
-    hasInteractiveMap &&
-    tierRequiresMap(tier)
-
-  function renderTierCard(tier: TicketSelectorTier) {
-    const requiresMap = ticketNeedsSeatModal(tier)
-    const selectedPlaces = requiresMap
-      ? selectedPlacesForCategory(daySelectedItems, tier.seatingSectorId)
-      : []
-    return (
-      <UnifiedTicketCard
-        key={tier.id}
-        tier={tier}
-        siblingTiers={listTiers}
-        quantity={quantityForPublicTier(quantities, tier, {
-          selectedDateId: activeDateId,
-          scheduleDays,
-        })}
-        isPending={isPending}
-        focused={focusedTierId === tier.id}
-        maxTicketsPerUser={maxTicketsPerUser}
-        selectedCount={selectedCount}
-        requiresMap={requiresMap}
-        mapLoading={mapLoading}
-        includesGeneralAccess={includesGeneralAccess && requiresMap}
-        selectedPlaces={selectedPlaces}
-        mapSeats={mapSeats}
-        occupancyBySeatId={occupancyBySeatId}
-        mapReady={Boolean(seatSelection?.map) && !mapLoading}
-        venueMap={seatSelection?.map ?? null}
-        sectorSummaries={seatSelection?.sectorSummaries}
-        scheduleDayCount={scheduleDays.length}
-        selectedDateId={activeDateId}
-        onQuantityChange={onQuantityChange}
-        onOpenSeatSelection={() =>
-          onOpenSeatSelection({
-            id: tier.id,
-            name: tier.name,
-            sectorId: tier.seatingSectorId,
-          })
-        }
-      />
+  const cartLines = useCheckoutStore((state) => state.lines)
+  const hasMapPlacesOnDay =
+    cartMapUnitIdsForSchedule(cartLines, activeDateId).length > 0 ||
+    daySelectedItems.some(
+      (item) =>
+        item.type === "seat" ||
+        item.type === "table" ||
+        item.type === "zone" ||
+        item.type === "standing" ||
+        isMapCartLine(item),
     )
-  }
-
-  const syntheticSelected = selectedPlacesForCategory(daySelectedItems)
-  const syntheticRow = showSyntheticMapRow ? (
-    <div className="flex w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/60 px-5 py-3.5 transition-all hover:border-white/20">
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <h4 className="truncate text-base font-bold text-foreground">
-          Ubicaciones en mapa
-          {includesGeneralAccess ? (
-            <span className="ml-2 text-xs font-semibold text-emerald-400">
-              Incluye acceso
-            </span>
-          ) : null}
-        </h4>
-        <div className="flex min-w-0 items-center gap-2 text-sm font-black text-foreground/90">
-          <span className="truncate text-xs font-medium text-muted-foreground">
-            Elegí mesas o butacas en el plano
-          </span>
-          <SelectedPlacesSummary labels={syntheticSelected} />
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center">
-        <PlaceActionButton
-          selected={syntheticSelected.length > 0}
-          loading={mapLoading}
-          disabled={isPending || mapLoading}
-          onClick={() =>
-            onOpenSeatSelection({
-              id: SYNTHETIC_MAP_TIER_ID,
-              name: "Ubicaciones en mapa",
-            })
-          }
-        />
-      </div>
-    </div>
-  ) : null
 
   return (
     <div className="relative flex w-full flex-col">
@@ -726,13 +655,21 @@ function TicketSelectionList({
           transition={{ duration: 0.3, ease: "easeInOut" }}
           className="z-0 flex flex-col gap-3 pb-32"
         >
+          {showGlobalMapCta && accessTab === "entradas" ? (
+            <GlobalMapCta
+              hasMapPlaces={hasMapPlacesOnDay}
+              loading={mapLoading}
+              disabled={isPending || mapLoading}
+              onClick={onOpenGlobalMap}
+            />
+          ) : null}
           {ticketGroups.length > 0 || showBundles ? (
             <div className="flex flex-col gap-3">
               {ticketGroups.map((group) => {
-                const mapTickets = group.tickets.filter(ticketNeedsSeatModal)
                 const generalTickets = group.tickets.filter(
-                  (tier) => !ticketNeedsSeatModal(tier),
+                  (tier) => !ticketHasSeatingSector(tier),
                 )
+                if (generalTickets.length === 0) return null
                 return (
                   <div key={group.dateId} className="mb-3 last:mb-0">
                     {showDateHeaders && group.dateLabel ? (
@@ -745,37 +682,33 @@ function TicketSelectionList({
                       </h3>
                     ) : null}
                     <div className="flex flex-col gap-3">
-                      {mapTickets.map(renderTierCard)}
-                      {generalTickets.length > 0 ? (
-                        <TicketTierList
-                          tiers={generalTickets}
-                          siblingTiers={listTiers}
-                          quantities={quantities}
-                          scheduleId={activeDateId ?? group.dateId}
-                          selectedCount={selectedCount}
-                          maxTicketsPerUser={maxTicketsPerUser}
-                          isPending={isPending}
-                          scheduleDays={scheduleDays}
-                          venueMap={seatMap}
-                          hasInteractiveMap={hasInteractiveMap}
-                          sectorSummaries={seatSelection?.sectorSummaries}
-                          onQuantityChange={onQuantityChange}
-                          onSelectSeat={(tierId) => {
-                            const tier = listTiers.find((item) => item.id === tierId)
-                            if (!tier) return
-                            onOpenSeatSelection({
-                              id: tier.id,
-                              name: tier.name,
-                              sectorId: tier.seatingSectorId,
-                            })
-                          }}
-                        />
-                      ) : null}
+                      <TicketTierList
+                        tiers={generalTickets}
+                        siblingTiers={listTiers}
+                        quantities={quantities}
+                        scheduleId={activeDateId ?? group.dateId}
+                        selectedCount={selectedCount}
+                        maxTicketsPerUser={maxTicketsPerUser}
+                        isPending={isPending}
+                        scheduleDays={scheduleDays}
+                        venueMap={seatMap}
+                        hasInteractiveMap={hasInteractiveMap}
+                        sectorSummaries={seatSelection?.sectorSummaries}
+                        onQuantityChange={onQuantityChange}
+                        onSelectSeat={(tierId) => {
+                          const tier = listTiers.find((item) => item.id === tierId)
+                          if (!tier) return
+                          onOpenSeatSelection({
+                            id: tier.id,
+                            name: tier.name,
+                            sectorId: tier.seatingSectorId,
+                          })
+                        }}
+                      />
                     </div>
                   </div>
                 )
               })}
-              {accessTab === "entradas" ? syntheticRow : null}
               {showBundles ? (
                 <BundleCardSelector
                   bundles={bundleTiers}
@@ -793,7 +726,7 @@ function TicketSelectionList({
                 />
               ) : null}
             </div>
-          ) : (
+          ) : showGlobalMapCta && accessTab === "entradas" ? null : (
             <p className="text-sm text-muted-foreground">
               No hay entradas para esta selección.
             </p>
@@ -821,6 +754,37 @@ function SelectedPlacesSummary({
         </span>
       ))}
     </div>
+  )
+}
+
+function GlobalMapCta({
+  hasMapPlaces,
+  loading = false,
+  disabled = false,
+  onClick,
+}: {
+  hasMapPlaces: boolean
+  loading?: boolean
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <Button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        tapFeedbackClass,
+        "h-14 w-full gap-3 rounded-2xl text-lg font-bold",
+      )}
+    >
+      <Map className="size-5 shrink-0" aria-hidden="true" />
+      {loading
+        ? "Cargando mapa..."
+        : hasMapPlaces
+          ? "Modificar lugares en el mapa"
+          : "Elegir lugares en el mapa"}
+    </Button>
   )
 }
 
@@ -888,7 +852,7 @@ function ticketCardBadges({
   return badges
 }
 
-function UnifiedTicketCard({
+export function UnifiedTicketCard({
   tier,
   siblingTiers,
   quantity,
@@ -1174,7 +1138,7 @@ export function QuantityList({
 }) {
   return (
     <ul className="space-y-3">
-      {tiers.map((tier) => {
+      {tiers.filter((tier) => !ticketHasSeatingSector(tier)).map((tier) => {
         const sale = resolveSalePhases(tier.phases)
         const current = sale.current
         const quantity = quantityForPublicTier(quantities, tier, {

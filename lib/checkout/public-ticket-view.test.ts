@@ -5,6 +5,7 @@ import {
   isPublicTicketActive,
   isQuantityCheckoutTier,
   publicEventTickets,
+  ticketHasSeatingSector,
   ticketUsesMapSelector,
   toPublicTicketSelectorTier,
 } from "./public-ticket-view"
@@ -48,6 +49,13 @@ describe("public ticket view", () => {
       ticketUsesMapSelector({ seatingSectorId: "sector-1" }),
       true,
     )
+  })
+
+  it("hides sector-assigned tickets from the quantity list", () => {
+    assert.equal(ticketHasSeatingSector({ seatingSectorId: "platea-a" }), true)
+    assert.equal(ticketHasSeatingSector({ seating_sector_id: "campo" }), true)
+    assert.equal(ticketHasSeatingSector({ seatingSectorId: null }), false)
+    assert.equal(ticketHasSeatingSector({ seatingSectorId: "  " }), false)
   })
 
   it("keeps a general without seating_sector_id as a quantity SKU", () => {

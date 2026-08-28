@@ -2,9 +2,9 @@
 
 import {
   Accessibility,
-  Armchair,
   CalendarDays,
   Flame,
+  Map,
   Ticket,
 } from "lucide-react"
 import { useMemo, useState } from "react"
@@ -16,7 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { isFullPassDayId } from "@/lib/event-schedule"
 import { formatCurrency, formatEventDay, formatTicketPrice } from "@/lib/format"
 import { generalTicketMaxQuantity } from "@/lib/checkout/general-ticket-quantity"
-import { ticketUsesMapSelector } from "@/lib/checkout/public-ticket-view"
+import { ticketHasSeatingSector } from "@/lib/checkout/public-ticket-view"
 import { resolveStockScarcity } from "@/lib/checkout/stock-scarcity"
 import {
   SOLD_OUT_BADGE_CLASS,
@@ -36,7 +36,9 @@ import {
   inferTicketTierCategory,
   type TicketTierCategory,
 } from "@/lib/ticket-tier-category"
-import { cn } from "@/lib/utils"
+import { cartMapUnitIdsForSchedule } from "@/lib/checkout/cart-item-identity"
+import { useCheckoutStore } from "@/lib/stores/checkout-store"
+import { cn, tapFeedbackClass } from "@/lib/utils"
 import type { ScheduleDay } from "@/types/events"
 
 export type TicketSelectorTier = {
@@ -332,7 +334,11 @@ function TierList({
   onOpenSeatFlow: () => void
   maxTicketsPerUser?: number | null
 }) {
-  if (tiers.length === 0) {
+  const listableTiers = tiers.filter((tier) => !ticketHasSeatingSector(tier))
+  const cartLines = useCheckoutStore((state) => state.lines)
+  const hasMapPlaces = cartMapUnitIdsForSchedule(cartLines, scheduleId).length > 0
+
+  if (listableTiers.length === 0 && !hasSeatingFlow) {
     return (
       <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
         No hay entradas en esta categoría.
@@ -342,7 +348,23 @@ function TierList({
 
   return (
     <div className="space-y-3">
-      {tiers.map((tier) => {
+      {hasSeatingFlow ? (
+        <Button
+          type="button"
+          disabled={isPending}
+          onClick={onOpenSeatFlow}
+          className={cn(
+            tapFeedbackClass,
+            "h-14 w-full gap-3 rounded-2xl text-lg font-bold",
+          )}
+        >
+          <Map className="size-5 shrink-0" aria-hidden="true" />
+          {hasMapPlaces
+            ? "Modificar lugares en el mapa"
+            : "Elegir lugares en el mapa"}
+        </Button>
+      ) : null}
+      {listableTiers.map((tier) => {
         const quantity = quantityForPublicTier(quantities, tier, {
           selectedDateId: scheduleId,
           scheduleDays,
@@ -478,16 +500,6 @@ function TierList({
                     : saleState.kind === "ended"
                       ? "Finalizado"
                       : "Agotado"}
-                </Button>
-              ) : hasSeatingFlow && ticketUsesMapSelector(tier) ? (
-                <Button
-                  type="button"
-                  disabled={isPending}
-                  onClick={onOpenSeatFlow}
-                  className="h-9 rounded-xl px-3 text-sm"
-                >
-                  <Armchair className="size-4" aria-hidden />
-                  Elegir en plano
                 </Button>
               ) : (
                 <QuantityCounter

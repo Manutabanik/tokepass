@@ -6,7 +6,10 @@ import type { TicketSelectorTier } from "@/components/public/ticket-tier-selecto
 import { quantityForPublicTier } from "@/lib/checkout/ticket-day-groups"
 import { generalTicketMaxQuantity } from "@/lib/checkout/general-ticket-quantity"
 import { resolveStockScarcity } from "@/lib/checkout/stock-scarcity"
-import { ticketUsesMapSelector } from "@/lib/checkout/public-ticket-view"
+import {
+  ticketHasSeatingSector,
+  ticketUsesMapSelector,
+} from "@/lib/checkout/public-ticket-view"
 import {
   SOLD_OUT_BADGE_CLASS,
   SOLD_OUT_TICKET_CARD_CLASS,
@@ -89,13 +92,17 @@ export function TicketTierList({
     total?: number
   }>
 }) {
-  const pool = siblingTiers ?? tiers
-  const groups = groupGeneralTiers(tiers, hasInteractiveMap ? venueMap : null)
+  const listableTiers = tiers.filter((tier) => !ticketHasSeatingSector(tier))
+  const pool = siblingTiers ?? listableTiers
+  const groups = groupGeneralTiers(
+    listableTiers,
+    hasInteractiveMap ? venueMap : null,
+  )
   const showGroupLabels =
     hasInteractiveMap &&
     groups.filter((group) => group.label.length > 0).length > 1
 
-  if (tiers.length === 0) return null
+  if (listableTiers.length === 0) return null
 
   return (
     <div className="flex w-full flex-col gap-3">

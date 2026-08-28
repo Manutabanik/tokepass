@@ -1163,7 +1163,7 @@ export function CheckoutTunnel({
   const visibleZoneId =
     focusedZoneId && daySelectedItems.some((item) => item.id === focusedZoneId)
       ? focusedZoneId
-      : (daySelectedItems.find((item) => item.type === "zone")?.id ?? null)
+      : null
 
   const priceBySectorId = useMemo(
     () => buildTierUnitPriceIndex(dayTiers),
@@ -2780,6 +2780,7 @@ export function CheckoutTunnel({
       return
     }
     persistCheckoutCart()
+    setFocusedZoneId(null)
     if (hasInteractiveMap) {
       useCheckoutStore.getState().setSeatSheetOpen(true)
       return
