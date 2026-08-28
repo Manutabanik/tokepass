@@ -1,3 +1,4 @@
+import { COMBO_PACKS_TAB_ID, isComboPackOffer } from "@/lib/checkout/combo-schedule"
 import { cartQuantityOnSchedule, normalizeCartScheduleId } from "@/lib/checkout/cart-item-identity"
 import { isUndatedCheckoutOffer } from "@/lib/events/ticket-commerce-type"
 import { isFullPassDayId, normalizeDayId } from "@/lib/event-schedule"
@@ -198,6 +199,7 @@ export function checkoutTicketsForSelectedDay(
 }
 
 export const FULL_PASS_TAB_ID = "full_pass"
+export { COMBO_PACKS_TAB_ID }
 
 export type CheckoutKindTab = "days" | "passes"
 
@@ -282,6 +284,7 @@ export function ticketMatchesTab(
   options?: { treatFullPassAsAnyDay?: boolean },
 ): boolean {
   const passOrCombo = isComboOrPassOffer(tier)
+  if (activeTabId === COMBO_PACKS_TAB_ID) return isComboPackOffer(tier)
   if (activeTabId === FULL_PASS_TAB_ID) return passOrCombo
   if (passOrCombo) return Boolean(options?.treatFullPassAsAnyDay)
   return resolveTicketDateMeta(tier).dateId === activeTabId

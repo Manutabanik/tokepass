@@ -6,6 +6,7 @@ import {
   Clock,
   Info,
   Map,
+  Package,
 } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useMemo, useState } from "react"
@@ -52,6 +53,7 @@ import {
 } from "@/lib/checkout/charge-unit"
 import { resolveSectorAssignMeta } from "@/lib/seating/assign-best-seats"
 import {
+  COMBO_PACKS_TAB_ID,
   FULL_PASS_TAB_ID,
   defaultCheckoutDateId,
   checkoutTicketsForSelectedDay,
@@ -63,6 +65,10 @@ import {
   ticketVisibleOnCheckoutDay,
   type TicketDayGroup,
 } from "@/lib/checkout/ticket-day-groups"
+import {
+  COMBO_PACKS_SUBTITLE,
+  isComboPackOffer,
+} from "@/lib/checkout/combo-schedule"
 import {
   partitionCheckoutTickets,
   resolveTicketCommerceType,
@@ -483,10 +489,12 @@ function TicketSelectionList({
   const activeDateId = selectedDateId
 
   function selectDate(dateId: string) {
+    setAccessTab("entradas")
     onSelectedDateIdChange?.(dateId)
   }
 
-  const showDateCards = accessTab === "entradas" && dateCards.length > 1
+  const showDateCards =
+    dateCards.length > 1 || (showAccessTabs && dateCards.length >= 1)
   const daySelectedItems = useMemo(
     () =>
       selectedItems.filter((item) =>
@@ -498,14 +506,12 @@ function TicketSelectionList({
   )
 
   const displayedTickets = useMemo(() => {
+    if (accessTab === "combos") {
+      return listTiers.filter((tier) => isComboPackOffer(tier))
+    }
     const withoutSectors = listTiers.filter(
       (tier) => !ticketHasSeatingSector(tier),
     )
-    if (accessTab === "combos") {
-      return withoutSectors.filter(
-        (tier) => resolveTicketCommerceType(tier) === "combo",
-      )
-    }
     const entradas = withoutSectors.filter(
       (tier) => resolveTicketCommerceType(tier) === "standard",
     )
@@ -523,8 +529,8 @@ function TicketSelectionList({
       return displayedTickets.length > 0
         ? [
             {
-              dateId: FULL_PASS_TAB_ID,
-              dateLabel: "Combos",
+              dateId: COMBO_PACKS_TAB_ID,
+              dateLabel: "Combos / Packs",
               tickets: displayedTickets,
             },
           ]
@@ -543,7 +549,7 @@ function TicketSelectionList({
 
   const selectorTitle =
     accessTab === "combos"
-      ? "Combos"
+      ? "Combos / Packs"
       : ticketDateSectionLabel(activeDateId, scheduleDays) || "Elegí tu entrada"
   const listKey =
     accessTab === "combos" ? "combos" : (activeDateId ?? "entradas")
@@ -566,50 +572,15 @@ function TicketSelectionList({
       <h2 className="mb-3 pt-2 text-lg font-black text-foreground first-letter:uppercase md:mb-4 md:text-xl">
         {selectorTitle}
       </h2>
-      {showAccessTabs ? (
-        <div
-          className="mb-6 grid grid-cols-2 gap-1 rounded-full bg-muted p-1"
-          role="tablist"
-          aria-label="Tipo de acceso"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={accessTab === "entradas"}
-            onClick={() => setAccessTab("entradas")}
-            className={cn(
-              "rounded-full px-3 py-2.5 text-center text-sm font-bold transition-colors",
-              accessTab === "entradas"
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground",
-            )}
-          >
-            Entradas
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={accessTab === "combos"}
-            onClick={() => setAccessTab("combos")}
-            className={cn(
-              "rounded-full px-3 py-2.5 text-center text-sm font-bold transition-colors",
-              accessTab === "combos"
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground",
-            )}
-          >
-            Combos
-          </button>
-        </div>
-      ) : null}
-      {showDateCards ? (
+      {showDateCards || showAccessTabs ? (
         <div
           className="hide-scrollbar flex gap-3 overflow-x-auto snap-x snap-mandatory pb-4 lg:flex-wrap lg:gap-4 lg:overflow-visible lg:snap-none lg:pb-6"
           role="tablist"
           aria-label="Elegí el día"
         >
           {dateCards.map((card) => {
-            const selected = activeDateId === card.dateId
+            const selected =
+              accessTab === "entradas" && activeDateId === card.dateId
             return (
               <button
                 key={card.dateId}
@@ -633,15 +604,38 @@ function TicketSelectionList({
               </button>
             )
           })}
+          {showAccessTabs ? (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={accessTab === "combos"}
+              onClick={() => setAccessTab("combos")}
+              className={cn(
+                "flex min-w-[148px] snap-start cursor-pointer flex-col items-center justify-center rounded-xl border-2 px-6 py-3 transition-all",
+                accessTab === "combos"
+                  ? "border-primary bg-primary/10 font-bold text-primary"
+                  : "border-gray-200 bg-white text-gray-700 hover:border-gray-400 dark:border-border dark:bg-card dark:text-muted-foreground dark:hover:border-muted-foreground/40",
+              )}
+            >
+              <Package className="size-4" aria-hidden="true" />
+              <span className="mt-0.5 text-sm font-black tracking-tight">
+                Combos / Packs
+              </span>
+            </button>
+          ) : null}
         </div>
       ) : null}
-      {showDateCards && samePriceAnyDay ? (
+      {accessTab === "entradas" && showDateCards && samePriceAnyDay ? (
         <p className="text-xs font-medium text-muted-foreground">
           Mismo valor para cualquier día seleccionado
         </p>
       ) : null}
 
-      {accessTab === "combos" || !ticketDateSectionLabel(activeDateId, scheduleDays) ? (
+      {accessTab === "combos" ? (
+        <p className="mb-3 mt-1 text-sm text-muted-foreground">
+          {COMBO_PACKS_SUBTITLE}
+        </p>
+      ) : !ticketDateSectionLabel(activeDateId, scheduleDays) ? (
         <h3 className="mb-3 mt-4 text-sm font-bold text-foreground">
           Seleccioná tus entradas
         </h3>
@@ -666,10 +660,11 @@ function TicketSelectionList({
           {ticketGroups.length > 0 || showBundles ? (
             <div className="flex flex-col gap-3">
               {ticketGroups.map((group) => {
-                const generalTickets = group.tickets.filter(
-                  (tier) => !ticketHasSeatingSector(tier),
-                )
-                if (generalTickets.length === 0) return null
+                const visibleTickets =
+                  accessTab === "combos"
+                    ? group.tickets
+                    : group.tickets.filter((tier) => !ticketHasSeatingSector(tier))
+                if (visibleTickets.length === 0) return null
                 return (
                   <div key={group.dateId} className="mb-3 last:mb-0">
                     {showDateHeaders && group.dateLabel ? (
@@ -683,7 +678,8 @@ function TicketSelectionList({
                     ) : null}
                     <div className="flex flex-col gap-3">
                       <TicketTierList
-                        tiers={generalTickets}
+                        tiers={visibleTickets}
+                        includeMappedTiers={accessTab === "combos"}
                         siblingTiers={listTiers}
                         quantities={quantities}
                         scheduleId={activeDateId ?? group.dateId}

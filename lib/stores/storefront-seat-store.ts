@@ -43,6 +43,9 @@ export type StorefrontSelectedItem = {
   eventDateId?: string
   dateId?: string
   scheduleId?: string
+  /** Combo / pack que cubre varias jornadas con el mismo asiento. */
+  comboTierId?: string
+  comboScheduleIds?: string[]
   dateString?: string
   dateLabel?: string
   /** Identificador exacto del asiento/mesa clickeado (ej. "Mesa 04"). */

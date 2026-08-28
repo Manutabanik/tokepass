@@ -38,6 +38,10 @@ import {
   rematchEventDraftTicketIds,
   type LiveTicketIdSnapshot,
 } from "@/lib/events/sync-draft-ticket-ids-v2"
+import {
+  syncPublishedComboItems,
+  ticketsWithoutComboScheduleIds,
+} from "@/lib/events/sync-published-combo-items"
 import { venueMapToSeatingLayout } from "@/lib/seating/venue-map-geometry"
 import { eventPreviewPath } from "@/lib/events/editor-v2-ux"
 import { revalidatePublicEventCache } from "@/lib/events/revalidate-public-event"
@@ -1153,6 +1157,10 @@ export async function publishEventV2(
   if (targetStatus === "published") {
     payload = { ...payload, visibility: "public" }
   }
+  const persistPayload: PublishEventV2Payload = {
+    ...payload,
+    tickets: ticketsWithoutComboScheduleIds(payload.tickets),
+  }
   let slug = event.slug
   if (targetStatus === "draft") {
     try {
@@ -1163,7 +1171,7 @@ export async function publishEventV2(
         existingFlyerUrl: event.flyer_url,
         existingImageUrl: event.image_url,
         existingShareUrl: event.social_share_image_url,
-        payload,
+        payload: persistPayload,
         lineup,
         targetStatus: "draft",
         keepDraftState: true,
@@ -1202,12 +1210,12 @@ export async function publishEventV2(
         return { success: false, error: publishActionError(error) }
       }
     }
-    const publishSequentially = shouldPublishEventV2Sequentially(payload)
+    const publishSequentially = shouldPublishEventV2Sequentially(persistPayload)
     let usedRpc = false
     if (!publishSequentially) {
       const rpc = await gate.supabase.rpc("publish_event_v2", {
         p_event_id: id,
-        p_payload: payload as unknown as Json,
+        p_payload: persistPayload as unknown as Json,
       })
 
       if (rpc.error && !shouldFallbackPublishRpc(rpc.error)) {
@@ -1238,7 +1246,7 @@ export async function publishEventV2(
           existingFlyerUrl: event.flyer_url,
           existingImageUrl: event.image_url,
           existingShareUrl: event.social_share_image_url,
-          payload,
+          payload: persistPayload,
           lineup,
         })
         slug = written.slug
@@ -1251,9 +1259,18 @@ export async function publishEventV2(
     }
   }
 
+  const comboSync = await syncPublishedComboItems({
+    db: gate.supabase as never,
+    eventId: id,
+    tickets: payload.tickets,
+  })
+  if (!comboSync.ok) {
+    return { success: false, error: publishActionError(comboSync.error) }
+  }
+
   if (targetStatus === "published") {
     try {
-      await ensurePublishedCatalogListing(id, event.organizer_id, payload)
+      await ensurePublishedCatalogListing(id, event.organizer_id, persistPayload)
     } catch (error) {
       return {
         success: false,

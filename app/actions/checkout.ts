@@ -1525,6 +1525,7 @@ export async function holdSeat(
   eventDateId: string | null,
   sessionId: string,
   eventId?: string | null,
+  comboTierId?: string | null,
 ): Promise<
   | {
       success: true
@@ -1532,6 +1533,7 @@ export async function holdSeat(
       seatingUnitId: string
       holdId?: string
       eventId?: string
+      seatingUnitIds?: string[]
     }
   | { success: false; error: "auth_required" | "out_of_stock" | string }
 > {
@@ -1540,6 +1542,7 @@ export async function holdSeat(
     eventDateId,
     sessionId,
     eventId: eventId || undefined,
+    comboTierId: comboTierId || undefined,
   })
   if (!parsed.success) {
     return { success: false, error: formatCheckoutPayloadError(parsed.error) }
@@ -1575,6 +1578,64 @@ export async function holdSeat(
     return {
       success: false,
       error: "No se pudo abrir la reserva temporal. Probá de nuevo.",
+    }
+  }
+
+  if (parsed.data.comboTierId) {
+    let combo = await supabase.rpc("hold_seat_for_combo", {
+      p_seat_id: parsed.data.seatId,
+      p_combo_tier_id: parsed.data.comboTierId,
+      p_session_id: owner.ownerId,
+      ...(parsed.data.eventId ? { p_event_id: parsed.data.eventId } : {}),
+    })
+    if (
+      combo.error &&
+      parsed.data.eventId &&
+      /p_event_id|PGRST202/i.test(combo.error.message)
+    ) {
+      combo = await supabase.rpc("hold_seat_for_combo", {
+        p_seat_id: parsed.data.seatId,
+        p_combo_tier_id: parsed.data.comboTierId,
+        p_session_id: owner.ownerId,
+      })
+    }
+    if (!combo.error) {
+      const rows = Array.isArray(combo.data)
+        ? combo.data
+        : combo.data
+          ? [combo.data]
+          : []
+      const first = rows[0]
+      const reservedUntil = first?.expires_at
+      const seatingUnitId = first?.seating_unit_id
+      if (!reservedUntil || !seatingUnitId) {
+        return { success: false, error: "out_of_stock" }
+      }
+      return {
+        success: true,
+        reservedUntil,
+        seatingUnitId,
+        holdId: first?.hold_id,
+        eventId: first?.event_id,
+        seatingUnitIds: rows
+          .map((row) => row.seating_unit_id)
+          .filter((id): id is string => Boolean(id)),
+      }
+    }
+    if (!/could not find|schema cache|does not exist|pgrst202/i.test(combo.error.message)) {
+      const mapped = mapReserveRpcError(reserveRpcErrorText(combo.error))
+      if (mapped) return { success: false, error: mapped.error }
+      logger.error({
+        context: "checkout/seat-hold",
+        message: "hold_seat_for_combo_failed",
+        seatId: parsed.data.seatId,
+        comboTierId: parsed.data.comboTierId,
+        error: combo.error.message,
+      })
+      return {
+        success: false,
+        error: "No se pudo reservar esa ubicación. Elegí otra.",
+      }
     }
   }
 
@@ -1830,13 +1891,17 @@ export async function holdSeatingUnitForCartByLayoutItem(
   previewKey?: string | null,
   eventDateId?: string | null,
   sessionId?: string | null,
-): Promise<CartSeatingHoldResult & { seatingUnitId?: string }> {
+  comboTierId?: string | null,
+): Promise<
+  CartSeatingHoldResult & { seatingUnitId?: string; seatingUnitIds?: string[] }
+> {
   const parsed = CheckoutLayoutHoldSchema.safeParse({
     eventId,
     sectorId,
     layoutItemId,
     eventDateId,
     dateId: eventDateId,
+    comboTierId: comboTierId || undefined,
   })
   if (!parsed.success) {
     return { success: false, error: formatCheckoutPayloadError(parsed.error) }
@@ -1876,21 +1941,23 @@ export async function holdSeatingUnitForCartByLayoutItem(
     return { success: false, error: "No se pudo abrir la reserva temporal. Probá de nuevo." }
   }
   const scheduleDayIds = await loadEventScheduleDayIds(db, eventId)
-  const dayGate = requireHoldEventDateId({
-    eventDateId,
-    scheduleDayIds,
-  })
-  if (!dayGate.ok) {
-    logger.error({
-      context: "checkout/cart-hold",
-      message: MISSING_EVENT_DATE_ID,
-      eventId,
-      sectorId,
-      layoutItemId,
+  if (!parsed.data.comboTierId) {
+    const dayGate = requireHoldEventDateId({
+      eventDateId,
+      scheduleDayIds,
     })
-    return { success: false, error: MISSING_EVENT_DATE_ID }
+    if (!dayGate.ok) {
+      logger.error({
+        context: "checkout/cart-hold",
+        message: MISSING_EVENT_DATE_ID,
+        eventId,
+        sectorId,
+        layoutItemId,
+      })
+      return { success: false, error: MISSING_EVENT_DATE_ID }
+    }
+    eventDateId = dayGate.eventDateId
   }
-  eventDateId = dayGate.eventDateId
 
   const room = await assertCheckoutWaitingRoom({
     eventId: access.eventId,
@@ -1906,6 +1973,52 @@ export async function holdSeatingUnitForCartByLayoutItem(
     return {
       success: false,
       error: CART_HOLD_RATE_LIMIT_ERROR,
+    }
+  }
+
+  if (parsed.data.comboTierId) {
+    const combo = await db.rpc("hold_layout_item_for_combo", {
+      p_event_id: eventId,
+      p_owner_id: owner.ownerId,
+      p_sector_id: sectorId,
+      p_layout_item_id: layoutItemId,
+      p_combo_tier_id: parsed.data.comboTierId,
+    })
+    if (!combo.error) {
+      const rows = Array.isArray(combo.data)
+        ? combo.data
+        : combo.data
+          ? [combo.data]
+          : []
+      const first = rows[0]
+      if (!first?.reserved_until || !first?.seating_unit_id) {
+        return { success: false, error: "out_of_stock" }
+      }
+      return {
+        success: true,
+        reservedUntil: first.reserved_until,
+        seatingUnitId: first.seating_unit_id,
+        seatingUnitIds: rows
+          .map((row) => row.seating_unit_id)
+          .filter((id): id is string => Boolean(id)),
+      }
+    }
+    if (!/could not find|schema cache|does not exist|pgrst202/i.test(combo.error.message)) {
+      const mapped = mapReserveRpcError(reserveRpcErrorText(combo.error))
+      if (mapped) return { success: false, error: mapped.error }
+      logger.error({
+        context: "checkout/cart-hold",
+        message: "hold_layout_item_for_combo_failed",
+        eventId,
+        sectorId,
+        layoutItemId,
+        comboTierId: parsed.data.comboTierId,
+        error: combo.error.message,
+      })
+      return {
+        success: false,
+        error: "No se pudo reservar esa ubicación. Elegí otra.",
+      }
     }
   }
 

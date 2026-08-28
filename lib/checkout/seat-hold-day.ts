@@ -12,7 +12,7 @@ export const MISSING_EVENT_DATE_ID_MESSAGE =
 export function asHoldEventDateId(value: unknown): string | null {
   if (typeof value !== "string") return null
   const id = value.trim()
-  if (!id || id === "full_pass" || id === "all") return null
+  if (!id || id === "full_pass" || id === "combo_packs" || id === "all") return null
   return UUID_RE.test(id) ? id : null
 }
 
@@ -21,8 +21,11 @@ export function storefrontSelectionKey(item: {
   eventDateId?: string | null
   dateId?: string | null
   scheduleId?: string | null
+  comboTierId?: string | null
 }): string {
   const id = item.id?.trim() ?? ""
+  const combo = item.comboTierId?.trim() ?? ""
+  if (combo) return `${id}::combo:${combo}`
   const date =
     asHoldEventDateId(item.scheduleId) ??
     asHoldEventDateId(item.eventDateId) ??
@@ -36,10 +39,12 @@ export function storefrontItemMatchesSchedule(
     eventDateId?: string | null
     dateId?: string | null
     scheduleId?: string | null
+    comboTierId?: string | null
   },
   scheduleId?: string | null,
   options?: { scheduleDayCount?: number },
 ): boolean {
+  if (item.comboTierId?.trim()) return !asHoldEventDateId(scheduleId)
   const itemDate =
     asHoldEventDateId(item.scheduleId) ??
     asHoldEventDateId(item.eventDateId) ??

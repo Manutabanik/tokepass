@@ -183,6 +183,7 @@ export type EventDetails = {
     tableNumberEnd: number | null
   }>
   comboItemsByTier: Record<string, Array<{ name: string; quantity: number }>>
+  comboScheduleIdsByTier: Record<string, string[]>
   /** Admission SKUs (`ticket_tiers` / ticket_types) with live stock. */
   tiers: Array<
     Pick<
@@ -1267,6 +1268,38 @@ async function loadEventDetails(
           event_items: { name: string } | null
         }> }
 
+  const comboScheduleIdsByTier: Record<string, string[]> = {}
+  if (tiers.length > 0) {
+    const comboDayRows = await supabase
+      .from("combo_items")
+      .select("combo_tier_id, schedule_id")
+      .in(
+        "combo_tier_id",
+        tiers.map((tier) => tier.id),
+      )
+    if (!comboDayRows.error) {
+      for (const row of comboDayRows.data ?? []) {
+        const list = comboScheduleIdsByTier[row.combo_tier_id] ?? []
+        if (!list.includes(row.schedule_id)) list.push(row.schedule_id)
+        comboScheduleIdsByTier[row.combo_tier_id] = list
+      }
+    }
+  }
+  for (const tier of tiers) {
+    if ((comboScheduleIdsByTier[tier.id]?.length ?? 0) > 0) continue
+    if (
+      resolveTicketCommerceType({
+        ticket_type: (tier as { ticket_type?: TicketTier["ticket_type"] }).ticket_type,
+        name: tier.name,
+        dayId: tier.day_id,
+        bundle_type: (tier as { bundle_type?: TicketTier["bundle_type"] }).bundle_type,
+      }) === "combo" &&
+      scheduleIds.length > 1
+    ) {
+      comboScheduleIdsByTier[tier.id] = scheduleIds
+    }
+  }
+
   let serviceChargeRate = 0.08
   const { data: rate } = await supabase.rpc("get_event_service_charge_rate", {
     p_event_id: resolvedId,
@@ -1417,6 +1450,7 @@ async function loadEventDetails(
       tableNumberStart: row.table_number_start,
       tableNumberEnd: row.table_number_end,
     })),
+    comboScheduleIdsByTier,
     comboItemsByTier: (() => {
       const map: Record<string, Array<{ name: string; quantity: number }>> = {}
       for (const row of comboRows ?? []) {

@@ -383,9 +383,10 @@ export function EventStorefront({
       admissionTickets.map((tier) =>
         toPublicTicketSelectorTier(tier, {
           comboItems: event.comboItemsByTier[tier.id] ?? [],
+          comboScheduleIds: event.comboScheduleIdsByTier?.[tier.id] ?? [],
         }),
       ),
-    [admissionTickets, event.comboItemsByTier],
+    [admissionTickets, event.comboItemsByTier, event.comboScheduleIdsByTier],
   )
 
   const reduceMotion = useSyncExternalStore(

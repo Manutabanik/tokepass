@@ -68,6 +68,7 @@ export type PublishEventV2TierPayload = {
   seating_sector_id: string | null
   day_id: string | null
   ticket_type: "standard" | "combo" | "extra"
+  combo_schedule_ids?: string[]
 }
 
 export type PublishEventV2ScheduleDay = {
@@ -579,6 +580,13 @@ export function buildPublishEventV2Payload(
       publishedDayIds,
       occurrences,
     )
+    if (mapped.ticket_type === "combo") {
+      const comboDays =
+        dayIds.length >= 2 ? dayIds : [...publishedDayIds]
+      if (comboDays.length >= 2) {
+        return [{ ...mapped, day_id: null, combo_schedule_ids: comboDays }]
+      }
+    }
     if (dayIds.length === 0) {
       return [{ ...mapped, day_id: null }]
     }

@@ -80,7 +80,9 @@ export function useOptimisticSeatHolds({
       const layoutId = selectionKey.split("::")[0] ?? selectionKey
       held.delete(selectionKey)
       applyOccupancyPatch({ [layoutId]: "available" })
-      void releaseSeatingUnitCartHold(eventId, unitId, sessionId)
+      for (const heldUnit of unitId.split(",").filter(Boolean)) {
+        void releaseSeatingUnitCartHold(eventId, heldUnit, sessionId)
+      }
     }
 
     if (holdable.length === 0) return
@@ -102,6 +104,7 @@ export function useOptimisticSeatHolds({
           previewKey,
           eventDateId,
           sessionId,
+          item.comboTierId,
         )
           .then((hold) => {
             if (!hold.success || !hold.seatingUnitId) {
@@ -133,16 +136,21 @@ export function useOptimisticSeatHolds({
                 (entry) => storefrontSelectionKey(entry) === selectionKey,
               )
             if (!stillSelected) {
-              void releaseSeatingUnitCartHold(
-                eventId,
-                hold.seatingUnitId,
-                sessionId,
-              )
+              for (const heldUnit of (
+                hold.seatingUnitIds ?? [hold.seatingUnitId]
+              ).filter(Boolean)) {
+                void releaseSeatingUnitCartHold(eventId, heldUnit, sessionId)
+              }
               applyOccupancyPatch({ [item.id]: "available" })
               return null
             }
 
-            held.set(selectionKey, hold.seatingUnitId)
+            held.set(
+              selectionKey,
+              (hold.seatingUnitIds ?? [hold.seatingUnitId])
+                .filter(Boolean)
+                .join(","),
+            )
             applyOccupancyPatch({ [item.id]: "held" })
             const next = minReservedUntil(
               useCheckoutStore.getState().holdExpiresAt,
@@ -169,7 +177,9 @@ export function useOptimisticSeatHolds({
     for (const [selectionKey, unitId] of held.entries()) {
       const layoutId = selectionKey.split("::")[0] ?? selectionKey
       applyOccupancyPatch({ [layoutId]: "available" })
-      void releaseSeatingUnitCartHold(previousEventId, unitId, sessionId)
+      for (const heldUnit of unitId.split(",").filter(Boolean)) {
+        void releaseSeatingUnitCartHold(previousEventId, heldUnit, sessionId)
+      }
     }
     held.clear()
     inFlightRef.current.clear()

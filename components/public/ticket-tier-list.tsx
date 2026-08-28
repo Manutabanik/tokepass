@@ -70,6 +70,7 @@ export function TicketTierList({
   venueMap = null,
   hasInteractiveMap = false,
   sectorSummaries = [],
+  includeMappedTiers = false,
 }: {
   tiers: TicketSelectorTier[]
   siblingTiers?: TicketSelectorTier[]
@@ -91,8 +92,11 @@ export function TicketTierList({
     available: number
     total?: number
   }>
+  includeMappedTiers?: boolean
 }) {
-  const listableTiers = tiers.filter((tier) => !ticketHasSeatingSector(tier))
+  const listableTiers = includeMappedTiers
+    ? tiers
+    : tiers.filter((tier) => !ticketHasSeatingSector(tier))
   const pool = siblingTiers ?? listableTiers
   const groups = groupGeneralTiers(
     listableTiers,

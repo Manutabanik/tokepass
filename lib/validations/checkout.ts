@@ -303,6 +303,7 @@ export const CheckoutLayoutHoldSchema = z.object({
   layoutItemId: z.string().trim().min(1, UUID_ERROR).max(200),
   eventDateId: optionalHoldEventDateId,
   dateId: optionalHoldEventDateId,
+  comboTierId: z.string().uuid(UUID_ERROR).optional(),
 })
 
 export const HoldSeatSchema = z.object({
@@ -310,6 +311,7 @@ export const HoldSeatSchema = z.object({
   eventDateId: optionalHoldEventDateId,
   sessionId: z.string().trim().min(1, UUID_ERROR).max(80),
   eventId: z.string().uuid(UUID_ERROR).optional(),
+  comboTierId: z.string().uuid(UUID_ERROR).optional(),
 })
 
 export const CheckoutLockTicketsSchema = z.object({

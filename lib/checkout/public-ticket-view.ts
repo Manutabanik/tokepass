@@ -142,9 +142,11 @@ export function toPublicTicketSelectorTier(
   tier: PublicTicketSource,
   extras: {
     comboItems?: Array<{ name: string; quantity: number }>
+    comboScheduleIds?: string[]
   } = {},
 ): TicketSelectorTier {
   const comboItems = extras.comboItems ?? []
+  const comboScheduleIds = extras.comboScheduleIds ?? []
   const mapped = ticketUsesMapSelector({
     hasMap: tier.hasMap ?? tier.has_map,
     isMapped: tier.isMapped ?? tier.is_mapped,
@@ -169,9 +171,11 @@ export function toPublicTicketSelectorTier(
     dayId: tier.day_id,
     dateId: normalizeDayId(tier.day_id),
     validDayIds: (() => {
+      if (comboScheduleIds.length > 0) return comboScheduleIds
       const dateId = normalizeDayId(tier.day_id)
       return dateId ? [dateId] : []
     })(),
+    comboScheduleIds,
     isFullPass:
       publicTicketOfferKind({
         name: tier.name,

@@ -61,6 +61,7 @@ function sampleEvent(): EventDetails {
       },
     ],
     comboItemsByTier: {},
+    comboScheduleIdsByTier: {},
     tiers: [
       {
         id: "tier-1",

@@ -66,6 +66,7 @@ export type TicketSelectorTier = {
   ticketType?: TicketCommerceType | string | null
   listPrice?: number | null
   comboItems?: Array<{ name: string; quantity: number }>
+  comboScheduleIds?: string[]
   tierType?: InventoryTierType | string | null
   bundleType?: string | null
   description?: string | null

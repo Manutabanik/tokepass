@@ -27,6 +27,7 @@ describe("asHoldEventDateId", () => {
   it("keeps real jornadas and drops full-pass tabs", () => {
     assert.equal(asHoldEventDateId(dayA), dayA)
     assert.equal(asHoldEventDateId("full_pass"), null)
+    assert.equal(asHoldEventDateId("combo_packs"), null)
     assert.equal(asHoldEventDateId("all"), null)
     assert.equal(asHoldEventDateId("día-1"), null)
   })

@@ -1187,4 +1187,46 @@ describe("publish helpers", () => {
       "After",
     )
   })
+
+  it("keeps a combo as one SKU covering every selected jornada", () => {
+    const dayA = "550e8400-e29b-41d4-a716-446655440001"
+    const dayB = "550e8400-e29b-41d4-a716-446655440002"
+    const draft = publishableDraft()
+    draft.schedule = [
+      {
+        id: dayA,
+        name: "Viernes",
+        date: "2026-11-13",
+        startDate: "2026-11-13T18:00",
+        endDate: "2026-11-13T23:00",
+        slots: [],
+      },
+      {
+        id: dayB,
+        name: "Sábado",
+        date: "2026-11-14",
+        startDate: "2026-11-14T18:00",
+        endDate: "2026-11-14T23:00",
+        slots: [],
+      },
+    ]
+    draft.tickets = [
+      {
+        id: "550e8400-e29b-41d4-a716-446655440099",
+        name: "Pack 2 días",
+        description: "",
+        price: 25000,
+        stock: 40,
+        minOrder: 1,
+        maxOrder: 4,
+        ticketType: "combo",
+        validDayIds: [dayA, dayB],
+      },
+    ]
+    const payload = buildPublishEventV2Payload(draft)
+    const combos = payload.tickets.filter((ticket) => ticket.ticket_type === "combo")
+    assert.equal(combos.length, 1)
+    assert.equal(combos[0]?.day_id, null)
+    assert.deepEqual(combos[0]?.combo_schedule_ids, [dayA, dayB])
+  })
 })

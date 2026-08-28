@@ -619,8 +619,21 @@ export type Ticket = {
   ticket_type: "admission" | "parking" | "access_pass"
   /** Fase / lote que vendió esta entrada. */
   phase_id: string | null
+  /** Jornada emitida al explotar un combo. */
+  event_date_id: string | null
+  /** SKU combo padre cuando este QR es una parte explotada. */
+  source_combo_tier_id: string | null
   created_at: string
   updated_at: string
+}
+
+export type ComboItem = {
+  id: string
+  combo_tier_id: string
+  schedule_id: string
+  child_tier_id: string | null
+  quantity: number
+  created_at: string
 }
 
 export type TicketTemplate = {
@@ -1528,6 +1541,8 @@ type TicketInsert = Omit<
   | "is_test"
   | "ticket_type"
   | "phase_id"
+  | "event_date_id"
+  | "source_combo_tier_id"
   | "created_at"
   | "updated_at"
 > & {
@@ -1562,6 +1577,8 @@ type TicketInsert = Omit<
   is_test?: boolean
   ticket_type?: "admission" | "parking" | "access_pass"
   phase_id?: string | null
+  event_date_id?: string | null
+  source_combo_tier_id?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -2823,6 +2840,19 @@ export type Database = {
         Update: Partial<EventItemInsert>
         Relationships: []
       }
+      combo_items: {
+        Row: ComboItem
+        Insert: {
+          id?: string
+          combo_tier_id: string
+          schedule_id: string
+          child_tier_id?: string | null
+          quantity?: number
+          created_at?: string
+        }
+        Update: Partial<ComboItem>
+        Relationships: []
+      }
       ticket_tier_combo_items: {
         Row: TicketTierComboItem
         Insert: {
@@ -3386,6 +3416,42 @@ export type Database = {
           event_id: string
           expires_at: string
         }[]
+      }
+      hold_seat_for_combo: {
+        Args: {
+          p_seat_id: string
+          p_combo_tier_id: string
+          p_session_id: string
+          p_event_id?: string | null
+        }
+        Returns: {
+          hold_id: string
+          seating_unit_id: string
+          event_id: string
+          expires_at: string
+          event_date_id: string | null
+        }[]
+      }
+      hold_layout_item_for_combo: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+          p_sector_id: string
+          p_layout_item_id: string
+          p_combo_tier_id: string
+        }
+        Returns: {
+          seating_unit_id: string
+          reserved_until: string
+          event_date_id: string
+        }[]
+      }
+      sync_combo_items: {
+        Args: {
+          p_combo_tier_id: string
+          p_schedule_ids: string[]
+        }
+        Returns: number
       }
       release_seat_holds: {
         Args: {

@@ -15,6 +15,7 @@ import {
   checkoutDateCardParts,
   defaultCheckoutDateId,
   defaultCheckoutKindTab,
+  COMBO_PACKS_TAB_ID,
   FULL_PASS_TAB_ID,
   groupTicketsByDate,
   isSamePriceAnyDay,
@@ -140,6 +141,8 @@ describe("ticketMatchesTab", () => {
     assert.equal(ticketMatchesTab(pass, "d1"), false)
     assert.equal(ticketMatchesTab(combo, "d1"), false)
     assert.equal(ticketMatchesTab(combo, FULL_PASS_TAB_ID), true)
+    assert.equal(ticketMatchesTab(combo, COMBO_PACKS_TAB_ID), true)
+    assert.equal(ticketMatchesTab(pass, COMBO_PACKS_TAB_ID), true)
     assert.equal(
       ticketMatchesTab(pass, "d1", { treatFullPassAsAnyDay: true }),
       true,

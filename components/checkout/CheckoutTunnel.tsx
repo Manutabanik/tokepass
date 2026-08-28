@@ -61,6 +61,10 @@ import {
   isMapCartLine,
   parseCartCompositeItemId,
 } from "@/lib/checkout/cart-item-identity"
+import {
+  comboScheduleIdsFromTier,
+  isComboPackOffer,
+} from "@/lib/checkout/combo-schedule"
 import { cartPlaceLabel } from "@/lib/checkout/cart-lines"
 import {
   cartItemDateString,
@@ -2948,6 +2952,12 @@ export function CheckoutTunnel({
       toast.error("Elegí una ubicación para continuar.")
       return
     }
+    const comboSource = displayTiers.find((item) => item.id === focusedTierId)
+    const comboTierId =
+      comboSource && isComboPackOffer(comboSource) ? comboSource.id : null
+    const comboDays = comboSource
+      ? comboScheduleIdsFromTier(comboSource, scheduleDays)
+      : []
     const seatingCap = mapPlaceSelectionCap({
       layoutType: "table_combo",
       fallbackMax: maxTicketsPerUser,
@@ -2967,12 +2977,23 @@ export function CheckoutTunnel({
         router.refresh()
         return false
       }
-      const hold = await holdSeatingUnitForCart(
-        eventId,
-        unit.id,
-        previewKey,
-        checkoutSessionId(),
-      )
+      const hold =
+        comboTierId && (unit.layoutItemId || unit.id)
+          ? await holdSeatingUnitForCartByLayoutItem(
+              eventId,
+              unit.sectorId,
+              unit.layoutItemId || unit.id,
+              previewKey,
+              unit.eventDateId ?? selectedDateId,
+              checkoutSessionId(),
+              comboTierId,
+            )
+          : await holdSeatingUnitForCart(
+              eventId,
+              unit.id,
+              previewKey,
+              checkoutSessionId(),
+            )
       if (!hold.success) {
         if (hold.error === HIGH_DEMAND_LOCK_TIMEOUT) {
           toast.error(HIGH_DEMAND_LOCK_MESSAGE)
@@ -3015,6 +3036,8 @@ export function CheckoutTunnel({
             sectorName: unit.sectorName,
             color: unit.color,
             ticketTierId: unit.tierId,
+            comboTierId: comboTierId ?? undefined,
+            comboScheduleIds: comboDays.length > 1 ? comboDays : undefined,
             seatLabel: unitLabel,
           },
           unitDateId,
@@ -3059,6 +3082,7 @@ export function CheckoutTunnel({
           previewKey,
           selectedDateId,
           checkoutSessionId(),
+          comboTierId,
         )
         if (!hold.success) {
           if (hold.error === MISSING_EVENT_DATE_ID) {
