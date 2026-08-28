@@ -1151,10 +1151,13 @@ export function CheckoutTunnel({
         return
       }
       if (action === "pay") {
-        void runCheckoutBusy(async () => {
-          await ensureGuestCheckoutSession()
-          await goToDetailsStep()
-        })
+        fireInitiateCheckoutPixels()
+        if (availableExtras.length > 0 && !upsellSkipped) {
+          setCheckoutStep("upsell")
+          panelBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" })
+          return
+        }
+        void enterDetailsStep()
       }
     }, 0)
   }
@@ -2826,6 +2829,10 @@ export function CheckoutTunnel({
     if (!(await hasCheckoutAuthSession())) {
       const created = await ensureGuestCheckoutSession()
       if (!created) {
+        if (useCheckoutStore.getState().mode === "guest") {
+          toast.error("No se pudo abrir la reserva temporal. Probá de nuevo.")
+          return false
+        }
         requestIdentity("continue")
         toast.error("Elegí ingresar o continuar como invitado para reservar.")
         return false

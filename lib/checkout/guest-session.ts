@@ -8,16 +8,17 @@ export async function hasCheckoutAuthSession(): Promise<boolean> {
 }
 
 /**
- * Anonymous Auth for cart holds and pay. Call on Continuar / pagar,
- * not when the buyer only opens the ticket list.
+ * UID anónimo solo para holds / pagar (RLS). Nunca desde el botón
+ * "Continuar como invitado" y nunca via `signUp` / OTP.
  */
 export async function ensureGuestCheckoutSession(): Promise<boolean> {
   if (await getBrowserAuthUser()) return true
 
   const supabase = createClient()
   try {
-    const { error } = await supabase.auth.signInAnonymously()
-    return !error
+    const { data, error } = await supabase.auth.signInAnonymously()
+    if (error) return false
+    return Boolean(data.session?.user ?? data.user)
   } catch {
     return false
   }
