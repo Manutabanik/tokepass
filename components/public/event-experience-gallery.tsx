@@ -2,7 +2,7 @@
 
 import { Images, X } from "lucide-react"
 import Image from "next/image"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { createPortal } from "react-dom"
 
 export function EventExperienceGallery({ urls }: { urls: string[] }) {
@@ -11,6 +11,11 @@ export function EventExperienceGallery({ urls }: { urls: string[] }) {
     null,
   )
   const scrollerRef = useRef<HTMLDivElement>(null)
+  const portalReady = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  )
 
   useEffect(() => {
     if (selectedImageIndex == null) return
@@ -29,7 +34,7 @@ export function EventExperienceGallery({ urls }: { urls: string[] }) {
       slide?.scrollIntoView({
         inline: "center",
         block: "nearest",
-        behavior: "instant",
+        behavior: "auto",
       })
     })
 
@@ -43,7 +48,7 @@ export function EventExperienceGallery({ urls }: { urls: string[] }) {
   if (photos.length === 0) return null
 
   const lightbox =
-    selectedImageIndex !== null && typeof document !== "undefined"
+    portalReady && selectedImageIndex !== null
       ? createPortal(
           <div
             role="dialog"
@@ -61,11 +66,11 @@ export function EventExperienceGallery({ urls }: { urls: string[] }) {
             </button>
             <div
               ref={scrollerRef}
-              className="hide-scrollbar flex min-h-0 flex-1 overflow-x-auto snap-x snap-mandatory"
+              className="hide-scrollbar flex min-h-0 flex-1 touch-pan-x snap-x snap-mandatory overflow-x-auto overscroll-x-contain"
             >
               {photos.map((url, index) => (
                 <div
-                  key={url}
+                  key={`${url}-${index}`}
                   className="flex h-full min-w-full snap-center items-center justify-center p-4"
                 >
                   <Image
@@ -73,6 +78,7 @@ export function EventExperienceGallery({ urls }: { urls: string[] }) {
                     alt={`Experiencia ${index + 1} de ${photos.length}`}
                     width={1600}
                     height={1200}
+                    sizes="100vw"
                     className="max-h-full max-w-full object-contain"
                     priority={index === selectedImageIndex}
                   />
@@ -101,7 +107,7 @@ export function EventExperienceGallery({ urls }: { urls: string[] }) {
       <div className="grid grid-cols-2 gap-3">
         {photos.map((url, index) => (
           <button
-            key={url}
+            key={`${url}-${index}`}
             type="button"
             onClick={() => setSelectedImageIndex(index)}
             className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-border bg-muted"

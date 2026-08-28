@@ -1151,7 +1151,10 @@ export function CheckoutTunnel({
         return
       }
       if (action === "pay") {
-        void runCheckoutBusy(goToDetailsStep)
+        void runCheckoutBusy(async () => {
+          await ensureGuestCheckoutSession()
+          await goToDetailsStep()
+        })
       }
     }, 0)
   }

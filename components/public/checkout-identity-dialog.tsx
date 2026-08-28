@@ -3,7 +3,7 @@
 import { LogIn, UserRound } from "lucide-react"
 import type { MouseEvent } from "react"
 
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
 
 export function CheckoutIdentityDialog({
   open,
@@ -59,16 +60,22 @@ export function CheckoutIdentityDialog({
             type="button"
             disabled={pending}
             className="h-12 w-full rounded-xl bg-primary font-bold text-primary-foreground hover:bg-primary/90"
-            onClick={onLogin}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onLogin()
+            }}
           >
             <LogIn className="size-4" aria-hidden="true" />
             Ingresar a mi cuenta
           </Button>
-          <Button
+          <button
             type="button"
-            variant="outline"
             disabled={pending}
-            className="h-12 w-full rounded-xl"
+            className={cn(
+              buttonVariants({ variant: "outline" }),
+              "h-12 w-full rounded-xl",
+            )}
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.preventDefault()
@@ -78,7 +85,7 @@ export function CheckoutIdentityDialog({
           >
             <UserRound className="size-4" aria-hidden="true" />
             Continuar como invitado
-          </Button>
+          </button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
