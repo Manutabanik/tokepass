@@ -85,6 +85,30 @@ export function cartLinePrimaryLabel(line: {
   return unit ? `${qty}x ${title} — ${unit} c/u` : `${qty}x ${title}`
 }
 
+/** Name + stamped date. No qty prefix and no seat (the seat lives in the badge). */
+export function cartLineOfferTitle(line: {
+  name: string
+  displayName?: string | null
+  sectorName?: string | null
+  dateString?: string | null
+  dateLabel?: string | null
+}): string {
+  const ticket =
+    line.displayName?.trim() ||
+    line.sectorName?.trim() ||
+    line.name.trim()
+  const date = line.dateString?.trim() || line.dateLabel?.trim() || ""
+  if (date && !ticket.includes(date)) return `${ticket} - ${date}`
+  return ticket
+}
+
+export function cartLinePlaceBadge(line: {
+  seatLabel?: string | null
+  placeLabel?: string | null
+}): string {
+  return line.seatLabel?.trim() || line.placeLabel?.trim() || ""
+}
+
 /**
  * Desglose inmutable: `Nombre - seatLabel - dateString`.
  * Only stamped fields. No active tab. Omit seat dash when there is no seatLabel.

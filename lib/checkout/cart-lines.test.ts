@@ -5,6 +5,8 @@ import {
   cartLineAmount,
   cartLineBreakdownLabel,
   cartLineDisplayName,
+  cartLineOfferTitle,
+  cartLinePlaceBadge,
   cartLinePrimaryLabel,
   cartLineSnapshotLabel,
   cartLineSeatTitle,
@@ -97,6 +99,35 @@ describe("cartLinePrimaryLabel", () => {
         unitPriceLabel: "$10.000",
       }),
       "2x General Viernes — $10.000 c/u",
+    )
+  })
+})
+
+describe("cartLineOfferTitle", () => {
+  it("joins the offer name and stamped day without qty or seat", () => {
+    assert.equal(
+      cartLineOfferTitle({
+        name: "Entrada General",
+        dateString: "Viernes 13 Nov",
+      }),
+      "Entrada General - Viernes 13 Nov",
+    )
+    assert.equal(
+      cartLineOfferTitle({
+        name: "Grada Amarilla",
+        sectorName: "Grada Amarilla",
+        dateLabel: "Sábado 14 Nov",
+      }),
+      "Grada Amarilla - Sábado 14 Nov",
+    )
+  })
+})
+
+describe("cartLinePlaceBadge", () => {
+  it("prefers the stamped seat label", () => {
+    assert.equal(
+      cartLinePlaceBadge({ seatLabel: "Mesa 14", placeLabel: "Fila A" }),
+      "Mesa 14",
     )
   })
 })

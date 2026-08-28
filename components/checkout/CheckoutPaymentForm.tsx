@@ -1,7 +1,7 @@
 "use client"
 
 import { ChevronDown } from "lucide-react"
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
+import { useMemo, useState, type FormEvent } from "react"
 import type { FieldErrors } from "react-hook-form"
 
 import type { ValidatedPromo } from "@/app/actions/coupons"
@@ -17,7 +17,12 @@ import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-cli
 import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import type { CheckoutBuyerInfo } from "@/lib/checkout-buyer"
 import { formatCartTotal } from "@/lib/format"
-import { cartLineAmount, cartLineSnapshotLabel } from "@/lib/checkout/cart-lines"
+import { isMapCartLine } from "@/lib/checkout/cart-item-identity"
+import {
+  cartLineAmount,
+  cartLineOfferTitle,
+  cartLinePlaceBadge,
+} from "@/lib/checkout/cart-lines"
 import {
   useCheckoutStore,
   type StorefrontCartLine,
@@ -96,13 +101,6 @@ export function CheckoutPaymentForm({
 }) {
   const buyer = useCheckoutStore((state) => state.buyer)
   const cartLines = useCheckoutStore((state) => state.lines)
-  const payLockRef = useRef(false)
-
-  useEffect(() => {
-    if (!confirmPending && !controlsLocked) {
-      payLockRef.current = false
-    }
-  }, [confirmPending, controlsLocked])
 
   if (step === "details") {
     function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -136,7 +134,6 @@ export function CheckoutPaymentForm({
 
   function handlePaymentSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (payLockRef.current) return
     if (
       !acceptedTerms ||
       confirmPending ||
@@ -146,7 +143,6 @@ export function CheckoutPaymentForm({
     ) {
       return
     }
-    payLockRef.current = true
     if (isDraftPreview) {
       onSandboxReserve()
       return
@@ -350,20 +346,19 @@ function PaymentOrderSummary({
 }
 
 function PaymentTicketRow({ item }: { item: StorefrontCartLine }) {
-  const quantity = Math.max(1, Math.floor(item.quantity) || 1)
-  const title = cartLineSnapshotLabel({
-    name: item.name,
-    displayName: item.displayName,
-    seatLabel: item.seatLabel,
-    dateString: item.dateString,
-  })
-  const name = quantity > 1 ? `${quantity}x ${title}` : title
+  const title = cartLineOfferTitle(item)
+  const badge = isMapCartLine(item) ? cartLinePlaceBadge(item) : ""
 
   return (
     <li className="flex min-w-0 items-start justify-between gap-3">
       <div className="min-w-0">
-        <p className="line-clamp-2 break-words text-sm font-semibold text-card-foreground">
-          {name}
+        <p className="flex min-w-0 items-center gap-2 text-sm font-semibold text-card-foreground">
+          {badge ? (
+            <span className="inline-flex max-w-[7.5rem] shrink-0 truncate rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-semibold text-secondary-foreground">
+              {badge}
+            </span>
+          ) : null}
+          <span className="min-w-0 truncate">{title}</span>
         </p>
         <p className="mt-0.5 line-clamp-2 break-words text-xs text-muted-foreground">
           {lineAccessLabel(item)}

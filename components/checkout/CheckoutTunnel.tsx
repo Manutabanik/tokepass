@@ -442,13 +442,13 @@ export function CheckoutTunnel({
 }: TicketSelectorProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const [ctaBusy, setCtaBusy] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
-  const ctaBusyRef = useRef(false)
+  const isProcessingRef = useRef(false)
   const checkoutAttemptKeyRef = useRef<string | null>(null)
   const checkoutAttemptCartRef = useRef("")
   const initiatedCheckoutRef = useRef(false)
-  const checkoutBusy = isPending || ctaBusy
+  const checkoutBusy = isProcessing
   const controlsLocked = checkoutBusy || purchaseLocked
   const [showSeatFlow, setShowSeatFlow] = useState(false)
   const portalReady = useSyncExternalStore(
@@ -2078,15 +2078,23 @@ export function CheckoutTunnel({
     return key
   }
 
+  function releaseCheckoutProcessing() {
+    isProcessingRef.current = false
+    setIsProcessing(false)
+  }
+
   async function runCheckoutBusy(task: () => Promise<void> | void) {
-    if (ctaBusyRef.current || purchaseLocked) return
-    ctaBusyRef.current = true
-    setCtaBusy(true)
+    if (isProcessingRef.current || purchaseLocked) return
+    isProcessingRef.current = true
+    setIsProcessing(true)
     try {
       await task()
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "checkout_failed"
+      applyCheckoutActionError(message, "No se pudo iniciar el pago")
     } finally {
-      ctaBusyRef.current = false
-      setCtaBusy(false)
+      releaseCheckoutProcessing()
     }
   }
 
@@ -2311,6 +2319,8 @@ export function CheckoutTunnel({
         error instanceof Error ? error.message : "checkout_failed"
       applyCheckoutActionError(message, fallbackTitle)
       router.refresh()
+    } finally {
+      releaseCheckoutProcessing()
     }
   }
 
@@ -2367,7 +2377,7 @@ export function CheckoutTunnel({
       setCheckoutStep("tickets")
       return
     }
-    if (ctaBusyRef.current || checkoutBusy) return
+    if (isProcessingRef.current || checkoutBusy) return
     if (isFreeCheckout) {
       void runCheckoutBusy(async () => {
         await buyerForm.handleSubmit(
@@ -2687,7 +2697,7 @@ export function CheckoutTunnel({
   }
 
   function handlePrimaryCta() {
-    if (ctaBusyRef.current || checkoutBusy || purchaseLocked) return
+    if (isProcessingRef.current || checkoutBusy || purchaseLocked) return
     if (visibleStep === "tickets") {
       if (!canProceedFromCart) {
         toastEmptyCheckoutCart()
@@ -2711,7 +2721,7 @@ export function CheckoutTunnel({
   const simulatePayment = isDraftPreview || sandboxEligible
 
   function handleConfirmPay() {
-    if (ctaBusyRef.current || checkoutBusy || purchaseLocked) return
+    if (isProcessingRef.current || checkoutBusy || purchaseLocked) return
     if (!acceptedTerms || !canProceedFromCart) return
     if (!identityReady) {
       requestIdentity("pay")
@@ -2732,7 +2742,7 @@ export function CheckoutTunnel({
   }
 
   function handleSandboxReserve() {
-    if (ctaBusyRef.current || checkoutBusy || purchaseLocked) return
+    if (isProcessingRef.current || checkoutBusy || purchaseLocked) return
     if (
       !acceptedTerms ||
       !(isDraftPreview || sandboxEligible) ||
@@ -3097,7 +3107,7 @@ export function CheckoutTunnel({
       <AppTakeover className="z-[100] overscroll-none">
         <AdaptiveSeatingFlow
           takeover
-          pending={controlsLocked}
+          pending={isPending || controlsLocked}
           maxSelectable={mapSelectionCap}
           eventId={eventId}
           eventTitle={eventTitle}
