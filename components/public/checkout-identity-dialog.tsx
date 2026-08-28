@@ -1,6 +1,7 @@
 "use client"
 
 import { LogIn, UserRound } from "lucide-react"
+import type { MouseEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -23,7 +24,7 @@ export function CheckoutIdentityDialog({
   pending?: boolean
   onOpenChange: (open: boolean) => void
   onLogin: () => void
-  onGuest: () => void
+  onGuest: (event: MouseEvent<HTMLButtonElement>) => void
 }) {
   return (
     <Dialog
@@ -68,7 +69,12 @@ export function CheckoutIdentityDialog({
             variant="outline"
             disabled={pending}
             className="h-12 w-full rounded-xl"
-            onClick={onGuest}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onGuest(event)
+            }}
           >
             <UserRound className="size-4" aria-hidden="true" />
             Continuar como invitado

@@ -15,6 +15,7 @@ import {
   useState,
   useSyncExternalStore,
   useTransition,
+  type MouseEvent,
   type ReactNode,
 } from "react"
 import { createPortal } from "react-dom"
@@ -1129,23 +1130,30 @@ export function CheckoutTunnel({
     }, 80)
   }
 
-  function continueAsGuest() {
-    useCheckoutStore.getState().chooseGuest(eventId, eventSlug)
+  function continueAsGuest(event?: MouseEvent<HTMLButtonElement>) {
+    event?.preventDefault()
+    event?.stopPropagation()
+    buyerForm.clearErrors()
+    const store = useCheckoutStore.getState()
+    store.chooseGuest(eventId, eventSlug)
     persistCheckoutCart()
-    const action = useCheckoutStore.getState().consumePendingAction()
-    useCheckoutStore.getState().setIdentityOpen(false)
+    const action = store.pendingAction
+    store.setPendingAction(null)
 
-    if (action === "open_map") {
-      if (hasInteractiveMap) {
-        useCheckoutStore.getState().setSeatSheetOpen(true)
-      } else {
-        setShowSeatFlow(true)
+    window.setTimeout(() => {
+      store.setIdentityOpen(false)
+      if (action === "open_map") {
+        if (hasInteractiveMap) {
+          store.setSeatSheetOpen(true)
+        } else {
+          setShowSeatFlow(true)
+        }
+        return
       }
-      return
-    }
-    if (action === "pay") {
-      void runCheckoutBusy(goToDetailsStep)
-    }
+      if (action === "pay") {
+        void runCheckoutBusy(goToDetailsStep)
+      }
+    }, 0)
   }
 
   const hasInteractiveMap =

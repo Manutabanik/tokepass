@@ -1,5 +1,7 @@
 "use client"
 
+import type { MouseEvent } from "react"
+
 import { CheckoutIdentityDialog } from "@/components/public/checkout-identity-dialog"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 
@@ -8,7 +10,7 @@ export function CheckoutIdentity({
   onGuest,
 }: {
   onLogin: () => void
-  onGuest: () => void
+  onGuest: (event: MouseEvent<HTMLButtonElement>) => void
 }) {
   const open = useCheckoutStore((state) => state.identityOpen)
 
@@ -16,8 +18,11 @@ export function CheckoutIdentity({
     <CheckoutIdentityDialog
       open={open}
       onOpenChange={(next) => {
-        useCheckoutStore.getState().setIdentityOpen(next)
-        if (!next) useCheckoutStore.getState().setPendingAction(null)
+        const store = useCheckoutStore.getState()
+        store.setIdentityOpen(next)
+        if (!next && store.mode === "undecided") {
+          store.setPendingAction(null)
+        }
       }}
       onLogin={onLogin}
       onGuest={onGuest}
