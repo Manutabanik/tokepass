@@ -104,6 +104,13 @@ export function findStoryTheme(id: StoryThemeId): StoryTheme {
   return STORY_THEMES.find((theme) => theme.id === id) ?? STORY_THEMES[0]
 }
 
+/** Gradiente compacto para el swatch del editor de historias. */
+export function storyThemeSwatch(theme: StoryTheme): string {
+  if (theme.overlay?.trim()) return theme.overlay
+  const [start, mid, end] = theme.gradientStops
+  return `linear-gradient(145deg, ${start} 0%, ${mid} 48%, ${end} 100%)`
+}
+
 export function findStoryHeadline(id: StoryHeadlineId): StoryHeadline {
   return STORY_HEADLINES.find((item) => item.id === id) ?? STORY_HEADLINES[0]
 }

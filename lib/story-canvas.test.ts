@@ -6,6 +6,7 @@ import {
   defaultStoryTitle,
   findStoryTheme,
   splitStoryTitle,
+  storyThemeSwatch,
   storyCategoryLabel,
   storyInitials,
   storyLiquidLayers,
@@ -50,5 +51,13 @@ describe("story canvas helpers", () => {
   it("always exposes three liquid gradient layers", () => {
     assert.equal(storyLiquidLayers(findStoryTheme("neon-purple")).length, 3)
     assert.equal(storyLiquidLayers(findStoryTheme("gradient-minimal")).length, 3)
+  })
+
+  it("paints a theme swatch from the overlay or the gradient stops", () => {
+    const minimal = findStoryTheme("gradient-minimal")
+    assert.equal(storyThemeSwatch(minimal), minimal.overlay)
+    const neon = findStoryTheme("neon-purple")
+    assert.match(storyThemeSwatch(neon), /linear-gradient/)
+    assert.match(storyThemeSwatch(neon), /#f5d0fe/)
   })
 })

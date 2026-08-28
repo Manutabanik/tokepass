@@ -6,6 +6,7 @@ import {
   ImagePlus,
   Loader2,
   PartyPopper,
+  Pencil,
   Share2,
   X,
 } from "lucide-react"
@@ -44,15 +45,13 @@ import {
   defaultStoryHeadlineId,
   defaultStoryTitle,
   findStoryTheme,
+  storyThemeSwatch,
   type StoryFlyerData,
   type StoryFlyerMode,
   type StoryHeadlineId,
   type StoryThemeId,
 } from "@/lib/story-canvas"
-import {
-  isNativeFileShareAvailable,
-  shareOrDownloadPngBlob,
-} from "@/lib/story-flyer-share"
+import { shareOrDownloadPngBlob } from "@/lib/story-flyer-share"
 import {
   hydrateStoryFlyerImages,
   storySafeImageSrc,
@@ -80,6 +79,12 @@ type StoryFlyerModalProps = {
 const SAVED_TOAST =
   "Imagen guardada. Abri Instagram para subirla a tus Historias"
 
+const STORY_PHRASE_CHIPS: Record<StoryHeadlineId, string> = {
+  "see-you": "Nos vemos ahí",
+  "got-ticket": "Ya tengo mi entrada",
+  "going-out": "Hoy se sale",
+}
+
 export function StoryFlyerModal({
   data,
   open,
@@ -100,6 +105,7 @@ export function StoryFlyerModal({
     defaultStoryHeadlineId(data.mode),
   )
   const [customTitle, setCustomTitle] = useState(DEFAULT_STORY_TITLE)
+  const [customPhrase, setCustomPhrase] = useState(false)
   const [resolved, setResolved] = useState(data)
   const [dataKey, setDataKey] = useState(
     () => `${data.eventId}-${data.imageUrl}-${data.mode}`,
@@ -110,6 +116,7 @@ export function StoryFlyerModal({
     setResolved(data)
     setHeadlineId(defaultStoryHeadlineId(data.mode))
     setCustomTitle(defaultStoryTitle(data.mode))
+    setCustomPhrase(false)
     setSafeImageUrl(storySafeImageSrc(data.imageUrl))
     setHydrating(
       Boolean(data.imageUrl?.trim()) && !isStorySafeImage(data.imageUrl),
@@ -126,9 +133,6 @@ export function StoryFlyerModal({
   const [previewScale, setPreviewScale] = useState(0.22)
   const [zoomScale, setZoomScale] = useState(0.4)
   const zoomRef = useRef<HTMLDivElement>(null)
-  const [nativeShare] = useState(() =>
-    typeof navigator === "undefined" ? false : isNativeFileShareAvailable(),
-  )
   const titleId = useId()
   const tilt = use3DTilt(open && !busy && !isZoomed)
 
@@ -276,8 +280,8 @@ export function StoryFlyerModal({
     onOpenChange(next)
   }
 
-  const chipScroller =
-    "flex w-full snap-x snap-mandatory gap-2 overflow-x-auto scroll-smooth pb-1 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
+  const phraseChip =
+    "inline-flex shrink-0 snap-start items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold tracking-wide transition"
 
   if (!open || typeof window === "undefined") return null
 
@@ -303,18 +307,11 @@ export function StoryFlyerModal({
         <DialogPortal>
         <DialogOverlay className="z-[100] bg-black/90 backdrop-blur-md" />
         <DialogPrimitive.Popup
-          className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black/90 p-4 outline-none backdrop-blur-md sm:p-6"
+          className="fixed inset-0 z-[100] flex items-end justify-center overflow-hidden outline-none sm:items-center sm:p-6"
           aria-labelledby={titleId}
-          style={{ WebkitOverflowScrolling: "touch" }}
         >
-          <div
-            className="relative my-auto flex w-full max-w-4xl max-h-[90vh] flex-col overflow-y-auto rounded-3xl border border-white/10 bg-zinc-950 p-4 sm:p-6"
-            style={{
-              WebkitOverflowScrolling: "touch",
-              overscrollBehavior: "contain",
-            }}
-          >
-            <div className="mb-4 flex w-full shrink-0 items-center justify-between gap-3">
+          <div className="mt-auto flex h-[90dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-zinc-950 sm:mt-0 sm:h-[85vh] sm:max-h-[85vh] sm:w-full sm:max-w-md sm:rounded-3xl">
+            <div className="flex shrink-0 items-center justify-between gap-3 px-4 pt-4 pb-2">
               <DialogTitle
                 id={titleId}
                 className="text-sm font-semibold text-white"
@@ -329,173 +326,171 @@ export function StoryFlyerModal({
               </DialogClose>
             </div>
 
-            <div className="flex flex-col items-center gap-4 md:grid md:grid-cols-12 md:items-center md:gap-8">
-              <div className="flex w-full justify-center md:col-span-6">
+            <div className="flex min-h-0 flex-1 items-center justify-center bg-black/5 p-4">
+              <button
+                type="button"
+                ref={previewRef}
+                onClick={() => setIsZoomed(true)}
+                className="relative aspect-[9/16] h-full max-h-full w-auto max-w-full cursor-pointer overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/10"
+                style={{
+                  willChange: "transform",
+                  transform: "translateZ(0)",
+                  ...tilt.perspectiveStyle,
+                }}
+                onPointerMove={tilt.onPointerMove}
+                onPointerLeave={tilt.onPointerLeave}
+                onPointerDown={(event) => {
+                  if (event.pointerType === "touch") void tilt.enableGyro()
+                }}
+                aria-label="Ampliar vista previa"
+              >
+                <div
+                  style={{
+                    width: STORY_CANVAS_WIDTH,
+                    height: STORY_CANVAS_HEIGHT,
+                    transform: `scale(${previewScale})`,
+                    transformOrigin: "top left",
+                    willChange: "transform",
+                    pointerEvents: "none",
+                  }}
+                >
+                  <StoryCanvas
+                    data={resolved}
+                    themeId={themeId}
+                    headlineId={headlineId}
+                    headlineText={customTitle}
+                    live
+                    pauseMotion={busy || hydrating || isZoomed}
+                    imagePending={hydrating && flyerRequired}
+                    rotateX={tilt.rotateX}
+                    rotateY={tilt.rotateY}
+                  />
+                </div>
+                <motion.div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 rounded-2xl mix-blend-screen"
+                  style={{ background: tilt.holoBackground }}
+                />
+              </button>
+            </div>
+
+            <div className="shrink-0 space-y-3 pt-3">
+              <div className="flex justify-center gap-3 px-4">
+                {STORY_THEMES.map((theme) => {
+                  const selected = theme.id === themeId
+                  return (
+                    <button
+                      key={theme.id}
+                      type="button"
+                      onClick={() => setThemeId(theme.id)}
+                      aria-pressed={selected}
+                      aria-label={theme.label}
+                      title={theme.label}
+                      className={cn(
+                        "size-10 rounded-full border-2 transition",
+                        selected
+                          ? "border-white ring-2 ring-primary ring-offset-2 ring-offset-zinc-950"
+                          : "border-white/25 hover:border-white/50",
+                      )}
+                      style={{
+                        background: storyThemeSwatch(theme),
+                        backgroundColor: theme.background,
+                      }}
+                    />
+                  )
+                })}
+              </div>
+
+              <div className="hide-scrollbar flex snap-x snap-mandatory gap-2 overflow-x-auto px-4">
+                {STORY_HEADLINES.map((headline) => {
+                  const selected =
+                    !customPhrase && headline.id === headlineId
+                  return (
+                    <button
+                      key={headline.id}
+                      type="button"
+                      onClick={() => {
+                        setCustomPhrase(false)
+                        setHeadlineId(headline.id)
+                        setCustomTitle(headline.lines.join(" "))
+                      }}
+                      aria-pressed={selected}
+                      className={cn(
+                        phraseChip,
+                        selected
+                          ? "bg-white text-zinc-950"
+                          : "border border-white/15 bg-white/8 text-white/80 hover:bg-white/15",
+                      )}
+                    >
+                      {STORY_PHRASE_CHIPS[headline.id]}
+                    </button>
+                  )
+                })}
                 <button
                   type="button"
-                  ref={previewRef}
-                  onClick={() => setIsZoomed(true)}
-                  className="relative aspect-[9/16] max-h-[45vh] w-[min(calc(45vh*9/16),calc(100vw-3rem),22rem)] cursor-pointer overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/10 md:max-h-[70vh] md:w-[min(calc(70vh*9/16),28rem)]"
-                  style={{
-                    willChange: "transform",
-                    transform: "translateZ(0)",
-                    ...tilt.perspectiveStyle,
-                  }}
-                  onPointerMove={tilt.onPointerMove}
-                  onPointerLeave={tilt.onPointerLeave}
-                  onPointerDown={(event) => {
-                    if (event.pointerType === "touch") void tilt.enableGyro()
-                  }}
-                  aria-label="Ampliar vista previa"
+                  onClick={() => setCustomPhrase(true)}
+                  aria-pressed={customPhrase}
+                  className={cn(
+                    phraseChip,
+                    customPhrase
+                      ? "bg-white text-zinc-950"
+                      : "border border-white/15 bg-white/8 text-white/80 hover:bg-white/15",
+                  )}
                 >
-                  <div
-                    style={{
-                      width: STORY_CANVAS_WIDTH,
-                      height: STORY_CANVAS_HEIGHT,
-                      transform: `scale(${previewScale})`,
-                      transformOrigin: "top left",
-                      willChange: "transform",
-                      pointerEvents: "none",
-                    }}
-                  >
-                    <StoryCanvas
-                      data={resolved}
-                      themeId={themeId}
-                      headlineId={headlineId}
-                      headlineText={customTitle}
-                      live
-                      pauseMotion={busy || hydrating || isZoomed}
-                      imagePending={hydrating && flyerRequired}
-                      rotateX={tilt.rotateX}
-                      rotateY={tilt.rotateY}
-                    />
-                  </div>
-                  <motion.div
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 rounded-2xl mix-blend-screen"
-                    style={{ background: tilt.holoBackground }}
-                  />
+                  <Pencil className="size-3.5" aria-hidden />
+                  Personalizado
                 </button>
               </div>
 
-              <div className="flex w-full flex-col gap-4 md:col-span-6">
-                <div className="w-full">
-                  <p className="mb-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-white/50 md:text-left">
-                    Tema
-                  </p>
-                  <div className={chipScroller}>
-                    {STORY_THEMES.map((theme) => {
-                      const selected = theme.id === themeId
-                      return (
-                        <button
-                          key={theme.id}
-                          type="button"
-                          onClick={() => setThemeId(theme.id)}
-                          aria-pressed={selected}
-                          title={theme.label}
-                          className={cn(
-                            "h-9 shrink-0 snap-start rounded-full px-3 text-[11px] font-bold transition",
-                            selected
-                              ? "bg-white text-zinc-950"
-                              : "border border-white/15 bg-white/8 text-white/80 hover:bg-white/15",
-                          )}
-                        >
-                          {theme.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                <div className="w-full">
-                  <p className="mb-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-white/50 md:text-left">
-                    Frase
-                  </p>
-                  <div className={chipScroller}>
-                    {STORY_HEADLINES.map((headline) => {
-                      const selected = headline.id === headlineId
-                      return (
-                        <button
-                          key={headline.id}
-                          type="button"
-                          onClick={() => {
-                            setHeadlineId(headline.id)
-                            setCustomTitle(headline.lines.join(" "))
-                          }}
-                          aria-pressed={selected}
-                          className={cn(
-                            "shrink-0 snap-start rounded-full px-3 py-1.5 text-[11px] font-bold tracking-wide transition",
-                            selected
-                              ? "bg-white text-zinc-950"
-                              : "border border-white/15 bg-white/8 text-white/80 hover:bg-white/15",
-                          )}
-                        >
-                          {headline.lines.join(" ")}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                <div className="w-full">
-                  <label
-                    htmlFor={titleId + "-custom"}
-                    className="mb-2 block text-center text-[10px] font-bold uppercase tracking-[0.18em] text-white/50 md:text-left"
-                  >
-                    Texto superior
-                  </label>
+              {customPhrase ? (
+                <div className="px-4">
                   <Input
                     id={titleId + "-custom"}
                     value={customTitle}
                     maxLength={48}
-                    placeholder="YA TENGO MI ENTRADA"
+                    placeholder="Escribi tu frase"
                     onChange={(event) => setCustomTitle(event.target.value)}
-                    className="h-11 rounded-xl border-white/15 bg-white/8 text-white placeholder:text-white/35"
+                    className="h-10 rounded-full border-white/15 bg-white/8 text-white placeholder:text-white/35"
+                    autoFocus
                   />
-                  <p className="mt-1.5 text-center text-[11px] text-white/40 md:text-left">
-                    Vacio: se oculta el titulo en la historia.
-                  </p>
                 </div>
+              ) : null}
+            </div>
 
-                <Button
-                  type="button"
-                  disabled={!exportReady}
-                  onClick={() => void handleShareInstagram()}
-                  className="min-h-14 w-full rounded-full bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500 text-base font-bold text-white hover:from-violet-500 hover:via-fuchsia-500 hover:to-pink-400"
-                >
-                  {busy ? (
-                    <>
-                      <Loader2 className="size-5 animate-spin" aria-hidden />
-                      Generando imagen…
-                    </>
-                  ) : hydrating || !imagesReady ? (
-                    <>
-                      <Loader2 className="size-5 animate-spin" aria-hidden />
-                      Preparando imagen…
-                    </>
-                  ) : (
-                    <>
-                      <Share2 className="size-5" aria-hidden />
-                      Compartir en Instagram
-                    </>
-                  )}
-                </Button>
-                <Button
-                  type="button"
-                  disabled={!exportReady}
-                  variant="outline"
-                  onClick={() => void handleDownloadPng()}
-                  className="min-h-12 w-full rounded-full border-white/20 bg-white/5 text-white hover:bg-white/10"
-                >
-                  <Download className="size-5" aria-hidden />
-                  Descargar Imagen PNG
-                </Button>
-                <p className="text-center text-xs text-zinc-500 md:text-left">
-                  {nativeShare
-                    ? "PNG Ultra HD 1080 x 1920 para Instagram o WhatsApp."
-                    : "PNG Ultra HD 1080 x 1920. Se guarda en el telefono si no puede compartir."}
-                </p>
-              </div>
+            <div className="mt-auto shrink-0 space-y-2 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <Button
+                type="button"
+                disabled={!exportReady}
+                onClick={() => void handleShareInstagram()}
+                className="min-h-12 w-full rounded-full bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500 text-sm font-bold text-white hover:from-violet-500 hover:via-fuchsia-500 hover:to-pink-400"
+              >
+                {busy ? (
+                  <>
+                    <Loader2 className="size-5 animate-spin" aria-hidden />
+                    Generando imagen…
+                  </>
+                ) : hydrating || !imagesReady ? (
+                  <>
+                    <Loader2 className="size-5 animate-spin" aria-hidden />
+                    Preparando imagen…
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="size-5" aria-hidden />
+                    Compartir en Instagram
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                disabled={!exportReady}
+                variant="outline"
+                onClick={() => void handleDownloadPng()}
+                className="min-h-11 w-full rounded-full border-white/20 bg-white/5 text-white hover:bg-white/10"
+              >
+                <Download className="size-4" aria-hidden />
+                Descargar PNG
+              </Button>
             </div>
           </div>
         </DialogPrimitive.Popup>
