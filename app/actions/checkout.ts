@@ -12,6 +12,8 @@ import {
   type CheckoutBuyerInfo,
   type NormalizedCheckoutBuyer,
 } from "@/lib/checkout-buyer"
+import { normalizeCheckoutHoldSessionId } from "@/lib/checkout/hold-session"
+import { resolveInvisibleCheckoutBuyer } from "@/lib/checkout/invisible-buyer"
 import { PHONE_ERROR } from "@/lib/checkout/guest-input"
 import {
   applyActivePhaseToTier,
@@ -439,6 +441,83 @@ async function assertCheckoutWaitingRoom(input: {
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   if (input.bypass) return { ok: true }
   return assertWaitingRoomCheckoutPass([input.eventId, input.eventSlug])
+}
+
+type HoldOwner =
+  | { ok: true; ownerId: string; userId: string | null; useAdmin: boolean }
+  | { ok: false; error: "auth_required" }
+
+async function resolveHoldOwner(
+  sessionId?: string | null,
+): Promise<HoldOwner> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (user) {
+    return { ok: true, ownerId: user.id, userId: user.id, useAdmin: false }
+  }
+  const session = normalizeCheckoutHoldSessionId(sessionId)
+  if (!session) {
+    return { ok: false, error: "auth_required" }
+  }
+  return { ok: true, ownerId: session, userId: null, useAdmin: true }
+}
+
+function holdDatabase(
+  accessDb: CheckoutSupabase,
+  useAdmin: boolean,
+): CheckoutSupabase | null {
+  if (!useAdmin) return accessDb
+  return (tryCreateAdminClient() as CheckoutSupabase | null) ?? null
+}
+
+async function transferGuestHoldsToBuyer(input: {
+  eventId: string
+  sessionId?: string | null
+  buyerId: string
+}) {
+  const session = normalizeCheckoutHoldSessionId(input.sessionId)
+  if (!session || session === input.buyerId) return
+  const admin = tryCreateAdminClient()
+  if (!admin) return
+
+  const { error } = await admin.rpc("transfer_guest_cart_holds", {
+    p_event_id: input.eventId,
+    p_session_id: session,
+    p_buyer_id: input.buyerId,
+  })
+  if (
+    error &&
+    /could not find|schema cache|does not exist|pgrst202/i.test(error.message)
+  ) {
+    await Promise.all([
+      admin
+        .from("event_ga_cart_holds")
+        .update({ owner_id: input.buyerId })
+        .eq("event_id", input.eventId)
+        .eq("owner_id", session),
+      admin
+        .from("seat_holds")
+        .update({ owner_id: input.buyerId })
+        .eq("event_id", input.eventId)
+        .eq("user_session_id", session),
+      admin
+        .from("event_seating_units")
+        .update({ reserved_by: input.buyerId })
+        .eq("event_id", input.eventId)
+        .eq("reserved_by", session),
+    ])
+    return
+  }
+  if (error) {
+    logger.error({
+      context: "checkout/guest-hold",
+      message: "transfer_guest_cart_holds_failed",
+      eventId: input.eventId,
+      error: error.message,
+    })
+  }
 }
 
 async function resolveCheckoutEventAccess(input: {
@@ -1226,6 +1305,7 @@ export async function holdSeatingUnitForCart(
   eventId: string,
   seatingUnitId: string,
   previewKey?: string | null,
+  sessionId?: string | null,
 ): Promise<CartSeatingHoldResult> {
   const parsed = CheckoutSeatHoldSchema.safeParse({ eventId, seatingUnitId })
   if (!parsed.success) {
@@ -1234,25 +1314,23 @@ export async function holdSeatingUnitForCart(
   eventId = parsed.data.eventId
   seatingUnitId = parsed.data.seatingUnitId
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError || !user) {
-    return { success: false, error: "auth_required" }
+  const owner = await resolveHoldOwner(sessionId)
+  if (!owner.ok) {
+    return { success: false, error: owner.error }
   }
 
   const access = await resolveCheckoutEventAccess({
     eventId,
-    userId: user.id,
+    userId: owner.userId ?? owner.ownerId,
     previewKey,
   })
   if (!access.ok) {
     return { success: false, error: access.error }
   }
-  const db = access.db
+  const db = holdDatabase(access.db, owner.useAdmin)
+  if (!db) {
+    return { success: false, error: "No se pudo abrir la reserva temporal. Probá de nuevo." }
+  }
 
   const room = await assertCheckoutWaitingRoom({
     eventId: access.eventId,
@@ -1263,7 +1341,7 @@ export async function holdSeatingUnitForCart(
     return { success: false, error: room.error }
   }
 
-  const allowed = !(await cartHoldRateLimited(user.id))
+  const allowed = !(await cartHoldRateLimited(owner.ownerId))
   if (!allowed) {
     return {
       success: false,
@@ -1283,7 +1361,7 @@ export async function holdSeatingUnitForCart(
 
   const { data, error } = await db.rpc("hold_seating_unit_for_cart", {
     p_event_id: eventId,
-    p_owner_id: user.id,
+    p_owner_id: owner.ownerId,
     p_seating_unit_id: seatingUnitId,
   })
 
@@ -1339,16 +1417,12 @@ export async function holdSeat(
     return { success: false, error: formatCheckoutPayloadError(parsed.error) }
   }
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return { success: false, error: "auth_required" }
+  const owner = await resolveHoldOwner(parsed.data.sessionId)
+  if (!owner.ok) {
+    return { success: false, error: owner.error }
   }
 
-  const allowed = !(await cartHoldRateLimited(user.id))
+  const allowed = !(await cartHoldRateLimited(owner.ownerId))
   if (!allowed) {
     return {
       success: false,
@@ -1356,10 +1430,20 @@ export async function holdSeat(
     }
   }
 
+  const supabase = owner.useAdmin
+    ? tryCreateAdminClient()
+    : await createClient()
+  if (!supabase) {
+    return {
+      success: false,
+      error: "No se pudo abrir la reserva temporal. Probá de nuevo.",
+    }
+  }
+
   const holdArgs = {
     p_seat_id: parsed.data.seatId,
     p_event_date_id: parsed.data.eventDateId,
-    p_session_id: user.id,
+    p_session_id: owner.ownerId,
     ...(parsed.data.eventId ? { p_event_id: parsed.data.eventId } : {}),
   }
   let { data, error } = await supabase.rpc("hold_seat", holdArgs)
@@ -1371,7 +1455,7 @@ export async function holdSeat(
     const retry = await supabase.rpc("hold_seat", {
       p_seat_id: parsed.data.seatId,
       p_event_date_id: parsed.data.eventDateId,
-      p_session_id: user.id,
+      p_session_id: owner.ownerId,
     })
     data = retry.data
     error = retry.error
@@ -1413,18 +1497,24 @@ export async function holdSeat(
 
 export async function releaseSeatHolds(
   eventId?: string | null,
+  sessionId?: string | null,
 ): Promise<{ success: true } | { success: false; error: string }> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return { success: false, error: "auth_required" }
+  const owner = await resolveHoldOwner(sessionId)
+  if (!owner.ok) {
+    return { success: false, error: owner.error }
+  }
+  const supabase = owner.useAdmin
+    ? tryCreateAdminClient()
+    : await createClient()
+  if (!supabase) {
+    return {
+      success: false,
+      error: "No se pudo abrir la reserva temporal. Probá de nuevo.",
+    }
   }
 
   const { error } = await supabase.rpc("release_seat_holds", {
-    p_session_id: user.id,
+    p_session_id: owner.ownerId,
     p_event_id: eventId?.trim() || null,
   })
   if (error) {
@@ -1601,6 +1691,7 @@ export async function holdSeatingUnitForCartByLayoutItem(
   layoutItemId: string,
   previewKey?: string | null,
   eventDateId?: string | null,
+  sessionId?: string | null,
 ): Promise<CartSeatingHoldResult & { seatingUnitId?: string }> {
   const parsed = CheckoutLayoutHoldSchema.safeParse({
     eventId,
@@ -1619,25 +1710,23 @@ export async function holdSeatingUnitForCartByLayoutItem(
     asHoldEventDateId(parsed.data.eventDateId) ??
     asHoldEventDateId(parsed.data.dateId)
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError || !user) {
-    return { success: false, error: "auth_required" }
+  const owner = await resolveHoldOwner(sessionId)
+  if (!owner.ok) {
+    return { success: false, error: owner.error }
   }
 
   const access = await resolveCheckoutEventAccess({
     eventId,
-    userId: user.id,
+    userId: owner.userId ?? owner.ownerId,
     previewKey,
   })
   if (!access.ok) {
     return { success: false, error: access.error }
   }
-  const db = access.db
+  const db = holdDatabase(access.db, owner.useAdmin)
+  if (!db) {
+    return { success: false, error: "No se pudo abrir la reserva temporal. Probá de nuevo." }
+  }
   const scheduleDayIds = await loadEventScheduleDayIds(db, eventId)
   const dayGate = requireHoldEventDateId({
     eventDateId,
@@ -1664,7 +1753,7 @@ export async function holdSeatingUnitForCartByLayoutItem(
     return { success: false, error: room.error }
   }
 
-  const allowed = !(await cartHoldRateLimited(user.id))
+  const allowed = !(await cartHoldRateLimited(owner.ownerId))
   if (!allowed) {
     return {
       success: false,
@@ -1714,7 +1803,7 @@ export async function holdSeatingUnitForCartByLayoutItem(
   if (matchedUnit) {
     const { data, error } = await db.rpc("hold_seating_unit_for_cart", {
       p_event_id: eventId,
-      p_owner_id: user.id,
+      p_owner_id: owner.ownerId,
       p_seating_unit_id: matchedUnit.id,
     })
     if (error) {
@@ -1759,7 +1848,7 @@ export async function holdSeatingUnitForCartByLayoutItem(
   )) {
     const rpcArgs = {
       p_event_id: eventId,
-      p_owner_id: user.id,
+      p_owner_id: owner.ownerId,
       p_sector_id: candidate,
       p_layout_item_id: layoutItemId,
       ...(eventDateId ? { p_event_date_id: eventDateId } : {}),
@@ -1829,6 +1918,7 @@ export async function holdSeatingUnitForCartByLayoutItem(
 export async function releaseSeatingUnitCartHold(
   eventId: string,
   seatingUnitId: string,
+  sessionId?: string | null,
 ): Promise<{ success: true } | { success: false; error: string }> {
   const parsed = CheckoutSeatHoldSchema.safeParse({ eventId, seatingUnitId })
   if (!parsed.success) {
@@ -1837,18 +1927,23 @@ export async function releaseSeatingUnitCartHold(
   eventId = parsed.data.eventId
   seatingUnitId = parsed.data.seatingUnitId
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return { success: false, error: "auth_required" }
+  const owner = await resolveHoldOwner(sessionId)
+  if (!owner.ok) {
+    return { success: false, error: owner.error }
+  }
+  const supabase = owner.useAdmin
+    ? tryCreateAdminClient()
+    : await createClient()
+  if (!supabase) {
+    return {
+      success: false,
+      error: "No se pudo abrir la reserva temporal. Probá de nuevo.",
+    }
   }
 
   const { error } = await supabase.rpc("release_seating_unit_cart_hold", {
     p_event_id: eventId,
-    p_owner_id: user.id,
+    p_owner_id: owner.ownerId,
     p_seating_unit_id: seatingUnitId,
   })
   if (error) {
@@ -1870,6 +1965,7 @@ export async function releaseSeatingUnitCartHold(
 export async function getSeatingUnitCartHold(
   eventId: string,
   seatingUnitId: string,
+  sessionId?: string | null,
 ): Promise<CartSeatingHoldResult> {
   const parsed = CheckoutSeatHoldSchema.safeParse({ eventId, seatingUnitId })
   if (!parsed.success) {
@@ -1878,18 +1974,23 @@ export async function getSeatingUnitCartHold(
   eventId = parsed.data.eventId
   seatingUnitId = parsed.data.seatingUnitId
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return { success: false, error: "auth_required" }
+  const owner = await resolveHoldOwner(sessionId)
+  if (!owner.ok) {
+    return { success: false, error: owner.error }
+  }
+  const supabase = owner.useAdmin
+    ? tryCreateAdminClient()
+    : await createClient()
+  if (!supabase) {
+    return {
+      success: false,
+      error: "No se pudo abrir la reserva temporal. Probá de nuevo.",
+    }
   }
 
   const { data, error } = await supabase.rpc("get_seating_unit_cart_hold", {
     p_event_id: eventId,
-    p_owner_id: user.id,
+    p_owner_id: owner.ownerId,
     p_seating_unit_id: seatingUnitId,
   })
   if (error) {
@@ -1938,6 +2039,7 @@ export async function lockTickets(
   eventId: string,
   items: LockTicketsItem[],
   previewKey?: string | null,
+  sessionId?: string | null,
 ): Promise<LockTicketsResult> {
   const parsed = CheckoutLockTicketsSchema.safeParse({ eventId, items })
   if (!parsed.success) {
@@ -1946,7 +2048,12 @@ export async function lockTickets(
   eventId = parsed.data.eventId
 
   try {
-    return await executeLockTickets(eventId, parsed.data.items, previewKey)
+    return await executeLockTickets(
+      eventId,
+      parsed.data.items,
+      previewKey,
+      sessionId,
+    )
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error ?? "")
     const mapped = mapReserveRpcError(message)
@@ -1975,25 +2082,29 @@ async function executeLockTickets(
   eventId: string,
   cartItemsInput: CheckoutCartItem[],
   previewKey?: string | null,
+  sessionId?: string | null,
 ): Promise<LockTicketsResult> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError || !user) {
-    return { success: false, error: "auth_required" }
+  const owner = await resolveHoldOwner(sessionId)
+  if (!owner.ok) {
+    return { success: false, error: owner.error }
   }
 
   const access = await resolveCheckoutEventAccess({
     eventId,
-    userId: user.id,
+    userId: owner.userId ?? owner.ownerId,
     previewKey,
   })
   if (!access.ok) {
     return { success: false, error: access.error }
   }
+  const holdDb = holdDatabase(access.db, owner.useAdmin)
+  if (!holdDb) {
+    return {
+      success: false,
+      error: "No se pudo abrir la reserva temporal. Probá de nuevo.",
+    }
+  }
+  access.db = holdDb
 
   const room = await assertCheckoutWaitingRoom({
     eventId: access.eventId,
@@ -2004,7 +2115,7 @@ async function executeLockTickets(
     return { success: false, error: room.error }
   }
 
-  const allowed = !(await cartHoldRateLimited(user.id))
+  const allowed = !(await cartHoldRateLimited(owner.ownerId))
   if (!allowed) {
     return {
       success: false,
@@ -2167,7 +2278,7 @@ async function executeLockTickets(
   )
   const mixed = await access.db.rpc("hold_mixed_cart_for_checkout", {
     p_event_id: eventId,
-    p_owner_id: user.id,
+    p_owner_id: owner.ownerId,
     p_items: rpcItems,
   })
   const mixedMissing = Boolean(
@@ -2195,7 +2306,7 @@ async function executeLockTickets(
       if (gaPayload.length > 0) {
         const ga = await access.db.rpc("hold_ga_tickets_for_cart", {
           p_event_id: eventId,
-          p_owner_id: user.id,
+          p_owner_id: owner.ownerId,
           p_items: gaPayload,
         })
         data = ga.data
@@ -2210,7 +2321,7 @@ async function executeLockTickets(
           if (gaHeld) {
             await access.db.rpc("release_ga_cart_holds", {
               p_event_id: eventId,
-              p_owner_id: user.id,
+              p_owner_id: owner.ownerId,
             })
           }
           return checkoutActionFailure(
@@ -2221,7 +2332,7 @@ async function executeLockTickets(
         }
         const held = await access.db.rpc("hold_seating_unit_for_cart", {
           p_event_id: eventId,
-          p_owner_id: user.id,
+          p_owner_id: owner.ownerId,
           p_seating_unit_id: seatId,
         })
         if (held.error) {
@@ -2239,7 +2350,7 @@ async function executeLockTickets(
       if (gaHeld) {
         const released = await access.db.rpc("release_ga_cart_holds", {
           p_event_id: eventId,
-          p_owner_id: user.id,
+          p_owner_id: owner.ownerId,
         })
         if (released.error) {
           logger.error({
@@ -2253,7 +2364,7 @@ async function executeLockTickets(
       for (const seatId of heldSeatIds) {
         const released = await access.db.rpc("release_seating_unit_cart_hold", {
           p_event_id: eventId,
-          p_owner_id: user.id,
+          p_owner_id: owner.ownerId,
           p_seating_unit_id: seatId,
         })
         if (released.error) {
@@ -2319,6 +2430,7 @@ async function executeLockTickets(
 
 export async function releaseGaCartHolds(
   eventId: string,
+  sessionId?: string | null,
 ): Promise<{ success: true } | { success: false; error: string }> {
   const parsed = CheckoutEventIdSchema.safeParse({ eventId })
   if (!parsed.success) {
@@ -2326,18 +2438,23 @@ export async function releaseGaCartHolds(
   }
   eventId = parsed.data.eventId
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return { success: false, error: "auth_required" }
+  const owner = await resolveHoldOwner(sessionId)
+  if (!owner.ok) {
+    return { success: false, error: owner.error }
+  }
+  const supabase = owner.useAdmin
+    ? tryCreateAdminClient()
+    : await createClient()
+  if (!supabase) {
+    return {
+      success: false,
+      error: "No se pudo abrir la reserva temporal. Probá de nuevo.",
+    }
   }
 
   const { error } = await supabase.rpc("release_ga_cart_holds", {
     p_event_id: eventId,
-    p_owner_id: user.id,
+    p_owner_id: owner.ownerId,
   })
   if (error) {
     logger.error({
@@ -2366,6 +2483,7 @@ export type CartHoldListRow = {
 
 export async function listCartHolds(
   eventId: string,
+  sessionId?: string | null,
 ): Promise<
   | { success: true; holds: CartHoldListRow[] }
   | { success: false; error: "auth_required" | string }
@@ -2376,18 +2494,23 @@ export async function listCartHolds(
   }
   eventId = parsed.data.eventId
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return { success: false, error: "auth_required" }
+  const owner = await resolveHoldOwner(sessionId)
+  if (!owner.ok) {
+    return { success: false, error: owner.error }
+  }
+  const supabase = owner.useAdmin
+    ? tryCreateAdminClient()
+    : await createClient()
+  if (!supabase) {
+    return {
+      success: false,
+      error: "No se pudo abrir la reserva temporal. Probá de nuevo.",
+    }
   }
 
   const { data, error } = await supabase.rpc("list_cart_holds", {
     p_event_id: eventId,
-    p_owner_id: user.id,
+    p_owner_id: owner.ownerId,
   })
   if (error) {
     const missing = /could not find|schema cache|does not exist/i.test(
@@ -2408,6 +2531,7 @@ export async function listCartHolds(
 
 export async function getGaCartHold(
   eventId: string,
+  sessionId?: string | null,
 ): Promise<LockTicketsResult> {
   const parsed = CheckoutEventIdSchema.safeParse({ eventId })
   if (!parsed.success) {
@@ -2415,18 +2539,23 @@ export async function getGaCartHold(
   }
   eventId = parsed.data.eventId
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return { success: false, error: "auth_required" }
+  const owner = await resolveHoldOwner(sessionId)
+  if (!owner.ok) {
+    return { success: false, error: owner.error }
+  }
+  const supabase = owner.useAdmin
+    ? tryCreateAdminClient()
+    : await createClient()
+  if (!supabase) {
+    return {
+      success: false,
+      error: "No se pudo abrir la reserva temporal. Probá de nuevo.",
+    }
   }
 
   const { data, error } = await supabase.rpc("get_ga_cart_hold", {
     p_event_id: eventId,
-    p_owner_id: user.id,
+    p_owner_id: owner.ownerId,
   })
   if (error) {
     return {
@@ -2867,6 +2996,7 @@ export async function startCheckoutWithPayment(
     termsAccepted?: boolean
     displayedTotal?: number
     idempotencyKey?: string | null
+    cartSessionId?: string | null
   },
 ): Promise<CheckoutResult> {
   const ctx = await getCheckoutRequestContext()
@@ -2892,6 +3022,7 @@ export async function startCheckoutWithPayment(
     paymentProvider: options?.paymentProvider,
     displayedTotal: options?.displayedTotal,
     idempotencyKey: options?.idempotencyKey,
+    cartSessionId: options?.cartSessionId,
   })
   if (!parsed.success) {
     await recordCheckoutFailure(ctx)
@@ -2901,19 +3032,15 @@ export async function startCheckoutWithPayment(
   const payload = parsed.data
   const buyer = buyerToHolderFields(payload.buyer) satisfies NormalizedCheckoutBuyer
 
-  const supabase = await createClient()
-  const {
-    data: { user: earlyUser },
-    error: earlyAuthError,
-  } = await supabase.auth.getUser()
-
-  if (earlyAuthError || !earlyUser) {
-    return { success: false, error: "auth_required" }
+  const invisible = await resolveInvisibleCheckoutBuyer(buyer)
+  if (!invisible.ok) {
+    await recordCheckoutFailure(ctx)
+    return { success: false, error: invisible.error }
   }
 
   const access = await resolveCheckoutEventAccess({
     eventId: payload.eventId,
-    userId: earlyUser.id,
+    userId: invisible.userId,
     previewKey: payload.previewKey ?? options?.previewKey,
   })
   if (!access.ok) {
@@ -2927,7 +3054,10 @@ export async function startCheckoutWithPayment(
     }
   }
   const useSandbox = access.useSandbox || Boolean(payload.sandbox)
-  const db = access.db
+  const db =
+    invisible.signedIn
+      ? access.db
+      : ((tryCreateAdminClient() as CheckoutSupabase | null) ?? access.db)
 
   const room = await assertCheckoutWaitingRoom({
     eventId: access.eventId,
@@ -2957,7 +3087,12 @@ export async function startCheckoutWithPayment(
   const cartItems = resolvedCart.items
   const seatingItems = cartItems.filter((item) => isMappedCheckoutItem(item))
 
-  const user = earlyUser
+  const user = { id: invisible.userId }
+  await transferGuestHoldsToBuyer({
+    eventId: payload.eventId,
+    sessionId: payload.cartSessionId,
+    buyerId: user.id,
+  })
 
   const checkoutAllowed = await consumeNamedRateLimit("checkoutUser", user.id)
   if (!checkoutAllowed) {
@@ -3095,7 +3230,7 @@ export async function startCheckoutWithPayment(
 
   // Progressive profiling: DNI + teléfono permanentes en el perfil.
   // email no está en column grant → no lo tocamos acá.
-  await supabase
+  await db
     .from("profiles")
     .update({
       full_name: buyer.buyerName,
@@ -3106,7 +3241,7 @@ export async function startCheckoutWithPayment(
 
   // Nunca confiar en promoter_id del cliente. Cupón con RRPP pisa cookie/?rrpp=.
   const promoterId = await resolveCheckoutPromoterId({
-    supabase,
+    supabase: db,
     eventId: payload.eventId,
     referralCode: payload.referralCode,
     promoCodeId: payload.promoCodeId,
@@ -3582,7 +3717,7 @@ export async function startCheckoutWithPayment(
       }
 
       const couponPromoterId = await resolveCheckoutPromoterId({
-        supabase,
+        supabase: db,
         eventId: payload.eventId,
         promoCodeId: cleanPromoId,
       })
@@ -3915,7 +4050,7 @@ export async function startCheckoutWithPayment(
 
     const message = error instanceof Error ? error.message : String(error ?? "")
     if (isPhaseStockError(message)) {
-      return resolvePhaseRolloverAfterError(supabase, payload.eventId, cartItems)
+      return resolvePhaseRolloverAfterError(db, payload.eventId, cartItems)
     }
     const mappedUnexpected = mapReserveRpcError(message)
     if (mappedUnexpected) return mappedUnexpected
@@ -4001,6 +4136,7 @@ export async function startSandboxCheckout(
   guard?: {
     displayedTotal?: number
     idempotencyKey?: string | null
+    cartSessionId?: string | null
   },
 ): Promise<CheckoutResult> {
   const parsed = CheckoutPayloadSchema.safeParse({
@@ -4015,6 +4151,7 @@ export async function startSandboxCheckout(
     previewKey: normalizePreviewKey(previewKey),
     displayedTotal: guard?.displayedTotal,
     idempotencyKey: guard?.idempotencyKey,
+    cartSessionId: guard?.cartSessionId,
   })
   if (!parsed.success) {
     return { success: false, error: formatCheckoutPayloadError(parsed.error) }
@@ -4037,6 +4174,7 @@ export async function startSandboxCheckout(
       captchaToken,
       displayedTotal: parsed.data.displayedTotal ?? guard?.displayedTotal,
       idempotencyKey: parsed.data.idempotencyKey ?? guard?.idempotencyKey,
+      cartSessionId: parsed.data.cartSessionId ?? guard?.cartSessionId,
     },
   )
 }

@@ -395,6 +395,7 @@ export const CheckoutPayloadSchema = z.preprocess(
         value == null ? value : centsToMoney(moneyToCents(value)),
       ),
     idempotencyKey: z.string().uuid(UUID_ERROR).optional().nullable(),
+    cartSessionId: z.string().uuid(UUID_ERROR).optional().nullable(),
   })
   .superRefine((payload, ctx) => {
     const items = payload.items ?? []

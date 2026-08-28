@@ -44,8 +44,8 @@ export function CheckoutIdentityDialog({
             Ingresá o continuá como invitado
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            El mapa se abre ahora. Nombre, DNI y teléfono se piden recién al
-            confirmar el pago.
+            El mapa se abre ahora. Nombre, apellido, DNI y email se piden
+            recién al confirmar el pago.
           </DialogDescription>
         </DialogHeader>
 

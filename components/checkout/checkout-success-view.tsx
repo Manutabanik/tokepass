@@ -238,8 +238,8 @@ export function CheckoutSuccessView({
                   ¡Pago confirmado! Ya estás adentro
                 </h1>
                 <p className="mx-auto max-w-md text-lg font-medium text-muted-foreground md:text-xl">
-                  Te mandamos el comprobante y el acceso a tu mail. También las
-                  tenés guardadas en &quot;Mis entradas&quot;
+                  Las entradas fueron enviadas a tu correo. No hace falta
+                  contraseña: también las tenés en &quot;Mis entradas&quot;
                 </p>
                 <p className="mx-auto max-w-md text-sm leading-6 text-muted-foreground">
                   {firstTicket?.deliveryMode === "ONLINE"

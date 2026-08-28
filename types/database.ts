@@ -989,6 +989,17 @@ export type SeatHold = {
   created_at: string
 }
 
+export type EventGaCartHold = {
+  id: string
+  event_id: string
+  tier_id: string
+  owner_id: string
+  quantity: number
+  reserved_until: string
+  created_at: string
+  user_session_id: string
+}
+
 export type Promoter = {
   id: string
   organizer_id: string
@@ -2539,6 +2550,28 @@ export type Database = {
         Update: Partial<EventSeatingUnitInsert>
         Relationships: []
       }
+      event_ga_cart_holds: {
+        Row: EventGaCartHold
+        Insert: {
+          id?: string
+          event_id: string
+          tier_id: string
+          owner_id: string
+          quantity: number
+          reserved_until: string
+          created_at?: string
+          user_session_id?: string
+        }
+        Update: Partial<{
+          event_id: string
+          tier_id: string
+          owner_id: string
+          quantity: number
+          reserved_until: string
+          user_session_id: string
+        }>
+        Relationships: []
+      }
       seat_holds: {
         Row: SeatHold
         Insert: SeatHoldInsert
@@ -3453,6 +3486,14 @@ export type Database = {
           p_owner_id: string
         }
         Returns: number
+      }
+      transfer_guest_cart_holds: {
+        Args: {
+          p_event_id: string
+          p_session_id: string
+          p_buyer_id: string
+        }
+        Returns: undefined
       }
       get_ga_cart_hold: {
         Args: {

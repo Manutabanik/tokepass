@@ -9,6 +9,7 @@ import {
   nextCartHoldExpiresAt,
   remainingHoldSeconds,
 } from "@/lib/checkout/cart-hold-clock"
+import { isCheckoutHoldSessionId } from "@/lib/checkout/hold-session"
 import {
   ABSOLUTE_MAX_ITEMS_PER_PURCHASE,
   type StorefrontLimitReason,
@@ -340,7 +341,14 @@ function createCartSessionId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID()
   }
-  return `cart-${Date.now().toString(36)}`
+  const bytes = new Uint8Array(16)
+  for (let i = 0; i < bytes.length; i += 1) {
+    bytes[i] = Math.floor(Math.random() * 256)
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("")
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 function sameSeat(
@@ -465,7 +473,7 @@ export const useCheckoutStore = create<CheckoutState>()(
 
       ensureCartSessionId: () => {
         const current = get().cartSessionId
-        if (current) return current
+        if (isCheckoutHoldSessionId(current)) return current
         const next = createCartSessionId()
         set({ cartSessionId: next })
         return next
@@ -922,7 +930,9 @@ export const useCheckoutStore = create<CheckoutState>()(
           holdFrozenSeconds: null,
           holdExpiredOpen: false,
           holdExpiryHandled: false,
-          cartSessionId: saved.cartSessionId ?? current.cartSessionId,
+          cartSessionId: isCheckoutHoldSessionId(saved.cartSessionId)
+            ? saved.cartSessionId
+            : current.cartSessionId,
           lines: [],
           catalogByTierId: {},
           selectedScheduleId: null,

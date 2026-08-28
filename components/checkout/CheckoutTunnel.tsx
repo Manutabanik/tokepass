@@ -150,10 +150,6 @@ import {
 import { selectableTicketStock } from "@/lib/checkout/ticket-stock"
 import { buildTierUnitPriceIndex } from "@/lib/checkout/tier-price-index"
 import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
-import {
-  ensureGuestCheckoutSession,
-  hasCheckoutAuthSession,
-} from "@/lib/checkout/guest-session"
 import { hasCheckoutIdentity } from "@/lib/checkout/identity"
 import {
   getCheckoutCaptchaToken,
@@ -825,7 +821,7 @@ export function CheckoutTunnel({
   useEffect(() => {
     return () => {
       const seat = selectedSeatRef.current
-      if (seat) void releaseSeatingUnitCartHold(eventId, seat.seatingUnitId)
+      if (seat) void releaseSeatingUnitCartHold(eventId, seat.seatingUnitId, checkoutSessionId())
     }
   }, [eventId])
 
@@ -979,15 +975,19 @@ export function CheckoutTunnel({
           })
         }
 
-        void listCartHolds(eventId).then((result) => {
+        void listCartHolds(eventId, checkoutSessionId()).then((result) => {
           if (!result.success) return
           for (const hold of result.holds) {
             if (hold.seating_unit_id) {
-              void releaseSeatingUnitCartHold(eventId, hold.seating_unit_id)
+              void releaseSeatingUnitCartHold(
+                eventId,
+                hold.seating_unit_id,
+                checkoutSessionId(),
+              )
             }
           }
         })
-        void releaseGaCartHolds(eventId)
+        void releaseGaCartHolds(eventId, checkoutSessionId())
       }
 
       setIntentRestored(true)
@@ -1103,16 +1103,17 @@ export function CheckoutTunnel({
     useCheckoutStore.getState().setIdentityOpen(true)
   }
 
-  async function ensureGuestAuthForHold(forcedIntent?: "open_map" | "continue"): Promise<boolean> {
-    const mode = useCheckoutStore.getState().mode
-
-    if (!hasCheckoutIdentity(currentUserId, mode)) {
-      requestIdentity(forcedIntent ?? "continue")
-      toast.error("Elegí ingresar o continuar como invitado para reservar.")
-      return false
+  async function ensureGuestAuthForHold(): Promise<boolean> {
+    const store = useCheckoutStore.getState()
+    if (!hasCheckoutIdentity(currentUserId, store.mode)) {
+      store.chooseGuest(eventId, eventSlug)
     }
-
+    store.ensureCartSessionId()
     return true
+  }
+
+  function checkoutSessionId() {
+    return useCheckoutStore.getState().ensureCartSessionId()
   }
 
   function goToLogin() {
@@ -1771,6 +1772,7 @@ export function CheckoutTunnel({
         void releaseSeatingUnitCartHold(
           eventId,
           previous.selectedSeat.seatingUnitId,
+          checkoutSessionId(),
         )
       }
       if (previous.holdExpiresAt && !state.holdExpiresAt) {
@@ -1785,7 +1787,7 @@ export function CheckoutTunnel({
         !gaReleaseAfterEmpty.has(eventId)
       ) {
         gaReleaseAfterEmpty.add(eventId)
-        void releaseGaCartHolds(eventId)
+        void releaseGaCartHolds(eventId, checkoutSessionId())
       }
       for (const [key, qty] of Object.entries(previous.quantities)) {
         if (qty > 0 && (state.quantities[key] ?? 0) === 0) {
@@ -2240,14 +2242,6 @@ export function CheckoutTunnel({
       : "No se pudo iniciar el pago"
 
     try {
-      if (!currentUserId) {
-        const authed = await ensureGuestCheckoutSession()
-        if (!authed) {
-          requestIdentity("pay")
-          toast.error("Elegí ingresar o continuar como invitado para pagar.")
-          return
-        }
-      }
       if (!(await lockCheckoutStock())) return
 
       const captchaToken =
@@ -2258,6 +2252,7 @@ export function CheckoutTunnel({
         idempotencyKey,
       }
 
+      const cartSessionId = checkoutSessionId()
       const result = sandbox
         ? await startSandboxCheckout(
             eventId,
@@ -2269,7 +2264,7 @@ export function CheckoutTunnel({
             previewKey,
             acceptedTerms,
             captchaToken,
-            priceGuard,
+            { ...priceGuard, cartSessionId },
           )
         : await startCheckoutWithPayment(
             eventId,
@@ -2287,6 +2282,7 @@ export function CheckoutTunnel({
               captchaToken,
               displayedTotal: priceGuard.displayedTotal,
               idempotencyKey: priceGuard.idempotencyKey,
+              cartSessionId,
             },
           )
 
@@ -2738,8 +2734,7 @@ export function CheckoutTunnel({
     if (isProcessingRef.current || checkoutBusy || purchaseLocked) return
     if (!acceptedTerms || !canProceedFromCart) return
     if (!identityReady) {
-      requestIdentity("pay")
-      return
+      useCheckoutStore.getState().chooseGuest(eventId, eventSlug)
     }
     if (availableExtras.length > 0 && !upsellSkipped) {
       setCheckoutStep("upsell")
@@ -2765,8 +2760,7 @@ export function CheckoutTunnel({
       return
     }
     if (!identityReady) {
-      requestIdentity("pay")
-      return
+      useCheckoutStore.getState().chooseGuest(eventId, eventSlug)
     }
     void runCheckoutBusy(async () => {
       await buyerForm.handleSubmit(
@@ -2826,25 +2820,38 @@ export function CheckoutTunnel({
       return false
     }
     if (!(await ensureGuestAuthForHold())) return false
-    if (!(await hasCheckoutAuthSession())) {
-      const created = await ensureGuestCheckoutSession()
-      if (!created) {
-        if (useCheckoutStore.getState().mode === "guest") {
-          toast.error("No se pudo abrir la reserva temporal. Probá de nuevo.")
-          return false
-        }
-        requestIdentity("continue")
-        toast.error("Elegí ingresar o continuar como invitado para reservar.")
-        return false
-      }
-    }
     useCheckoutStore.getState().clearTicketError()
     try {
-      const result = await lockTickets(eventId, items, previewKey)
+      const result = await lockTickets(
+        eventId,
+        items,
+        previewKey,
+        checkoutSessionId(),
+      )
       if (!result.success) {
         if (result.error === "auth_required") {
-          requestIdentity("continue")
-          return false
+          useCheckoutStore.getState().chooseGuest(eventId, eventSlug)
+          const retry = await lockTickets(
+            eventId,
+            items,
+            previewKey,
+            checkoutSessionId(),
+          )
+          if (!retry.success) {
+            applyCheckoutActionError(retry.error, CHECKOUT_GENERIC_TOAST, {
+              code: retry.code,
+              ticketId: retry.ticketId,
+            })
+            router.refresh()
+            return false
+          }
+          useCheckoutStore.getState().clearTicketError()
+          const next = minReservedUntil(
+            retry.reservedUntil,
+            useCheckoutStore.getState().holdExpiresAt,
+          )
+          if (next) useCheckoutStore.getState().setHoldExpiresAt(next)
+          return true
         }
         applyCheckoutActionError(result.error, CHECKOUT_GENERIC_TOAST, {
           code: result.code,
@@ -2946,7 +2953,12 @@ export function CheckoutTunnel({
         router.refresh()
         return false
       }
-      const hold = await holdSeatingUnitForCart(eventId, unit.id, previewKey)
+      const hold = await holdSeatingUnitForCart(
+        eventId,
+        unit.id,
+        previewKey,
+        checkoutSessionId(),
+      )
       if (!hold.success && hold.error !== "auth_required") {
         if (hold.error === HIGH_DEMAND_LOCK_TIMEOUT) {
           toast.error(HIGH_DEMAND_LOCK_MESSAGE)
@@ -3031,6 +3043,7 @@ export function CheckoutTunnel({
           seat.id,
           previewKey,
           selectedDateId,
+          checkoutSessionId(),
         )
         if (!hold.success) {
           if (hold.error === MISSING_EVENT_DATE_ID) {
@@ -3304,7 +3317,11 @@ export function CheckoutTunnel({
                   const seat = selectedSeat
                   useCheckoutStore.getState().clearCart()
                   if (seat) {
-                    void releaseSeatingUnitCartHold(eventId, seat.seatingUnitId)
+                    void releaseSeatingUnitCartHold(
+                      eventId,
+                      seat.seatingUnitId,
+                      checkoutSessionId(),
+                    )
                   }
                 }}
                 selectedDateId={selectedDateId}
