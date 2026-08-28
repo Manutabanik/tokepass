@@ -137,17 +137,68 @@ function SmartCartRow({
   )
 }
 
+export function CartServiceFeeRows({
+  compact = false,
+  showTotal = true,
+}: {
+  compact?: boolean
+  showTotal?: boolean
+}) {
+  const serviceFee = useCheckoutStore((state) => state.serviceFee)
+  const totalAmount = useCheckoutStore((state) => state.totalAmount)
+  if (serviceFee <= 0 && !showTotal) return null
+
+  return (
+    <div
+      className={cn(
+        "shrink-0 space-y-1.5 border-t border-border",
+        compact ? "mt-2 pt-2" : "mt-3 pt-3",
+      )}
+    >
+      {serviceFee > 0 ? (
+        <div
+          className={cn(
+            "flex items-center justify-between gap-3 text-muted-foreground",
+            compact ? "text-xs" : "text-sm",
+          )}
+        >
+          <span>Cargo por servicio</span>
+          <span className="tabular-nums">{formatCartTotal(serviceFee)}</span>
+        </div>
+      ) : null}
+      {showTotal ? (
+        <div
+          className={cn(
+            "flex items-center justify-between gap-3 font-bold text-foreground",
+            compact ? "text-sm" : "text-base",
+          )}
+        >
+          <span>Total</span>
+          <span className="tabular-nums">{formatCartTotal(totalAmount)}</span>
+        </div>
+      ) : null}
+      {serviceFee > 0 ? (
+        <p className="text-[11px] leading-4 text-muted-foreground">
+          Incluido en el precio final. No se suma de nuevo.
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 export function CartSummary({
   className,
   heading = "Tu Selección",
   showClear = true,
   compact = false,
+  showGrandTotal = true,
 }: {
   items: StorefrontCartLine[]
   className?: string
   heading?: string
   showClear?: boolean
   compact?: boolean
+  showGrandTotal?: boolean
 }) {
   const liveLines = useCheckoutStore((state) => state.lines)
   const rows = liveLines
@@ -198,6 +249,7 @@ export function CartSummary({
           />
         ))}
       </ul>
+      <CartServiceFeeRows compact={compact} showTotal={showGrandTotal} />
     </div>
   )
 }

@@ -302,8 +302,10 @@ type TicketSelectorProps = {
   tiers: TicketSelectorTier[]
   scheduleDays?: ScheduleDay[]
   selectedDayId?: string | null
-  /** @deprecated All-In pricing absorbs the fee; ignored. */
+  /** Fracción decimal All-In (0.08 = 8%). Solo desglose visual; no se suma al total. */
   serviceChargeRate?: number
+  /** Cargo fijo ARS por entrada paga (split All-In). */
+  platformFixedFee?: number
   /** Código RRPP desde ?rrpp= / cookie — nunca se envía promoter_id al servidor */
   referralCode?: string | null
   seatingUnits?: EventSeatingUnit[]
@@ -359,12 +361,13 @@ function toastCheckoutStock(message = CHECKOUT_NO_STOCK_TOAST) {
 function toastCheckoutError(
   error: string,
   fallbackTitle: string,
+  options?: { revealDetail?: boolean },
 ) {
   const technical =
     /invalid token|hydrat|undefined|cannot read|failed to fetch|networkerror|internal server/i.test(
       error,
     )
-  if (technical) {
+  if (technical && !options?.revealDetail) {
     toast.error(CHECKOUT_GENERIC_TOAST)
     return
   }
@@ -429,6 +432,8 @@ export function CheckoutTunnel({
   purchaseLocked = false,
   selectedDayId = null,
   scheduleDays = [],
+  serviceChargeRate = 0,
+  platformFixedFee = 0,
   maxTicketsPerUser = null,
   fillViewport = false,
   isOnline = false,
@@ -525,6 +530,12 @@ export function CheckoutTunnel({
     selectedItems,
     applyOccupancyPatch,
   })
+  useEffect(() => {
+    useCheckoutStore.getState().setServiceChargeRule({
+      rate: serviceChargeRate,
+      fixedFee: platformFixedFee,
+    })
+  }, [platformFixedFee, serviceChargeRate])
   const buyer = useCheckoutStore((state) => state.buyer)
   const setBuyer = useCheckoutStore((state) => state.setBuyer)
   const buyerForm = useForm<CheckoutBuyerInfo>({
@@ -2133,7 +2144,7 @@ export function CheckoutTunnel({
   function applyCheckoutActionError(
     error: string,
     fallbackTitle: string,
-    extras?: { code?: string; ticketId?: string },
+    extras?: { code?: string; ticketId?: string; revealDetail?: boolean },
   ) {
     const feedback = resolveCheckoutFeedback(error, extras)
     const ticketId = inferCheckoutTicketId(
@@ -2178,7 +2189,9 @@ export function CheckoutTunnel({
       setCheckoutStep("tickets")
       return
     }
-    toastCheckoutError(error, fallbackTitle)
+    toastCheckoutError(error, fallbackTitle, {
+      revealDetail: extras?.revealDetail,
+    })
   }
 
   function handleBuyerValidationFailure(
@@ -2279,6 +2292,9 @@ export function CheckoutTunnel({
           )
 
       if (!result.success) {
+        if (sandbox) {
+          console.error("[checkout/sandbox]", result.error, result)
+        }
         if (result.error === "auth_required") {
           persistCheckoutCart()
           toast.error("Ingresá para pagar. Tu selección está guardada.")
@@ -2293,6 +2309,7 @@ export function CheckoutTunnel({
         applyCheckoutActionError(result.error, fallbackTitle, {
           code: result.code,
           ticketId: result.ticketId,
+          revealDetail: sandbox,
         })
         router.refresh()
         return
@@ -2319,7 +2336,12 @@ export function CheckoutTunnel({
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "checkout_failed"
-      applyCheckoutActionError(message, fallbackTitle)
+      if (sandbox) {
+        console.error("[checkout/sandbox]", error)
+      }
+      applyCheckoutActionError(message, fallbackTitle, {
+        revealDetail: sandbox,
+      })
       router.refresh()
     } finally {
       releaseCheckoutProcessing()

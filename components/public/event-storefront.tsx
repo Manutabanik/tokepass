@@ -662,6 +662,7 @@ export function EventStorefront({
             isDraftPreview={event.isDraftPreview}
             previewKey={previewKey}
             serviceChargeRate={event.serviceChargeRate}
+            platformFixedFee={event.platformFixedFee}
             scheduleDays={event.scheduleDays ?? []}
             seatingUnits={event.seatingUnits}
             seatingSectorSummaries={event.seatingSectorSummaries}

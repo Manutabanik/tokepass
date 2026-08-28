@@ -325,6 +325,7 @@ function PaymentOrderSummary({
           </span>
         </div>
       ) : null}
+      <PaymentServiceFeeRow />
       <div className="flex items-start justify-between gap-3 border-t border-border pt-3">
         <div className="min-w-0">
           <p className="font-semibold text-card-foreground">
@@ -341,6 +342,17 @@ function PaymentOrderSummary({
         </span>
       </div>
       <TokepassGuaranteeBadge variant="full" isOnline={isOnline} />
+    </div>
+  )
+}
+
+function PaymentServiceFeeRow() {
+  const serviceFee = useCheckoutStore((state) => state.serviceFee)
+  if (serviceFee <= 0) return null
+  return (
+    <div className="flex items-center justify-between text-sm text-muted-foreground">
+      <span>Cargo por servicio</span>
+      <span className="tabular-nums">{formatCartTotal(serviceFee)}</span>
     </div>
   )
 }

@@ -163,6 +163,7 @@ export function CheckoutSelectionSidebar({
             heading="Desglose"
             showClear
             compact
+            showGrandTotal={false}
           />
         ) : (
           <p className="text-sm text-muted-foreground">

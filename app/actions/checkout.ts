@@ -165,6 +165,25 @@ const EVENT_SOLD_OUT_ERROR = "El evento o sector se encuentra agotado"
 const GENERIC_CHECKOUT_ERROR =
   "Ocurrió un error al procesar tu solicitud"
 
+function formatCheckoutDbError(error: {
+  message?: string
+  details?: string
+  hint?: string
+  code?: string
+} | null | undefined): string {
+  if (!error) return ""
+  return [error.message, error.details, error.hint]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(" — ")
+}
+
+function sandboxOrFallback(sandbox: boolean, detail: string, fallback: string) {
+  const text = detail.trim()
+  if (sandbox && text) return text
+  return fallback
+}
+
 export type ReservedTicket = {
   ticket_id: string
 }
@@ -3193,10 +3212,18 @@ export async function startCheckoutWithPayment(
     }
   }
   const useSandbox = access.useSandbox || Boolean(payload.sandbox)
-  const db =
-    invisible.signedIn
-      ? access.db
-      : ((tryCreateAdminClient() as CheckoutSupabase | null) ?? access.db)
+  let db = access.db
+  if (!invisible.signedIn) {
+    const adminDb = tryCreateAdminClient() as CheckoutSupabase | null
+    if (!adminDb) {
+      return {
+        success: false,
+        error:
+          "No se pudo preparar la compra de invitado. Falta la clave de servicio.",
+      }
+    }
+    db = adminDb
+  }
 
   const room = await assertCheckoutWaitingRoom({
     eventId: access.eventId,
@@ -3756,7 +3783,11 @@ export async function startCheckoutWithPayment(
       })
       return {
         success: false,
-        error: "No se pudo completar la reserva. Intentá nuevamente.",
+        error: sandboxOrFallback(
+          useSandbox,
+          formatCheckoutDbError(error),
+          "No se pudo completar la reserva. Intentá nuevamente.",
+        ),
       }
     }
 
@@ -3885,7 +3916,11 @@ export async function startCheckoutWithPayment(
       await cleanupPendingOrder(orderId)
       return {
         success: false,
-        error: "No se pudo validar el total final de la orden.",
+        error: sandboxOrFallback(
+          useSandbox,
+          formatCheckoutDbError(pricedOrderError),
+          "No se pudo validar el total final de la orden.",
+        ),
       }
     }
 
@@ -3989,7 +4024,13 @@ export async function startCheckoutWithPayment(
         const mapped = mapReserveRpcError(finalizeMessage)
         return {
           success: false,
-          error: mapped?.error ?? "No se pudo completar la compra de prueba.",
+          error:
+            mapped?.error ??
+            sandboxOrFallback(
+              true,
+              formatCheckoutDbError(finalizeError) || finalizeMessage,
+              "No se pudo completar la compra de prueba.",
+            ),
         }
       }
 
@@ -4214,7 +4255,7 @@ export async function startCheckoutWithPayment(
     })
     return {
       success: false,
-      error: GENERIC_CHECKOUT_ERROR,
+      error: sandboxOrFallback(useSandbox, message, GENERIC_CHECKOUT_ERROR),
     }
   }
 }

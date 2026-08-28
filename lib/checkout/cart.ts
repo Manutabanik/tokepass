@@ -4,6 +4,7 @@ import {
   toCartNumber,
 } from "@/lib/checkout/cart-lines"
 import { centsToMoney, moneyToCents } from "@/lib/money/cents"
+import { allInBreakdown } from "@/lib/pricing/all-in"
 
 export { cartLineQuantity, toCartNumber } from "@/lib/checkout/cart-lines"
 
@@ -59,6 +60,33 @@ export function includedServiceFee(subtotal: unknown, rate: unknown = 0.1): numb
   const safeRate = rawRate > 1 ? rawRate / 100 : Math.max(0, rawRate)
   if (base <= 0 || safeRate <= 0) return 0
   return centsToMoney(Math.round(moneyToCents(base) * safeRate))
+}
+
+function asServiceRate(rate: unknown): number {
+  const raw = toCartNumber(rate)
+  return raw > 1 ? raw / 100 : Math.max(0, raw)
+}
+
+/**
+ * Comisión TokePass ya incluida en precios All-In.
+ * No sumar este valor al total cobrado: total = subtotal público.
+ */
+export function cartIncludedServiceFee(
+  lines: ReadonlyArray<{ price?: unknown; quantity?: unknown }> | null | undefined,
+  rate: unknown = 0,
+  fixedFee = 0,
+): number {
+  const safeRate = asServiceRate(rate)
+  const perTicketFixed = toCartNumber(fixedFee)
+  return centsToMoney(
+    (lines ?? []).reduce((sum, line) => {
+      const unit = toCartNumber(line.price)
+      const quantity = cartLineQuantity(line.quantity)
+      if (unit <= 0 || quantity <= 0) return sum
+      const { platformFee } = allInBreakdown(unit, safeRate, perTicketFixed)
+      return sum + moneyToCents(platformFee) * quantity
+    }, 0),
+  )
 }
 
 /** Counts selected tickets. $0 / Gratis quantities still count. */

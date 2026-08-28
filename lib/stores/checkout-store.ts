@@ -21,6 +21,7 @@ import {
 } from "@/lib/checkout/cart-item-payload"
 import {
   calculateTotal,
+  cartIncludedServiceFee,
   cartItemCount,
   sumCartQuantities,
   toCartNumber,
@@ -137,6 +138,9 @@ type CheckoutState = {
   selectedSeat: CheckoutSavedSeat | null
   buyer: CheckoutBuyerInfo
   subtotal: number
+  serviceFee: number
+  serviceChargeRate: number
+  serviceChargeFixedFee: number
   holdExpiresAt: string | null
   holdFrozen: boolean
   holdFrozenSeconds: number | null
@@ -193,6 +197,7 @@ type CheckoutState = {
       | CheckoutBuyerInfo
       | ((current: CheckoutBuyerInfo) => CheckoutBuyerInfo),
   ) => void
+  setServiceChargeRule: (input: { rate: number; fixedFee?: number }) => void
   setCartTotals: (input: { totalAmount: number; itemsCount: number }) => void
   setCartLines: (
     lines: StorefrontCartLine[],
@@ -252,10 +257,28 @@ function sameLines(left: StorefrontCartLine[], right: StorefrontCartLine[]) {
   })
 }
 
-function cartTotalsFromLines(lines: StorefrontCartLine[]) {
+function cartTotalsFromLines(
+  lines: StorefrontCartLine[],
+  rule?: { rate?: number; fixedFee?: number },
+) {
   const totalAmount = calculateTotal(lines)
   const itemsCount = sumCartQuantities(lines)
-  return { totalAmount, itemsCount, subtotal: totalAmount }
+  const serviceFee = cartIncludedServiceFee(
+    lines,
+    rule?.rate ?? 0,
+    rule?.fixedFee ?? 0,
+  )
+  return { totalAmount, itemsCount, subtotal: totalAmount, serviceFee }
+}
+
+function totalsForLines(
+  lines: StorefrontCartLine[],
+  state: { serviceChargeRate: number; serviceChargeFixedFee: number },
+) {
+  return cartTotalsFromLines(lines, {
+    rate: state.serviceChargeRate,
+    fixedFee: state.serviceChargeFixedFee,
+  })
 }
 
 function mergeCatalog(
@@ -379,6 +402,9 @@ export const useCheckoutStore = create<CheckoutState>()(
       selectedSeat: null,
       buyer: EMPTY_CHECKOUT_BUYER,
       subtotal: 0,
+      serviceFee: 0,
+      serviceChargeRate: 0,
+      serviceChargeFixedFee: 0,
       holdExpiresAt: null,
       holdFrozen: false,
       holdFrozenSeconds: null,
@@ -515,6 +541,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           selectedSeat: null,
           buyer: EMPTY_CHECKOUT_BUYER,
           subtotal: 0,
+          serviceFee: 0,
           holdExpiresAt: null,
           holdFrozen: false,
           holdFrozenSeconds: null,
@@ -589,6 +616,26 @@ export const useCheckoutStore = create<CheckoutState>()(
         set({ buyer: next })
       },
 
+      setServiceChargeRule: ({ rate, fixedFee = 0 }) => {
+        const current = get()
+        const nextRate = Number.isFinite(rate) ? Math.max(0, rate) : 0
+        const nextFixed = Number.isFinite(fixedFee) ? Math.max(0, fixedFee) : 0
+        if (
+          current.serviceChargeRate === nextRate &&
+          current.serviceChargeFixedFee === nextFixed
+        ) {
+          return
+        }
+        set({
+          serviceChargeRate: nextRate,
+          serviceChargeFixedFee: nextFixed,
+          ...totalsForLines(current.lines, {
+            serviceChargeRate: nextRate,
+            serviceChargeFixedFee: nextFixed,
+          }),
+        })
+      },
+
       setCartTotals: ({ totalAmount, itemsCount }) => {
         const current = get()
         if (
@@ -640,7 +687,7 @@ export const useCheckoutStore = create<CheckoutState>()(
             lines,
             quantities,
             catalogByTierId: catalog,
-            ...cartTotalsFromLines(lines),
+            ...totalsForLines(lines, current),
           }),
         )
       },
@@ -706,7 +753,7 @@ export const useCheckoutStore = create<CheckoutState>()(
                   price: unitPrice,
                 },
               ]),
-              ...cartTotalsFromLines(lines),
+              ...totalsForLines(lines, current),
               selectedSeat: seatId
                 ? {
                     tierId: input.ticketTierId,
@@ -754,7 +801,7 @@ export const useCheckoutStore = create<CheckoutState>()(
                 price: unitPrice,
               },
             ]),
-            ...cartTotalsFromLines(stamped.lines),
+            ...totalsForLines(stamped.lines, current),
           }),
         )
         return { ok: true, quantity: nextQty }
@@ -801,7 +848,7 @@ export const useCheckoutStore = create<CheckoutState>()(
                 price: unitPrice,
               },
             ]),
-            ...cartTotalsFromLines(stamped.lines),
+            ...totalsForLines(stamped.lines, current),
           }),
         )
         return { ok: true, quantity: nextQty }
@@ -822,7 +869,7 @@ export const useCheckoutStore = create<CheckoutState>()(
         ) {
           return
         }
-        set({ totalAmount: 0, itemsCount: 0, lines: [] })
+        set({ totalAmount: 0, itemsCount: 0, subtotal: 0, serviceFee: 0, lines: [] })
       },
 
       removeItem: (id) => {
@@ -853,7 +900,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           withCartHoldClock(current, {
             quantities,
             lines,
-            ...cartTotalsFromLines(lines),
+            ...totalsForLines(lines, current),
           }),
         )
         const seats = useStorefrontSeatStore.getState()
@@ -889,6 +936,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           totalAmount: 0,
           itemsCount: 0,
           subtotal: 0,
+          serviceFee: 0,
           catalogByTierId: {},
           holdExpiresAt: null,
           holdFrozen: false,
@@ -939,6 +987,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           totalAmount: 0,
           itemsCount: 0,
           subtotal: 0,
+          serviceFee: 0,
         }
       },
       partialize: (state) => ({
