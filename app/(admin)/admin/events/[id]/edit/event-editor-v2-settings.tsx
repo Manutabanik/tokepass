@@ -1,11 +1,10 @@
 "use client"
 
-import { Eye, MessageSquareText } from "lucide-react"
+import { Eye } from "lucide-react"
 import { Controller, useFormContext } from "react-hook-form"
 
 import {
   DRAFT_TEXTAREA_CLASS,
-  DraftCard,
   DraftFieldError,
   DraftFieldLabel,
   DraftHint,
@@ -23,92 +22,57 @@ export function EventEditorV2SettingsStep() {
   } = useFormContext<EventDraftV2>()
 
   return (
-    <>
+    <div className="space-y-4">
       <Controller
         name="settings.isPublic"
         control={control}
         render={({ field }) => (
-          <SettingToggle
-            id="event-v2-is-public"
-            icon={Eye}
-            title="¿Sale en el catálogo?"
-            description={
-              field.value
-                ? "Sí: aparece en Tokepass cuando lo subas al catálogo."
-                : "No: solo lo ven quienes tengan el link."
-            }
-            checked={Boolean(field.value)}
-            onCheckedChange={field.onChange}
-          />
+          <div className="flex items-start justify-between gap-4 rounded-xl border border-border/60 px-3 py-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <Eye className="size-4 text-emerald-400" aria-hidden />
+                <Label
+                  htmlFor="event-v2-is-public"
+                  className="text-sm font-medium text-foreground"
+                >
+                  ¿Sale en el catálogo?
+                </Label>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {field.value
+                  ? "Sí: aparece en Tokepass cuando lo subas al catálogo."
+                  : "No: solo lo ven quienes tengan el link."}
+              </p>
+            </div>
+            <Switch
+              id="event-v2-is-public"
+              checked={Boolean(field.value)}
+              onCheckedChange={field.onChange}
+              className="mt-0.5 shrink-0 data-checked:bg-emerald-500"
+              aria-label="¿Sale en el catálogo?"
+            />
+          </div>
         )}
       />
 
-      <DraftCard className="md:col-span-12">
-        <div className="mb-4 flex items-center gap-2">
-          <MessageSquareText className="size-4 text-emerald-400" aria-hidden />
-          <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-            Mensaje post-compra
-          </h2>
-        </div>
-        <div className="grid gap-2">
-          <DraftFieldLabel
-            htmlFor="event-v2-checkout-message"
-            optional
-            className="text-sm"
-          >
-            Mensaje después de pagar
-          </DraftFieldLabel>
-          <Textarea
-            id="event-v2-checkout-message"
-            rows={5}
-            className={DRAFT_TEXTAREA_CLASS}
-            placeholder="Ej. Gracias por tu compra. Revisá el mail para el acceso."
-            {...register("settings.checkoutMessage")}
-          />
-          <DraftHint>Aparece en la pantalla de éxito después del pago.</DraftHint>
-          <DraftFieldError message={errors.settings?.checkoutMessage?.message} />
-        </div>
-      </DraftCard>
-    </>
-  )
-}
-
-function SettingToggle({
-  id,
-  icon: Icon,
-  title,
-  description,
-  checked,
-  onCheckedChange,
-}: {
-  id: string
-  icon: typeof Eye
-  title: string
-  description: string
-  checked: boolean
-  onCheckedChange: (checked: boolean) => void
-}) {
-  return (
-    <DraftCard className="flex h-full items-center justify-between gap-4 md:col-span-12">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <Icon className="size-4 text-emerald-400" aria-hidden />
-          <Label
-            htmlFor={id}
-            className="text-sm font-bold text-slate-800 dark:text-zinc-200"
-          >
-            {title}
-          </Label>
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      <div className="grid gap-2">
+        <DraftFieldLabel
+          htmlFor="event-v2-checkout-message"
+          optional
+          className="text-sm"
+        >
+          Mensaje después de pagar
+        </DraftFieldLabel>
+        <Textarea
+          id="event-v2-checkout-message"
+          rows={5}
+          className={DRAFT_TEXTAREA_CLASS}
+          placeholder="Ej. Gracias por tu compra. Revisá el mail para el acceso."
+          {...register("settings.checkoutMessage")}
+        />
+        <DraftHint>Aparece en la pantalla de éxito después del pago.</DraftHint>
+        <DraftFieldError message={errors.settings?.checkoutMessage?.message} />
       </div>
-      <Switch
-        id={id}
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        className="data-checked:bg-emerald-500"
-        aria-label={title}
-      />
-    </DraftCard>
+    </div>
   )
 }

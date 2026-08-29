@@ -9,7 +9,7 @@ import { toast } from "sonner"
 import { updateEventAbsorbFees } from "@/app/actions/events-v2"
 import { useEventEditorFee } from "./event-editor-fee-context"
 import { EventEditorV2SettingsStep } from "./event-editor-v2-settings"
-import { BENTO_GRID_CLASS, DraftCard, DraftHint } from "./event-editor-v2-ui"
+import { DraftHint, SplitRowSection } from "./event-editor-v2-ui"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -85,149 +85,128 @@ export function EventEditorV2LaunchStep({
   })
 
   return (
-    <div className={BENTO_GRID_CLASS}>
-      <div className="md:col-span-12">
+    <div>
+      <div className="mb-8">
         <p className="text-xs font-bold tracking-[0.18em] text-emerald-400 uppercase">
-          Centro de lanzamiento
-        </p>
-        <h2 className="mt-1 text-xl font-black tracking-tight text-foreground">
-          Revisión, precios y publicación
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Controlá cómo se ve el evento, cómo se reparte el cargo de la
-          plataforma y si está listo para abrir boletería.
-        </p>
-      </div>
-
-      <CatalogPreviewCard preview={preview} />
-
-      <DraftCard className="h-full md:col-span-8">
-          <div className="mb-4 flex flex-col items-start justify-between gap-4 sm:flex-row">
-            <div className="min-w-0">
-              <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-                Estrategia de Venta
-              </h3>
-              <DraftHint>
-                Comisión de plataforma simulada:{" "}
-                {Math.round(platformFeeRate * 100)}
-                %. El ticket de muestra es la entrada más barata.
-              </DraftHint>
-            </div>
-            <Controller
-              name="settings.absorbFees"
-              control={control}
-              render={({ field }) => (
-                <div className="flex shrink-0 items-center gap-2">
-                  <Label
-                    htmlFor="event-v2-absorb-fees"
-                    className="text-xs font-bold text-slate-800 dark:text-zinc-200"
-                  >
-                    Absorber cargos
-                  </Label>
-                  <Switch
-                    id="event-v2-absorb-fees"
-                    checked={Boolean(field.value)}
-                    disabled={savingAbsorb}
-                    onCheckedChange={(checked) => {
-                      const previous = Boolean(field.value)
-                      field.onChange(checked)
-                      setSavingAbsorb(true)
-                      void updateEventAbsorbFees(eventId, checked).then(
-                        (result) => {
-                          setSavingAbsorb(false)
-                          if (result.success) return
-                          field.onChange(previous)
-                          toast.error(result.error)
-                        },
-                      )
-                    }}
-                    className="data-checked:bg-emerald-500"
-                    aria-label="Absorber cargos"
-                    aria-busy={savingAbsorb}
-                  />
-                </div>
-              )}
-            />
-          </div>
-
-          {sale ? (
-            <div className="flex-grow space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/80 p-4 dark:border-gray-800 dark:bg-gray-900/50">
-              <p className="text-sm text-slate-700 dark:text-zinc-200">
-                {absorbFees ? (
-                  <>
-                    Entrada: {formatCurrency(sale.ticketPrice)} | Cargo: -
-                    {formatCurrency(sale.feeAmount)} (Absorbido). El cliente
-                    paga {formatCurrency(sale.customerPays)} | Tú recibes{" "}
-                    {formatCurrency(sale.organizerReceives)}.
-                  </>
-                ) : (
-                  <>
-                    Entrada: {formatCurrency(sale.ticketPrice)} | Cargo:{" "}
-                    {formatCurrency(sale.feeAmount)}. El cliente paga{" "}
-                    {formatCurrency(sale.customerPays)} | Tú recibes{" "}
-                    {formatCurrency(sale.organizerReceives)}.
-                  </>
-                )}
-              </p>
-              <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                <BreakdownStat
-                  label="El cliente paga"
-                  value={formatCurrency(sale.customerPays)}
-                />
-                <BreakdownStat
-                  label="Tú recibes"
-                  value={formatCurrency(sale.organizerReceives)}
-                  emphasis
-                />
-              </dl>
-            </div>
-          ) : (
-            <p className="flex-grow rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-muted-foreground dark:border-gray-700">
-              Agregá una entrada en el paso 2 para simular el cobro con la
-              comisión del 10%.
-            </p>
-          )}
-        </DraftCard>
-
-      <DraftCard className="md:col-span-12">
-        <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
           Pre-Flight Checklist
-        </h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Semáforo rápido antes de abrir boletería. Verde listo, amarillo
-          pendiente.
         </p>
-        <ul className="mt-4 space-y-2">
+        <p className="mt-1 text-sm text-muted-foreground">
+          Semáforo rápido antes de abrir boletería.
+        </p>
+        <ul className="mt-3 flex flex-wrap gap-2">
           {checks.map((item) => (
             <li
               key={item.id}
-              className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-900/40"
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
+                item.ok
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  : "border-amber-400/40 bg-amber-400/10 text-amber-800 dark:text-amber-200",
+              )}
             >
               {item.ok ? (
-                <CircleCheck
-                  className="size-5 shrink-0 text-emerald-500"
-                  aria-hidden
-                />
+                <CircleCheck className="size-3.5 shrink-0" aria-hidden />
               ) : (
-                <CircleAlert
-                  className="size-5 shrink-0 text-amber-400"
-                  aria-hidden
-                />
+                <CircleAlert className="size-3.5 shrink-0" aria-hidden />
               )}
-              <span className="text-sm font-medium text-slate-800 dark:text-zinc-100">
-                {item.label}
-              </span>
-              <span className="ml-auto text-xs font-semibold text-muted-foreground">
+              <span>{item.label}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
                 {item.ok ? "Listo" : "Pendiente"}
               </span>
             </li>
           ))}
         </ul>
-      </DraftCard>
+      </div>
 
-      <EventEditorV2SettingsStep />
+      <SplitRowSection
+        title="Estrategia de Venta"
+        description={`Comisión de plataforma simulada: ${Math.round(platformFeeRate * 100)}%. El ticket de muestra es la entrada más barata.`}
+      >
+        <Controller
+          name="settings.absorbFees"
+          control={control}
+          render={({ field }) => (
+            <div className="flex items-start justify-between gap-4 rounded-xl border border-border/60 px-3 py-3">
+              <div className="min-w-0">
+                <Label
+                  htmlFor="event-v2-absorb-fees"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Absorber cargos
+                </Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Si está activo, el cliente paga el precio que cargaste y el
+                  cargo se descuenta de tu liquidación.
+                </p>
+              </div>
+              <Switch
+                id="event-v2-absorb-fees"
+                checked={Boolean(field.value)}
+                disabled={savingAbsorb}
+                onCheckedChange={(checked) => {
+                  const previous = Boolean(field.value)
+                  field.onChange(checked)
+                  setSavingAbsorb(true)
+                  void updateEventAbsorbFees(eventId, checked).then(
+                    (result) => {
+                      setSavingAbsorb(false)
+                      if (result.success) return
+                      field.onChange(previous)
+                      toast.error(result.error)
+                    },
+                  )
+                }}
+                className="mt-0.5 shrink-0 data-checked:bg-emerald-500"
+                aria-label="Absorber cargos"
+                aria-busy={savingAbsorb}
+              />
+            </div>
+          )}
+        />
 
-      <div className="md:col-span-12">
+        {sale ? (
+          <div className="rounded-md border bg-muted/30 p-4">
+            <p className="text-sm tabular-nums text-foreground">
+              Entrada {formatCurrency(sale.ticketPrice)}
+              <span className="text-muted-foreground"> + </span>
+              Cargo{" "}
+              {absorbFees ? (
+                <>
+                  {formatCurrency(0)}{" "}
+                  <span className="text-muted-foreground">
+                    ({formatCurrency(sale.feeAmount)} absorbido)
+                  </span>
+                </>
+              ) : (
+                formatCurrency(sale.feeAmount)
+              )}
+              <span className="text-muted-foreground"> = </span>
+              <span className="font-semibold">
+                Total {formatCurrency(sale.customerPays)}
+              </span>
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Recibís {formatCurrency(sale.organizerReceives)}
+            </p>
+          </div>
+        ) : (
+          <DraftHint>
+            Agregá una entrada en el paso 2 para simular Entrada + Cargo =
+            Total.
+          </DraftHint>
+        )}
+      </SplitRowSection>
+
+      <SplitRowSection
+        title="Comunicación y Visibilidad"
+        description="Quién puede encontrar el evento y qué ve el comprador después de pagar."
+        className="mb-0 border-b-0 pb-0"
+      >
+        <EventEditorV2SettingsStep />
+        <CatalogPreviewCard preview={preview} />
+      </SplitRowSection>
+
+      <div className="mt-8">
         <p className="text-sm text-muted-foreground">
           {launchReady
             ? isPublished
@@ -251,32 +230,6 @@ export function EventEditorV2LaunchStep({
   )
 }
 
-function BreakdownStat({
-  label,
-  value,
-  emphasis = false,
-}: {
-  label: string
-  value: string
-  emphasis?: boolean
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-lg px-3 py-2",
-        emphasis
-          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-          : "bg-white/80 text-slate-700 dark:bg-gray-950/60 dark:text-zinc-200",
-      )}
-    >
-      <dt className="text-[10px] font-semibold tracking-wider uppercase">
-        {label}
-      </dt>
-      <dd className="mt-0.5 text-base font-black">{value}</dd>
-    </div>
-  )
-}
-
 function CatalogPreviewCard({
   preview,
 }: {
@@ -293,14 +246,13 @@ function CatalogPreviewCard({
         : `Desde ${formatTicketPrice(preview.minPrice)}`
 
   return (
-    <DraftCard className="h-full overflow-hidden p-4 md:col-span-4">
-      <p className="mb-3 text-[10px] font-bold tracking-[0.18em] text-muted-foreground uppercase">
+    <div>
+      <p className="mb-2 text-[10px] font-bold tracking-[0.18em] text-muted-foreground uppercase">
         Vista previa del catálogo
       </p>
-      <div className="flex flex-grow items-center justify-center">
       <article
         aria-label="Vista previa del evento en el catálogo"
-        className="pointer-events-none relative mx-auto aspect-[3/4] w-full max-w-[280px] overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 shadow-xl select-none"
+        className="pointer-events-none relative aspect-[3/4] w-full max-w-[180px] overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 select-none"
       >
         {preview.imageUrl ? (
           <Image
@@ -308,7 +260,7 @@ function CatalogPreviewCard({
             alt=""
             fill
             unoptimized
-            sizes="280px"
+            sizes="180px"
             className="object-cover object-center"
           />
         ) : (
@@ -318,33 +270,22 @@ function CatalogPreviewCard({
           className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-2/3 bg-gradient-to-t from-black via-black/90 to-transparent"
           aria-hidden
         />
-        <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col justify-end p-5">
-          <span className="text-xs font-bold tracking-wide text-emerald-400 uppercase">
+        <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col justify-end p-3">
+          <span className="text-[10px] font-bold tracking-wide text-emerald-400 uppercase">
             {dateLabel}
           </span>
-          <h3 className="mt-1 line-clamp-2 text-lg leading-tight font-black text-white">
+          <h3 className="mt-0.5 line-clamp-2 text-sm leading-tight font-black text-white">
             {preview.name}
           </h3>
-          <p className="mt-1 flex items-center gap-1 text-xs font-medium text-white/80">
+          <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-white/80">
             <MapPin className="size-3 shrink-0" aria-hidden />
             <span className="truncate">{preview.locationName}</span>
           </p>
-          <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4">
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold tracking-wider text-white/50 uppercase">
-                Precio
-              </p>
-              <p className="truncate text-sm font-black text-white">
-                {priceLabel}
-              </p>
-            </div>
-            <span className="rounded-xl bg-emerald-500/90 px-3 py-2 text-xs font-extrabold text-black">
-              Comprar
-            </span>
-          </div>
+          <p className="mt-2 truncate text-xs font-black text-white">
+            {priceLabel}
+          </p>
         </div>
       </article>
-      </div>
-    </DraftCard>
+    </div>
   )
 }
