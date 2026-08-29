@@ -11,6 +11,8 @@ import {
   drawableContentAabb,
   elementBelongsToZone,
   fitDrawableContentCamera,
+  buyerViewportFitSessionKey,
+  buyerViewportLooksReset,
   expandSelectionForContext,
   lodCameraTransform,
   pointInPolygon,
@@ -18,6 +20,7 @@ import {
   publicRevealSeats,
   resolveLodZones,
   shouldEnableMapLod,
+  shouldRunBuyerAutoFit,
   synthesizeLodZones,
   zoneCanvasAabb,
 } from "./venue-map-lod"
@@ -245,6 +248,53 @@ describe("venue-map-lod", () => {
         vip,
       ).map((seat) => seat.sectorId),
       ["zona-vip"],
+    )
+  })
+})
+
+describe("buyer auto-fit isolation", () => {
+  it("runs only on the first macro frame of an event/day, not on later selection renders", () => {
+    const sessionKey = buyerViewportFitSessionKey("evt-1", "day-1")
+    assert.equal(
+      shouldRunBuyerAutoFit({
+        sessionKey,
+        fittedSessionKey: null,
+        viewMode: "macro",
+        wrapWidth: 390,
+        wrapHeight: 520,
+      }),
+      true,
+    )
+    assert.equal(
+      shouldRunBuyerAutoFit({
+        sessionKey,
+        fittedSessionKey: sessionKey,
+        viewMode: "macro",
+        wrapWidth: 390,
+        wrapHeight: 480,
+      }),
+      false,
+    )
+    assert.equal(
+      shouldRunBuyerAutoFit({
+        sessionKey: buyerViewportFitSessionKey("evt-1", "day-2"),
+        fittedSessionKey: sessionKey,
+        viewMode: "macro",
+        wrapWidth: 390,
+        wrapHeight: 520,
+      }),
+      true,
+    )
+  })
+
+  it("detects a library reset back to identity so zoom/pan can be restored", () => {
+    assert.equal(
+      buyerViewportLooksReset({ scale: 1, positionX: 0, positionY: 0 }),
+      true,
+    )
+    assert.equal(
+      buyerViewportLooksReset({ scale: 2.4, positionX: -80, positionY: 40 }),
+      false,
     )
   })
 })

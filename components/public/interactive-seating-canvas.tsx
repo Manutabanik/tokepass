@@ -9,7 +9,14 @@ import {
   Trash2,
   X,
 } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import {
   TransformComponent,
   TransformWrapper,
@@ -91,6 +98,8 @@ import {
   CONTEXT_FOCUS_MIN_SCALE,
   CONTEXT_FOCUS_PADDING,
   CLIENT_FIT_MAX_SCALE,
+  buyerViewportFitSessionKey,
+  buyerViewportLooksReset,
   drawableContentAabb,
   expandSelectionForContext,
   fitDrawableContentCamera,
@@ -99,7 +108,9 @@ import {
   publicRevealSeats,
   resolveLodZones,
   shouldEnableMapLod,
+  shouldRunBuyerAutoFit,
   zoneCanvasAabb,
+  type BuyerMapViewport,
   type MapLodMode,
 } from "@/lib/seating/venue-map-lod"
 import {
@@ -431,6 +442,17 @@ export function InteractiveSeatingCanvas({
     return () => observer.disconnect()
   }, [])
 
+  const viewportSessionKey = buyerViewportFitSessionKey(eventId, mapScheduleId)
+  const fittedSessionRef = useRef<string | null>(null)
+  const savedViewportRef = useRef<BuyerMapViewport | null>(null)
+  if (
+    fittedSessionRef.current &&
+    fittedSessionRef.current !== viewportSessionKey
+  ) {
+    fittedSessionRef.current = null
+    savedViewportRef.current = null
+  }
+
   const applyBuyerContentFit = useCallback(
     (animate: boolean) => {
       if (!buyerChrome || viewMode !== "macro") return false
@@ -445,18 +467,59 @@ export function InteractiveSeatingCanvas({
         animate ? 280 : 0,
         "easeOut",
       )
+      savedViewportRef.current = {
+        scale: camera.scale,
+        positionX: camera.positionX,
+        positionY: camera.positionY,
+      }
       return true
     },
     [buyerChrome, buyerFitBox, viewMode, wrapHeight, wrapWidth],
   )
 
   useEffect(() => {
-    if (!buyerChrome || viewMode !== "macro") return
+    if (!buyerChrome) return
+    if (
+      !shouldRunBuyerAutoFit({
+        sessionKey: viewportSessionKey,
+        fittedSessionKey: fittedSessionRef.current,
+        viewMode,
+        wrapWidth,
+        wrapHeight,
+      })
+    ) {
+      return
+    }
     const frame = window.requestAnimationFrame(() => {
-      applyBuyerContentFit(true)
+      if (applyBuyerContentFit(true)) {
+        fittedSessionRef.current = viewportSessionKey
+      }
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [applyBuyerContentFit, buyerChrome, viewMode])
+  }, [
+    applyBuyerContentFit,
+    buyerChrome,
+    viewMode,
+    viewportSessionKey,
+    wrapHeight,
+    wrapWidth,
+  ])
+
+  useLayoutEffect(() => {
+    if (!buyerChrome || viewMode !== "macro") return
+    const saved = savedViewportRef.current
+    const controls = transformRef.current as
+      | (ReactZoomPanPinchContentRef & {
+          instance?: { transformState?: BuyerMapViewport }
+        })
+      | null
+    const current = controls?.instance?.transformState
+    if (!saved || !current || !controls) return
+    if (fittedSessionRef.current !== viewportSessionKey) return
+    if (!buyerViewportLooksReset(current)) return
+    if (buyerViewportLooksReset(saved)) return
+    controls.setTransform(saved.positionX, saved.positionY, saved.scale, 0)
+  }, [buyerChrome, viewMode, viewportSessionKey, liveSelectedItems.length])
 
   useEffect(() => {
     if (!lodEnabled || viewMode !== "micro" || !focusedZoneId) {
@@ -541,7 +604,15 @@ export function InteractiveSeatingCanvas({
   }
 
   const handleTransformed = useCallback(
-    (_ref: unknown, state: { scale: number }) => {
+    (
+      _ref: unknown,
+      state: { scale: number; positionX: number; positionY: number },
+    ) => {
+      savedViewportRef.current = {
+        scale: state.scale,
+        positionX: state.positionX,
+        positionY: state.positionY,
+      }
       setZoom((current) =>
         Math.abs(current - state.scale) < 0.04 ? current : state.scale,
       )
@@ -830,7 +901,9 @@ export function InteractiveSeatingCanvas({
     setViewMode("macro")
     setFocusedZoneId(null)
     setRevealedZoneId(null)
-    if (!buyerChrome) {
+    if (buyerChrome) {
+      applyBuyerContentFit(true)
+    } else {
       transformRef.current?.resetTransform(400, "easeOut")
     }
   }
@@ -1213,10 +1286,13 @@ export function InteractiveSeatingCanvas({
         )}
       >
       <TransformWrapper
+        key={buyerChrome ? viewportSessionKey : "studio"}
         ref={transformRef}
         minScale={MIN_ZOOM}
         maxScale={buyerChrome ? CLIENT_FIT_MAX_SCALE : MAX_ZOOM}
-        initialScale={1}
+        initialScale={savedViewportRef.current?.scale ?? 1}
+        initialPositionX={savedViewportRef.current?.positionX ?? 0}
+        initialPositionY={savedViewportRef.current?.positionY ?? 0}
         centerOnInit={!buyerChrome}
         centerZoomedOut={!buyerChrome}
         limitToBounds={!hideChrome && !buyerChrome}
@@ -1237,6 +1313,7 @@ export function InteractiveSeatingCanvas({
         className={cn(
           "h-full w-full overscroll-none",
           buyerMapSurfaceClass(hideChrome, buyerChrome),
+          // touch-action: none only on the canvas so pinch/pan belong to the map.
           readOnly ? "pointer-events-none touch-pan-y" : "touch-none",
         )}
       >

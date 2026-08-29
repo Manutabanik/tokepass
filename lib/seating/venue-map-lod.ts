@@ -274,3 +274,37 @@ export function publicRevealSeats<
   if (!zone) return []
   return seats.filter((seat) => seatBelongsToZone(seat, zone))
 }
+
+export function buyerViewportFitSessionKey(
+  eventId?: string | null,
+  eventDateId?: string | null,
+): string {
+  return `${eventId?.trim() || ""}::${eventDateId?.trim() || ""}`
+}
+
+/** Auto-fit once per event/day. Never again on cart or seat selection. */
+export function shouldRunBuyerAutoFit(input: {
+  sessionKey: string
+  fittedSessionKey: string | null
+  viewMode: MapLodMode
+  wrapWidth: number
+  wrapHeight: number
+}): boolean {
+  if (input.viewMode !== "macro") return false
+  if (input.wrapWidth < 80 || input.wrapHeight < 80) return false
+  return input.fittedSessionKey !== input.sessionKey
+}
+
+export type BuyerMapViewport = {
+  scale: number
+  positionX: number
+  positionY: number
+}
+
+export function buyerViewportLooksReset(current: BuyerMapViewport): boolean {
+  return (
+    Math.abs(current.scale - 1) < 0.02 &&
+    Math.abs(current.positionX) < 2 &&
+    Math.abs(current.positionY) < 2
+  )
+}
