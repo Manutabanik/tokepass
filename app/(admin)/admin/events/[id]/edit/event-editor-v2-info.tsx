@@ -1,7 +1,5 @@
 "use client"
 
-import { ImagePlus, Type } from "lucide-react"
-import { useState } from "react"
 import { useFormContext, useWatch } from "react-hook-form"
 
 import { EventEditorV2ArchetypePicker, useDraftArchetype } from "./event-editor-v2-archetype"
@@ -14,29 +12,15 @@ import {
 import { EventEditorV2LineupFields } from "./event-editor-v2-lineup"
 import { EventEditorV2ScheduleFields } from "./event-editor-v2-schedule"
 import {
-  BENTO_GRID_CLASS,
   DRAFT_FIELD_CLASS,
-  DraftCard,
   DraftFieldError,
   DraftFieldLabel,
   DraftHint,
-  SUPER_PANEL_ITEM_CLASS,
+  SplitRowSection,
 } from "./event-editor-v2-ui"
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import {
-  infoLocationErrorsOpenLogistics,
-  infoSuperPanelForFieldPath,
-  resolveInfoSuperPanel,
-  type InfoSuperPanelId,
-} from "@/lib/events/editor-v2-info-panels"
 import {
   emptyEventDraftV2Location,
   type EventDraftV2,
@@ -44,7 +28,6 @@ import {
 
 export function EventEditorV2InfoStep({
   eventId,
-  revealField = null,
 }: {
   eventId: string
   revealField?: string | null
@@ -55,23 +38,7 @@ export function EventEditorV2InfoStep({
     formState: { errors },
   } = useFormContext<EventDraftV2>()
   const { labels, supportsVirtual } = useDraftArchetype()
-  const eventName = useWatch({ name: "basicInfo.name" })
   const isVirtual = Boolean(useWatch({ name: "isVirtual" }))
-  const [openPanel, setOpenPanel] = useState<InfoSuperPanelId[]>(() => [
-    resolveInfoSuperPanel(errors, revealField),
-  ])
-  const locationErrors = infoLocationErrorsOpenLogistics(errors)
-  const revealKey = revealField?.trim() ?? ""
-  const panelSyncKey = `${revealKey}::${locationErrors}`
-  const [lastPanelSyncKey, setLastPanelSyncKey] = useState(panelSyncKey)
-  if (panelSyncKey !== lastPanelSyncKey) {
-    setLastPanelSyncKey(panelSyncKey)
-    if (revealKey) {
-      setOpenPanel([infoSuperPanelForFieldPath(revealKey)])
-    } else if (locationErrors) {
-      setOpenPanel(["logistics"])
-    }
-  }
 
   function setVirtual(checked: boolean) {
     setValue("isVirtual", checked, { shouldDirty: true, shouldTouch: true })
@@ -87,149 +54,120 @@ export function EventEditorV2InfoStep({
     }
   }
 
-  const onlineSwitch = supportsVirtual ? (
-    <div className="inline-flex items-center gap-2">
-      <Switch
-        id="event-v2-is-virtual"
-        checked={isVirtual}
-        onCheckedChange={setVirtual}
-        className="data-checked:bg-emerald-500"
-        aria-label="Evento virtual / online"
-      />
-      <Label
-        htmlFor="event-v2-is-virtual"
-        className="text-xs font-semibold text-slate-700 dark:text-zinc-200"
-      >
-        Es online
-      </Label>
-    </div>
-  ) : null
-
   return (
-    <div className="space-y-6">
-      <Accordion
-        type="single"
-        collapsible
-        keepMounted
-        value={openPanel}
-        onValueChange={(next) => {
-          const panel = next[0]
-          setOpenPanel(panel === "identity" || panel === "logistics" ? [panel] : [])
-        }}
-        className="w-full"
+    <div>
+      <SplitRowSection
+        title="Identidad del evento"
+        description="Tipo, nombre e imágenes principales. Así aparece en el catálogo y en las entradas."
       >
-        <AccordionItem value="identity" className={SUPER_PANEL_ITEM_CLASS}>
-          <AccordionTrigger className="px-1 py-4 hover:no-underline">
-            <span className="flex min-w-0 flex-1 items-center gap-2 pr-3 text-left">
-              <Type className="size-4 shrink-0 text-emerald-400" aria-hidden />
-              <span className="truncate text-sm font-bold text-slate-800 dark:text-zinc-100">
-                Identidad • {eventName?.trim() || "Nuevo Evento"}
-              </span>
-            </span>
-          </AccordionTrigger>
-          <AccordionContent className="space-y-6 pb-4">
-            <EventEditorV2ArchetypePicker />
+        <EventEditorV2ArchetypePicker embedded />
 
-            <DraftCard>
-              <div className="mb-5 flex items-center gap-2">
-                <Type className="size-4 text-emerald-400" aria-hidden />
-                <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-                  Lo esencial
-                </h2>
-              </div>
-              <div className="grid gap-2">
-                <DraftFieldLabel htmlFor="event-v2-name" required className="text-sm">
-                  ¿Cómo se llama?
-                </DraftFieldLabel>
-                <Input
-                  id="event-v2-name"
-                  className={DRAFT_FIELD_CLASS}
-                  placeholder="Ej. After en la terraza"
-                  {...register("basicInfo.name")}
-                />
-                <DraftHint>
-                  Así lo van a ver en el catálogo y en {labels.tickets.toLowerCase()}.
-                </DraftHint>
-                <DraftFieldError message={errors.basicInfo?.name?.message} />
-              </div>
-            </DraftCard>
+        <div className="grid gap-2">
+          <DraftFieldLabel htmlFor="event-v2-name" required className="text-sm">
+            ¿Cómo se llama?
+          </DraftFieldLabel>
+          <Input
+            id="event-v2-name"
+            className={DRAFT_FIELD_CLASS}
+            placeholder="Ej. After en la terraza"
+            {...register("basicInfo.name")}
+          />
+          <DraftHint>
+            Así lo van a ver en el catálogo y en {labels.tickets.toLowerCase()}.
+          </DraftHint>
+          <DraftFieldError message={errors.basicInfo?.name?.message} />
+        </div>
 
-            <DraftCard>
-              <div className="mb-5 flex items-center gap-2">
-                <ImagePlus className="size-4 text-emerald-400" aria-hidden />
-                <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-                  Imágenes
-                </h2>
-              </div>
-              <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
-                <EventEditorV2MediaField
-                  eventId={eventId}
-                  name="flyerUrl"
-                  label="Portada"
-                  hint="La imagen principal del evento."
-                  optional
-                />
-                <EventEditorV2MediaField
-                  eventId={eventId}
-                  name="bannerUrl"
-                  label="Imagen ancha"
-                  hint="Para la ficha y las redes."
-                  optional
-                />
-              </div>
-            </DraftCard>
+        <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
+          <EventEditorV2MediaField
+            eventId={eventId}
+            name="flyerUrl"
+            label="Portada"
+            hint="La imagen principal del evento."
+            optional
+          />
+          <EventEditorV2MediaField
+            eventId={eventId}
+            name="bannerUrl"
+            label="Imagen ancha"
+            hint="Para la ficha y las redes."
+            optional
+          />
+        </div>
+      </SplitRowSection>
 
-            <EventEditorV2LineupFields />
-          </AccordionContent>
-        </AccordionItem>
+      <SplitRowSection
+        title="Artistas y Lineup"
+        description={`Opcional. Buscá en Spotify o en el catálogo, o cargá a ${labels.participants.toLowerCase()} a mano.`}
+      >
+        <EventEditorV2LineupFields embedded />
+      </SplitRowSection>
 
-        <AccordionItem value="logistics" className={SUPER_PANEL_ITEM_CLASS}>
-          <AccordionTrigger className="px-1 py-4 hover:no-underline">
-            <span className="flex min-w-0 flex-1 items-center gap-2 pr-3 text-left">
-              <span className="truncate text-sm font-bold text-slate-800 dark:text-zinc-100">
-                Tiempo y espacio • Logística
-              </span>
-            </span>
-          </AccordionTrigger>
-          <AccordionContent className="space-y-6 pb-4">
-            <EventEditorV2ScheduleFields />
-
-            <EventEditorV2LocationFields
-              headerExtra={onlineSwitch}
-              hideFields={supportsVirtual && isVirtual}
-            />
-
-            <div hidden={!supportsVirtual || !isVirtual}>
-              <DraftCard>
-                <div className="grid gap-2">
-                  <DraftFieldLabel
-                    htmlFor="event-v2-virtual-link"
-                    optional
-                    className="text-sm"
-                  >
-                    Link para entrar
-                  </DraftFieldLabel>
-                  <Input
-                    id="event-v2-virtual-link"
-                    className={DRAFT_FIELD_CLASS}
-                    placeholder="Link de Zoom, Meet, YouTube..."
-                    {...register("virtualLink")}
-                  />
-                  <DraftHint>
-                    El mapa queda fuera del borrador mientras el evento sea virtual.
-                  </DraftHint>
-                  <DraftFieldError message={errors.virtualLink?.message} />
-                </div>
-              </DraftCard>
+      <SplitRowSection
+        title="Fechas y Ubicación"
+        description="Definí si es online, las fechas y el lugar. El mapa queda afuera si el evento es virtual."
+      >
+        {supportsVirtual ? (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 px-3 py-2.5">
+            <div className="min-w-0">
+              <Label
+                htmlFor="event-v2-is-virtual"
+                className="text-sm font-medium text-foreground"
+              >
+                Es online
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                El acceso va por link. Provincia, ciudad y mapa quedan fuera.
+              </p>
             </div>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+            <Switch
+              id="event-v2-is-virtual"
+              checked={isVirtual}
+              onCheckedChange={setVirtual}
+              className="data-checked:bg-emerald-500"
+              aria-label="Evento virtual / online"
+            />
+          </div>
+        ) : null}
 
-      <div className={BENTO_GRID_CLASS}>
-        <EventEditorV2MultimediaCard eventId={eventId} />
-        <EventEditorV2UsefulInfoCard />
-      </div>
+        <EventEditorV2LocationFields
+          embedded
+          hideFields={supportsVirtual && isVirtual}
+        />
+
+        <div hidden={!supportsVirtual || !isVirtual}>
+          <div className="grid gap-2">
+            <DraftFieldLabel
+              htmlFor="event-v2-virtual-link"
+              optional
+              className="text-sm"
+            >
+              Link para entrar
+            </DraftFieldLabel>
+            <Input
+              id="event-v2-virtual-link"
+              className={DRAFT_FIELD_CLASS}
+              placeholder="Link de Zoom, Meet, YouTube..."
+              {...register("virtualLink")}
+            />
+            <DraftHint>
+              El mapa queda fuera del borrador mientras el evento sea virtual.
+            </DraftHint>
+            <DraftFieldError message={errors.virtualLink?.message} />
+          </div>
+        </div>
+
+        <EventEditorV2ScheduleFields embedded />
+      </SplitRowSection>
+
+      <SplitRowSection
+        title="Multimedia y Reglas"
+        description="Video, galería y las reglas que el comprador ve antes de pagar."
+        className="mb-0 border-b-0 pb-0"
+      >
+        <EventEditorV2MultimediaCard eventId={eventId} embedded />
+        <EventEditorV2UsefulInfoCard embedded />
+      </SplitRowSection>
     </div>
   )
 }

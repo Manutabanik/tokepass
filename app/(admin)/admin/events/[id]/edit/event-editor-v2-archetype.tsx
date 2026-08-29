@@ -35,7 +35,11 @@ export function useDraftArchetype() {
   }
 }
 
-export function EventEditorV2ArchetypePicker() {
+export function EventEditorV2ArchetypePicker({
+  embedded = false,
+}: {
+  embedded?: boolean
+}) {
   const { getValues, setValue } = useFormContext<EventDraftV2>()
   const { archetype } = useDraftArchetype()
 
@@ -47,16 +51,7 @@ export function EventEditorV2ArchetypePicker() {
     }
   }
 
-  return (
-    <DraftCard className="h-full">
-      <div className="mb-4">
-        <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-          ¿Qué tipo de evento es?
-        </h2>
-        <DraftHint>
-          Cambia los nombres de lugar, cupo y accesos según lo que estás armando.
-        </DraftHint>
-      </div>
+  const radios = (
       <div
         role="radiogroup"
         aria-label="Arquetipo del evento"
@@ -86,6 +81,28 @@ export function EventEditorV2ArchetypePicker() {
           )
         })}
       </div>
+  )
+
+  if (embedded) {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-foreground">¿Qué tipo de evento es?</p>
+        {radios}
+      </div>
+    )
+  }
+
+  return (
+    <DraftCard className="h-full">
+      <div className="mb-4">
+        <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
+          ¿Qué tipo de evento es?
+        </h2>
+        <DraftHint>
+          Cambia los nombres de lugar, cupo y accesos según lo que estás armando.
+        </DraftHint>
+      </div>
+      {radios}
     </DraftCard>
   )
 }

@@ -79,9 +79,11 @@ function matchGeorefName(rows: GeorefEntity[], name: string) {
 export function EventEditorV2LocationFields({
   headerExtra,
   hideFields = false,
+  embedded = false,
 }: {
   headerExtra?: ReactNode
   hideFields?: boolean
+  embedded?: boolean
 }) {
   const listboxId = useId()
   const { labels } = useDraftArchetype()
@@ -293,23 +295,33 @@ export function EventEditorV2LocationFields({
       ? googleMapsDeepLink(location.lat, location.lng)
       : null
 
-  return (
-    <DraftCard className="md:col-span-12">
-      <div className="mb-5 flex flex-col items-start justify-between gap-3 sm:flex-row">
+  const header = (
+      <div className={cn(
+        "flex flex-col items-start justify-between gap-3 sm:flex-row",
+        embedded ? "mb-3" : "mb-5",
+      )}>
         <div className="flex min-w-0 items-center gap-2">
-          <MapPinned className="size-4 shrink-0 text-emerald-400" aria-hidden />
+          {embedded ? null : (
+            <MapPinned className="size-4 shrink-0 text-emerald-400" aria-hidden />
+          )}
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
+              <h2 className={cn(
+                embedded
+                  ? "text-sm font-medium text-foreground"
+                  : "text-sm font-bold text-slate-800 dark:text-zinc-100",
+              )}>
                 {labels.venue}
               </h2>
               {headerExtra}
             </div>
+            {embedded ? null : (
             <p className="mt-1 text-xs text-muted-foreground">
               {hideFields
                 ? "El acceso va por link. El mapa queda fuera del borrador."
                 : "Buscá la dirección y afiná el pin en el mapa."}
             </p>
+            )}
           </div>
         </div>
         <Button
@@ -324,6 +336,10 @@ export function EventEditorV2LocationFields({
           Limpiar ubicación
         </Button>
       </div>
+  )
+
+  const fields = (
+    <>
 
       <div
         hidden={hideFields}
@@ -546,6 +562,22 @@ export function EventEditorV2LocationFields({
           </a>
         ) : null}
       </div>
+    </>
+  )
+
+  if (embedded) {
+    return (
+      <div className="space-y-3">
+        {header}
+        {fields}
+      </div>
+    )
+  }
+
+  return (
+    <DraftCard className="md:col-span-12">
+      {header}
+      {fields}
     </DraftCard>
   )
 }

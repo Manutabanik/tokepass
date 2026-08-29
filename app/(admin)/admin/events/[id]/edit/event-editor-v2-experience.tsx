@@ -16,20 +16,19 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import type { EventDraftV2 } from "@/lib/validations/event-draft-v2"
 
-export function EventEditorV2MultimediaCard({ eventId }: { eventId: string }) {
+export function EventEditorV2MultimediaCard({
+  eventId,
+  embedded = false,
+}: {
+  eventId: string
+  embedded?: boolean
+}) {
   const {
     register,
     formState: { errors },
   } = useFormContext<EventDraftV2>()
 
-  return (
-    <DraftCard className="md:col-span-12">
-      <div className="mb-5 flex items-center gap-2">
-        <Clapperboard className="size-4 text-emerald-400" aria-hidden />
-        <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-          Multimedia
-        </h2>
-      </div>
+  const body = (
       <div className="grid flex-grow gap-4">
         <div className="grid gap-2">
           <DraftFieldLabel htmlFor="event-v2-promo-video" optional className="text-sm">
@@ -46,24 +45,34 @@ export function EventEditorV2MultimediaCard({ eventId }: { eventId: string }) {
         </div>
         <EventEditorV2GalleryField eventId={eventId} />
       </div>
+  )
+
+  if (embedded) return body
+
+  return (
+    <DraftCard className="md:col-span-12">
+      <div className="mb-5 flex items-center gap-2">
+        <Clapperboard className="size-4 text-emerald-400" aria-hidden />
+        <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
+          Multimedia
+        </h2>
+      </div>
+      {body}
     </DraftCard>
   )
 }
 
-export function EventEditorV2UsefulInfoCard() {
+export function EventEditorV2UsefulInfoCard({
+  embedded = false,
+}: {
+  embedded?: boolean
+} = {}) {
   const {
     register,
     formState: { errors },
   } = useFormContext<EventDraftV2>()
 
-  return (
-    <DraftCard className="md:col-span-12">
-      <div className="mb-5 flex items-center gap-2">
-        <Info className="size-4 text-emerald-400" aria-hidden />
-        <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
-          Información útil
-        </h2>
-      </div>
+  const body = (
       <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
         <div className="grid gap-2">
           <DraftFieldLabel htmlFor="event-v2-restrictions" optional className="text-sm">
@@ -94,6 +103,19 @@ export function EventEditorV2UsefulInfoCard() {
           <DraftFieldError message={errors.whatToBring?.message} />
         </div>
       </div>
+  )
+
+  if (embedded) return body
+
+  return (
+    <DraftCard className="md:col-span-12">
+      <div className="mb-5 flex items-center gap-2">
+        <Info className="size-4 text-emerald-400" aria-hidden />
+        <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
+          Información útil
+        </h2>
+      </div>
+      {body}
     </DraftCard>
   )
 }

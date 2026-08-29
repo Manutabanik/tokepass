@@ -36,7 +36,11 @@ type LineupSuggestion = {
   source: Exclude<EventDraftLineupSource, "custom">
 }
 
-export function EventEditorV2LineupFields() {
+export function EventEditorV2LineupFields({
+  embedded = false,
+}: {
+  embedded?: boolean
+}) {
   const { labels } = useDraftArchetype()
   const { control, getValues, register, setValue } =
     useFormContext<EventDraftV2>()
@@ -174,8 +178,10 @@ export function EventEditorV2LineupFields() {
   const showDropdown = open && query.trim().length >= 1
   const searching = query.trim().length >= 2 && loading
 
-  return (
-    <DraftCard className="md:col-span-12">
+  const searchAndList = (
+    <>
+      {embedded ? null : (
+        <>
       <div className="mb-5 flex items-center gap-2">
         <Users className="size-4 text-emerald-400" aria-hidden />
         <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
@@ -186,8 +192,10 @@ export function EventEditorV2LineupFields() {
       <DraftHint>
         Buscá o cargá a mano. Se guarda en el borrador.
       </DraftHint>
+        </>
+      )}
 
-      <div ref={rootRef} className="relative mt-5">
+      <div ref={rootRef} className={cn("relative", embedded ? "" : "mt-5")}>
         <Search
           className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-gray-400"
           aria-hidden
@@ -270,14 +278,14 @@ export function EventEditorV2LineupFields() {
       </div>
 
       {fields.length > 0 ? (
-        <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="mt-4 flex flex-wrap gap-2">
           {fields.map((field, index) => {
             const person = lineup[index]
             const displayName = person?.name?.trim() || "Sin nombre"
             return (
               <li
                 key={field._rowId}
-                className="relative flex gap-3 rounded-xl border border-slate-200 bg-white/80 p-4 pr-14 dark:border-gray-700/50 dark:bg-gray-800/50"
+                className="flex max-w-full flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-white/90 py-1 pr-1 pl-1 dark:border-gray-700 dark:bg-gray-900/70"
               >
                 <input type="hidden" {...register(`lineup.${index}.id`)} />
                 <input type="hidden" {...register(`lineup.${index}.source`)} />
@@ -286,64 +294,65 @@ export function EventEditorV2LineupFields() {
                 <ArtistAvatar
                   name={displayName}
                   imageUrl={person?.avatarUrl}
-                  size="lg"
+                  size="sm"
                 />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-800 dark:text-zinc-100">
-                    {displayName}
-                  </p>
-                  <input
-                    className="h-11 min-h-11 w-full border-0 bg-transparent px-0 text-sm text-gray-500 outline-none placeholder:text-gray-400 focus-visible:ring-0"
-                    placeholder="Ej: Orador principal, Cierre..."
-                    aria-label={`Rol de ${displayName}`}
-                    {...register(`lineup.${index}.role`)}
-                  />
-                  {multiDay ? (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {schedule.map((day, dayIndex) => {
-                        const dayId = day.id?.trim()
-                        if (!dayId) return null
-                        const selected = (person?.dayIds ?? []).includes(dayId)
-                        const label = day.name?.trim() || `Día ${dayIndex + 1}`
-                        return (
-                          <button
-                            key={dayId}
-                            type="button"
-                            onClick={() => toggleDay(index, dayId)}
-                            aria-pressed={selected}
-                            className={cn(
-                              "min-h-11 rounded-full px-3 py-2 text-[11px] font-semibold transition-colors",
-                              selected
-                                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                                : "bg-slate-100 text-gray-500 hover:bg-slate-200 dark:bg-gray-900 dark:text-gray-400",
-                            )}
-                          >
-                            {label}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  ) : null}
-                </div>
+                <span className="max-w-[8rem] truncate text-sm font-medium text-slate-800 dark:text-zinc-100">
+                  {displayName}
+                </span>
+                <input
+                  className="h-9 min-h-9 w-32 min-w-0 border-0 bg-transparent px-1 text-xs text-gray-500 outline-none placeholder:text-gray-400 focus-visible:ring-0"
+                  placeholder="Rol…"
+                  aria-label={`Rol de ${displayName}`}
+                  {...register(`lineup.${index}.role`)}
+                />
+                {multiDay ? (
+                  <div className="flex flex-wrap gap-1">
+                    {schedule.map((day, dayIndex) => {
+                      const dayId = day.id?.trim()
+                      if (!dayId) return null
+                      const selected = (person?.dayIds ?? []).includes(dayId)
+                      const label = day.name?.trim() || `Día ${dayIndex + 1}`
+                      return (
+                        <button
+                          key={dayId}
+                          type="button"
+                          onClick={() => toggleDay(index, dayId)}
+                          aria-pressed={selected}
+                          className={cn(
+                            "min-h-8 rounded-full px-2 py-1 text-[10px] font-semibold transition-colors",
+                            selected
+                              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                              : "bg-slate-100 text-gray-500 hover:bg-slate-200 dark:bg-gray-900 dark:text-gray-400",
+                          )}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : null}
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="absolute top-2 right-2 size-11 text-muted-foreground hover:text-red-500"
+                  className="size-8 shrink-0 text-muted-foreground hover:text-red-500"
                   aria-label={`Quitar a ${displayName}`}
                   onClick={() => remove(index)}
                 >
-                  <X className="size-4" />
+                  <X className="size-3.5" />
                 </Button>
               </li>
             )
           })}
         </ul>
       ) : (
-        <p className="mt-5 text-sm text-gray-500">
+        <p className="mt-4 text-sm text-muted-foreground">
           Todavía no hay protagonistas. Buscá o creá el primero.
         </p>
       )}
-    </DraftCard>
+    </>
   )
+
+  if (embedded) return <div className="space-y-3">{searchAndList}</div>
+  return <DraftCard className="md:col-span-12">{searchAndList}</DraftCard>
 }

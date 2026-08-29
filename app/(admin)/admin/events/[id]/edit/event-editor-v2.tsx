@@ -275,7 +275,7 @@ export function EventEditorV2({
     <EventEditorFeeProvider fee={fee}>
       <FormProvider {...form}>
       <OrphanMapTicketGarbageCollector />
-      <div className="w-full flex-1 overflow-x-hidden bg-background pb-24 text-foreground">
+      <div className="w-full flex-1 overflow-x-hidden bg-background text-foreground">
         <EventEditorV2StickyHeader
           step={step}
           ticketsLabel={labels.tickets}
@@ -287,7 +287,7 @@ export function EventEditorV2({
           }
         />
 
-        <div className="mx-auto max-w-5xl px-4 py-8 pb-24 sm:px-6">
+        <div className="mx-auto w-full max-w-5xl px-4 py-8 pb-24">
           <div className="mb-8 min-w-0">
             <p className="text-xs font-bold tracking-[0.18em] text-emerald-400 uppercase">
               Editor
@@ -349,10 +349,20 @@ export function EventEditorV2({
       <EventEditorV2StickyFooter
         step={step}
         busy={working}
+        saving={saveStatus === "saving"}
         publishLabel={publishLabel}
         onBack={() => {
           const previous = prevEditorStep(step)
           if (previous) goToStep(previous)
+        }}
+        onSaveDraft={() => {
+          void persistDraft(true).then((result) => {
+            if (result.success) {
+              toast.success("Borrador guardado")
+              return
+            }
+            toast.error(result.error)
+          })
         }}
         onNext={() => {
           const next = nextEditorStep(step)

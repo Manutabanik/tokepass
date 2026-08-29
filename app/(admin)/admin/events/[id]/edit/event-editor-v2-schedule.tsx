@@ -25,7 +25,11 @@ import {
 } from "@/lib/events/draft-schedule-slots-v2"
 import type { EventDraftV2 } from "@/lib/validations/event-draft-v2"
 
-export function EventEditorV2ScheduleFields() {
+export function EventEditorV2ScheduleFields({
+  embedded = false,
+}: {
+  embedded?: boolean
+}) {
   const {
     control,
     register,
@@ -67,8 +71,14 @@ export function EventEditorV2ScheduleFields() {
     replace(next)
   }
 
-  return (
-    <DraftCard className="md:col-span-12">
+  const body = (
+    <>
+      {embedded ? (
+        <p className="text-sm font-medium text-foreground">
+          {usesSlots ? "Fechas y turnos" : "Fechas y funciones"}
+        </p>
+      ) : (
+        <>
       <div className="mb-5 flex items-center gap-2">
         <CalendarDays className="size-4 text-emerald-400" aria-hidden />
         <h2 className="text-sm font-bold text-slate-800 dark:text-zinc-100">
@@ -80,6 +90,8 @@ export function EventEditorV2ScheduleFields() {
           ? "Cada fecha puede tener varias franjas horarias. Duplicá los turnos para armar la semana de una vez."
           : "Por defecto el evento dura un día. Agregá otra función si se repite en varias fechas."}
       </DraftHint>
+        </>
+      )}
 
       <ul className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
         {fields.map((field, index) => {
@@ -202,14 +214,17 @@ export function EventEditorV2ScheduleFields() {
         })}
       </ul>
 
-      <div className="mt-4">
+      <div className={embedded ? "mt-2" : "mt-4"}>
         <DraftAddButton onClick={addDay}>
           <Plus className="size-4" aria-hidden />
           Agregar otro día / función
         </DraftAddButton>
       </div>
-    </DraftCard>
+    </>
   )
+
+  if (embedded) return <div className="space-y-3">{body}</div>
+  return <DraftCard className="md:col-span-12">{body}</DraftCard>
 }
 
 function DaySlotList({

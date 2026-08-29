@@ -39,6 +39,35 @@ export function DraftCard({
   )
 }
 
+export function SplitRowSection({
+  title,
+  description,
+  children,
+  className,
+}: {
+  title: string
+  description?: string
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <section
+      className={cn(
+        "mb-8 grid grid-cols-1 gap-8 border-b border-border/50 pb-8 md:grid-cols-3",
+        className,
+      )}
+    >
+      <div className="md:col-span-1">
+        <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+        {description ? (
+          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      <div className="space-y-4 md:col-span-2">{children}</div>
+    </section>
+  )
+}
+
 export function DraftHint({ children }: { children: ReactNode }) {
   return <p className="text-sm text-gray-500">{children}</p>
 }

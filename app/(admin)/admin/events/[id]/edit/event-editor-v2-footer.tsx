@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, ArrowRight, Rocket } from "lucide-react"
+import { ArrowLeft, ArrowRight, Rocket, Save } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import type { EditorV2StepId } from "@/lib/events/editor-v2-steps"
@@ -9,15 +9,19 @@ import { cn } from "@/lib/utils"
 export function EventEditorV2StickyFooter({
   step,
   busy = false,
+  saving = false,
   publishLabel = "Publicar",
   onBack,
+  onSaveDraft,
   onNext,
   onPublish,
 }: {
   step: EditorV2StepId
   busy?: boolean
+  saving?: boolean
   publishLabel?: string
   onBack: () => void
+  onSaveDraft: () => void
   onNext: () => void
   onPublish: () => void
 }) {
@@ -25,8 +29,8 @@ export function EventEditorV2StickyFooter({
   const lastStep = step === 3
 
   return (
-    <footer className="fixed bottom-0 left-0 z-50 flex w-full items-center justify-between border-t bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3">
+    <footer className="fixed right-0 bottom-0 left-0 z-50 border-t border-border bg-background/80 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md">
+      <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3">
         <Button
           type="button"
           variant="outline"
@@ -36,6 +40,16 @@ export function EventEditorV2StickyFooter({
         >
           <ArrowLeft className="size-4" aria-hidden />
           Atrás
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy || saving}
+          className="h-12 min-h-12 shrink-0"
+          onClick={onSaveDraft}
+        >
+          <Save className="size-4" aria-hidden />
+          {saving ? "Guardando…" : "Guardar Borrador"}
         </Button>
         {lastStep ? (
           <Button
@@ -54,7 +68,7 @@ export function EventEditorV2StickyFooter({
             className="h-12 min-h-12"
             onClick={onNext}
           >
-            Siguiente paso
+            Siguiente
             <ArrowRight className="size-4" aria-hidden />
           </Button>
         )}
