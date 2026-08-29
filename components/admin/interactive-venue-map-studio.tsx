@@ -67,7 +67,7 @@ export function InteractiveVenueMapStudio({
   if (!open || !mounted) return null
 
   return createPortal(
-    <AppTakeover className="overscroll-none text-foreground">
+    <AppTakeover className="z-[110] overscroll-none text-foreground">
       <InteractiveVenueMapEditor
         variant="studio"
         eventId={eventId}

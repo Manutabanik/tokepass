@@ -1,6 +1,6 @@
 "use client"
 
-import { ChevronDown, Settings2, Trash2 } from "lucide-react"
+import { Settings2 } from "lucide-react"
 import { useLayoutEffect, useState } from "react"
 import { useFormContext, useWatch, type UseFormRegister } from "react-hook-form"
 
@@ -22,7 +22,6 @@ import {
   hasMultipleDraftSlots,
   listDraftScheduleSlots,
 } from "@/lib/events/draft-schedule-slots-v2"
-import { formatCurrency, formatNumber } from "@/lib/format"
 import { ORGANIZER_BASE_PRICE_LABEL } from "@/lib/pricing/organizer-public-price-preview"
 import { cn } from "@/lib/utils"
 import {
@@ -40,22 +39,12 @@ import {
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
 
-export function DraftInventoryAccordionCard({
+export function DraftInventoryItemFields({
   name,
   index,
-  emptyTitle,
-  initialName,
-  initialStartDate,
-  initialEndDate,
-  onRemove,
 }: {
   name: "tickets" | "extras"
   index: number
-  emptyTitle: string
-  initialName?: string
-  initialStartDate?: string
-  initialEndDate?: string
-  onRemove: () => void
 }) {
   const {
     control,
@@ -85,25 +74,17 @@ export function DraftInventoryAccordionCard({
   const showSlots = name === "tickets" && hasMultipleDraftSlots(schedule)
   const itemName = useWatch({ control, name: `${name}.${index}.name` })
   const price = useWatch({ control, name: `${name}.${index}.price` })
-  const stock = useWatch({ control, name: `${name}.${index}.stock` })
   const startDate = useWatch({ control, name: `${name}.${index}.startDate` })
   const endDate = useWatch({ control, name: `${name}.${index}.endDate` })
-  const [isExpanded, setIsExpanded] = useState(
-    () => !String(initialName ?? "").trim(),
-  )
   const [showAdvanced, setShowAdvanced] = useState(() =>
     hasDraftPresale({
-      startDate: initialStartDate,
-      endDate: initialEndDate,
+      startDate: getValues(`${name}.${index}.startDate`),
+      endDate: getValues(`${name}.${index}.endDate`),
     }),
   )
 
   const itemErrors = errors[name]?.[index]
-  const displayName = String(itemName ?? "").trim() || emptyTitle
-  const priceValue = draftNumberValue(price)
-  const stockValue = draftNumberValue(stock)
-  const panelId = `event-v2-${name}-${index}-panel`
-  const advancedId = `${panelId}-advanced`
+  const displayName = String(itemName ?? "").trim() || "Ítem"
   const scheduled = hasDraftPresale({ startDate, endDate })
   const dayRows = pricedByDay
     ? schedule.flatMap((day, dayIndex) => {
@@ -147,11 +128,9 @@ export function DraftInventoryAccordionCard({
   function syncHeadlineFromDayRates() {
     const rates = getValues(`${name}.${index}.dayRates`) ?? []
     if (rates.length === 0) return
-    setValue(
-      `${name}.${index}.price`,
-      draftNumberValue(rates[0]?.price),
-      { shouldDirty: true },
-    )
+    setValue(`${name}.${index}.price`, draftNumberValue(rates[0]?.price), {
+      shouldDirty: true,
+    })
     setValue(
       `${name}.${index}.stock`,
       rates.reduce((sum, rate) => sum + draftNumberValue(rate.stock), 0),
@@ -160,358 +139,280 @@ export function DraftInventoryAccordionCard({
   }
 
   return (
-    <li className="w-full overflow-hidden rounded-xl border border-border/40 bg-transparent transition-all duration-200">
+    <div className="space-y-4">
       <input type="hidden" {...register(`${name}.${index}.id`)} />
       <input type="hidden" {...register(`${name}.${index}.source`)} />
       <input type="hidden" {...register(`${name}.${index}.sectorId`)} />
       <input type="hidden" {...register(`${name}.${index}.layoutType`)} />
       <input type="hidden" {...register(`${name}.${index}.slotId`)} />
 
-      <div className="flex items-center justify-between gap-2">
-        <button
-          type="button"
-          aria-expanded={isExpanded}
-          aria-controls={panelId}
-          onClick={() => setIsExpanded((open) => !open)}
-          className="flex min-h-12 min-w-0 flex-1 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-100/80 dark:hover:bg-gray-800/50"
-        >
-          <span className="flex min-w-0 items-center gap-2">
-            <ChevronDown
-              className={cn(
-                "size-4 shrink-0 text-muted-foreground transition-transform duration-300",
-                isExpanded && "rotate-180",
-              )}
-              aria-hidden
+      <div className="grid grid-cols-1 gap-3">
+        <div className="grid gap-1.5">
+          <DraftFieldLabel htmlFor={`event-v2-${name}-${index}-name`} required>
+            {name === "tickets" ? "¿Cómo se llama?" : "¿Cómo se llama el extra?"}
+          </DraftFieldLabel>
+          <Input
+            id={`event-v2-${name}-${index}-name`}
+            className={DRAFT_FIELD_CLASS}
+            placeholder={name === "tickets" ? "General" : "Cerveza"}
+            {...register(`${name}.${index}.name`)}
+          />
+          <DraftFieldError message={itemErrors?.name?.message} />
+        </div>
+        <div className="grid gap-1.5">
+          <DraftFieldLabel htmlFor={`event-v2-${name}-${index}-ticketType`}>
+            Tipo de acceso
+          </DraftFieldLabel>
+          <select
+            id={`event-v2-${name}-${index}-ticketType`}
+            className={DRAFT_FIELD_CLASS}
+            {...register(`${name}.${index}.ticketType`)}
+          >
+            {TICKET_COMMERCE_TYPES.map((value) => (
+              <option key={value} value={value}>
+                {TICKET_COMMERCE_TYPE_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </div>
+        {pricedByDay ? (
+          <>
+            <input
+              type="hidden"
+              {...register(`${name}.${index}.price`, {
+                setValueAs: draftNumberValue,
+              })}
             />
-            <span className="truncate text-sm font-semibold text-slate-800 dark:text-zinc-100">
-              {displayName}
-            </span>
-          </span>
-          <span className="hidden shrink-0 text-xs text-muted-foreground tabular-nums sm:inline">
-            Precio: {formatCurrency(priceValue)} | Stock: {formatNumber(stockValue)}
-          </span>
-        </button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="mr-2 size-11 shrink-0 text-muted-foreground hover:text-red-500"
-          aria-label={`Eliminar ${displayName}`}
-          onClick={onRemove}
-        >
-          <Trash2 className="size-4" />
-        </Button>
-      </div>
-
-      <div
-        id={panelId}
-        aria-hidden={!isExpanded}
-        className={cn(
-          "grid transition-all duration-300 ease-in-out",
-          isExpanded
-            ? "mt-0 grid-rows-[1fr] opacity-100"
-            : "pointer-events-none grid-rows-[0fr] opacity-0",
-        )}
-      >
-        <div className="overflow-hidden">
-          <div className="space-y-3 px-4 pt-1 pb-4">
-            <p className="text-xs text-muted-foreground tabular-nums sm:hidden">
-              Precio: {formatCurrency(priceValue)} | Stock: {formatNumber(stockValue)}
-            </p>
-            <div
-              className={cn(
-                "grid grid-cols-1 gap-3",
-                pricedByDay
-                  ? "md:grid-cols-[minmax(0,1fr)_11rem]"
-                  : "md:grid-cols-[minmax(0,1fr)_11rem_8rem_8rem]",
-              )}
-            >
-              <div className="grid gap-1.5">
-                <DraftFieldLabel
-                  htmlFor={`event-v2-${name}-${index}-name`}
-                  required
-                >
-                  {name === "tickets" ? "¿Cómo se llama?" : "¿Cómo se llama el extra?"}
-                </DraftFieldLabel>
-                <Input
-                  id={`event-v2-${name}-${index}-name`}
-                  className={DRAFT_FIELD_CLASS}
-                  placeholder={name === "tickets" ? "General" : "Cerveza"}
-                  {...register(`${name}.${index}.name`)}
-                />
-                <DraftFieldError message={itemErrors?.name?.message} />
-              </div>
-              <div className="grid gap-1.5">
-                <DraftFieldLabel htmlFor={`event-v2-${name}-${index}-ticketType`}>
-                  Tipo de acceso
-                </DraftFieldLabel>
-                <select
-                  id={`event-v2-${name}-${index}-ticketType`}
-                  className={DRAFT_FIELD_CLASS}
-                  {...register(`${name}.${index}.ticketType`)}
-                >
-                  {TICKET_COMMERCE_TYPES.map((value) => (
-                    <option key={value} value={value}>
-                      {TICKET_COMMERCE_TYPE_LABELS[value]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {pricedByDay ? (
-                <>
-                  <input
-                    type="hidden"
-                    {...register(`${name}.${index}.price`, {
-                      setValueAs: draftNumberValue,
-                    })}
-                  />
-                  <input
-                    type="hidden"
-                    {...register(`${name}.${index}.stock`, {
-                      setValueAs: draftNumberValue,
-                    })}
-                  />
-                </>
-              ) : (
-                <>
-                  <div className="grid gap-1.5">
-                    <DraftFieldLabel
-                      htmlFor={`event-v2-${name}-${index}-price`}
-                      required
-                    >
-                      {ORGANIZER_BASE_PRICE_LABEL}
-                    </DraftFieldLabel>
-                    <Input
-                      id={`event-v2-${name}-${index}-price`}
-                      type="number"
-                      min={0}
-                      step={1}
-                      inputMode="numeric"
-                      className={DRAFT_FIELD_CLASS}
-                      {...register(`${name}.${index}.price`, {
-                        setValueAs: draftNumberValue,
-                      })}
-                    />
-                    <DraftFieldError message={itemErrors?.price?.message} />
-                    <OrganizerPublicPriceHint price={price} />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <DraftFieldLabel
-                      htmlFor={`event-v2-${name}-${index}-stock`}
-                      required
-                    >
-                      ¿Cuántas hay?
-                    </DraftFieldLabel>
-                    <Input
-                      id={`event-v2-${name}-${index}-stock`}
-                      type="number"
-                      min={0}
-                      step={1}
-                      inputMode="numeric"
-                      className={DRAFT_FIELD_CLASS}
-                      {...register(`${name}.${index}.stock`, {
-                        setValueAs: draftNumberValue,
-                      })}
-                    />
-                    <DraftFieldError message={itemErrors?.stock?.message} />
-                  </div>
-                </>
-              )}
-            </div>
-
-            {pricedByDay ? (
-              <DraftDayRateFields
-                name={name}
-                index={index}
-                rows={dayRows}
-                register={register}
-                onRateChange={syncHeadlineFromDayRates}
-              />
-            ) : null}
-
+            <input
+              type="hidden"
+              {...register(`${name}.${index}.stock`, {
+                setValueAs: draftNumberValue,
+              })}
+            />
+          </>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <DraftFieldLabel
-                htmlFor={`event-v2-${name}-${index}-description`}
-                optional
+                htmlFor={`event-v2-${name}-${index}-price`}
+                required
               >
-                Detalle
+                {ORGANIZER_BASE_PRICE_LABEL}
               </DraftFieldLabel>
-              <Textarea
-                id={`event-v2-${name}-${index}-description`}
-                rows={2}
-                className={DRAFT_TEXTAREA_CLASS}
-                placeholder="Qué incluye o cómo se usa."
-                {...register(`${name}.${index}.description`)}
+              <Input
+                id={`event-v2-${name}-${index}-price`}
+                type="number"
+                min={0}
+                step={1}
+                inputMode="numeric"
+                className={DRAFT_FIELD_CLASS}
+                {...register(`${name}.${index}.price`, {
+                  setValueAs: draftNumberValue,
+                })}
               />
-              <DraftHint>Una línea alcanza. El comprador lo ve en el checkout.</DraftHint>
-              <DraftFieldError message={itemErrors?.description?.message} />
+              <DraftFieldError message={itemErrors?.price?.message} />
+              <OrganizerPublicPriceHint price={price} />
             </div>
-
-            {multiDay ? (
-              <div className="grid gap-1.5">
-                <DraftFieldLabel optional>
-                  ¿Para qué días es válida esta entrada?
-                </DraftFieldLabel>
-                <div className="flex flex-wrap gap-1.5">
-                  {schedule.map((day, dayIndex) => {
-                    const dayId = day.id?.trim()
-                    if (!dayId) return null
-                    const selected = validDayIds.includes(dayId)
-                    return (
-                      <button
-                        key={dayId}
-                        type="button"
-                        onClick={() => toggleValidDay(dayId)}
-                        aria-pressed={selected}
-                        className={cn(
-                          "min-h-11 rounded-full px-3 py-2 text-[11px] font-semibold transition-colors",
-                          selected
-                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                            : "bg-slate-100 text-gray-500 hover:bg-slate-200 dark:bg-gray-900 dark:text-gray-400",
-                        )}
-                      >
-                        {draftScheduleDayChipLabel(day, dayIndex)}
-                      </button>
-                    )
-                  })}
-                </div>
-                <DraftHint>
-                  {validDayIds.length === 1
-                    ? "Este precio y stock son solo para ese día."
-                    : "Un día = pase diario con su propio precio. Varios días = abono al mismo valor."}
-                </DraftHint>
-              </div>
-            ) : null}
-
-            {showSlots ? (
-              <div className="grid gap-1.5">
-                  <DraftFieldLabel htmlFor={`event-v2-${name}-${index}-slot`} optional>
-                    ¿Para qué turno?
-                  </DraftFieldLabel>
-                <EventEditorV2SlotSelect
-                  value={String(slotId ?? "")}
-                  options={slotOptions}
-                  ariaLabel={`Turno de ${displayName}`}
-                  onChange={(next) =>
-                    setValue(`${name}.${index}.slotId`, next, {
-                      shouldDirty: true,
-                      shouldTouch: true,
-                    })
-                  }
-                />
-                <DraftHint>
-                  Dejalo en cualquier turno para un pase que sirve en todas las
-                  franjas.
-                </DraftHint>
-              </div>
-            ) : null}
-
-            <Button
-              type="button"
-              variant="ghost"
-              aria-expanded={showAdvanced}
-              aria-controls={advancedId}
-              onClick={() => setShowAdvanced((open) => !open)}
-              className="h-11 min-h-11 w-full justify-start gap-2 px-2 text-sm font-medium text-gray-500 hover:text-emerald-500"
-            >
-              <Settings2 className="size-4" aria-hidden />
-              Opciones de preventa y límites
-              {scheduled ? (
-                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold tracking-wide text-amber-600 uppercase dark:text-amber-300">
-                  Programada
-                </span>
-              ) : null}
-            </Button>
-
-            <div
-              id={advancedId}
-              aria-hidden={!showAdvanced}
-              className={cn(
-                "grid transition-all duration-300 ease-in-out",
-                showAdvanced
-                  ? "grid-rows-[1fr] opacity-100"
-                  : "pointer-events-none grid-rows-[0fr] opacity-0",
-              )}
-            >
-              <div className="overflow-hidden">
-                <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 dark:border-gray-800 dark:bg-gray-950/40 md:grid-cols-2">
-                  <div className="grid gap-1.5">
-                    <DraftFieldLabel
-                      htmlFor={`event-v2-${name}-${index}-sale-start`}
-                      optional
-                    >
-                      ¿Desde cuándo se vende?
-                    </DraftFieldLabel>
-                    <Input
-                      id={`event-v2-${name}-${index}-sale-start`}
-                      type="datetime-local"
-                      className={DRAFT_FIELD_CLASS}
-                      {...register(`${name}.${index}.startDate`)}
-                    />
-                    <DraftHint>Vacío = se vende apenas publiques.</DraftHint>
-                  </div>
-                  <div className="grid gap-1.5">
-                    <DraftFieldLabel
-                      htmlFor={`event-v2-${name}-${index}-sale-end`}
-                      optional
-                    >
-                      ¿Hasta cuándo se vende?
-                    </DraftFieldLabel>
-                    <Input
-                      id={`event-v2-${name}-${index}-sale-end`}
-                      type="datetime-local"
-                      className={DRAFT_FIELD_CLASS}
-                      {...register(`${name}.${index}.endDate`)}
-                    />
-                    <DraftHint>Vacío = hasta la fecha del evento.</DraftHint>
-                  </div>
-                  <div className="grid gap-1.5">
-                    <DraftFieldLabel
-                      htmlFor={`event-v2-${name}-${index}-min`}
-                      optional
-                    >
-                      Mínimo por persona
-                    </DraftFieldLabel>
-                    <Input
-                      id={`event-v2-${name}-${index}-min`}
-                      type="number"
-                      min={0}
-                      step={1}
-                      inputMode="numeric"
-                      className={DRAFT_FIELD_CLASS}
-                      {...register(`${name}.${index}.minOrder`, {
-                        setValueAs: (value) => draftNumberValue(value, 1),
-                      })}
-                    />
-                    <DraftFieldError message={itemErrors?.minOrder?.message} />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <DraftFieldLabel
-                      htmlFor={`event-v2-${name}-${index}-max`}
-                      optional
-                    >
-                      Máximo por persona
-                    </DraftFieldLabel>
-                    <Input
-                      id={`event-v2-${name}-${index}-max`}
-                      type="number"
-                      min={0}
-                      step={1}
-                      inputMode="numeric"
-                      className={DRAFT_FIELD_CLASS}
-                      {...register(`${name}.${index}.maxOrder`, {
-                        setValueAs: (value) => draftNumberValue(value, 10),
-                      })}
-                    />
-                    <DraftFieldError message={itemErrors?.maxOrder?.message} />
-                  </div>
-                </div>
-              </div>
+            <div className="grid gap-1.5">
+              <DraftFieldLabel
+                htmlFor={`event-v2-${name}-${index}-stock`}
+                required
+              >
+                ¿Cuántas hay?
+              </DraftFieldLabel>
+              <Input
+                id={`event-v2-${name}-${index}-stock`}
+                type="number"
+                min={0}
+                step={1}
+                inputMode="numeric"
+                className={DRAFT_FIELD_CLASS}
+                {...register(`${name}.${index}.stock`, {
+                  setValueAs: draftNumberValue,
+                })}
+              />
+              <DraftFieldError message={itemErrors?.stock?.message} />
             </div>
           </div>
-        </div>
+        )}
       </div>
-    </li>
+
+      {pricedByDay ? (
+        <DraftDayRateFields
+          name={name}
+          index={index}
+          rows={dayRows}
+          register={register}
+          onRateChange={syncHeadlineFromDayRates}
+        />
+      ) : null}
+
+      <div className="grid gap-1.5">
+        <DraftFieldLabel
+          htmlFor={`event-v2-${name}-${index}-description`}
+          optional
+        >
+          Detalle
+        </DraftFieldLabel>
+        <Textarea
+          id={`event-v2-${name}-${index}-description`}
+          rows={2}
+          className={DRAFT_TEXTAREA_CLASS}
+          placeholder="Qué incluye o cómo se usa."
+          {...register(`${name}.${index}.description`)}
+        />
+        <DraftHint>Una línea alcanza. El comprador lo ve en el checkout.</DraftHint>
+        <DraftFieldError message={itemErrors?.description?.message} />
+      </div>
+
+      {multiDay ? (
+        <div className="grid gap-1.5">
+          <DraftFieldLabel optional>
+            ¿Para qué días es válida esta entrada?
+          </DraftFieldLabel>
+          <div className="flex flex-wrap gap-1.5">
+            {schedule.map((day, dayIndex) => {
+              const dayId = day.id?.trim()
+              if (!dayId) return null
+              const selected = validDayIds.includes(dayId)
+              return (
+                <button
+                  key={dayId}
+                  type="button"
+                  onClick={() => toggleValidDay(dayId)}
+                  aria-pressed={selected}
+                  className={cn(
+                    "min-h-11 rounded-full px-3 py-2 text-[11px] font-semibold transition-colors",
+                    selected
+                      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                      : "bg-slate-100 text-gray-500 hover:bg-slate-200 dark:bg-gray-900 dark:text-gray-400",
+                  )}
+                >
+                  {draftScheduleDayChipLabel(day, dayIndex)}
+                </button>
+              )
+            })}
+          </div>
+          <DraftHint>
+            {validDayIds.length === 1
+              ? "Este precio y stock son solo para ese día."
+              : "Un día = pase diario con su propio precio. Varios días = abono al mismo valor."}
+          </DraftHint>
+        </div>
+      ) : null}
+
+      {showSlots ? (
+        <div className="grid gap-1.5">
+          <DraftFieldLabel htmlFor={`event-v2-${name}-${index}-slot`} optional>
+            ¿Para qué turno?
+          </DraftFieldLabel>
+          <EventEditorV2SlotSelect
+            value={String(slotId ?? "")}
+            options={slotOptions}
+            ariaLabel={`Turno de ${displayName}`}
+            onChange={(next) =>
+              setValue(`${name}.${index}.slotId`, next, {
+                shouldDirty: true,
+                shouldTouch: true,
+              })
+            }
+          />
+          <DraftHint>
+            Dejalo en cualquier turno para un pase que sirve en todas las
+            franjas.
+          </DraftHint>
+        </div>
+      ) : null}
+
+      <Button
+        type="button"
+        variant="ghost"
+        aria-expanded={showAdvanced}
+        aria-controls={`event-v2-${name}-${index}-panel-advanced`}
+        onClick={() => setShowAdvanced((open) => !open)}
+        className="h-11 min-h-11 w-full justify-start gap-2 px-2 text-sm font-medium text-gray-500 hover:text-emerald-500"
+      >
+        <Settings2 className="size-4" aria-hidden />
+        Opciones de preventa y límites
+        {scheduled ? (
+          <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold tracking-wide text-amber-600 uppercase dark:text-amber-300">
+            Programada
+          </span>
+        ) : null}
+      </Button>
+
+      {showAdvanced ? (
+        <div
+          id={`event-v2-${name}-${index}-panel-advanced`}
+          className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 dark:border-gray-800 dark:bg-gray-950/40 sm:grid-cols-2"
+        >
+          <div className="grid gap-1.5">
+            <DraftFieldLabel
+              htmlFor={`event-v2-${name}-${index}-sale-start`}
+              optional
+            >
+              ¿Desde cuándo se vende?
+            </DraftFieldLabel>
+            <Input
+              id={`event-v2-${name}-${index}-sale-start`}
+              type="datetime-local"
+              className={DRAFT_FIELD_CLASS}
+              {...register(`${name}.${index}.startDate`)}
+            />
+            <DraftHint>Vacío = se vende apenas publiques.</DraftHint>
+          </div>
+          <div className="grid gap-1.5">
+            <DraftFieldLabel
+              htmlFor={`event-v2-${name}-${index}-sale-end`}
+              optional
+            >
+              ¿Hasta cuándo se vende?
+            </DraftFieldLabel>
+            <Input
+              id={`event-v2-${name}-${index}-sale-end`}
+              type="datetime-local"
+              className={DRAFT_FIELD_CLASS}
+              {...register(`${name}.${index}.endDate`)}
+            />
+            <DraftHint>Vacío = hasta la fecha del evento.</DraftHint>
+          </div>
+          <div className="grid gap-1.5">
+            <DraftFieldLabel htmlFor={`event-v2-${name}-${index}-min`} optional>
+              Mínimo por persona
+            </DraftFieldLabel>
+            <Input
+              id={`event-v2-${name}-${index}-min`}
+              type="number"
+              min={0}
+              step={1}
+              inputMode="numeric"
+              className={DRAFT_FIELD_CLASS}
+              {...register(`${name}.${index}.minOrder`, {
+                setValueAs: (value) => draftNumberValue(value, 1),
+              })}
+            />
+            <DraftFieldError message={itemErrors?.minOrder?.message} />
+          </div>
+          <div className="grid gap-1.5">
+            <DraftFieldLabel htmlFor={`event-v2-${name}-${index}-max`} optional>
+              Máximo por persona
+            </DraftFieldLabel>
+            <Input
+              id={`event-v2-${name}-${index}-max`}
+              type="number"
+              min={0}
+              step={1}
+              inputMode="numeric"
+              className={DRAFT_FIELD_CLASS}
+              {...register(`${name}.${index}.maxOrder`, {
+                setValueAs: (value) => draftNumberValue(value, 10),
+              })}
+            />
+            <DraftFieldError message={itemErrors?.maxOrder?.message} />
+          </div>
+        </div>
+      ) : null}
+    </div>
   )
 }
 
