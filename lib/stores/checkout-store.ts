@@ -22,6 +22,7 @@ import {
 import {
   calculateCartPriceBreakdown,
   cartItemCount,
+  stampCartLinesMoney,
   sumCartQuantities,
   toCartNumber,
   type CartPriceBreakdown,
@@ -73,8 +74,14 @@ export type StorefrontCartLine = {
   scheduleId?: string | null
   dateString?: string | null
   quantity: number
-  /** Precio visual para el subtotal. Nunca se envía a reserva/checkout. */
+  /** Precio público All-In por unidad. Nunca se envía a reserva/checkout. */
   price: number
+  /** Entrada base extraída (unidad). */
+  basePrice?: number
+  /** Comisión extraída (unidad). */
+  serviceFee?: number
+  /** Total cobrado por unidad. All-In: igual a `price`. */
+  totalPrice?: number
   seatId?: string | null
   elementId?: string | null
   sectorId?: string | null
@@ -249,6 +256,9 @@ function sameLines(left: StorefrontCartLine[], right: StorefrontCartLine[]) {
       line.dateString === other.dateString &&
       line.quantity === other.quantity &&
       line.price === other.price &&
+      line.basePrice === other.basePrice &&
+      line.serviceFee === other.serviceFee &&
+      line.totalPrice === other.totalPrice &&
       line.ticketTierId === other.ticketTierId &&
       line.seatId === other.seatId &&
       line.elementId === other.elementId &&
@@ -263,12 +273,15 @@ function cartTotalsFromLines(
   lines: StorefrontCartLine[],
   rule?: { rate?: number; fixedFee?: number },
 ) {
-  const quote = calculateCartPriceBreakdown(lines, {
+  const feeRule = {
     rate: rule?.rate ?? 0,
     fixedFee: rule?.fixedFee ?? 0,
-  })
+  }
+  const stamped = stampCartLinesMoney(lines, feeRule)
+  const quote = calculateCartPriceBreakdown(stamped, feeRule)
   return {
-    itemsCount: sumCartQuantities(lines),
+    lines: stamped,
+    itemsCount: sumCartQuantities(stamped),
     subtotal: quote.subtotal,
     serviceFee: quote.serviceFee,
     grandTotal: quote.grandTotal,

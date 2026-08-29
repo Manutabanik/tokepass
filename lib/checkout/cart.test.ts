@@ -5,6 +5,7 @@ import {
   calculateCartPriceBreakdown,
   calculateTotal,
   cartIncludedServiceFee,
+  cartLineUnitMoney,
   cartItemCount,
   cartQuantityCount,
   hasActiveCheckoutSelection,
@@ -101,6 +102,7 @@ describe("calculateCartPriceBreakdown", () => {
     const quote = calculateCartPriceBreakdown(lines, { rate: 8, fixedFee: 200 })
     assert.equal(quote.subtotal, 25000)
     assert.equal(quote.serviceFee, cartIncludedServiceFee(lines, 8, 200))
+    assert.equal(quote.baseAmount, quote.subtotal - quote.serviceFee)
     assert.equal(quote.grandTotal, 25000)
     assert.ok(quote.serviceFee > 0)
     assert.ok(quote.serviceFee <= quote.grandTotal)
@@ -114,6 +116,7 @@ describe("calculateCartPriceBreakdown", () => {
       rate: 0.1,
     })
     assert.equal(one.subtotal, 10000)
+    assert.equal(one.baseAmount, 9000)
     assert.equal(one.serviceFee, 1000)
     assert.equal(one.grandTotal, 10000)
     assert.equal(two.subtotal, 20000)
@@ -124,6 +127,7 @@ describe("calculateCartPriceBreakdown", () => {
   it("keeps a zero quote when the cart is empty or free", () => {
     assert.deepEqual(calculateCartPriceBreakdown([], { rate: 0.1, fixedFee: 200 }), {
       subtotal: 0,
+      baseAmount: 0,
       serviceFee: 0,
       grandTotal: 0,
     })
@@ -132,7 +136,16 @@ describe("calculateCartPriceBreakdown", () => {
         rate: 10,
         fixedFee: 200,
       }),
-      { subtotal: 0, serviceFee: 0, grandTotal: 0 },
+      { subtotal: 0, baseAmount: 0, serviceFee: 0, grandTotal: 0 },
     )
+  })
+
+  it("stamps each line with base, fee and all-in total from the event rate", () => {
+    const unit = cartLineUnitMoney(10000, { rate: 0.1, fixedFee: 200 })
+    assert.equal(unit.price, 10000)
+    assert.equal(unit.serviceFee, 1200)
+    assert.equal(unit.basePrice, 8800)
+    assert.equal(unit.totalPrice, 10000)
+    assert.equal(unit.basePrice + unit.serviceFee, unit.totalPrice)
   })
 })

@@ -294,7 +294,11 @@ export function EventStorefront({
       store.resetIfOtherEvent(event.id)
       store.setViewMode("info")
     }
-  }, [event.id])
+    store.setServiceChargeRule({
+      rate: event.serviceChargeRate,
+      fixedFee: event.platformFixedFee,
+    })
+  }, [event.id, event.platformFixedFee, event.serviceChargeRate])
 
   useEffect(() => {
     const bind = () => useStorefrontSeatStore.getState().bindEvent(event.id)

@@ -26,12 +26,25 @@ export type CartServiceFeeRule = {
 }
 
 export type CartPriceBreakdown = {
-  /** Σ(price × quantity) en centavos. Precio público All-In. */
+  /** Σ(price × quantity). Precio público All-In. */
   subtotal: number
+  /** Σ(base extraída). `subtotal - serviceFee`. */
+  baseAmount: number
   /** Cargo Tokepass incluido (porcentaje + fijo). No se factura aparte. */
   serviceFee: number
   /** Monto cobrado. En All-In es igual al subtotal público. */
   grandTotal: number
+}
+
+export type CartLineMoney = {
+  /** Precio público All-In por unidad. */
+  price: number
+  /** Entrada base extraída por unidad. */
+  basePrice: number
+  /** Comisión extraída por unidad. */
+  serviceFee: number
+  /** Total cobrado por unidad. All-In: igual a `price`. */
+  totalPrice: number
 }
 
 /**
@@ -101,22 +114,74 @@ export function cartIncludedServiceFee(
   )
 }
 
+/** Split All-In de una unidad: base + fee = precio público. */
+export function cartLineUnitMoney(
+  publicPrice: unknown,
+  rule: CartServiceFeeRule = {},
+): CartLineMoney {
+  const price = toCartNumber(publicPrice)
+  if (price <= 0) {
+    return { price: 0, basePrice: 0, serviceFee: 0, totalPrice: 0 }
+  }
+  const split = allInBreakdown(
+    price,
+    asServiceRate(rule.rate ?? 0),
+    toCartNumber(rule.fixedFee),
+  )
+  return {
+    price,
+    basePrice: split.basePrice,
+    serviceFee: split.platformFee,
+    totalPrice: price,
+  }
+}
+
+export function stampCartLineMoney<
+  T extends { price?: unknown; quantity?: unknown },
+>(line: T, rule: CartServiceFeeRule = {}): T & CartLineMoney {
+  return { ...line, ...cartLineUnitMoney(line.price, rule) }
+}
+
+export function stampCartLinesMoney<
+  T extends { price?: unknown; quantity?: unknown },
+>(
+  lines: readonly T[] | null | undefined,
+  rule: CartServiceFeeRule = {},
+): Array<T & CartLineMoney> {
+  return (lines ?? []).map((line) => stampCartLineMoney(line, rule))
+}
+
 /**
  * Motor de precios del carrito. Recalcular en cada cambio de ítem o de tarifa.
  *
  * All-In: `ticket_tiers.price` ya incluye el service fee del evento
  * (`platform_fee_percentage` + `platform_fixed_fee`). El comprador paga
  * `grandTotal === subtotal`. `serviceFee` es el split interno / UI.
+ * `itemTotalPrice = itemBasePrice + itemFee` sin sumar la fee otra vez
+ * encima del precio público.
  */
 export function calculateCartPriceBreakdown(
   items: ReadonlyArray<{ price?: unknown; quantity?: unknown }> | null | undefined,
   rule: CartServiceFeeRule = {},
 ): CartPriceBreakdown {
-  const subtotal = sumCartAmounts(items)
-  const rawFee = cartIncludedServiceFee(items, rule.rate ?? 0, rule.fixedFee ?? 0)
-  const serviceFee = Math.min(subtotal, rawFee)
+  const stamped = stampCartLinesMoney(items, rule)
+  const subtotal = sumCartAmounts(stamped)
+  const serviceFee = Math.min(
+    subtotal,
+    centsToMoney(
+      stamped.reduce((sum, line) => {
+        const quantity = cartLineQuantity(line.quantity)
+        if (quantity <= 0 || line.serviceFee <= 0) return sum
+        return sum + moneyToCents(line.serviceFee) * quantity
+      }, 0),
+    ),
+  )
+  const baseAmount = centsToMoney(
+    Math.max(0, moneyToCents(subtotal) - moneyToCents(serviceFee)),
+  )
   return {
     subtotal,
+    baseAmount,
     serviceFee,
     grandTotal: subtotal,
   }

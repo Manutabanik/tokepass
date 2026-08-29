@@ -23,6 +23,17 @@ export function defaultEventFeeConfig(): EventFeeConfig {
   }
 }
 
+/** Acepta fracción (0.08) o puntos (8). */
+export function normalizeServiceFeeRate(
+  value: unknown,
+  fallback = DEFAULT_PLATFORM_FEE_PERCENTAGE / 100,
+): number {
+  const raw = Number(value)
+  if (!Number.isFinite(raw) || raw < 0) return fallback
+  const fraction = raw > 1 ? raw / 100 : raw
+  return Math.min(0.95, Math.max(0, fraction))
+}
+
 /** Decimal rate for allInBreakdown (0.08 = 8%). Sponsored → 0. */
 export function eventFeeRate(config: EventFeeConfig): number {
   if (config.isSponsoredByTokePass) return 0

@@ -65,6 +65,7 @@ import {
   publicTierAvailable,
 } from "@/lib/inventory/public-stock-cap"
 import { startingPriceFromSellable } from "@/lib/checkout/sellable-tickets"
+import { normalizeServiceFeeRate } from "@/lib/pricing/event-fees"
 import type { Event, TicketTier, Venue } from "@/types/database"
 import type { ScheduleDay } from "@/types/events"
 import type { EventSeatingUnit, SeatingSectorSummary, VenueSeatingLayout } from "@/types/venues"
@@ -1300,14 +1301,14 @@ async function loadEventDetails(
     }
   }
 
-  let serviceChargeRate = 0.08
+  let serviceChargeRate = normalizeServiceFeeRate(
+    event.platform_fee_percentage,
+  )
   const { data: rate } = await supabase.rpc("get_event_service_charge_rate", {
     p_event_id: resolvedId,
   })
-  if (typeof rate === "number" && Number.isFinite(rate)) {
-    serviceChargeRate = rate
-  } else if (rate != null && Number.isFinite(Number(rate))) {
-    serviceChargeRate = Number(rate)
+  if (rate != null && Number.isFinite(Number(rate))) {
+    serviceChargeRate = normalizeServiceFeeRate(rate, serviceChargeRate)
   }
 
   let platformFixedFee = Number(event.platform_fixed_fee ?? 0)
