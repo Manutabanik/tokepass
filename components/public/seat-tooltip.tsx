@@ -116,21 +116,23 @@ export function BuyerMapZoomDock({
   onReset: () => void
   className?: string
 }) {
-  const pillClass =
-    "flex size-10 items-center justify-center rounded-full border border-white/10 bg-black/60 p-2 text-white backdrop-blur-md hover:bg-black/75"
+  const buttonClass =
+    "flex h-10 w-10 items-center justify-center rounded-full text-white hover:bg-white/10"
 
   return (
     <div
       className={cn(
-        "absolute right-4 bottom-24 z-10 flex flex-col gap-2",
+        "absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 flex-row items-center gap-1 rounded-full border border-white/10 bg-black/60 p-1 backdrop-blur-md",
         className,
       )}
+      role="toolbar"
+      aria-label="Zoom del mapa"
     >
       <button
         type="button"
         onClick={onZoomIn}
         aria-label="Acercar"
-        className={pillClass}
+        className={buttonClass}
       >
         <Plus className="size-4" aria-hidden="true" />
       </button>
@@ -138,7 +140,7 @@ export function BuyerMapZoomDock({
         type="button"
         onClick={onZoomOut}
         aria-label="Alejar"
-        className={pillClass}
+        className={buttonClass}
       >
         <Minus className="size-4" aria-hidden="true" />
       </button>
@@ -147,7 +149,7 @@ export function BuyerMapZoomDock({
         onClick={onReset}
         title="Restablecer vista"
         aria-label="Restablecer vista"
-        className={pillClass}
+        className={buttonClass}
       >
         <Locate className="size-4" aria-hidden="true" />
       </button>
