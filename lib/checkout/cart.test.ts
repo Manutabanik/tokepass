@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  calculateCartPriceBreakdown,
   calculateTotal,
   cartIncludedServiceFee,
   cartItemCount,
@@ -78,5 +79,60 @@ describe("cart math", () => {
     assert.equal(cartIncludedServiceFee(lines, 0.1), 2000)
     assert.equal(cartIncludedServiceFee(lines, 0.1, 200), 2400)
     assert.equal(calculateTotal(lines), 20000)
+  })
+
+  it("rounds stamped line math in integer cents", () => {
+    assert.equal(
+      calculateTotal([
+        { price: 10.005, quantity: 1 },
+        { price: 10.005, quantity: 1 },
+      ]),
+      20.02,
+    )
+  })
+})
+
+describe("calculateCartPriceBreakdown", () => {
+  it("returns a derived object instead of a bare total", () => {
+    const lines = [
+      { price: 10000, quantity: 2 },
+      { price: 5000, quantity: 1 },
+    ]
+    const quote = calculateCartPriceBreakdown(lines, { rate: 8, fixedFee: 200 })
+    assert.equal(quote.subtotal, 25000)
+    assert.equal(quote.serviceFee, cartIncludedServiceFee(lines, 8, 200))
+    assert.equal(quote.grandTotal, 25000)
+    assert.ok(quote.serviceFee > 0)
+    assert.ok(quote.serviceFee <= quote.grandTotal)
+  })
+
+  it("recalculates when quantity changes without adding the fee twice", () => {
+    const one = calculateCartPriceBreakdown([{ price: 10000, quantity: 1 }], {
+      rate: 0.1,
+    })
+    const two = calculateCartPriceBreakdown([{ price: 10000, quantity: 2 }], {
+      rate: 0.1,
+    })
+    assert.equal(one.subtotal, 10000)
+    assert.equal(one.serviceFee, 1000)
+    assert.equal(one.grandTotal, 10000)
+    assert.equal(two.subtotal, 20000)
+    assert.equal(two.serviceFee, 2000)
+    assert.equal(two.grandTotal, 20000)
+  })
+
+  it("keeps a zero quote when the cart is empty or free", () => {
+    assert.deepEqual(calculateCartPriceBreakdown([], { rate: 0.1, fixedFee: 200 }), {
+      subtotal: 0,
+      serviceFee: 0,
+      grandTotal: 0,
+    })
+    assert.deepEqual(
+      calculateCartPriceBreakdown([{ price: 0, quantity: 3 }], {
+        rate: 10,
+        fixedFee: 200,
+      }),
+      { subtotal: 0, serviceFee: 0, grandTotal: 0 },
+    )
   })
 })

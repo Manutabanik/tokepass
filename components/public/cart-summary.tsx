@@ -22,6 +22,7 @@ import {
 } from "@/lib/checkout/cart-lines"
 import { formatCartTotal } from "@/lib/format"
 import {
+  useCartPriceBreakdown,
   useCheckoutStore,
   type StorefrontCartLine,
 } from "@/lib/stores/checkout-store"
@@ -144,8 +145,7 @@ export function CartServiceFeeRows({
   compact?: boolean
   showTotal?: boolean
 }) {
-  const serviceFee = useCheckoutStore((state) => state.serviceFee)
-  const totalAmount = useCheckoutStore((state) => state.totalAmount)
+  const { serviceFee, grandTotal } = useCartPriceBreakdown()
   if (serviceFee <= 0 && !showTotal) return null
 
   return (
@@ -174,7 +174,7 @@ export function CartServiceFeeRows({
           )}
         >
           <span>Total</span>
-          <span className="tabular-nums">{formatCartTotal(totalAmount)}</span>
+          <span className="tabular-nums">{formatCartTotal(grandTotal)}</span>
         </div>
       ) : null}
       {serviceFee > 0 ? (

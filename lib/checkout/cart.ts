@@ -18,18 +18,30 @@ export function sumCartQuantities(
   )
 }
 
+export type CartServiceFeeRule = {
+  /** Fracción (0.08) o puntos (8 = 8%). */
+  rate?: unknown
+  /** Cargo fijo ARS por entrada paga. */
+  fixedFee?: unknown
+}
+
+export type CartPriceBreakdown = {
+  /** Σ(price × quantity) en centavos. Precio público All-In. */
+  subtotal: number
+  /** Cargo Tokepass incluido (porcentaje + fijo). No se factura aparte. */
+  serviceFee: number
+  /** Monto cobrado. En All-In es igual al subtotal público. */
+  grandTotal: number
+}
+
 /**
- * Immutable cart total: stamped `price * quantity` only.
+ * Immutable cart total: stamped `price * quantity` only, rounded in cents.
  * Gratis (`0`) stays `0` — never substitute a parent/category price.
  */
 export function calculateTotal(
   items: ReadonlyArray<{ price?: unknown; quantity?: unknown }> | null | undefined,
 ): number {
-  return (items ?? []).reduce((acc, item) => {
-    const price = toCartNumber(item.price)
-    const quantity = cartLineQuantity(item.quantity)
-    return acc + price * quantity
-  }, 0)
+  return sumCartAmounts(items)
 }
 
 export function sumCartAmounts(
@@ -87,6 +99,27 @@ export function cartIncludedServiceFee(
       return sum + moneyToCents(platformFee) * quantity
     }, 0),
   )
+}
+
+/**
+ * Motor de precios del carrito. Recalcular en cada cambio de ítem o de tarifa.
+ *
+ * All-In: `ticket_tiers.price` ya incluye el service fee del evento
+ * (`platform_fee_percentage` + `platform_fixed_fee`). El comprador paga
+ * `grandTotal === subtotal`. `serviceFee` es el split interno / UI.
+ */
+export function calculateCartPriceBreakdown(
+  items: ReadonlyArray<{ price?: unknown; quantity?: unknown }> | null | undefined,
+  rule: CartServiceFeeRule = {},
+): CartPriceBreakdown {
+  const subtotal = sumCartAmounts(items)
+  const rawFee = cartIncludedServiceFee(items, rule.rate ?? 0, rule.fixedFee ?? 0)
+  const serviceFee = Math.min(subtotal, rawFee)
+  return {
+    subtotal,
+    serviceFee,
+    grandTotal: subtotal,
+  }
 }
 
 /** Counts selected tickets. $0 / Gratis quantities still count. */

@@ -18,7 +18,10 @@ import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-cli
 import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import type { CheckoutBuyerInfo } from "@/lib/checkout-buyer"
 import { formatCartTotal } from "@/lib/format"
-import { useCheckoutStore } from "@/lib/stores/checkout-store"
+import {
+  useCartPriceBreakdown,
+  useCheckoutStore,
+} from "@/lib/stores/checkout-store"
 
 export function CheckoutPaymentForm({
   step,
@@ -294,7 +297,7 @@ function PaymentOrderSummary({
 }
 
 function PaymentServiceFeeRow() {
-  const serviceFee = useCheckoutStore((state) => state.serviceFee)
+  const { serviceFee } = useCartPriceBreakdown()
   if (serviceFee <= 0) return null
   return (
     <div className="flex items-center justify-between text-sm text-muted-foreground">

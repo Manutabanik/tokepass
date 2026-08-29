@@ -20,11 +20,11 @@ import {
   type CartItemPayload,
 } from "@/lib/checkout/cart-item-payload"
 import {
-  calculateTotal,
-  cartIncludedServiceFee,
+  calculateCartPriceBreakdown,
   cartItemCount,
   sumCartQuantities,
   toCartNumber,
+  type CartPriceBreakdown,
 } from "@/lib/checkout/cart"
 import {
   cartCompositeItemId,
@@ -139,8 +139,10 @@ type CheckoutState = {
   buyer: CheckoutBuyerInfo
   subtotal: number
   serviceFee: number
+  grandTotal: number
   serviceChargeRate: number
   serviceChargeFixedFee: number
+  getTotals: () => CartPriceBreakdown
   holdExpiresAt: string | null
   holdFrozen: boolean
   holdFrozenSeconds: number | null
@@ -261,14 +263,17 @@ function cartTotalsFromLines(
   lines: StorefrontCartLine[],
   rule?: { rate?: number; fixedFee?: number },
 ) {
-  const totalAmount = calculateTotal(lines)
-  const itemsCount = sumCartQuantities(lines)
-  const serviceFee = cartIncludedServiceFee(
-    lines,
-    rule?.rate ?? 0,
-    rule?.fixedFee ?? 0,
-  )
-  return { totalAmount, itemsCount, subtotal: totalAmount, serviceFee }
+  const quote = calculateCartPriceBreakdown(lines, {
+    rate: rule?.rate ?? 0,
+    fixedFee: rule?.fixedFee ?? 0,
+  })
+  return {
+    itemsCount: sumCartQuantities(lines),
+    subtotal: quote.subtotal,
+    serviceFee: quote.serviceFee,
+    grandTotal: quote.grandTotal,
+    totalAmount: quote.grandTotal,
+  }
 }
 
 function totalsForLines(
@@ -403,8 +408,14 @@ export const useCheckoutStore = create<CheckoutState>()(
       buyer: EMPTY_CHECKOUT_BUYER,
       subtotal: 0,
       serviceFee: 0,
+      grandTotal: 0,
       serviceChargeRate: 0,
       serviceChargeFixedFee: 0,
+      getTotals: () =>
+        calculateCartPriceBreakdown(get().lines, {
+          rate: get().serviceChargeRate,
+          fixedFee: get().serviceChargeFixedFee,
+        }),
       holdExpiresAt: null,
       holdFrozen: false,
       holdFrozenSeconds: null,
@@ -455,17 +466,19 @@ export const useCheckoutStore = create<CheckoutState>()(
         quantities,
         selectedSeat,
         buyer,
-        subtotal,
         holdExpiresAt,
       }) => {
         const current = get()
         const nextSlug = eventSlug ?? current.eventSlug
         const nextHold =
           holdExpiresAt === undefined ? current.holdExpiresAt : holdExpiresAt
+        const derived = totalsForLines(current.lines, current)
         if (
           current.eventId === eventId &&
           current.eventSlug === nextSlug &&
-          current.subtotal === subtotal &&
+          current.subtotal === derived.subtotal &&
+          current.serviceFee === derived.serviceFee &&
+          current.grandTotal === derived.grandTotal &&
           current.holdExpiresAt === nextHold &&
           sameSeat(current.selectedSeat, selectedSeat) &&
           sameBuyer(current.buyer, buyer) &&
@@ -479,7 +492,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           quantities,
           selectedSeat,
           buyer,
-          subtotal,
+          ...derived,
           holdExpiresAt: nextHold,
         })
       },
@@ -542,6 +555,9 @@ export const useCheckoutStore = create<CheckoutState>()(
           buyer: EMPTY_CHECKOUT_BUYER,
           subtotal: 0,
           serviceFee: 0,
+          grandTotal: 0,
+          serviceChargeRate: 0,
+          serviceChargeFixedFee: 0,
           holdExpiresAt: null,
           holdFrozen: false,
           holdFrozenSeconds: null,
@@ -638,13 +654,22 @@ export const useCheckoutStore = create<CheckoutState>()(
 
       setCartTotals: ({ totalAmount, itemsCount }) => {
         const current = get()
+        const derived = totalsForLines(current.lines, current)
         if (
           current.totalAmount === totalAmount &&
-          current.itemsCount === itemsCount
+          current.itemsCount === itemsCount &&
+          current.subtotal === derived.subtotal &&
+          current.serviceFee === derived.serviceFee &&
+          current.grandTotal === totalAmount
         ) {
           return
         }
-        set({ totalAmount, itemsCount })
+        set({
+          ...derived,
+          totalAmount,
+          itemsCount,
+          grandTotal: totalAmount,
+        })
       },
 
       setCartLines: (incoming, options) => {
@@ -869,7 +894,14 @@ export const useCheckoutStore = create<CheckoutState>()(
         ) {
           return
         }
-        set({ totalAmount: 0, itemsCount: 0, subtotal: 0, serviceFee: 0, lines: [] })
+        set({
+          totalAmount: 0,
+          itemsCount: 0,
+          subtotal: 0,
+          serviceFee: 0,
+          grandTotal: 0,
+          lines: [],
+        })
       },
 
       removeItem: (id) => {
@@ -937,6 +969,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           itemsCount: 0,
           subtotal: 0,
           serviceFee: 0,
+          grandTotal: 0,
           catalogByTierId: {},
           holdExpiresAt: null,
           holdFrozen: false,
@@ -988,6 +1021,10 @@ export const useCheckoutStore = create<CheckoutState>()(
           itemsCount: 0,
           subtotal: 0,
           serviceFee: 0,
+          grandTotal: 0,
+          serviceChargeRate: saved.serviceChargeRate ?? current.serviceChargeRate,
+          serviceChargeFixedFee:
+            saved.serviceChargeFixedFee ?? current.serviceChargeFixedFee,
         }
       },
       partialize: (state) => ({
@@ -997,6 +1034,8 @@ export const useCheckoutStore = create<CheckoutState>()(
         isGuest: state.isGuest || state.mode === "guest",
         buyer: state.buyer,
         cartSessionId: state.cartSessionId,
+        serviceChargeRate: state.serviceChargeRate,
+        serviceChargeFixedFee: state.serviceChargeFixedFee,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return
@@ -1016,18 +1055,41 @@ export function useIsGuestCheckout(currentUserId?: string | null) {
   return isCheckoutGuest(mode, currentUserId, isGuest)
 }
 
+export function selectCartPriceBreakdown(state: {
+  lines: StorefrontCartLine[]
+  serviceChargeRate: number
+  serviceChargeFixedFee: number
+}): CartPriceBreakdown {
+  return calculateCartPriceBreakdown(state.lines, {
+    rate: state.serviceChargeRate,
+    fixedFee: state.serviceChargeFixedFee,
+  })
+}
+
+/** Getter derivado: se recalcula desde líneas + tarifa del evento. */
+export function useCartPriceBreakdown(): CartPriceBreakdown {
+  return useCheckoutStore(useShallow(selectCartPriceBreakdown))
+}
+
 export function useActiveCheckoutSelection(eventId: string) {
   return useCheckoutStore(
     useShallow((state) => {
+      const quote = selectCartPriceBreakdown(state)
       if (state.eventId !== eventId) {
-        return { active: false, itemCount: 0, subtotal: 0 }
+        return {
+          active: false,
+          itemCount: 0,
+          subtotal: 0,
+          serviceFee: 0,
+          grandTotal: 0,
+        }
       }
       const itemCount = Math.max(
         cartItemCount(state.quantities, Boolean(state.selectedSeat)),
         sumCartQuantities(state.lines),
         state.itemsCount,
       )
-      return { active: itemCount > 0, itemCount, subtotal: state.subtotal }
+      return { active: itemCount > 0, itemCount, ...quote }
     }),
   )
 }

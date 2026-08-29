@@ -9,5 +9,6 @@ export {
   useCheckoutStore,
   useCheckoutStore as useCheckoutIntentStore,
   useActiveCheckoutSelection,
+  useCartPriceBreakdown,
   useIsGuestCheckout,
 } from "@/lib/stores/checkout-store"

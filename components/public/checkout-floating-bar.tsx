@@ -10,7 +10,10 @@ import {
   toCartNumber,
 } from "@/lib/checkout/cart"
 import { formatCartTotal } from "@/lib/format"
-import { useCheckoutStore } from "@/lib/stores/checkout-store"
+import {
+  useCartPriceBreakdown,
+  useCheckoutStore,
+} from "@/lib/stores/checkout-store"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 
 export function CheckoutFloatingBar({
@@ -48,7 +51,7 @@ export function CheckoutFloatingBar({
   optionalStep?: boolean
   hasAddedItems?: boolean
 }) {
-  const cartTotal = useCheckoutStore((state) => state.totalAmount)
+  const { grandTotal: cartTotal } = useCartPriceBreakdown()
   const cartCount = useCheckoutStore((state) => state.itemsCount)
   const cartLines = useCheckoutStore((state) => state.lines)
   const lineCount = sumCartQuantities(cartLines)
