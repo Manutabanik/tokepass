@@ -18,6 +18,7 @@ import {
 } from "@/lib/events/validate-event-publish"
 import { allInBreakdown } from "@/lib/pricing/all-in"
 import {
+  DEFAULT_PLATFORM_FEE_PERCENTAGE,
   eventFeeRate,
   eventFixedFee,
   type EventFeeConfig,
@@ -944,7 +945,9 @@ export async function getEventCommercialSettings(
   return {
     eventId: event.id,
     title: event.title,
-    platformFeePercentage: Number(event.platform_fee_percentage ?? 8),
+    platformFeePercentage: Number(
+      event.platform_fee_percentage ?? DEFAULT_PLATFORM_FEE_PERCENTAGE,
+    ),
     platformFixedFee: Number(event.platform_fixed_fee ?? 0),
     maxFreeTickets: Number(event.max_free_tickets ?? 100),
     isSponsoredByTokePass: Boolean(event.is_sponsored_by_tokepass),

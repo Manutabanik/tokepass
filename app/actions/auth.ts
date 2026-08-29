@@ -10,6 +10,7 @@ import {
   type FreshLoginProfile,
 } from "@/lib/auth/post-login"
 import { logger } from "@/lib/logger"
+import { DEFAULT_ORGANIZER_SERVICE_CHARGE_RATE } from "@/lib/pricing/event-fees"
 import { getRequestIp } from "@/lib/request-ip"
 import {
   AUTH_RATE_LIMIT_ERROR,
@@ -259,6 +260,7 @@ async function promoteProfileToOrganizer(
       phone: extras.phone?.trim() || null,
       role: "admin",
       organizer_approval_status: "pending",
+      service_charge_rate: DEFAULT_ORGANIZER_SERVICE_CHARGE_RATE,
     })
     if (!upsertError) return { ok: true }
     logger.error({

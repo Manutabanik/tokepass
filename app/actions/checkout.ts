@@ -36,6 +36,7 @@ import { eventAcceptsMercadoPago } from "@/lib/events/checkout-policy"
 import { isSandboxEventStatus } from "@/lib/events/review-status"
 import { orderTestFlags } from "@/lib/finance/order-test-flags"
 import { logger } from "@/lib/logger"
+import { DEFAULT_PLATFORM_FEE_PERCENTAGE } from "@/lib/pricing/event-fees"
 import { captureCriticalException } from "@/lib/sentry/capture"
 import { getSiteUrl } from "@/lib/mercadopago"
 import {
@@ -1147,7 +1148,9 @@ async function loadEventServiceFeeRule(
     return { rate: 0, fixedFee: 0 }
   }
 
-  let rate = Number(event?.platform_fee_percentage ?? 8)
+  let rate = Number(
+    event?.platform_fee_percentage ?? DEFAULT_PLATFORM_FEE_PERCENTAGE,
+  )
   if (Number.isFinite(rate) && rate > 1) rate = rate / 100
   const { data: rateRpc } = await supabase.rpc("get_event_service_charge_rate", {
     p_event_id: eventId,

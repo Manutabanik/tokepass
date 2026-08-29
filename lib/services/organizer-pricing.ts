@@ -1,8 +1,9 @@
 import "server-only"
 
+import { DEFAULT_ORGANIZER_SERVICE_CHARGE_RATE } from "@/lib/pricing/event-fees"
 import { createAdminClient } from "@/lib/supabase/admin"
 
-const FALLBACK_SERVICE_CHARGE_RATE = 0.15
+const FALLBACK_SERVICE_CHARGE_RATE = DEFAULT_ORGANIZER_SERVICE_CHARGE_RATE
 
 function normalizeServiceChargeRate(value: number | null): number {
   if (!Number.isFinite(value) || value === null) {

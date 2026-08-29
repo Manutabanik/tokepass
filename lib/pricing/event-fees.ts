@@ -1,12 +1,26 @@
 import { roundMoney } from "@/lib/pricing/all-in"
 
-/** Defaults for brand-new events (match DB column defaults). */
-export const DEFAULT_PLATFORM_FEE_PERCENTAGE = 8
+/** Defaults for brand-new events and organizers (match DB column defaults). */
+export const DEFAULT_ORGANIZER_SERVICE_CHARGE_RATE = 0.15
+export const DEFAULT_PLATFORM_FEE_PERCENTAGE = 15
 export const DEFAULT_PLATFORM_FIXED_FEE = 200
 export const DEFAULT_MAX_FREE_TICKETS = 100
 
+/** Convierte `profiles.service_charge_rate` (0.15) a puntos de evento (15). */
+export function organizerRateToFeePercentage(rate: unknown): number {
+  if (rate == null || rate === "") {
+    return DEFAULT_PLATFORM_FEE_PERCENTAGE
+  }
+  const raw = Number(rate)
+  if (!Number.isFinite(raw) || raw < 0) {
+    return DEFAULT_PLATFORM_FEE_PERCENTAGE
+  }
+  const points = raw <= 1 ? raw * 100 : raw
+  return Math.min(95, Math.max(0, Math.round(points * 100) / 100))
+}
+
 export type EventFeeConfig = {
-  /** Percentage points, e.g. 8 = 8% */
+  /** Percentage points, e.g. 15 = 15% */
   platformFeePercentage: number
   /** Fixed ARS fee per paid ticket inside All-In split */
   platformFixedFee: number
@@ -55,7 +69,7 @@ export function normalizeServiceFeeRate(
 
 /**
  * Tasa y cargo fijo del evento para el carrito del comprador.
- * RPC 0 no pisa una columna válida. Sin tasa y no sponsored → 8%.
+ * RPC 0 no pisa una columna válida. Sin tasa y no sponsored → 15%.
  */
 export function resolvePublicEventFeeRule(input: {
   platformFeePercentage?: unknown

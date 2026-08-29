@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { OrganizerDirectoryFeeField } from "@/components/superadmin/organizer-directory-fee-field"
 import { formatDate, formatNumber, getInitials } from "@/lib/format"
 
 export type OrganizerDirectoryRow = {
@@ -23,6 +24,7 @@ export type OrganizerDirectoryRow = {
   cuitCuil: string | null
   totalEvents: number
   joinedAt: string
+  feePercentage: number
 }
 
 export function OrganizersDirectory({
@@ -63,19 +65,28 @@ export function OrganizersDirectory({
                 </p>
               </div>
             </div>
-            <div className="mt-4 flex items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge
-                  variant="outline"
-                  className="rounded-full border-emerald-500/35 text-[10px] uppercase text-emerald-800 dark:text-emerald-200"
-                >
-                  Aprobada
-                </Badge>
-                <span className="text-xs text-muted-foreground">
-                  {formatNumber(org.totalEvents)} eventos ·{" "}
-                  {formatDate(org.joinedAt)}
-                </span>
-              </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Badge
+                variant="outline"
+                className="rounded-full border-emerald-500/35 text-[10px] uppercase text-emerald-800 dark:text-emerald-200"
+              >
+                Aprobada
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                {formatNumber(org.totalEvents)} eventos ·{" "}
+                {formatDate(org.joinedAt)}
+              </span>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Comisión
+              </span>
+              <OrganizerDirectoryFeeField
+                organizerId={org.id}
+                feePercentage={org.feePercentage}
+              />
+            </div>
+            <div className="mt-3 flex justify-end">
               <Button
                 type="button"
                 className="min-h-12 shrink-0 rounded-xl bg-sky-600 px-4 text-sm font-bold text-white hover:bg-sky-500"
@@ -100,6 +111,7 @@ export function OrganizersDirectory({
               <TableHead className="pl-6 text-muted-foreground">Productora</TableHead>
               <TableHead className="text-muted-foreground">CUIT</TableHead>
               <TableHead className="text-muted-foreground">Eventos</TableHead>
+              <TableHead className="text-muted-foreground">Comisión</TableHead>
               <TableHead className="text-muted-foreground">Alta</TableHead>
               <TableHead className="pr-6 text-right text-muted-foreground">
                 Detalle
@@ -132,6 +144,12 @@ export function OrganizersDirectory({
                 </TableCell>
                 <TableCell className="text-foreground">
                   {formatNumber(org.totalEvents)}
+                </TableCell>
+                <TableCell>
+                  <OrganizerDirectoryFeeField
+                    organizerId={org.id}
+                    feePercentage={org.feePercentage}
+                  />
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {formatDate(org.joinedAt)}

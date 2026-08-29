@@ -23,7 +23,7 @@ export default async function SuperAdminOrganizersPage() {
       <PageHeading
         eyebrow="B2B"
         title="Productoras aprobadas"
-        description="Organizadores con KYB aprobado. Desde acá entrás al gobierno financiero de cada una."
+        description="Organizadores con KYB aprobado. La comisión arranca en 15% y solo vos podés negociarla."
       />
 
       <Card className="border border-border bg-card py-0 text-card-foreground">

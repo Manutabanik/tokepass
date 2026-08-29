@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server"
 import type { Json } from "@/types/database"
 import { allInBreakdown } from "@/lib/pricing/all-in"
 import {
+  DEFAULT_PLATFORM_FEE_PERCENTAGE,
   defaultEventFeeConfig,
   eventFeeRate,
   eventFixedFee,
@@ -245,12 +246,16 @@ export async function upsertTicketBundle(input: {
     salePrice,
     eventFeeRate({
       ...feeConfig,
-      platformFeePercentage: Number(gate.event.platform_fee_percentage ?? 8),
+      platformFeePercentage: Number(
+        gate.event.platform_fee_percentage ?? DEFAULT_PLATFORM_FEE_PERCENTAGE,
+      ),
       platformFixedFee: Number(gate.event.platform_fixed_fee ?? 0),
     }),
     eventFixedFee({
       ...feeConfig,
-      platformFeePercentage: Number(gate.event.platform_fee_percentage ?? 8),
+      platformFeePercentage: Number(
+        gate.event.platform_fee_percentage ?? DEFAULT_PLATFORM_FEE_PERCENTAGE,
+      ),
       platformFixedFee: Number(gate.event.platform_fixed_fee ?? 0),
     }),
   )

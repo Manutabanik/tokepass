@@ -4,6 +4,11 @@ import { revalidatePath } from "next/cache"
 
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
+import {
+  DEFAULT_PLATFORM_FEE_PERCENTAGE,
+  organizerRateToFeePercentage,
+} from "@/lib/pricing/event-fees"
+import { getOrganizerServiceChargeRate } from "@/lib/services/organizer-pricing"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -108,6 +113,15 @@ export async function createEventDraftV2(options?: {
     writer = admin
   }
 
+  let platformFeePercentage = DEFAULT_PLATFORM_FEE_PERCENTAGE
+  try {
+    platformFeePercentage = organizerRateToFeePercentage(
+      await getOrganizerServiceChargeRate(organizerId),
+    )
+  } catch {
+    platformFeePercentage = DEFAULT_PLATFORM_FEE_PERCENTAGE
+  }
+
   const { data, error } = await writer
     .from("events")
     .insert({
@@ -116,6 +130,7 @@ export async function createEventDraftV2(options?: {
       date: new Date().toISOString(),
       status: "draft",
       has_seating_plan: false,
+      platform_fee_percentage: platformFeePercentage,
       draft_state: toEventDraftV2Payload(emptyEventDraftV2()) as Json,
     })
     .select("id")

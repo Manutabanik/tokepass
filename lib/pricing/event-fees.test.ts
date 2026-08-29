@@ -2,9 +2,22 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  DEFAULT_ORGANIZER_SERVICE_CHARGE_RATE,
   DEFAULT_PLATFORM_FEE_PERCENTAGE,
+  organizerRateToFeePercentage,
   resolvePublicEventFeeRule,
 } from "./event-fees"
+
+describe("platform fee defaults", () => {
+  it("defaults new organizers and events to 15 percent", () => {
+    assert.equal(DEFAULT_ORGANIZER_SERVICE_CHARGE_RATE, 0.15)
+    assert.equal(DEFAULT_PLATFORM_FEE_PERCENTAGE, 15)
+    assert.equal(organizerRateToFeePercentage(0.15), 15)
+    assert.equal(organizerRateToFeePercentage(null), 15)
+    assert.equal(organizerRateToFeePercentage(0), 0)
+    assert.equal(organizerRateToFeePercentage(0.125), 12.5)
+  })
+})
 
 describe("resolvePublicEventFeeRule", () => {
   it("uses the event column as points and keeps a positive RPC fraction", () => {

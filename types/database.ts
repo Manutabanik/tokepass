@@ -282,7 +282,7 @@ export type Event = {
     | null
   featured_until: string | null
   storefront_views?: number
-  /** Comisión % TokePass (ej. 8.00 = 8%). */
+  /** Comisión % TokePass (ej. 15.00 = 15%). */
   platform_fee_percentage: number
   /** Cargo fijo ARS por entrada paga (split All-In). */
   platform_fixed_fee: number

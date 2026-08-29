@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { organizerRateToFeePercentage } from "@/lib/pricing/event-fees"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { SuperAdminForbiddenError } from "@/lib/superadmin-errors"
@@ -33,6 +34,8 @@ export type ApprovedOrganizerRow = {
   totalEvents: number
   joinedAt: string
   approvalStatus: string
+  /** Puntos de comisión (15 = 15%). Solo Super Admin. */
+  feePercentage: number
 }
 
 export type BuyerRow = {
@@ -270,7 +273,7 @@ export async function listApprovedOrganizers(): Promise<ApprovedOrganizerRow[]> 
 
   const { data: profiles, error } = await admin
     .from("profiles")
-    .select("id, full_name, email, public_name, organizer_approval_status, created_at")
+    .select("id, full_name, email, public_name, organizer_approval_status, service_charge_rate, created_at")
     .eq("role", "admin")
     .eq("organizer_approval_status", "approved")
     .order("created_at", { ascending: false })
@@ -309,6 +312,7 @@ export async function listApprovedOrganizers(): Promise<ApprovedOrganizerRow[]> 
       totalEvents: eventCount.get(profile.id) ?? 0,
       joinedAt: profile.created_at,
       approvalStatus: profile.organizer_approval_status,
+      feePercentage: organizerRateToFeePercentage(profile.service_charge_rate),
     }
   })
 }
