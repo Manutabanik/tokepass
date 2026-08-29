@@ -49,6 +49,7 @@ import {
   type CheckoutIdentityMode,
 } from "@/lib/checkout/identity"
 import type { CheckoutFlowStep } from "@/components/public/checkout-stepper"
+import { fallbackServiceFeeRate } from "@/lib/pricing/event-fees"
 import { useStorefrontSeatStore } from "@/lib/stores/storefront-seat-store"
 
 export type { CheckoutIdentityMode }
@@ -208,7 +209,10 @@ type CheckoutState = {
       | CheckoutBuyerInfo
       | ((current: CheckoutBuyerInfo) => CheckoutBuyerInfo),
   ) => void
-  setServiceChargeRule: (input: { rate: number; fixedFee?: number }) => void
+  setServiceChargeRule: (input: {
+    rate?: number | null
+    fixedFee?: number | null
+  }) => void
   setCartTotals: (input: { totalAmount: number; itemsCount: number }) => void
   setCartLines: (
     lines: StorefrontCartLine[],
@@ -424,7 +428,7 @@ export const useCheckoutStore = create<CheckoutState>()(
       subtotal: 0,
       serviceFee: 0,
       grandTotal: 0,
-      serviceChargeRate: 0,
+      serviceChargeRate: fallbackServiceFeeRate(null),
       serviceChargeFixedFee: 0,
       getTotals: () =>
         calculateCartPriceBreakdown(get().lines, {
@@ -571,7 +575,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           subtotal: 0,
           serviceFee: 0,
           grandTotal: 0,
-          serviceChargeRate: 0,
+          serviceChargeRate: fallbackServiceFeeRate(null),
           serviceChargeFixedFee: 0,
           holdExpiresAt: null,
           holdFrozen: false,
@@ -649,8 +653,10 @@ export const useCheckoutStore = create<CheckoutState>()(
 
       setServiceChargeRule: ({ rate, fixedFee = 0 }) => {
         const current = get()
-        const nextRate = Number.isFinite(rate) ? Math.max(0, rate) : 0
-        const nextFixed = Number.isFinite(fixedFee) ? Math.max(0, fixedFee) : 0
+        const nextRate = fallbackServiceFeeRate(rate)
+        const nextFixed = Number.isFinite(Number(fixedFee))
+          ? Math.max(0, Number(fixedFee))
+          : 0
         if (
           current.serviceChargeRate === nextRate &&
           current.serviceChargeFixedFee === nextFixed

@@ -4,6 +4,9 @@ import { describe, it } from "node:test"
 import {
   DEFAULT_ORGANIZER_SERVICE_CHARGE_RATE,
   DEFAULT_PLATFORM_FEE_PERCENTAGE,
+  eventFeeConfigFromRow,
+  fallbackFeePercentagePoints,
+  fallbackServiceFeeRate,
   organizerRateToFeePercentage,
   resolvePublicEventFeeRule,
 } from "./event-fees"
@@ -16,6 +19,21 @@ describe("platform fee defaults", () => {
     assert.equal(organizerRateToFeePercentage(null), 15)
     assert.equal(organizerRateToFeePercentage(0), 0)
     assert.equal(organizerRateToFeePercentage(0.125), 12.5)
+  })
+
+  it("uses a 15 percent nullish fallback without wiping an explicit zero", () => {
+    assert.equal(fallbackFeePercentagePoints(null), 15)
+    assert.equal(fallbackFeePercentagePoints(undefined), 15)
+    assert.equal(fallbackFeePercentagePoints(""), 15)
+    assert.equal(fallbackServiceFeeRate(null), 0.15)
+    assert.equal(fallbackServiceFeeRate(15), 0.15)
+    assert.equal(fallbackServiceFeeRate(0.1), 0.1)
+    assert.equal(fallbackServiceFeeRate(0), 0)
+    assert.equal(
+      eventFeeConfigFromRow({ platform_fee_percentage: null })
+        .platformFeePercentage,
+      15,
+    )
   })
 })
 

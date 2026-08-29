@@ -1,4 +1,5 @@
 import { formatCurrency } from "@/lib/format"
+import { fallbackFeePercentagePoints } from "@/lib/pricing/event-fees"
 import { calculateTierPricing } from "@/lib/pricing/flexible-pricing"
 
 function asBasePrice(value: unknown): number {
@@ -19,16 +20,17 @@ export type OrganizerPublicPricePreview = {
 export function organizerPublicPriceFromBase(input: {
   basePrice: unknown
   absorbFees: boolean
-  platformFeePercentage: number
+  platformFeePercentage?: number | null
   platformFixedFee: number
   isSponsoredByTokePass: boolean
 }): OrganizerPublicPricePreview | null {
   const raw = asBasePrice(input.basePrice)
   if (!Number.isFinite(raw) || raw <= 0) return null
+  const feePercentage = fallbackFeePercentagePoints(input.platformFeePercentage)
 
   const priced = calculateTierPricing({
     inputValue: raw,
-    feePercentage: input.platformFeePercentage,
+    feePercentage,
     fixedFee: input.platformFixedFee,
     feeStrategy: input.absorbFees ? "absorb_in_price" : "pass_to_customer",
     calculationMode: input.absorbFees ? "public_price" : "net_income",
@@ -37,9 +39,7 @@ export function organizerPublicPriceFromBase(input: {
 
   return {
     publicPrice: priced.publicPrice,
-    feePercentage: input.isSponsoredByTokePass
-      ? 0
-      : input.platformFeePercentage,
+    feePercentage: input.isSponsoredByTokePass ? 0 : feePercentage,
     absorbFees: input.absorbFees,
     sponsored: input.isSponsoredByTokePass,
   }

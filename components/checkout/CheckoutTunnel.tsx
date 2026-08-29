@@ -247,6 +247,7 @@ import {
 import { formatCartTotal } from "@/lib/format"
 import { centsToMoney, moneyToCents } from "@/lib/money/cents"
 import { roundMoney } from "@/lib/pricing/all-in"
+import { fallbackServiceFeeRate } from "@/lib/pricing/event-fees"
 import { cn } from "@/lib/utils"
 import { publicEventLoginPath } from "@/lib/seo/site"
 import {
@@ -443,7 +444,7 @@ export function CheckoutTunnel({
   purchaseLocked = false,
   selectedDayId = null,
   scheduleDays = [],
-  serviceChargeRate = 0,
+  serviceChargeRate,
   platformFixedFee = 0,
   maxTicketsPerUser = null,
   fillViewport = false,
@@ -541,23 +542,24 @@ export function CheckoutTunnel({
     selectedItems,
     applyOccupancyPatch,
   })
+  const feeRate = fallbackServiceFeeRate(serviceChargeRate)
   const storedFeeRate = useCheckoutStore((state) => state.serviceChargeRate)
   const storedFeeFixed = useCheckoutStore((state) => state.serviceChargeFixedFee)
   if (
-    storedFeeRate !== serviceChargeRate ||
+    storedFeeRate !== feeRate ||
     storedFeeFixed !== platformFixedFee
   ) {
     useCheckoutStore.getState().setServiceChargeRule({
-      rate: serviceChargeRate,
+      rate: feeRate,
       fixedFee: platformFixedFee,
     })
   }
   useEffect(() => {
     useCheckoutStore.getState().setServiceChargeRule({
-      rate: serviceChargeRate,
+      rate: feeRate,
       fixedFee: platformFixedFee,
     })
-  }, [platformFixedFee, serviceChargeRate])
+  }, [feeRate, platformFixedFee])
   const buyer = useCheckoutStore((state) => state.buyer)
   const setBuyer = useCheckoutStore((state) => state.setBuyer)
   const buyerForm = useForm<CheckoutBuyerInfo>({
@@ -2322,7 +2324,7 @@ export function CheckoutTunnel({
           price: line.price,
           quantity: line.quantity,
         })),
-        { rate: serviceChargeRate, fixedFee: platformFixedFee },
+        { rate: feeRate, fixedFee: platformFixedFee },
       )
       const priceGuard = {
         displayedTotal: finalTotal,

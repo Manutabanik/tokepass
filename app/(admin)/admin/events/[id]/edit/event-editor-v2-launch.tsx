@@ -22,6 +22,7 @@ import {
   formatDiscoveryDate,
   formatTicketPrice,
 } from "@/lib/format"
+import { fallbackServiceFeeRate } from "@/lib/pricing/event-fees"
 import { cn } from "@/lib/utils"
 import type { EventDraftV2 } from "@/lib/validations/event-draft-v2"
 
@@ -44,7 +45,7 @@ export function EventEditorV2LaunchStep({
   const fee = useEventEditorFee()
   const platformFeeRate = fee.isSponsoredByTokePass
     ? 0
-    : fee.platformFeePercentage / 100
+    : fallbackServiceFeeRate(fee.platformFeePercentage)
   const tickets = useWatch({ control, name: "tickets" }) ?? []
   const absorbFees = Boolean(useWatch({ control, name: "settings.absorbFees" }))
   const name = useWatch({ control, name: "basicInfo.name" })

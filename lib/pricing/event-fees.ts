@@ -6,17 +6,31 @@ export const DEFAULT_PLATFORM_FEE_PERCENTAGE = 15
 export const DEFAULT_PLATFORM_FIXED_FEE = 200
 export const DEFAULT_MAX_FREE_TICKETS = 100
 
-/** Convierte `profiles.service_charge_rate` (0.15) a puntos de evento (15). */
-export function organizerRateToFeePercentage(rate: unknown): number {
-  if (rate == null || rate === "") {
+/**
+ * Puntos de comisión (15 = 15%).
+ * `null` / `undefined` / NaN → 15. Un 0 explícito se conserva (auspicio).
+ * Acepta fracción (0.15) o puntos (15).
+ */
+export function fallbackFeePercentagePoints(value: unknown): number {
+  if (value == null || value === "") {
     return DEFAULT_PLATFORM_FEE_PERCENTAGE
   }
-  const raw = Number(rate)
+  const raw = Number(value)
   if (!Number.isFinite(raw) || raw < 0) {
     return DEFAULT_PLATFORM_FEE_PERCENTAGE
   }
-  const points = raw <= 1 ? raw * 100 : raw
+  const points = raw > 1 ? raw : raw * 100
   return Math.min(95, Math.max(0, Math.round(points * 100) / 100))
+}
+
+/** `(fee_percentage ?? 15) / 100` → 0.15 */
+export function fallbackServiceFeeRate(value: unknown): number {
+  return Math.min(0.95, fallbackFeePercentagePoints(value) / 100)
+}
+
+/** Convierte `profiles.service_charge_rate` (0.15) a puntos de evento (15). */
+export function organizerRateToFeePercentage(rate: unknown): number {
+  return fallbackFeePercentagePoints(rate)
 }
 
 export type EventFeeConfig = {
@@ -43,13 +57,11 @@ export function eventFeeConfigFromRow(row: {
   max_free_tickets?: unknown
   is_sponsored_by_tokepass?: unknown
 }): EventFeeConfig {
-  const percentage = Number(row.platform_fee_percentage)
+  const percentage = fallbackFeePercentagePoints(row.platform_fee_percentage)
   const fixed = Number(row.platform_fixed_fee)
   const maxFree = Number(row.max_free_tickets)
   return {
-    platformFeePercentage: Number.isFinite(percentage)
-      ? percentage
-      : DEFAULT_PLATFORM_FEE_PERCENTAGE,
+    platformFeePercentage: percentage,
     platformFixedFee: Number.isFinite(fixed) ? fixed : DEFAULT_PLATFORM_FIXED_FEE,
     maxFreeTickets: Number.isFinite(maxFree) ? maxFree : DEFAULT_MAX_FREE_TICKETS,
     isSponsoredByTokePass: Boolean(row.is_sponsored_by_tokepass),
@@ -61,6 +73,7 @@ export function normalizeServiceFeeRate(
   value: unknown,
   fallback = DEFAULT_PLATFORM_FEE_PERCENTAGE / 100,
 ): number {
+  if (value == null || value === "") return fallback
   const raw = Number(value)
   if (!Number.isFinite(raw) || raw < 0) return fallback
   const fraction = raw > 1 ? raw / 100 : raw

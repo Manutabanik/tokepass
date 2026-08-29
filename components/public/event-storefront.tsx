@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/dialog"
 import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll"
 import { releaseCheckoutCartHolds } from "@/lib/checkout/release-cart-holds"
+import { fallbackServiceFeeRate } from "@/lib/pricing/event-fees"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import { useStorefrontChromeStore } from "@/lib/stores/storefront-chrome-store"
 import {
@@ -288,14 +289,15 @@ export function EventStorefront({
     }
   }, [])
 
+  const eventFeeRate = fallbackServiceFeeRate(event.serviceChargeRate)
   const checkoutFeeRate = useCheckoutStore((state) => state.serviceChargeRate)
   const checkoutFeeFixed = useCheckoutStore((state) => state.serviceChargeFixedFee)
   if (
-    checkoutFeeRate !== event.serviceChargeRate ||
+    checkoutFeeRate !== eventFeeRate ||
     checkoutFeeFixed !== event.platformFixedFee
   ) {
     useCheckoutStore.getState().setServiceChargeRule({
-      rate: event.serviceChargeRate,
+      rate: eventFeeRate,
       fixedFee: event.platformFixedFee,
     })
   }
@@ -307,10 +309,10 @@ export function EventStorefront({
       store.setViewMode("info")
     }
     store.setServiceChargeRule({
-      rate: event.serviceChargeRate,
+      rate: eventFeeRate,
       fixedFee: event.platformFixedFee,
     })
-  }, [event.id, event.platformFixedFee, event.serviceChargeRate])
+  }, [event.id, event.platformFixedFee, eventFeeRate])
 
   useEffect(() => {
     const bind = () => useStorefrontSeatStore.getState().bindEvent(event.id)

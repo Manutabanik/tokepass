@@ -48,6 +48,18 @@ describe("organizerPublicPriceFromBase", () => {
     assert.equal(preview?.feePercentage, 8)
   })
 
+  it("falls back to 15 percent when the event fee is still missing", () => {
+    const preview = organizerPublicPriceFromBase({
+      basePrice: 15000,
+      absorbFees: false,
+      platformFeePercentage: null,
+      platformFixedFee: 0,
+      isSponsoredByTokePass: false,
+    })
+    assert.equal(preview?.publicPrice, 17250)
+    assert.equal(preview?.feePercentage, 15)
+  })
+
   it("hides the hint while the organizer has not typed a price", () => {
     assert.equal(
       organizerPublicPriceFromBase({

@@ -4,12 +4,22 @@ import { createContext, useContext, type ReactNode } from "react"
 
 import {
   defaultEventFeeConfig,
+  fallbackFeePercentagePoints,
   type EventFeeConfig,
 } from "@/lib/pricing/event-fees"
 
 const EventEditorFeeContext = createContext<EventFeeConfig>(
   defaultEventFeeConfig(),
 )
+
+function withFeeFallback(fee: EventFeeConfig): EventFeeConfig {
+  return {
+    ...fee,
+    platformFeePercentage: fallbackFeePercentagePoints(
+      fee.platformFeePercentage,
+    ),
+  }
+}
 
 export function EventEditorFeeProvider({
   fee,
@@ -19,7 +29,7 @@ export function EventEditorFeeProvider({
   children: ReactNode
 }) {
   return (
-    <EventEditorFeeContext.Provider value={fee}>
+    <EventEditorFeeContext.Provider value={withFeeFallback(fee)}>
       {children}
     </EventEditorFeeContext.Provider>
   )

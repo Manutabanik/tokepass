@@ -3,6 +3,7 @@
 import { useFormContext, useWatch } from "react-hook-form"
 
 import { useEventEditorFee } from "./event-editor-fee-context"
+import { fallbackFeePercentagePoints } from "@/lib/pricing/event-fees"
 import {
   organizerPublicPriceFromBase,
   organizerPublicPriceHintParts,
@@ -18,7 +19,9 @@ export function OrganizerPublicPriceHint({ price }: { price: unknown }) {
   const preview = organizerPublicPriceFromBase({
     basePrice: price,
     absorbFees,
-    platformFeePercentage: fee.platformFeePercentage,
+    platformFeePercentage: fallbackFeePercentagePoints(
+      fee.platformFeePercentage,
+    ),
     platformFixedFee: fee.platformFixedFee,
     isSponsoredByTokePass: fee.isSponsoredByTokePass,
   })
