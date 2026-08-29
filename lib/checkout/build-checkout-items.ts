@@ -69,6 +69,27 @@ export function generalItemsFromCartLines(
     })
 }
 
+/**
+ * Leftover map/combo places must not ride along a GA-only cart.
+ * Only fill seating refs for SKUs already present as map lines.
+ */
+export function extraPlacesForCheckoutLock(
+  lines: readonly CartIdentityLine[],
+  places: readonly MappedCartPlace[] = [],
+): MappedCartPlace[] {
+  const mappedTiers = new Set(
+    lines
+      .filter((line) => isMapCartLine(line))
+      .map((line) => generalLineTierId(line))
+      .filter(Boolean),
+  )
+  if (mappedTiers.size === 0) return []
+  return places.filter((place) => {
+    const tier = place.ticketTierId?.trim()
+    return Boolean(tier && mappedTiers.has(tier))
+  })
+}
+
 export function buildCheckoutActionItems(input: {
   lines: readonly CartIdentityLine[]
   extraPlaces?: MappedCartPlace[]

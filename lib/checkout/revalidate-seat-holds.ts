@@ -124,8 +124,35 @@ export function isBuyerSoldOutToast(error: string): boolean {
   )
 }
 
+/** Postgres / PostgREST schema errors. Never inventory. */
+export function isCheckoutInfrastructureError(error: string): boolean {
+  const normalized = error.trim().toLowerCase()
+  if (!normalized) return false
+  return (
+    /does not exist/.test(normalized) ||
+    /schema cache/.test(normalized) ||
+    /pgrst202/.test(normalized) ||
+    /could not find the (function|type)/.test(normalized) ||
+    /type ['"]public\./.test(normalized)
+  )
+}
+
+function mentionsInventoryStock(normalized: string): boolean {
+  return (
+    normalized === "out_of_stock" ||
+    normalized.includes("out_of_stock") ||
+    normalized.includes("err_no_stock") ||
+    normalized.includes("sin stock") ||
+    normalized.includes("stock insuficiente") ||
+    normalized.includes("no hay suficiente stock") ||
+    normalized.includes("general_stock") ||
+    /(^|[^a-z_])stock([^a-z_]|$)/.test(normalized)
+  )
+}
+
 export function isCheckoutStockConflict(error: string): boolean {
   if (error === HIGH_DEMAND_LOCK_TIMEOUT) return false
+  if (isCheckoutInfrastructureError(error)) return false
   if (isSectorNotConfiguredError(error)) return false
   if (isSeatSelectionRequiredError(error)) return false
   if (isSeatUnavailableError(error)) return false
@@ -138,7 +165,7 @@ export function isCheckoutStockConflict(error: string): boolean {
     normalized.includes("409") ||
     normalized.includes("conflict") ||
     normalized.includes("sold out") ||
-    normalized.includes("stock") ||
+    mentionsInventoryStock(normalized) ||
     normalized.includes("agotad") ||
     normalized.includes("capacidad") ||
     normalized.includes("seating_unit_unavailable") ||

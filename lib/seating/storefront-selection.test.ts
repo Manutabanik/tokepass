@@ -510,6 +510,57 @@ describe("storefront-selection", () => {
     assert.equal(hydrated[0]?.eventDateId, dayB)
   })
 
+  it("does not remap a combo pack onto the active jornada map", () => {
+    const dayA = "550e8400-e29b-41d4-a716-446655440001"
+    const comboTier = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    const map = emptyVenueMap()
+    map.elements = [
+      {
+        id: "mesa-09",
+        type: "round_table",
+        label: "Mesa 09 Viernes",
+        category: "commercial",
+        sectorName: "General",
+        groupName: "General",
+        x: 10,
+        y: 10,
+        width: 28,
+        height: 28,
+        rotation: 0,
+        price: 15000,
+        color: "#22d3ee",
+        opacity: 1,
+        chairCount: 4,
+        sideA: 0,
+        sideB: 0,
+        sellMode: "group",
+        capacity: 4,
+        seats: [],
+        ticketTypeId: "tier-viernes",
+      },
+    ]
+    const hydrated = hydrateStorefrontItemsFromMap(
+      [
+        {
+          id: "mesa-09",
+          name: "Combo 2 noches",
+          type: "table",
+          price: 80000,
+          capacity: 1,
+          ticketTierId: comboTier,
+          comboTierId: comboTier,
+        },
+      ],
+      map,
+      { "tier-viernes": 15000 },
+      dayA,
+    )
+    assert.equal(hydrated[0]?.ticketTierId, comboTier)
+    assert.equal(hydrated[0]?.comboTierId, comboTier)
+    assert.equal(hydrated[0]?.name, "Combo 2 noches")
+    assert.equal(hydrated[0]?.price, 80000)
+  })
+
   it("agrupa asientos por sector y fila sin repetir numeros", () => {
     const groups = formatStorefrontSelectionGroups([
       {

@@ -86,7 +86,7 @@ function asServiceRate(rate: unknown): number {
 export function cartIncludedServiceFee(
   lines: ReadonlyArray<{ price?: unknown; quantity?: unknown }> | null | undefined,
   rate: unknown = 0,
-  fixedFee = 0,
+  fixedFee: unknown = 0,
 ): number {
   const safeRate = asServiceRate(rate)
   const perTicketFixed = toCartNumber(fixedFee)

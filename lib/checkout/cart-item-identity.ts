@@ -38,7 +38,12 @@ const LEGACY_SEP = "__"
 const DAY_OR_ALL =
   /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|all)$/i
 
-const REJECTED_SCHEDULE_TOKENS = new Set(["all", "full_pass", "sin-fecha"])
+const REJECTED_SCHEDULE_TOKENS = new Set([
+  "all",
+  "full_pass",
+  "sin-fecha",
+  "combo_packs",
+])
 
 /** Real jornada id, or null for undated extras / poison tab tokens. */
 export function normalizeCartScheduleId(

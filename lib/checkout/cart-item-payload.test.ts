@@ -123,4 +123,21 @@ describe("cart item payload", () => {
     assert.equal(item.event_date_id, dayId)
     assert.equal(item.dateId, dayId)
   })
+
+  it("drops combo_packs so it never reaches the lock as a jornada", () => {
+    const payload = toCartItemPayload({
+      ticket_tier_id: tierId,
+      quantity: 1,
+      eventDateId: "combo_packs",
+    })
+    assert.equal(payload.event_date_id, undefined)
+    const item = sanitizeCheckoutActionItem({
+      ticket_tier_id: tierId,
+      quantity: 1,
+      scheduleId: "combo_packs",
+    })
+    assert.equal(item.eventDateId, null)
+    assert.equal(item.event_date_id, null)
+    assert.equal(item.dateId, null)
+  })
 })

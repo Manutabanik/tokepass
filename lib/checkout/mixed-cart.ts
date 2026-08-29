@@ -47,6 +47,36 @@ export function generalTierRemaining(row: {
   return Math.max(0, capacity - sold)
 }
 
+/** Hold GA propio: `ticket_tiers.sold` ya lo incluye; el lock no puede tratarlo como cupo ajeno. */
+export function ownActiveGaHoldQuantity(
+  holds: ReadonlyArray<{
+    tier_id?: string | null
+    quantity?: number | null
+    reserved_until?: string | null
+  }>,
+  tierId: string,
+  nowMs = Date.now(),
+): number {
+  const id = tierId.trim()
+  if (!id) return 0
+  let total = 0
+  for (const hold of holds) {
+    if (hold.tier_id?.trim() !== id) continue
+    const until = hold.reserved_until ? Date.parse(hold.reserved_until) : NaN
+    if (Number.isFinite(until) && until <= nowMs) continue
+    total += Math.max(0, Math.floor(Number(hold.quantity)) || 0)
+  }
+  return total
+}
+
+export function generalRemainingWithOwnHolds(
+  remaining: number | null | undefined,
+  ownHeld: number,
+): number | null {
+  if (remaining == null || !Number.isFinite(remaining)) return null
+  return remaining + Math.max(0, Math.floor(ownHeld) || 0)
+}
+
 export function tierUsesMapInventory(
   tier: Pick<
     MixedCartTierHint,

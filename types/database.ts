@@ -4709,7 +4709,6 @@ export type Database = {
       ticket_status: TicketStatus
       zone_type: ZoneType
       seat_status: SeatStatus
-      order_status: OrderStatus
       ticket_resale_listing_status: TicketResaleListingStatus
       ticket_transfer_status: TicketTransferStatus
       payout_pending_status: PayoutPendingStatus

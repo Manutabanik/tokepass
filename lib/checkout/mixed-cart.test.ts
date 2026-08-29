@@ -5,7 +5,9 @@ import type { CheckoutCartItem } from "@/lib/validations/checkout"
 
 import {
   assertSeatedCartItemsHaveUnits,
+  generalRemainingWithOwnHolds,
   generalTierRemaining,
+  ownActiveGaHoldQuantity,
   partitionMixedCartItems,
   tierIsNumbered,
   tierUsesMapInventory,
@@ -146,5 +148,31 @@ describe("mixed cart inventory split", () => {
       ),
       true,
     )
+  })
+
+  it("credits this buyer's active GA hold against live remaining", () => {
+    const now = Date.parse("2026-08-28T20:00:00.000Z")
+    assert.equal(
+      ownActiveGaHoldQuantity(
+        [
+          {
+            tier_id: parkingTier,
+            quantity: 1,
+            reserved_until: "2026-08-28T20:10:00.000Z",
+          },
+          {
+            tier_id: parkingTier,
+            quantity: 2,
+            reserved_until: "2026-08-28T19:00:00.000Z",
+          },
+        ],
+        parkingTier,
+        now,
+      ),
+      1,
+    )
+    assert.equal(generalRemainingWithOwnHolds(0, 1), 1)
+    assert.equal(generalRemainingWithOwnHolds(2, 1), 3)
+    assert.equal(generalRemainingWithOwnHolds(undefined, 1), null)
   })
 })

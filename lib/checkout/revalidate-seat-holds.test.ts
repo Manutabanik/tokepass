@@ -112,6 +112,10 @@ describe("revalidate seat holds", () => {
   })
 
   it("detects concurrency stock conflicts", () => {
+    assert.equal(
+      isCheckoutStockConflict('type "public.order_status" does not exist'),
+      false,
+    )
     assert.equal(isCheckoutStockConflict("out_of_stock"), true)
     assert.equal(isCheckoutStockConflict("SEATING_UNIT_UNAVAILABLE"), false)
     assert.equal(isSeatUnavailableError("SEATING_UNIT_UNAVAILABLE"), true)

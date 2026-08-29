@@ -1,4 +1,5 @@
 import type { CheckoutCartItemInput } from "@/lib/validations/checkout"
+import { asHoldEventDateId } from "@/lib/checkout/seat-hold-day"
 
 /** Identifiers + quantity only. Client money never belongs on this payload. */
 export type CartItemPayload = {
@@ -43,11 +44,13 @@ export function toCartItemPayload(input: unknown): CartItemPayload {
     Array.isArray(item.seatingIds) ? item.seatingIds[0] : undefined,
   )
   const elementId = firstNonEmpty(item.element_id, item.elementId)
-  const eventDateId = firstNonEmpty(
-    item.event_date_id,
-    item.eventDateId,
-    item.dateId,
-    item.scheduleId,
+  const eventDateId = asHoldEventDateId(
+    firstNonEmpty(
+      item.event_date_id,
+      item.eventDateId,
+      item.dateId,
+      item.scheduleId,
+    ),
   )
   const quantityRaw = Number(item.quantity)
   const payload: CartItemPayload = {
@@ -101,11 +104,13 @@ export function sanitizeCheckoutActionItem(
     item.isMappedSelection,
     item.is_mapped_selection,
   )
-  const eventDateId = firstNonEmpty(
-    item.eventDateId,
-    item.event_date_id,
-    item.dateId,
-    item.scheduleId,
+  const eventDateId = asHoldEventDateId(
+    firstNonEmpty(
+      item.eventDateId,
+      item.event_date_id,
+      item.dateId,
+      item.scheduleId,
+    ),
   )
 
   return {

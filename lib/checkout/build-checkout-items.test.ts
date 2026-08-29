@@ -2,7 +2,10 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import { cartCompositeItemId } from "./cart-item-identity"
-import { buildCheckoutActionItems } from "./build-checkout-items"
+import {
+  buildCheckoutActionItems,
+  extraPlacesForCheckoutLock,
+} from "./build-checkout-items"
 
 const friday = "550e8400-e29b-41d4-a716-446655440001"
 const saturday = "550e8400-e29b-41d4-a716-446655440002"
@@ -127,5 +130,38 @@ describe("buildCheckoutActionItems", () => {
     const saturdayLine = items.find((item) => item.eventDateId === saturday)
     assert.equal(fridayLine?.quantity, 1)
     assert.equal(saturdayLine?.quantity, 2)
+  })
+
+  it("does not lock a leftover combo mesa on a GA-only cart", () => {
+    const comboTier = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    const lines = [
+      {
+        id: cartCompositeItemId(fridayTier, friday),
+        ticketTierId: fridayTier,
+        name: "General Viernes",
+        quantity: 1,
+        price: 15000,
+        scheduleId: friday,
+        isMappedSelection: false,
+      },
+    ]
+    const leftover = extraPlacesForCheckoutLock(lines, [
+      {
+        id: "mesa-09",
+        ticketTierId: comboTier,
+        eventDateId: friday,
+      },
+    ])
+    const items = buildCheckoutActionItems({
+      scheduleDayCount: 2,
+      selectedDateId: friday,
+      extraPlaces: leftover,
+      lines,
+    })
+    assert.equal(leftover.length, 0)
+    assert.equal(items.length, 1)
+    assert.equal(items[0]?.type, "general")
+    assert.equal(items[0]?.ticketTierId, fridayTier)
+    assert.equal(items[0]?.quantity, 1)
   })
 })

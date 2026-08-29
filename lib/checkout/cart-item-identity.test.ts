@@ -23,6 +23,7 @@ describe("cartScheduleToken", () => {
   it("collapses poison tab tokens so they cannot diverge from _all", () => {
     assert.equal(cartScheduleToken("sin-fecha"), "all")
     assert.equal(cartScheduleToken("full_pass"), "all")
+    assert.equal(cartScheduleToken("combo_packs"), "all")
     assert.equal(cartScheduleToken("all"), "all")
     assert.equal(cartScheduleToken(friday), friday)
   })

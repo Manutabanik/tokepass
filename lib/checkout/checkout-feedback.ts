@@ -5,6 +5,7 @@ import {
   SEAT_SELECTION_REQUIRED,
   SEAT_UNAVAILABLE,
   SECTOR_NOT_CONFIGURED,
+  isCheckoutInfrastructureError,
   isCheckoutStockConflict,
   isSeatSelectionRequiredError,
   isSeatUnavailableError,
@@ -140,6 +141,16 @@ export function resolveCheckoutFeedback(
       code: CHECKOUT_FEEDBACK_CODE.ERR_SECTOR_NOT_CONFIGURED,
       message: "Esta ubicación no está disponible temporalmente por mantenimiento",
       inlineMessage: "Esta ubicación no está disponible por ahora.",
+      ticketId,
+      ticketName,
+    }
+  }
+
+  if (isCheckoutInfrastructureError(error)) {
+    return {
+      code: CHECKOUT_FEEDBACK_CODE.ERR_GENERIC,
+      message: CHECKOUT_GENERIC_TOAST,
+      inlineMessage: "",
       ticketId,
       ticketName,
     }

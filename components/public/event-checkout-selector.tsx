@@ -1035,6 +1035,7 @@ export function UnifiedTicketCard({
         </div>
         <IncludesServiceFeeHint price={shownPrice} />
       </div>
+      </div>
       <div className="flex shrink-0 items-center justify-end pl-2">
         {inactive ? (
           <Button type="button" disabled className="h-9 px-3 text-sm font-semibold text-muted-foreground">

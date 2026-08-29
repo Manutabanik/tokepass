@@ -116,19 +116,19 @@ describe("storefrontItemMatchesSchedule", () => {
     )
   })
 
-  it("keeps combo packs visible on every jornada tab", () => {
+  it("does not treat a combo pack as a single-jornada place", () => {
     assert.equal(
       storefrontItemMatchesSchedule(
         { id: "mesa-09", comboTierId: "pack-1", eventDateId: dayA },
         dayB,
         { scheduleDayCount: 2 },
       ),
-      true,
+      false,
     )
     assert.equal(
       storefrontItemMatchesSchedule(
         { id: "mesa-09", comboTierId: "pack-1" },
-        dayA,
+        "combo_packs",
         { scheduleDayCount: 2 },
       ),
       true,

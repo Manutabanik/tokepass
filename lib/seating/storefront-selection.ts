@@ -366,6 +366,7 @@ export function hydrateStorefrontItemsFromMap(
   if (!map) return unique
   const activeDay = asHoldEventDateId(activeScheduleId)
   return unique.map((item) => {
+    if (item.comboTierId?.trim()) return item
     const itemDay =
       asHoldEventDateId(item.scheduleId) ??
       asHoldEventDateId(item.eventDateId) ??

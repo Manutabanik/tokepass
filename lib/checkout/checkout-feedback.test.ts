@@ -50,6 +50,14 @@ describe("checkout feedback", () => {
     assert.equal(parseGeneralStockParts(GENERAL_STOCK_UNAVAILABLE)?.ticketId, undefined)
   })
 
+  it("does not treat a missing Postgres type as sold-out stock", () => {
+    const schema = resolveCheckoutFeedback(
+      'type "public.order_status" does not exist',
+    )
+    assert.equal(schema.code, CHECKOUT_FEEDBACK_CODE.ERR_GENERIC)
+    assert.notEqual(schema.message, CHECKOUT_NO_STOCK_TOAST)
+  })
+
   it("maps a server price mismatch to the cart-refresh copy", () => {
     const fromLegacy = resolveCheckoutFeedback(
       "El total de la orden no coincide con el precio vigente.",
