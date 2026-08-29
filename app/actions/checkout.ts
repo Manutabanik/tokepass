@@ -64,6 +64,11 @@ import {
   isReusableCheckoutOrderStatus,
 } from "@/lib/checkout/idempotency"
 import {
+  clientCheckoutMoneyMatchesQuoted,
+  quoteCheckoutMoney,
+  type CheckoutMoneyQuote,
+} from "@/lib/checkout/checkout-money"
+import {
   CHECKOUT_PRICES_CHANGED_ERROR,
   displayedTotalMatchesServer,
   liveCheckoutTiersCoverCart,
@@ -76,6 +81,7 @@ import {
   SEAT_UNAVAILABLE,
   SECTOR_NOT_CONFIGURED,
   encodeGeneralStockUnavailable,
+  isCheckoutInfrastructureError,
   isSeatSelectionRequiredError,
   layoutRequiresSeatSelection,
 } from "@/lib/checkout/revalidate-seat-holds"
@@ -92,7 +98,9 @@ import {
 } from "@/lib/checkout/seat-hold-day"
 import {
   assertSeatedCartItemsHaveUnits,
+  generalRemainingWithOwnHolds,
   generalTierRemaining,
+  ownActiveGaHoldQuantity,
   partitionMixedCartItems,
   tierIsNumbered,
 } from "@/lib/checkout/mixed-cart"
@@ -238,6 +246,10 @@ function mapReserveRpcError(
 
   const normalized = message.toLowerCase()
 
+  if (isCheckoutInfrastructureError(message)) {
+    return null
+  }
+
   if (normalized.includes("finalizado")) {
     return { success: false, error: EVENT_FINISHED_ERROR }
   }
@@ -339,6 +351,7 @@ function mapReserveRpcError(
   }
 
   if (
+    isCheckoutInfrastructureError(message) ||
     /could not find the function|function .+ does not exist|pgrst202|schema cache/i.test(
       normalized,
     )
@@ -348,7 +361,11 @@ function mapReserveRpcError(
 
   if (
     normalized.includes("sold out") ||
-    normalized.includes("stock") ||
+    normalized.includes("out_of_stock") ||
+    normalized.includes("err_no_stock") ||
+    normalized.includes("sin stock") ||
+    normalized.includes("stock insuficiente") ||
+    /(^|[^a-z_])stock([^a-z_]|$)/.test(normalized) ||
     normalized.includes("capacity") ||
     normalized.includes("recinto") ||
     normalized.includes("física") ||
@@ -1116,12 +1133,78 @@ async function resolveMappedSeatingUnits(
   return { ok: true, items: next }
 }
 
+async function loadEventServiceFeeRule(
+  supabase: CheckoutSupabase,
+  eventId: string,
+): Promise<{ rate: number; fixedFee: number }> {
+  const { data: event } = await supabase
+    .from("events")
+    .select("platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass")
+    .eq("id", eventId)
+    .maybeSingle()
+
+  if (event?.is_sponsored_by_tokepass) {
+    return { rate: 0, fixedFee: 0 }
+  }
+
+  let rate = Number(event?.platform_fee_percentage ?? 8)
+  if (Number.isFinite(rate) && rate > 1) rate = rate / 100
+  const { data: rateRpc } = await supabase.rpc("get_event_service_charge_rate", {
+    p_event_id: eventId,
+  })
+  if (rateRpc != null && Number.isFinite(Number(rateRpc))) {
+    rate = Number(rateRpc)
+  }
+
+  let fixedFee = Number(event?.platform_fixed_fee ?? 0)
+  const { data: fixedRpc } = await supabase.rpc("get_event_platform_fixed_fee", {
+    p_event_id: eventId,
+  })
+  if (fixedRpc != null && Number.isFinite(Number(fixedRpc))) {
+    fixedFee = Number(fixedRpc)
+  }
+
+  return {
+    rate: Number.isFinite(rate) ? Math.max(0, rate) : 0,
+    fixedFee: Number.isFinite(fixedFee) ? Math.max(0, fixedFee) : 0,
+  }
+}
+
+async function persistOrderFeeLedger(
+  orderId: string,
+  quote: CheckoutMoneyQuote,
+): Promise<void> {
+  const admin = tryCreateAdminClient()
+  if (!admin) return
+  const { data: order } = await admin
+    .from("orders")
+    .select("service_charge")
+    .eq("id", orderId)
+    .maybeSingle()
+  if (!order) return
+  if (amountsMatch(Number(order.service_charge ?? 0), quote.feeAmount)) return
+  const { error } = await admin
+    .from("orders")
+    .update({ service_charge: quote.feeAmount })
+    .eq("id", orderId)
+  if (error) {
+    logger.error({
+      context: "checkout/reservation",
+      message: "fee_ledger_persist_failed",
+      orderId,
+      error: error.message,
+    })
+  }
+}
+
 async function quoteCheckoutFromDatabase(
   supabase: CheckoutSupabase,
   eventId: string,
   items: CheckoutCartItem[],
   phasesByTier: Map<string, PublicTicketPhase[]>,
-): Promise<{ ok: true; total: number } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; total: number; quote: CheckoutMoneyQuote } | { ok: false; error: string }
+> {
   const tierIds = [...new Set(items.map((item) => checkoutItemTierId(item)))]
   const { data: tierRows } = await supabase
     .from("ticket_tiers")
@@ -1187,12 +1270,16 @@ async function quoteCheckoutFromDatabase(
     return { ok: false, error: CHECKOUT_PRICES_CHANGED_ERROR }
   }
 
-  return quoteHybridCartTotal({
+  const hybrid = quoteHybridCartTotal({
     items,
     unitPriceByTier,
     unitPriceByIndex,
     phasesByTier,
   })
+  if (!hybrid.ok) return hybrid
+  const rule = await loadEventServiceFeeRule(supabase, eventId)
+  const quote = quoteCheckoutMoney(hybrid.lines, rule)
+  return { ok: true, total: quote.grandTotal, quote }
 }
 
 function isMissingIdempotencySchema(
@@ -2512,12 +2599,21 @@ async function executeLockTickets(
       }),
     ]),
   )
+  const { data: ownGaHolds } = await access.db
+    .from("event_ga_cart_holds")
+    .select("tier_id, quantity, reserved_until")
+    .eq("event_id", eventId)
+    .eq("owner_id", owner.ownerId)
+  const nowMs = Date.now()
   const nameByTier = new Map(
     (holdTiers ?? []).map((tier) => [tier.id, tier.name?.trim() || ""]),
   )
   for (const item of zoneGeneralItems) {
     const tierId = checkoutItemTierId(item)
-    const remaining = remainingByTier.get(tierId)
+    const remaining = generalRemainingWithOwnHolds(
+      remainingByTier.get(tierId),
+      ownActiveGaHoldQuantity(ownGaHolds ?? [], tierId, nowMs),
+    )
     if (liveStockReady && remaining != null && remaining < item.quantity) {
       return checkoutActionFailure(
         ERR_NO_STOCK,
@@ -3281,6 +3377,9 @@ export async function startCheckoutWithPayment(
     dwellMs?: number | null
     termsAccepted?: boolean
     displayedTotal?: number
+    subtotal?: number
+    serviceFee?: number
+    grandTotal?: number
     idempotencyKey?: string | null
     cartSessionId?: string | null
   },
@@ -3307,6 +3406,9 @@ export async function startCheckoutWithPayment(
     previewKey: options?.previewKey,
     paymentProvider: options?.paymentProvider,
     displayedTotal: options?.displayedTotal,
+    subtotal: options?.subtotal,
+    serviceFee: options?.serviceFee,
+    grandTotal: options?.grandTotal,
     idempotencyKey: options?.idempotencyKey,
     cartSessionId: options?.cartSessionId,
   })
@@ -3590,12 +3692,24 @@ export async function startCheckoutWithPayment(
     )
   }
 
-  const displayedTotal = payload.displayedTotal ?? options?.displayedTotal
+  const displayedTotal =
+    payload.grandTotal ??
+    payload.displayedTotal ??
+    options?.grandTotal ??
+    options?.displayedTotal
   const idempotencyKey = payload.idempotencyKey ?? options?.idempotencyKey ?? null
   const cartFingerprint = checkoutCartFingerprint(cartItems)
   if (
-    !payload.promoCodeId &&
-    !displayedTotalMatchesServer(displayedTotal, quoted.total)
+    !clientCheckoutMoneyMatchesQuoted(
+      {
+        displayedTotal,
+        subtotal: payload.subtotal ?? options?.subtotal,
+        serviceFee: payload.serviceFee ?? options?.serviceFee,
+        grandTotal: payload.grandTotal ?? options?.grandTotal ?? displayedTotal,
+      },
+      quoted.quote,
+      { skipPrePromoTotal: Boolean(payload.promoCodeId) },
+    )
   ) {
     await recordCheckoutFailure(ctx)
     return checkoutActionFailure(
@@ -3940,7 +4054,7 @@ export async function startCheckoutWithPayment(
     if (
       !skipReservedQuoteCheck &&
       (!Number.isFinite(reservedMerchandise) ||
-        !amountsMatch(reservedMerchandise, quoted.total))
+        !amountsMatch(reservedMerchandise, quoted.quote.grandTotal))
     ) {
       await cleanupPendingOrder(orderId)
       logger.error({
@@ -3985,6 +4099,10 @@ export async function startCheckoutWithPayment(
       captchaProvider,
       captchaScore,
     })
+
+    if (!resumedPromoCodeId && !payload.promoCodeId) {
+      await persistOrderFeeLedger(orderId, quoted.quote)
+    }
 
     const cleanPromoId = resumedPromoCodeId ? null : payload.promoCodeId
     if (cleanPromoId) {
@@ -4035,7 +4153,7 @@ export async function startCheckoutWithPayment(
 
     const { data: pricedOrder, error: pricedOrderError } = await db
       .from("orders")
-      .select("total_amount")
+      .select("total_amount, subtotal, service_charge")
       .eq("id", orderId)
       .eq("buyer_id", user.id)
       .maybeSingle()
@@ -4053,7 +4171,15 @@ export async function startCheckoutWithPayment(
     }
 
     const finalTotal = Number(pricedOrder.total_amount)
+    const finalSubtotal = Number(pricedOrder.subtotal)
+    const finalFee = Number(pricedOrder.service_charge ?? 0)
     if (!Number.isFinite(finalTotal) || finalTotal < 0) {
+      await cleanupPendingOrder(orderId)
+      return { success: false, error: "El total de la orden es inválido." }
+    }
+    const allInLedger = amountsMatch(finalSubtotal, finalTotal)
+    const legacyMarkup = amountsMatch(finalSubtotal + finalFee, finalTotal)
+    if (!allInLedger && !legacyMarkup) {
       await cleanupPendingOrder(orderId)
       return { success: false, error: "El total de la orden es inválido." }
     }
@@ -4448,6 +4574,9 @@ export async function startSandboxCheckout(
   captchaToken?: string | null,
   guard?: {
     displayedTotal?: number
+    subtotal?: number
+    serviceFee?: number
+    grandTotal?: number
     idempotencyKey?: string | null
     cartSessionId?: string | null
   },
@@ -4463,6 +4592,9 @@ export async function startSandboxCheckout(
     termsAccepted,
     previewKey: normalizePreviewKey(previewKey),
     displayedTotal: guard?.displayedTotal,
+    subtotal: guard?.subtotal,
+    serviceFee: guard?.serviceFee,
+    grandTotal: guard?.grandTotal,
     idempotencyKey: guard?.idempotencyKey,
     cartSessionId: guard?.cartSessionId,
   })
@@ -4486,6 +4618,9 @@ export async function startSandboxCheckout(
       }),
       captchaToken,
       displayedTotal: parsed.data.displayedTotal ?? guard?.displayedTotal,
+      subtotal: parsed.data.subtotal ?? guard?.subtotal,
+      serviceFee: parsed.data.serviceFee ?? guard?.serviceFee,
+      grandTotal: parsed.data.grandTotal ?? guard?.grandTotal,
       idempotencyKey: parsed.data.idempotencyKey ?? guard?.idempotencyKey,
       cartSessionId: parsed.data.cartSessionId ?? guard?.cartSessionId,
     },

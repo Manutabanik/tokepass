@@ -129,8 +129,15 @@ export function quoteHybridCartTotal(input: {
   unitPriceByTier: Map<string, number>
   unitPriceByIndex?: Array<number | undefined>
   phasesByTier?: Map<string, PublicTicketPhase[]>
-}): { ok: true; total: number } | { ok: false; error: string } {
+}):
+  | {
+      ok: true
+      total: number
+      lines: Array<{ price: number; quantity: number }>
+    }
+  | { ok: false; error: string } {
   let totalCents = 0
+  const lines: Array<{ price: number; quantity: number }> = []
   for (const [index, item] of input.items.entries()) {
     const tierId = checkoutItemTierId(item)
     const phases = input.phasesByTier?.get(tierId) ?? []
@@ -145,9 +152,11 @@ export function quoteHybridCartTotal(input: {
       return { ok: false, error: CHECKOUT_PRICES_CHANGED_ERROR }
     }
     const quantity = isMappedCheckoutItem(item) ? 1 : item.quantity
+    const price = centsToMoney(moneyToCents(unit))
+    lines.push({ price, quantity })
     totalCents += moneyToCents(unit) * quantity
   }
-  return { ok: true, total: centsToMoney(totalCents) }
+  return { ok: true, total: centsToMoney(totalCents), lines }
 }
 
 export function amountsMatch(left: number, right: number): boolean {

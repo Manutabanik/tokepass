@@ -124,7 +124,10 @@ import {
   cartHasPurchasableItems,
   resolveCheckoutProgressStep,
 } from "@/lib/checkout/checkout-step-guard"
-import { buildCheckoutActionItems } from "@/lib/checkout/build-checkout-items"
+import {
+  buildCheckoutActionItems,
+  extraPlacesForCheckoutLock,
+} from "@/lib/checkout/build-checkout-items"
 import {
   isCheckoutUuid,
   storefrontPlaceNeedsMappedLine,
@@ -147,6 +150,7 @@ import {
   isSeatUnavailableError,
   isSectorNotConfiguredError,
 } from "@/lib/checkout/revalidate-seat-holds"
+import { quoteCheckoutMoney } from "@/lib/checkout/checkout-money"
 import { isQuantityCheckoutTier } from "@/lib/checkout/public-ticket-view"
 import {
   mapSelectionUnitPrice,
@@ -2102,7 +2106,7 @@ export function CheckoutTunnel({
 
     return buildCheckoutActionItems({
       lines: storeLines,
-      extraPlaces: places,
+      extraPlaces: extraPlacesForCheckoutLock(storeLines, places),
       selectedDateId,
       scheduleDayCount,
       mapBackedTierIds: displayTiers
@@ -2296,8 +2300,18 @@ export function CheckoutTunnel({
       const captchaToken =
         sandbox || isFreeCheckout ? null : await getCheckoutCaptchaToken()
       const idempotencyKey = checkoutIdempotencyKeyFor(items)
+      const moneyQuote = quoteCheckoutMoney(
+        (storeLines.length > 0 ? storeLines : cartLines).map((line) => ({
+          price: line.price,
+          quantity: line.quantity,
+        })),
+        { rate: serviceChargeRate, fixedFee: platformFixedFee },
+      )
       const priceGuard = {
         displayedTotal: finalTotal,
+        subtotal: moneyQuote.subtotal,
+        serviceFee: moneyQuote.serviceFee,
+        grandTotal: finalTotal,
         idempotencyKey,
       }
 
@@ -2330,6 +2344,9 @@ export function CheckoutTunnel({
               termsAccepted: isFreeCheckout ? true : acceptedTerms,
               captchaToken,
               displayedTotal: priceGuard.displayedTotal,
+              subtotal: priceGuard.subtotal,
+              serviceFee: priceGuard.serviceFee,
+              grandTotal: priceGuard.grandTotal,
               idempotencyKey: priceGuard.idempotencyKey,
               cartSessionId,
             },
@@ -2394,7 +2411,7 @@ export function CheckoutTunnel({
 
   async function enterDetailsStep() {
     if (buildCheckoutItems().length === 0) {
-      toastCheckoutStock()
+      toastEmptyCheckoutCart()
       setCheckoutStep("tickets")
       return
     }

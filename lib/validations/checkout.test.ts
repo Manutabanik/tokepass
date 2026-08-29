@@ -264,21 +264,27 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
     assert.equal("total" in item, false)
   })
 
-  it("keeps displayedTotal only as a comparison hint and drops payload totals", () => {
+  it("keeps the All-In money breakdown as comparison hints and drops trusted totals", () => {
     const parsed = CheckoutPayloadSchema.safeParse({
       eventId,
       buyer,
       items: [{ tierId: generalId, quantity: 1 }],
       totalPrice: 999999,
       clientTotal: 1,
-      displayedTotal: 0,
+      displayedTotal: 10000,
+      subtotal: 10000,
+      serviceFee: 1000,
+      grandTotal: 10000,
       idempotencyKey: eventId,
     })
     assert.equal(parsed.success, true)
     if (!parsed.success) return
     assert.equal("totalPrice" in parsed.data, false)
     assert.equal("clientTotal" in parsed.data, false)
-    assert.equal(parsed.data.displayedTotal, 0)
+    assert.equal(parsed.data.displayedTotal, 10000)
+    assert.equal(parsed.data.subtotal, 10000)
+    assert.equal(parsed.data.serviceFee, 1000)
+    assert.equal(parsed.data.grandTotal, 10000)
     assert.equal(parsed.data.idempotencyKey, eventId)
   })
 

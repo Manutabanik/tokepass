@@ -20,6 +20,7 @@ import {
   normalizeDni,
   normalizeEmail,
 } from "@/lib/checkout/guest-input"
+import { asHoldEventDateId } from "@/lib/checkout/seat-hold-day"
 
 const UUID_ERROR = "Identificador inválido."
 const QTY_ERROR = "La cantidad de entradas no es válida."
@@ -167,23 +168,29 @@ function normalizeIncomingCartItem(raw: unknown) {
       item.is_mapped_selection,
       item.isMappedSelection,
     ),
-    eventDateId: firstString(
-      item.eventDateId,
-      item.event_date_id,
-      item.dateId,
-      item.scheduleId,
+    eventDateId: asHoldEventDateId(
+      firstString(
+        item.eventDateId,
+        item.event_date_id,
+        item.dateId,
+        item.scheduleId,
+      ),
     ),
-    event_date_id: firstString(
-      item.event_date_id,
-      item.eventDateId,
-      item.dateId,
-      item.scheduleId,
+    event_date_id: asHoldEventDateId(
+      firstString(
+        item.event_date_id,
+        item.eventDateId,
+        item.dateId,
+        item.scheduleId,
+      ),
     ),
-    dateId: firstString(
-      item.dateId,
-      item.eventDateId,
-      item.event_date_id,
-      item.scheduleId,
+    dateId: asHoldEventDateId(
+      firstString(
+        item.dateId,
+        item.eventDateId,
+        item.event_date_id,
+        item.scheduleId,
+      ),
     ),
   }
 }
@@ -389,6 +396,30 @@ export const CheckoutPayloadSchema = z.preprocess(
       .enum(["mercadopago", "payway", "naranjax", "modo"])
       .default("mercadopago"),
     displayedTotal: z
+      .number()
+      .finite()
+      .min(0)
+      .optional()
+      .transform((value) =>
+        value == null ? value : centsToMoney(moneyToCents(value)),
+      ),
+    subtotal: z
+      .number()
+      .finite()
+      .min(0)
+      .optional()
+      .transform((value) =>
+        value == null ? value : centsToMoney(moneyToCents(value)),
+      ),
+    serviceFee: z
+      .number()
+      .finite()
+      .min(0)
+      .optional()
+      .transform((value) =>
+        value == null ? value : centsToMoney(moneyToCents(value)),
+      ),
+    grandTotal: z
       .number()
       .finite()
       .min(0)
