@@ -2,6 +2,7 @@
 
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
 import { Button } from "@/components/ui/button"
+import { IncludesServiceFeeHint } from "@/components/public/includes-service-fee-hint"
 import { formatCurrency, formatTicketPrice } from "@/lib/format"
 import {
   BUNDLE_TYPE_LABELS,
@@ -119,6 +120,7 @@ function BundlePromoCard({
             {comboLine}
           </span>
         </div>
+        <IncludesServiceFeeHint price={bundle.price} />
       </div>
       <Button
         type="button"

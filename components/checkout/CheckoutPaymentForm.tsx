@@ -17,11 +17,9 @@ import { PromoCodeInput } from "@/components/public/promo-code-input"
 import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-clickwrap"
 import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import type { CheckoutBuyerInfo } from "@/lib/checkout-buyer"
+import { CartTotalLabel } from "@/components/public/cart-total-transparency"
 import { formatCartTotal } from "@/lib/format"
-import {
-  useCartPriceBreakdown,
-  useCheckoutStore,
-} from "@/lib/stores/checkout-store"
+import { useCheckoutStore } from "@/lib/stores/checkout-store"
 
 export function CheckoutPaymentForm({
   step,
@@ -269,17 +267,16 @@ function PaymentOrderSummary({
           </span>
         </div>
       ) : null}
-      <PaymentServiceFeeRow />
       <div className="flex items-start justify-between gap-3 border-t border-border pt-3">
         <div className="min-w-0">
           <p className="font-semibold text-card-foreground">
-            {finalTotal === 0 ? "Total" : "Total a pagar"}
+            <CartTotalLabel>
+              {finalTotal === 0 ? "Total" : "Total a pagar"}
+            </CartTotalLabel>
           </p>
-          <p className="text-xs text-muted-foreground">
-            {finalTotal === 0
-              ? "Entrada sin costo."
-              : "Precio final All-In. Incluye servicio."}
-          </p>
+          {finalTotal === 0 ? (
+            <p className="text-xs text-muted-foreground">Entrada sin costo.</p>
+          ) : null}
         </div>
         <span className="shrink-0 text-xl font-black tabular-nums text-card-foreground">
           {formatCartTotal(finalTotal)}
@@ -292,17 +289,6 @@ function PaymentOrderSummary({
         onOpenChange={setIsCartOpen}
         totalAmount={finalTotal}
       />
-    </div>
-  )
-}
-
-function PaymentServiceFeeRow() {
-  const { serviceFee } = useCartPriceBreakdown()
-  if (serviceFee <= 0) return null
-  return (
-    <div className="flex items-center justify-between text-sm text-muted-foreground">
-      <span>Cargo por servicio</span>
-      <span className="tabular-nums">{formatCartTotal(serviceFee)}</span>
     </div>
   )
 }

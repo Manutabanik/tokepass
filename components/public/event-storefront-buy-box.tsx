@@ -4,6 +4,7 @@ import { Calendar, Lock, MapPin } from "lucide-react"
 
 import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import { Button } from "@/components/ui/button"
+import { IncludesServiceFeeHint } from "@/components/public/includes-service-fee-hint"
 import { formatTicketPrice } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -59,6 +60,7 @@ export function EventStorefrontBuyBox({
             ? "Entrada gratuita"
             : formatTicketPrice(price)}
       </p>
+      {price != null ? <IncludesServiceFeeHint price={price} className="mt-1" /> : null}
 
       <ul className="mt-5 flex flex-col gap-3 border-t border-border/60 pt-5">
         {dateLabel ? (

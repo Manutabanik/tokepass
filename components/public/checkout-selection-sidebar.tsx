@@ -6,6 +6,7 @@ import { createPortal } from "react-dom"
 
 import { AdaptiveSeatingFlow } from "@/components/public/adaptive-seating-flow"
 import { CartSummary } from "@/components/public/cart-summary"
+import { CartTotalLabel } from "@/components/public/cart-total-transparency"
 import type { SeatSelectionContext } from "@/components/public/seat-selection-sheet"
 import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-clickwrap"
 import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
@@ -176,7 +177,7 @@ export function CheckoutSelectionSidebar({
         <div className="flex items-end justify-between">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Total
+              <CartTotalLabel className="uppercase tracking-wider" />
             </p>
             {itemCount > 0 ? (
               <p className="text-xs text-muted-foreground">

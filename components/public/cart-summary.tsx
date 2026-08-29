@@ -20,6 +20,7 @@ import {
   cartTicketLineId,
   parseCartTicketLineId,
 } from "@/lib/checkout/cart-lines"
+import { CartTotalLabel } from "@/components/public/cart-total-transparency"
 import { formatCartTotal } from "@/lib/format"
 import {
   useCartPriceBreakdown,
@@ -145,43 +146,25 @@ export function CartServiceFeeRows({
   compact?: boolean
   showTotal?: boolean
 }) {
-  const { serviceFee, grandTotal } = useCartPriceBreakdown()
-  if (serviceFee <= 0 && !showTotal) return null
+  const { grandTotal } = useCartPriceBreakdown()
+  if (!showTotal) return null
 
   return (
     <div
       className={cn(
-        "shrink-0 space-y-1.5 border-t border-border",
+        "shrink-0 border-t border-border",
         compact ? "mt-2 pt-2" : "mt-3 pt-3",
       )}
     >
-      {serviceFee > 0 ? (
-        <div
-          className={cn(
-            "flex items-center justify-between gap-3 text-muted-foreground",
-            compact ? "text-xs" : "text-sm",
-          )}
-        >
-          <span>Cargo por servicio</span>
-          <span className="tabular-nums">{formatCartTotal(serviceFee)}</span>
-        </div>
-      ) : null}
-      {showTotal ? (
-        <div
-          className={cn(
-            "flex items-center justify-between gap-3 font-bold text-foreground",
-            compact ? "text-sm" : "text-base",
-          )}
-        >
-          <span>Total</span>
-          <span className="tabular-nums">{formatCartTotal(grandTotal)}</span>
-        </div>
-      ) : null}
-      {serviceFee > 0 ? (
-        <p className="text-[11px] leading-4 text-muted-foreground">
-          Incluido en el precio final. No se suma de nuevo.
-        </p>
-      ) : null}
+      <div
+        className={cn(
+          "flex items-center justify-between gap-3 font-bold text-foreground",
+          compact ? "text-sm" : "text-base",
+        )}
+      >
+        <CartTotalLabel />
+        <span className="tabular-nums">{formatCartTotal(grandTotal)}</span>
+      </div>
     </div>
   )
 }

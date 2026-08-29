@@ -14,6 +14,8 @@ import { quantityForPublicTier } from "@/lib/checkout/ticket-day-groups"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { isFullPassDayId } from "@/lib/event-schedule"
+import { IncludesServiceFeeHint } from "@/components/public/includes-service-fee-hint"
+import { publicOfferPrice } from "@/lib/checkout/public-price"
 import { formatCurrency, formatEventDay, formatTicketPrice } from "@/lib/format"
 import { generalTicketMaxQuantity } from "@/lib/checkout/general-ticket-quantity"
 import { ticketHasSeatingSector } from "@/lib/checkout/public-ticket-view"
@@ -416,9 +418,10 @@ function TierList({
           : day
             ? day.title || formatEventDay(day.start_time)
             : null
+        const offerPrice = publicOfferPrice(tier)
         const listPrice = tier.listPrice ?? 0
-        const saveAmt = listPrice > tier.price ? listPrice - tier.price : 0
-        const savePct = discountPercent(listPrice, tier.price)
+        const saveAmt = listPrice > offerPrice ? listPrice - offerPrice : 0
+        const savePct = discountPercent(listPrice, offerPrice)
 
         const comboLine = tier.comboItems?.length
           ? tier.comboItems
@@ -453,7 +456,9 @@ function TierList({
                     soldOut && "text-muted-foreground line-through",
                   )}
                 >
-                  {formatTicketPrice(tier.price)}
+                  {offerPrice === 0
+                    ? "Gratis"
+                    : formatTicketPrice(offerPrice)}
                 </span>
                 {saveAmt > 0 ? (
                   <span className="text-xs font-medium text-muted-foreground line-through">
@@ -487,6 +492,7 @@ function TierList({
                   </span>
                 ) : null}
               </div>
+              <IncludesServiceFeeHint price={offerPrice} />
             </div>
 
             <div className="flex shrink-0 items-center">
