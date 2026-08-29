@@ -612,6 +612,35 @@ export function formatStorefrontSelectionLabel(
     .join(" · ")
 }
 
+function footerSelectionKind(
+  item: Pick<StorefrontSelectedItem, "type" | "inventoryType">,
+): "table" | "seat" | "place" {
+  if (item.type === "table" || item.inventoryType === "TABLES") return "table"
+  if (item.type === "seat" || item.inventoryType === "SEATED_NUMERATED") {
+    return "seat"
+  }
+  return "place"
+}
+
+/** Resumen corto del footer del modal: no listar cada mesa/asiento. */
+export function formatSeatSelectionFooterLabel(
+  items: readonly Pick<StorefrontSelectedItem, "type" | "inventoryType">[],
+): string {
+  const count = items.length
+  if (count <= 0) return "Seleccioná un lugar para continuar."
+  const kinds = new Set(items.map(footerSelectionKind))
+  const homogeneous = kinds.size === 1 ? [...kinds][0] : "mixed"
+  if (homogeneous === "table") {
+    return count === 1 ? "1 Mesa seleccionada" : `${count} Mesas seleccionadas`
+  }
+  if (homogeneous === "seat") {
+    return count === 1
+      ? "1 Asiento seleccionado"
+      : `${count} Asientos seleccionados`
+  }
+  return count === 1 ? "1 Lugar seleccionado" : `${count} Lugares seleccionados`
+}
+
 export function buyerElementTypeName(
   element: Pick<VenueMapElement, "type">,
 ): string {

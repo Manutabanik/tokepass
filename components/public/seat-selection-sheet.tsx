@@ -3,6 +3,8 @@
 import { Component, type ErrorInfo, type ReactNode, useEffect, useMemo, useRef } from "react"
 import { toast } from "sonner"
 
+import { MapPin } from "lucide-react"
+
 import { InteractiveMapViewer } from "@/components/public/interactive-map-viewer"
 import { SeatSelectionQuickList } from "@/components/public/seat-selection-quick-list"
 import { Button } from "@/components/ui/button"
@@ -26,7 +28,7 @@ import { logger } from "@/lib/logger"
 import { buildAccessibleSeatTree } from "@/lib/seating/accessible-seat-tree"
 import { resolveSectorAssignMeta } from "@/lib/seating/assign-best-seats"
 import {
-  formatStorefrontSelectionGroups,
+  formatSeatSelectionFooterLabel,
   isTablePurchaseSku,
   storefrontItemFromElement,
   storefrontItemFromZone,
@@ -200,8 +202,9 @@ export function SeatSelectionSheet({
         showCloseButton
         overlayClassName="z-[100]"
         className={cn(
-          "z-[100] flex h-[100dvh] max-h-[100dvh] flex-col gap-0 overflow-hidden rounded-none p-0",
-          "lg:inset-x-auto lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:h-[min(88dvh,840px)] lg:max-h-[88dvh] lg:w-[min(56rem,94vw)] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl",
+          "z-[100] flex h-[100dvh] max-h-[100dvh] flex-col gap-0 overflow-hidden rounded-none border-none bg-background p-0",
+          "max-md:m-0 max-md:h-[100dvh] max-md:max-w-none max-md:w-screen max-md:rounded-none max-md:border-none",
+          "lg:inset-x-auto lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:h-[min(88dvh,840px)] lg:max-h-[88dvh] lg:w-[min(56rem,94vw)] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl lg:border lg:border-border",
         )}
       >
         <SheetHeader className="shrink-0 border-b border-border px-4 py-3 pr-14 text-left">
@@ -227,16 +230,25 @@ export function SeatSelectionSheet({
           />
         </SeatModalErrorBoundary>
 
-        <div className="sticky bottom-0 z-10 mt-auto shrink-0 border-t border-border bg-card px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-          {isValidSelection ? (
-            <p className="mb-3 text-center text-sm font-semibold leading-snug text-foreground">
-              {formatAssistantLine(selectedItems, placeTotal)}
+        <div className="sticky bottom-0 z-10 mt-auto shrink-0 border-t border-border bg-background px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p
+              className={cn(
+                "flex min-w-0 items-center gap-1.5 truncate text-sm font-semibold",
+                isValidSelection ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
+              <span className="truncate">
+                {formatSeatSelectionFooterLabel(selectedItems)}
+              </span>
             </p>
-          ) : (
-            <p className="mb-3 text-center text-sm text-muted-foreground">
-              Seleccioná un lugar para continuar.
-            </p>
-          )}
+            {isValidSelection ? (
+              <p className="shrink-0 text-sm font-bold tabular-nums text-foreground">
+                {formatTicketPrice(placeTotal)}
+              </p>
+            ) : null}
+          </div>
           <Button
             type="button"
             disabled={!isValidSelection || pending}
@@ -547,7 +559,7 @@ function SeatSelectionModalInner({
       className="flex min-h-0 flex-1 flex-col gap-0"
     >
       <div className="shrink-0 border-b border-border px-4 pt-3">
-        <TabsList className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-muted/50 p-1 text-muted-foreground">
+        <TabsList className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-background p-1 text-muted-foreground">
           <TabsTrigger
             value="lista"
             className="inline-flex h-full w-full flex-1 items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium shadow-none after:hidden data-active:border-transparent data-active:bg-background data-active:text-foreground data-active:shadow-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-active:border-transparent"
@@ -650,16 +662,3 @@ function QuickPlaceSkeleton() {
   )
 }
 
-function formatAssistantLine(
-  items: StorefrontSelectedItem[],
-  total: number,
-): string {
-  const groups = formatStorefrontSelectionGroups(items)
-  const names = groups
-    .map((group) => group.placeLabel || group.label)
-    .filter((name) => name.trim().length > 0)
-  const accesses = storefrontSelectionCount(items)
-  const ticketLabel = accesses === 1 ? "1 entrada" : `${accesses} entradas`
-  const heading = names.join(" · ") || "Selección"
-  return `${heading} · ${ticketLabel} · ${formatTicketPrice(total)}`
-}

@@ -6,6 +6,7 @@ import {
   addSelectedSeatToCartItem,
   buyerElementTitle,
   dedupeStorefrontItemsById,
+  formatSeatSelectionFooterLabel,
   formatStorefrontSelectionGroups,
   formatStorefrontSelectionLabel,
   hydrateStorefrontItemsFromMap,
@@ -721,5 +722,39 @@ describe("storefront-selection", () => {
     ])
     assert.equal(groups[0]?.price, 58824)
     assert.equal(groups[0]?.placeLabel, "Mesa completa (Incluye 6 accesos)")
+  })
+
+  it("resume mesas homogeneas sin listar cada nombre", () => {
+    assert.equal(
+      formatSeatSelectionFooterLabel([
+        { type: "table", inventoryType: "TABLES" },
+      ]),
+      "1 Mesa seleccionada",
+    )
+    assert.equal(
+      formatSeatSelectionFooterLabel([
+        { type: "table", inventoryType: "TABLES" },
+        { type: "table" },
+      ]),
+      "2 Mesas seleccionadas",
+    )
+  })
+
+  it("resume asientos homogeneos y mezcla como lugares", () => {
+    assert.equal(
+      formatSeatSelectionFooterLabel([
+        { type: "seat" },
+        { type: "seat", inventoryType: "SEATED_NUMERATED" },
+      ]),
+      "2 Asientos seleccionados",
+    )
+    assert.equal(
+      formatSeatSelectionFooterLabel([
+        { type: "table", inventoryType: "TABLES" },
+        { type: "seat" },
+      ]),
+      "2 Lugares seleccionados",
+    )
+    assert.equal(formatSeatSelectionFooterLabel([]), "Seleccioná un lugar para continuar.")
   })
 })
