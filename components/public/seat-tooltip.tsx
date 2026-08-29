@@ -1,5 +1,7 @@
 "use client"
 
+import { Locate, Minus, Plus } from "lucide-react"
+
 import { formatCurrency } from "@/lib/format"
 import { SEAT_HELD_BY_OTHER_MESSAGE } from "@/lib/seating/inventory-seat-state"
 import { cn } from "@/lib/utils"
@@ -114,10 +116,13 @@ export function BuyerMapZoomDock({
   onReset: () => void
   className?: string
 }) {
+  const pillClass =
+    "flex size-10 items-center justify-center rounded-full border border-white/10 bg-black/60 p-2 text-white backdrop-blur-md hover:bg-black/75"
+
   return (
     <div
       className={cn(
-        "absolute right-3 bottom-3 z-20 flex flex-col gap-1 rounded-xl border border-white/10 bg-black/60 p-1 backdrop-blur-md",
+        "absolute right-4 bottom-24 z-10 flex flex-col gap-2",
         className,
       )}
     >
@@ -125,26 +130,26 @@ export function BuyerMapZoomDock({
         type="button"
         onClick={onZoomIn}
         aria-label="Acercar"
-        className="flex size-8 items-center justify-center rounded-lg text-sm font-bold text-foreground hover:bg-white/10"
+        className={pillClass}
       >
-        +
+        <Plus className="size-4" aria-hidden="true" />
       </button>
       <button
         type="button"
         onClick={onZoomOut}
         aria-label="Alejar"
-        className="flex size-8 items-center justify-center rounded-lg text-sm font-bold text-foreground hover:bg-white/10"
+        className={pillClass}
       >
-        -
+        <Minus className="size-4" aria-hidden="true" />
       </button>
       <button
         type="button"
         onClick={onReset}
         title="Restablecer vista"
         aria-label="Restablecer vista"
-        className="flex size-8 items-center justify-center rounded-lg text-xs text-muted-foreground hover:bg-white/10"
+        className={pillClass}
       >
-        ↺
+        <Locate className="size-4" aria-hidden="true" />
       </button>
     </div>
   )

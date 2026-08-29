@@ -558,17 +558,17 @@ function SeatSelectionModalInner({
       defaultValue={selectionMode === "map" ? "mapa" : "lista"}
       className="flex min-h-0 flex-1 flex-col gap-0"
     >
-      <div className="shrink-0 border-b border-border px-4 pt-3">
-        <TabsList className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-background p-1 text-muted-foreground">
+      <div className="shrink-0 px-4 pt-3 pb-2">
+        <TabsList className="flex h-11 w-full items-center rounded-lg bg-secondary/50 p-1 text-muted-foreground">
           <TabsTrigger
             value="lista"
-            className="inline-flex h-full w-full flex-1 items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium shadow-none after:hidden data-active:border-transparent data-active:bg-background data-active:text-foreground data-active:shadow-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-active:border-transparent"
+            className={segmentedTabClass}
           >
             Selección rápida
           </TabsTrigger>
           <TabsTrigger
             value="mapa"
-            className="inline-flex h-full w-full flex-1 items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium shadow-none after:hidden data-active:border-transparent data-active:bg-background data-active:text-foreground data-active:shadow-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-active:border-transparent"
+            className={segmentedTabClass}
           >
             Ver en el mapa
           </TabsTrigger>
@@ -623,6 +623,14 @@ function SeatSelectionModalInner({
     </Tabs>
   )
 }
+
+const segmentedTabClass = cn(
+  "inline-flex h-full flex-1 items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium shadow-none after:hidden",
+  "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+  "data-active:border-transparent data-active:bg-background data-active:text-foreground data-active:shadow-sm",
+  "data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm",
+  "dark:data-active:border-transparent dark:data-active:bg-background dark:data-active:text-foreground",
+)
 
 function isolateSectorMap(
   map: InteractiveVenueMap,
