@@ -541,6 +541,17 @@ export function CheckoutTunnel({
     selectedItems,
     applyOccupancyPatch,
   })
+  const storedFeeRate = useCheckoutStore((state) => state.serviceChargeRate)
+  const storedFeeFixed = useCheckoutStore((state) => state.serviceChargeFixedFee)
+  if (
+    storedFeeRate !== serviceChargeRate ||
+    storedFeeFixed !== platformFixedFee
+  ) {
+    useCheckoutStore.getState().setServiceChargeRule({
+      rate: serviceChargeRate,
+      fixedFee: platformFixedFee,
+    })
+  }
   useEffect(() => {
     useCheckoutStore.getState().setServiceChargeRule({
       rate: serviceChargeRate,

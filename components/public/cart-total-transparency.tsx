@@ -8,7 +8,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { formatCartTotal } from "@/lib/format"
+import { serviceFeeSplitLabel } from "@/components/public/includes-service-fee-hint"
 import { useCartPriceBreakdown } from "@/lib/stores/checkout-store"
 import { cn } from "@/lib/utils"
 
@@ -30,8 +30,7 @@ export function CartTotalTransparencyTooltip({
         <Info className="size-3.5" aria-hidden="true" />
       </TooltipTrigger>
       <TooltipContent>
-        Entrada base: {formatCartTotal(baseAmount)} | Cargo por servicio:{" "}
-        {formatCartTotal(serviceFee)}
+        {serviceFeeSplitLabel(baseAmount, serviceFee)}
       </TooltipContent>
     </Tooltip>
   )

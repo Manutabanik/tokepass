@@ -22,9 +22,11 @@ import {
 import {
   calculateCartPriceBreakdown,
   cartItemCount,
+  cartLineUnitMoney,
   stampCartLinesMoney,
   sumCartQuantities,
   toCartNumber,
+  type CartLineMoney,
   type CartPriceBreakdown,
 } from "@/lib/checkout/cart"
 import {
@@ -1035,9 +1037,6 @@ export const useCheckoutStore = create<CheckoutState>()(
           subtotal: 0,
           serviceFee: 0,
           grandTotal: 0,
-          serviceChargeRate: saved.serviceChargeRate ?? current.serviceChargeRate,
-          serviceChargeFixedFee:
-            saved.serviceChargeFixedFee ?? current.serviceChargeFixedFee,
         }
       },
       partialize: (state) => ({
@@ -1047,8 +1046,6 @@ export const useCheckoutStore = create<CheckoutState>()(
         isGuest: state.isGuest || state.mode === "guest",
         buyer: state.buyer,
         cartSessionId: state.cartSessionId,
-        serviceChargeRate: state.serviceChargeRate,
-        serviceChargeFixedFee: state.serviceChargeFixedFee,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return
@@ -1082,6 +1079,20 @@ export function selectCartPriceBreakdown(state: {
 /** Getter derivado: se recalcula desde líneas + tarifa del evento. */
 export function useCartPriceBreakdown(): CartPriceBreakdown {
   return useCheckoutStore(useShallow(selectCartPriceBreakdown))
+}
+
+export function useCartServiceFeeRule() {
+  return useCheckoutStore(
+    useShallow((state) => ({
+      rate: state.serviceChargeRate,
+      fixedFee: state.serviceChargeFixedFee,
+    })),
+  )
+}
+
+export function useCartLineUnitMoney(publicPrice: number): CartLineMoney {
+  const rule = useCartServiceFeeRule()
+  return cartLineUnitMoney(publicPrice, rule)
 }
 
 export function useActiveCheckoutSelection(eventId: string) {

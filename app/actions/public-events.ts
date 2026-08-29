@@ -65,7 +65,7 @@ import {
   publicTierAvailable,
 } from "@/lib/inventory/public-stock-cap"
 import { startingPriceFromSellable } from "@/lib/checkout/sellable-tickets"
-import { normalizeServiceFeeRate } from "@/lib/pricing/event-fees"
+import { resolvePublicEventFeeRule } from "@/lib/pricing/event-fees"
 import type { Event, TicketTier, Venue } from "@/types/database"
 import type { ScheduleDay } from "@/types/events"
 import type { EventSeatingUnit, SeatingSectorSummary, VenueSeatingLayout } from "@/types/venues"
@@ -1301,32 +1301,23 @@ async function loadEventDetails(
     }
   }
 
-  let serviceChargeRate = normalizeServiceFeeRate(
-    event.platform_fee_percentage,
-  )
   const { data: rate } = await supabase.rpc("get_event_service_charge_rate", {
     p_event_id: resolvedId,
   })
-  if (rate != null && Number.isFinite(Number(rate))) {
-    serviceChargeRate = normalizeServiceFeeRate(rate, serviceChargeRate)
-  }
-
-  let platformFixedFee = Number(event.platform_fixed_fee ?? 0)
   const { data: fixedFeeRpc } = await supabase.rpc(
     "get_event_platform_fixed_fee",
     { p_event_id: resolvedId },
   )
-  if (typeof fixedFeeRpc === "number" && Number.isFinite(fixedFeeRpc)) {
-    platformFixedFee = fixedFeeRpc
-  } else if (fixedFeeRpc != null && Number.isFinite(Number(fixedFeeRpc))) {
-    platformFixedFee = Number(fixedFeeRpc)
-  }
-
   const isSponsoredByTokePass = Boolean(event.is_sponsored_by_tokepass)
-  if (isSponsoredByTokePass) {
-    serviceChargeRate = 0
-    platformFixedFee = 0
-  }
+  const feeRule = resolvePublicEventFeeRule({
+    platformFeePercentage: event.platform_fee_percentage,
+    rpcRate: rate,
+    platformFixedFee: event.platform_fixed_fee,
+    rpcFixedFee: fixedFeeRpc,
+    isSponsored: isSponsoredByTokePass,
+  })
+  const serviceChargeRate = feeRule.rate
+  const platformFixedFee = feeRule.fixedFee
 
   let organizerName = event.profiles?.full_name?.trim() || null
   let organizerBio: string | null = null

@@ -288,6 +288,18 @@ export function EventStorefront({
     }
   }, [])
 
+  const checkoutFeeRate = useCheckoutStore((state) => state.serviceChargeRate)
+  const checkoutFeeFixed = useCheckoutStore((state) => state.serviceChargeFixedFee)
+  if (
+    checkoutFeeRate !== event.serviceChargeRate ||
+    checkoutFeeFixed !== event.platformFixedFee
+  ) {
+    useCheckoutStore.getState().setServiceChargeRule({
+      rate: event.serviceChargeRate,
+      fixedFee: event.platformFixedFee,
+    })
+  }
+
   useEffect(() => {
     const store = useCheckoutStore.getState()
     if (store.eventId && store.eventId !== event.id) {

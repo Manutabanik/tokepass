@@ -34,6 +34,40 @@ export function normalizeServiceFeeRate(
   return Math.min(0.95, Math.max(0, fraction))
 }
 
+/**
+ * Tasa y cargo fijo del evento para el carrito del comprador.
+ * RPC 0 no pisa una columna válida. Sin tasa y no sponsored → 8%.
+ */
+export function resolvePublicEventFeeRule(input: {
+  platformFeePercentage?: unknown
+  rpcRate?: unknown
+  platformFixedFee?: unknown
+  rpcFixedFee?: unknown
+  isSponsored?: boolean
+}): { rate: number; fixedFee: number } {
+  if (input.isSponsored) {
+    return { rate: 0, fixedFee: 0 }
+  }
+
+  let rate = normalizeServiceFeeRate(input.platformFeePercentage)
+  const rpcRate = Number(input.rpcRate)
+  if (Number.isFinite(rpcRate) && rpcRate > 0) {
+    rate = normalizeServiceFeeRate(rpcRate, rate)
+  }
+  if (rate <= 0) {
+    rate = DEFAULT_PLATFORM_FEE_PERCENTAGE / 100
+  }
+
+  let fixedFee = Number(input.platformFixedFee ?? 0)
+  if (!Number.isFinite(fixedFee) || fixedFee < 0) fixedFee = 0
+  const rpcFixed = Number(input.rpcFixedFee)
+  if (Number.isFinite(rpcFixed) && rpcFixed >= 0) {
+    fixedFee = rpcFixed
+  }
+
+  return { rate, fixedFee: roundMoney(fixedFee) }
+}
+
 /** Decimal rate for allInBreakdown (0.08 = 8%). Sponsored → 0. */
 export function eventFeeRate(config: EventFeeConfig): number {
   if (config.isSponsoredByTokePass) return 0
