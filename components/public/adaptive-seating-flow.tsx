@@ -41,7 +41,10 @@ import {
   zoneIdFromClientPoint,
   zoneIdFromEventTarget,
 } from "@/lib/seating/venue-polygon"
-import { occupancyFromSeatingUnits } from "@/lib/seating/venue-map-occupancy"
+import {
+  expandOccupancyToVenueMap,
+  occupancyFromSeatingUnits,
+} from "@/lib/seating/venue-map-occupancy"
 import { useStorefrontSeatStore } from "@/lib/stores/storefront-seat-store"
 import { cn } from "@/lib/utils"
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
@@ -288,12 +291,22 @@ function MacroSeatingFlow({
         if (cancelled) return
         const units = groups.flat()
         const knownIds = flattenVenueMapSeats(map).map((seat) => seat.id)
-        setMapOccupancy(occupancyFromSeatingUnits(units, knownIds))
+        setMapOccupancy(
+          expandOccupancyToVenueMap(
+            occupancyFromSeatingUnits(units, knownIds),
+            map,
+          ),
+        )
       })
       .catch(() => {
         if (cancelled) return
         const knownIds = flattenVenueMapSeats(map).map((seat) => seat.id)
-        setMapOccupancy(occupancyFromSeatingUnits([], knownIds))
+        setMapOccupancy(
+          expandOccupancyToVenueMap(
+            occupancyFromSeatingUnits([], knownIds),
+            map,
+          ),
+        )
       })
       .finally(() => {
         if (!cancelled) setMapHydrating(false)

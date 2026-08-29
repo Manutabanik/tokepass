@@ -31,7 +31,7 @@ async function fetchOccupancySnapshot(
   const multi = (scope.scheduleDayCount ?? 0) >= 2
   let query = supabase
     .from("event_seating_occupancy")
-    .select("layout_item_id, status, event_date_id")
+    .select("id, layout_item_id, status, event_date_id")
     .eq("event_id", eventId)
   if (selected && multi) {
     query = query.eq("event_date_id", selected)
@@ -45,7 +45,7 @@ async function fetchOccupancySnapshot(
     if (multi) return null
     const fallback = await supabase
       .from("event_seating_occupancy")
-      .select("layout_item_id, status")
+      .select("id, layout_item_id, status")
       .eq("event_id", eventId)
     if (fallback.error || !fallback.data?.length) return null
     const patch: Record<string, SeatStatus> = {}

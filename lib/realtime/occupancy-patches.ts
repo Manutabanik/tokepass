@@ -1,10 +1,22 @@
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 
 export type OccupancyRealtimeRow = {
+  id?: string
   event_id?: string
   layout_item_id?: string
   status?: string
   event_date_id?: string | null
+}
+
+function occupancyAliasPatch(
+  layoutItemId: string,
+  status: SeatStatus,
+  unitId?: string | null,
+): Record<string, SeatStatus> {
+  const patch: Record<string, SeatStatus> = { [layoutItemId]: status }
+  const id = unitId?.trim()
+  if (id && id !== layoutItemId) patch[id] = status
+  return patch
 }
 
 export type OccupancyDayScope = {
@@ -41,7 +53,11 @@ export function occupancyPatchFromSeatingRow(
   if (!row || !occupancyRowMatchesDay(row, scope)) return null
   const layoutItemId = row.layout_item_id?.trim()
   if (!layoutItemId) return null
-  return { [layoutItemId]: statusToOccupancy(row.status) }
+  return occupancyAliasPatch(
+    layoutItemId,
+    statusToOccupancy(row.status),
+    row.id,
+  )
 }
 
 export function occupancyPatchFromRealtimePayload(
@@ -57,7 +73,7 @@ export function occupancyPatchFromRealtimePayload(
     if (!old || !occupancyRowMatchesDay(old, scope)) return null
     const layoutItemId = old.layout_item_id?.trim()
     if (!layoutItemId) return null
-    return { [layoutItemId]: "available" }
+    return occupancyAliasPatch(layoutItemId, "available", old.id)
   }
   return occupancyPatchFromSeatingRow(payload.new ?? null, scope)
 }

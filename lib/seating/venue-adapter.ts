@@ -333,6 +333,7 @@ export function buildUniversalSeatPayloadForCheckout(input: {
   const seatingUnits = input.seatingUnits ?? []
   const occupancyBySeatId: Record<string, SeatStatus> = occupancyFromSeatingUnits(
     seatingUnits.map((unit) => ({
+      id: unit.id,
       layoutItemId: unit.layoutItemId,
       status: unit.status,
       reservedUntil: unit.reservedUntil,

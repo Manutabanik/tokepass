@@ -13,9 +13,16 @@ import {
 } from "lucide-react"
 
 import {
+  BUYER_SEAT_FILL,
+  BUYER_SOLD_OPACITY,
+  buyerSeatPaint,
+} from "@/lib/seating/buyer-seat-fill"
+import { lookupOccupancyStatus } from "@/lib/seating/venue-map-occupancy"
+import {
   resolveVenueShapeType,
   VENUE_SHAPE,
 } from "@/lib/seating/venue-element-geometry"
+import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import type { VenueMapElement, VenueMapElementSeat, VenueShapeType } from "@/types/venue-map"
 
 export const CHAIR_DOT_RADIUS = VENUE_SHAPE.chairRadius
@@ -48,17 +55,36 @@ function seatInteractionProps(
   }
 }
 
+type OccupancyMap = Record<string, Occupancy | SeatStatus | "available" | "occupied" | "blocked">
+
 function seatState(
   seat: VenueMapElementSeat,
-  occupancyBySeatId: Record<string, Occupancy | "available" | "occupied" | "blocked">,
+  occupancyBySeatId: OccupancyMap,
   selectedSeatIds: Set<string>,
+  parentIds: Array<string | null | undefined> = [],
 ): Occupancy {
   if (selectedSeatIds.has(seat.id)) return "selected"
-  const live = occupancyBySeatId[seat.id]
-  if (live === "occupied" || live === "blocked" || live === "selected" || live === "held") {
+  for (const id of parentIds) {
+    if (id && selectedSeatIds.has(id)) return "selected"
+  }
+  const live = lookupOccupancyStatus(
+    occupancyBySeatId,
+    seat.id,
+    ...parentIds,
+  )
+  if (live === "occupied" || live === "blocked" || live === "held") {
     return live
   }
   if (seat.status === "blocked") return "blocked"
+  return "available"
+}
+
+function elementOccupancyState(
+  occupancyBySeatId: OccupancyMap,
+  ...ids: Array<string | null | undefined>
+): Occupancy {
+  const live = lookupOccupancyStatus(occupancyBySeatId, ...ids)
+  if (live === "occupied" || live === "blocked" || live === "held") return live
   return "available"
 }
 
@@ -68,11 +94,11 @@ function fillFor(
   buyerOccupancy = false,
 ) {
   if (buyerOccupancy) {
-    if (state === "held") return "#f59e0b"
-    if (state === "occupied" || state === "blocked") return "#333333"
-    return color || "#22c55e"
+    if (state === "held") return BUYER_SEAT_FILL.held
+    if (state === "occupied" || state === "blocked") return BUYER_SEAT_FILL.sold
+    return color || BUYER_SEAT_FILL.available
   }
-  if (state === "held") return "#f59e0b"
+  if (state === "held") return BUYER_SEAT_FILL.held
   if (state === "selected") return "#34d399"
   if (state === "occupied" || state === "blocked") return "#ef4444"
   return color || "#22c55e"
@@ -87,8 +113,8 @@ function strokeFor(
   if (buyerOccupancy) {
     if (state === "held") return "#c2410c"
     if (selected || state === "selected") return "#10b981"
-    if (state === "occupied" || state === "blocked") return "#333333"
-    return color
+    if (state === "occupied" || state === "blocked") return BUYER_SEAT_FILL.sold
+    return color || BUYER_SEAT_FILL.available
   }
   if (state === "held") return "#c2410c"
   if (selected || state === "selected") return "#ffffff"
@@ -103,7 +129,7 @@ function occupancyOpacity(
   availableFallback = 0.95,
 ) {
   if (state === "occupied" || state === "blocked") {
-    return buyerOccupancy ? 0.3 : occupiedFallback
+    return buyerOccupancy ? BUYER_SOLD_OPACITY : occupiedFallback
   }
   if (state === "held") return 0.5
   return buyerOccupancy ? 1 : availableFallback
@@ -112,7 +138,32 @@ function occupancyOpacity(
 const TABLE_SELECTED_FILL = "#f4f4f5"
 const TABLE_SELECTED_FILL_OPACITY = 0.96
 
-function tableSurfaceProps(color: string, selected: boolean) {
+function tableSurfaceProps(
+  color: string,
+  selected: boolean,
+  state: Occupancy = "available",
+  buyerOccupancy = false,
+) {
+  if (buyerOccupancy && !selected) {
+    if (state === "occupied" || state === "blocked") {
+      return {
+        fill: BUYER_SEAT_FILL.sold,
+        fillOpacity: BUYER_SOLD_OPACITY,
+        stroke: BUYER_SEAT_FILL.sold,
+        strokeWidth: 1.4,
+        className: undefined,
+      }
+    }
+    if (state === "held") {
+      return {
+        fill: BUYER_SEAT_FILL.held,
+        fillOpacity: 0.55,
+        stroke: "#c2410c",
+        strokeWidth: 1.4,
+        className: undefined,
+      }
+    }
+  }
   return {
     fill: selected ? TABLE_SELECTED_FILL : color,
     fillOpacity: selected ? TABLE_SELECTED_FILL_OPACITY : 0.28,
@@ -220,6 +271,7 @@ export function RoundTableSymbol({
   chairs,
   occupancyBySeatId = {},
   selectedSeatIds,
+  parentIds = [],
   onSeatPointerDown,
   onSeatDoubleClick,
   buyerOccupancy = false,
@@ -230,7 +282,8 @@ export function RoundTableSymbol({
   color: string
   selected?: boolean
   chairs: VenueMapElementSeat[]
-  occupancyBySeatId?: Record<string, Occupancy | "available" | "occupied" | "blocked">
+  occupancyBySeatId?: OccupancyMap
+  parentIds?: Array<string | null | undefined>
   selectedSeatIds: Set<string>
   onSeatPointerDown?: (event: React.PointerEvent, seatId: string) => void
   onSeatDoubleClick?: (event: React.MouseEvent, seatId: string) => void
@@ -239,6 +292,7 @@ export function RoundTableSymbol({
   const r = Math.max(8, radius)
   const orbit = r + CHAIR_DOT_RADIUS + 2
   const count = chairs.length
+  const tableState = elementOccupancyState(occupancyBySeatId, ...parentIds)
 
   return (
     <g>
@@ -248,8 +302,8 @@ export function RoundTableSymbol({
         const x = cx + Math.cos(angle) * orbit
         const y = cy + Math.sin(angle) * orbit
         const state = seat
-          ? seatState(seat, occupancyBySeatId, selectedSeatIds)
-          : "available"
+          ? seatState(seat, occupancyBySeatId, selectedSeatIds, parentIds)
+          : tableState
         const locked = state === "occupied" || state === "blocked"
         return (
           <g key={seat?.id ?? `chair-${index}`}>
@@ -286,7 +340,7 @@ export function RoundTableSymbol({
         cx={cx}
         cy={cy}
         r={r}
-        {...tableSurfaceProps(color, selected)}
+        {...tableSurfaceProps(color, selected, tableState, buyerOccupancy)}
       />
     </g>
   )
@@ -305,6 +359,7 @@ export function LongTableSymbol({
   chairs,
   occupancyBySeatId = {},
   selectedSeatIds,
+  parentIds = [],
   onSeatPointerDown,
   onSeatDoubleClick,
   buyerOccupancy = false,
@@ -319,7 +374,8 @@ export function LongTableSymbol({
   sideA: number
   sideB: number
   chairs: VenueMapElementSeat[]
-  occupancyBySeatId?: Record<string, Occupancy | "available" | "occupied" | "blocked">
+  occupancyBySeatId?: OccupancyMap
+  parentIds?: Array<string | null | undefined>
   selectedSeatIds: Set<string>
   onSeatPointerDown?: (event: React.PointerEvent, seatId: string) => void
   onSeatDoubleClick?: (event: React.MouseEvent, seatId: string) => void
@@ -330,6 +386,7 @@ export function LongTableSymbol({
   const rx = Math.max(0, Math.min(roundedCorner, Math.min(w, h) / 2))
   const inset = Math.min(8, w / 4)
   const offset = h / 2 + CHAIR_DOT_RADIUS + 2
+  const tableState = elementOccupancyState(occupancyBySeatId, ...parentIds)
 
   function dots(count: number, y: number, startIndex: number) {
     const safe = Math.max(0, count)
@@ -338,8 +395,8 @@ export function LongTableSymbol({
       const x = cx - w / 2 + inset + t * (w - inset * 2)
       const seat = chairs[startIndex + index]
       const state = seat
-        ? seatState(seat, occupancyBySeatId, selectedSeatIds)
-        : "available"
+        ? seatState(seat, occupancyBySeatId, selectedSeatIds, parentIds)
+        : tableState
       const locked = state === "occupied" || state === "blocked"
       return (
         <circle
@@ -372,7 +429,7 @@ export function LongTableSymbol({
         width={w}
         height={h}
         rx={rx}
-        {...tableSurfaceProps(color, selected)}
+        {...tableSurfaceProps(color, selected, tableState, buyerOccupancy)}
       />
     </g>
   )
@@ -389,6 +446,7 @@ export function VipBoxSymbol({
   chairs = [],
   occupancyBySeatId = {},
   selectedSeatIds,
+  parentIds = [],
   onSeatPointerDown,
   onSeatDoubleClick,
   buyerOccupancy = false,
@@ -401,7 +459,8 @@ export function VipBoxSymbol({
   selected?: boolean
   roundedCorner?: number
   chairs?: VenueMapElementSeat[]
-  occupancyBySeatId?: Record<string, Occupancy | "available" | "occupied" | "blocked">
+  occupancyBySeatId?: OccupancyMap
+  parentIds?: Array<string | null | undefined>
   selectedSeatIds?: Set<string>
   onSeatPointerDown?: (event: React.PointerEvent, seatId: string) => void
   onSeatDoubleClick?: (event: React.MouseEvent, seatId: string) => void
@@ -410,8 +469,16 @@ export function VipBoxSymbol({
   const w = Math.max(24, width)
   const h = Math.max(18, height)
   const rx = Math.max(2, Math.min(roundedCorner, 10))
-  const stroke = color
-  const surface = tableSurfaceProps(color, selected)
+  const tableState = elementOccupancyState(occupancyBySeatId, ...parentIds)
+  const paint = buyerOccupancy
+    ? buyerSeatPaint(
+        tableState === "occupied" || tableState === "blocked"
+          ? "sold"
+          : tableState,
+      )
+    : null
+  const stroke = paint?.fillColor ?? color
+  const surface = tableSurfaceProps(color, selected, tableState, buyerOccupancy)
   const arm = Math.max(7, w * 0.16)
   const back = Math.max(6, h * 0.22)
   const tableW = w * 0.28
@@ -429,7 +496,7 @@ export function VipBoxSymbol({
         height={h}
         rx={rx}
         fill={surface.fill}
-        fillOpacity={selected ? surface.fillOpacity : 0.12}
+        fillOpacity={surface.fillOpacity}
         stroke={surface.stroke}
         strokeWidth={surface.strokeWidth}
         className={surface.className}
@@ -440,8 +507,8 @@ export function VipBoxSymbol({
         width={w - 6}
         height={back}
         rx={3}
-        fill={color}
-        fillOpacity={0.55}
+        fill={paint?.fillColor ?? color}
+        fillOpacity={paint ? paint.opacity : 0.55}
         stroke={stroke}
         strokeWidth={0.8}
       />
@@ -451,8 +518,8 @@ export function VipBoxSymbol({
         width={arm}
         height={h - 6}
         rx={3}
-        fill={color}
-        fillOpacity={0.5}
+        fill={paint?.fillColor ?? color}
+        fillOpacity={paint ? paint.opacity : 0.5}
         stroke={stroke}
         strokeWidth={0.8}
       />
@@ -462,8 +529,8 @@ export function VipBoxSymbol({
         width={arm}
         height={h - 6}
         rx={3}
-        fill={color}
-        fillOpacity={0.5}
+        fill={paint?.fillColor ?? color}
+        fillOpacity={paint ? paint.opacity : 0.5}
         stroke={stroke}
         strokeWidth={0.8}
       />
@@ -472,8 +539,8 @@ export function VipBoxSymbol({
         cy={cy + h * 0.12}
         rx={tableW / 2}
         ry={tableH / 2}
-        fill={color}
-        fillOpacity={0.35}
+        fill={paint?.fillColor ?? color}
+        fillOpacity={paint ? paint.opacity : 0.35}
         stroke={stroke}
         strokeWidth={0.9}
       />
@@ -482,7 +549,7 @@ export function VipBoxSymbol({
         const row = Math.floor(index / cols)
         const x = cx - (cols - 1) * 8 + col * 16
         const y = cy - 10 + row * 18
-        const state = seatState(seat, occupancyBySeatId, selectedSet)
+        const state = seatState(seat, occupancyBySeatId, selectedSet, parentIds)
         const locked = state === "occupied" || state === "blocked"
         return (
           <circle
@@ -613,6 +680,8 @@ export function StandingZoneSymbol({
   color,
   selected = false,
   roundedCorner = 12,
+  occupancy = "available",
+  buyerOccupancy = false,
 }: {
   cx: number
   cy: number
@@ -621,10 +690,13 @@ export function StandingZoneSymbol({
   color: string
   selected?: boolean
   roundedCorner?: number
+  occupancy?: Occupancy
+  buyerOccupancy?: boolean
 }) {
   const w = Math.max(24, width)
   const h = Math.max(18, height)
   const rx = Math.max(4, Math.min(roundedCorner, 16))
+  const fill = fillFor(color, occupancy, buyerOccupancy)
   return (
     <rect
       x={cx - w / 2}
@@ -632,9 +704,9 @@ export function StandingZoneSymbol({
       width={w}
       height={h}
       rx={rx}
-      fill={color}
-      fillOpacity={0.16}
-      stroke={selected ? "#ffffff" : color}
+      fill={fill}
+      fillOpacity={occupancyOpacity(occupancy, buyerOccupancy, 0.16, 0.16)}
+      stroke={strokeFor(color, selected, occupancy, buyerOccupancy)}
       strokeWidth={selected ? 3.2 : 1.4}
       strokeDasharray="5 3"
     />
@@ -656,7 +728,7 @@ export function VenueElementSymbol({
 }: {
   element: VenueMapElement
   selected?: boolean
-  occupancyBySeatId?: Record<string, Occupancy | "available" | "occupied" | "blocked">
+  occupancyBySeatId?: OccupancyMap
   selectedSeatIds: Set<string>
   showLabels?: boolean
   showChairs?: boolean
@@ -670,6 +742,14 @@ export function VenueElementSymbol({
   const color = element.color
   const rx = element.roundedCorner
   const chairs = showChairs ? (element.seats ?? []) : []
+  const parentIds = [element.id]
+  const live = elementOccupancyState(
+    occupancyBySeatId,
+    element.id,
+    ...chairs.map((seat) => seat.id),
+  )
+  const occupied = live === "occupied" || live === "blocked"
+  const held = live === "held"
 
   if (shape === "theatre_seat") {
     return (
@@ -680,6 +760,8 @@ export function VenueElementSymbol({
         height={element.height || VENUE_SHAPE.theatreSeat}
         color={color}
         selected={selected}
+        occupied={occupied && !selected}
+        held={held && !selected}
         label={label}
         showLabel={showLabels}
         buyerOccupancy={buyerOccupancy}
@@ -697,6 +779,7 @@ export function VenueElementSymbol({
         selected={selected}
         chairs={chairs}
         occupancyBySeatId={occupancyBySeatId}
+        parentIds={parentIds}
         selectedSeatIds={selectedSeatIds}
         onSeatPointerDown={onSeatPointerDown}
         onSeatDoubleClick={onSeatDoubleClick}
@@ -718,6 +801,7 @@ export function VenueElementSymbol({
         sideB={showChairs ? element.sideB : 0}
         chairs={chairs}
         occupancyBySeatId={occupancyBySeatId}
+        parentIds={parentIds}
         selectedSeatIds={selectedSeatIds}
         onSeatPointerDown={onSeatPointerDown}
         onSeatDoubleClick={onSeatDoubleClick}
@@ -737,6 +821,7 @@ export function VenueElementSymbol({
         roundedCorner={rx ?? 6}
         chairs={chairs}
         occupancyBySeatId={occupancyBySeatId}
+        parentIds={parentIds}
         selectedSeatIds={selectedSeatIds}
         onSeatPointerDown={onSeatPointerDown}
         onSeatDoubleClick={onSeatDoubleClick}
@@ -754,6 +839,8 @@ export function VenueElementSymbol({
         color={color}
         selected={selected}
         roundedCorner={rx ?? 12}
+        occupancy={live}
+        buyerOccupancy={buyerOccupancy}
       />
     )
   }

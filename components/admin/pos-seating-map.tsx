@@ -17,6 +17,7 @@ import { resolveLiveVenueMapForDay } from "@/lib/seating/live-venue-map-for-day"
 import { resolveTierIdForUniversalSector } from "@/lib/seating/venue-adapter"
 import { flattenVenueMapSeats } from "@/lib/seating/venue-map-geometry"
 import {
+  expandOccupancyToVenueMap,
   occupancyFromSeatingUnits,
   seatingUnitsForOccupancyDay,
 } from "@/lib/seating/venue-map-occupancy"
@@ -124,9 +125,12 @@ export function PosSeatingMap({
         eventId: event.id,
         dateId: selectedDateId,
         occupancy: liveMap
-          ? occupancyFromSeatingUnits(
-              scoped,
-              flattenVenueMapSeats(liveMap).map((seat) => seat.id),
+          ? expandOccupancyToVenueMap(
+              occupancyFromSeatingUnits(
+                scoped,
+                flattenVenueMapSeats(liveMap).map((seat) => seat.id),
+              ),
+              liveMap,
             )
           : {},
       })

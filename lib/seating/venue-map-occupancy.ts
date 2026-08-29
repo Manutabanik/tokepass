@@ -1,6 +1,7 @@
 import { asHoldEventDateId, seatingUnitMatchesEventDate } from "@/lib/checkout/seat-hold-day"
 import {
   inventoryStateToSeatStatus,
+  isSoldInventoryStatus,
   resolveInventorySeatState,
 } from "@/lib/seating/inventory-seat-state"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
@@ -133,9 +134,60 @@ export function seatingUnitsForOccupancyDay<
   })
 }
 
+export function lookupOccupancyStatus(
+  occupancy: Record<string, SeatStatus | string> | null | undefined,
+  ...ids: Array<string | null | undefined>
+): SeatStatus | undefined {
+  if (!occupancy) return undefined
+  let found: SeatStatus | undefined
+  for (const raw of ids) {
+    const id = raw?.trim()
+    if (!id) continue
+    const status = occupancy[id]
+    if (status === "occupied" || status === "blocked") return status
+    if (status === "held" && found !== "held") found = "held"
+    if (
+      (status === "available" || status === "selected") &&
+      !found
+    ) {
+      found = status === "selected" ? "available" : status
+    }
+  }
+  return found
+}
+
+/** Copy table/unit occupancy onto generated chair ids (`mesa-09-S1`). */
+export function expandOccupancyToVenueMap(
+  occupancy: Record<string, SeatStatus>,
+  map?: {
+    elements?: Array<{
+      id?: string | null
+      seats?: Array<{ id?: string | null }>
+    }>
+  } | null,
+): Record<string, SeatStatus> {
+  const next = { ...occupancy }
+  for (const element of map?.elements ?? []) {
+    const parentId = element.id?.trim()
+    const parent = lookupOccupancyStatus(occupancy, parentId)
+    if (!parent || parent === "available") continue
+    for (const seat of element.seats ?? []) {
+      const seatId = seat.id?.trim()
+      if (!seatId) continue
+      const current = next[seatId]
+      if (isSoldInventoryStatus(current) && !isSoldInventoryStatus(parent)) {
+        continue
+      }
+      next[seatId] = parent
+    }
+  }
+  return next
+}
+
 /** After a live occupancy fetch, unknown ids are occupied — never optimistic-available. */
 export function occupancyFromSeatingUnits(
   units: Array<{
+    id?: string | null
     layoutItemId: string
     status: string
     reservedUntil?: string | null
@@ -150,7 +202,7 @@ export function occupancyFromSeatingUnits(
     occupancy[id] = "occupied"
   }
   for (const unit of units) {
-    occupancy[unit.layoutItemId] = inventoryStateToSeatStatus(
+    const status = inventoryStateToSeatStatus(
       resolveInventorySeatState({
         unitStatus: unit.status,
         reservedUntil: unit.reservedUntil,
@@ -158,6 +210,11 @@ export function occupancyFromSeatingUnits(
         sold: unit.sold || Boolean(unit.soldOrderId),
       }),
     )
+    occupancy[unit.layoutItemId] = status
+    const unitId = unit.id?.trim()
+    if (unitId && unitId !== unit.layoutItemId) {
+      occupancy[unitId] = status
+    }
   }
   return occupancy
 }

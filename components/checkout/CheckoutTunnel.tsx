@@ -228,6 +228,7 @@ import {
 } from "@/types/venue-map"
 import { mergeInventoryOccupancy } from "@/lib/seating/inventory-seat-state"
 import {
+  expandOccupancyToVenueMap,
   occupancyFromSeatingUnits,
   resolveLiveVenueSeatStatus,
   seatingUnitsForComboDays,
@@ -1285,19 +1286,24 @@ export function CheckoutTunnel({
             dayTierIds,
             scheduleDayCount,
           })
-    return mergeInventoryOccupancy(
-      occupancyFromSeatingUnits(
-        units.map((unit) => ({
-          layoutItemId: unit.layoutItemId,
-          status: unit.status,
-          reservedUntil: unit.reservedUntil,
-        })),
+    return expandOccupancyToVenueMap(
+      mergeInventoryOccupancy(
+        occupancyFromSeatingUnits(
+          units.map((unit) => ({
+            id: unit.id,
+            layoutItemId: unit.layoutItemId,
+            status: unit.status,
+            reservedUntil: unit.reservedUntil,
+          })),
+        ),
+        liveOccupancy,
       ),
-      liveOccupancy,
+      liveMap,
     )
   }, [
     dayTiers,
     focusedComboDays,
+    liveMap,
     liveOccupancy,
     mergedSeatingUnits,
     scheduleDayCount,
@@ -3265,6 +3271,11 @@ export function CheckoutTunnel({
     setLoadedUnitsBySector((current) => ({ ...current, ...bySector }))
     return units
   }, [eventId, scheduleDayCount, selectedDateId])
+
+  useEffect(() => {
+    if (!hasInteractiveMap) return
+    void loadAllUnits()
+  }, [hasInteractiveMap, loadAllUnits])
 
   const seatFlowOverlay =
     showSeatFlow && !hasInteractiveMap ? (

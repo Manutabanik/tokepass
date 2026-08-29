@@ -13,6 +13,14 @@ describe("occupancyPatchFromSeatingRow", () => {
       { "s-1": "occupied" },
     )
     assert.deepEqual(
+      occupancyPatchFromSeatingRow({
+        id: "unit-1",
+        layout_item_id: "s-1",
+        status: "sold",
+      }),
+      { "s-1": "occupied", "unit-1": "occupied" },
+    )
+    assert.deepEqual(
       occupancyPatchFromSeatingRow({ layout_item_id: "s-2", status: "held" }),
       { "s-2": "held" },
     )

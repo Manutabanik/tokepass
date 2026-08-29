@@ -48,7 +48,9 @@ import { formatCurrency } from "@/lib/format"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { flattenVenueMapSeats, type FlattenedVenueSeat } from "@/lib/seating/venue-map-geometry"
 import {
+  expandOccupancyToVenueMap,
   hexToRgba,
+  lookupOccupancyStatus,
   resolveLiveVenueSeatStatus,
 } from "@/lib/seating/venue-map-occupancy"
 import {
@@ -298,9 +300,22 @@ export function InteractiveSeatingCanvas({
     scheduleDayCount,
   )
   const occupancy = useMemo(
-    () => mergeInventoryOccupancy(occupancyBySeatId, liveOccupancy),
-    [liveOccupancy, occupancyBySeatId],
+    () =>
+      expandOccupancyToVenueMap(
+        mergeInventoryOccupancy(occupancyBySeatId, liveOccupancy),
+        map,
+      ),
+    [liveOccupancy, map, occupancyBySeatId],
   )
+  const inventoryRev = useMemo(() => {
+    let sold = 0
+    let held = 0
+    for (const status of Object.values(occupancy)) {
+      if (status === "occupied" || status === "blocked") sold += 1
+      else if (status === "held") held += 1
+    }
+    return `${sold}:${held}:${Object.keys(occupancy).length}`
+  }, [occupancy])
   const selectedIds = useMemo(() => {
     const ids = new Set(cartMapUnitIdsForSchedule(cartLines, mapScheduleId))
     for (const seat of daySelectedSeats) {
@@ -597,7 +612,7 @@ export function InteractiveSeatingCanvas({
     for (const seat of hoverSeats) {
       const live = resolveLiveVenueSeatStatus({
         mapStatus: seat.mapStatus,
-        occupancy: occupancy[seat.id],
+        occupancy: lookupOccupancyStatus(occupancy, seat.id),
         selected: selectedIds.has(seat.id),
         held: heldSet.has(seat.id),
       })
@@ -634,7 +649,11 @@ export function InteractiveSeatingCanvas({
       if (isInfrastructureElement(element)) continue
       const elementLive = resolveLiveVenueSeatStatus({
         mapStatus: "available",
-        occupancy: occupancy[element.id],
+        occupancy: lookupOccupancyStatus(
+          occupancy,
+          element.id,
+          ...element.seats.map((seat) => seat.id),
+        ),
         selected:
           selectedIds.has(element.id) || selectedElementIds.includes(element.id),
         held: heldSet.has(element.id),
@@ -643,7 +662,7 @@ export function InteractiveSeatingCanvas({
         elementLive === "held" ||
         element.seats.some((seat) => {
           if (selectedIds.has(seat.id) || heldSet.has(seat.id)) return false
-          return occupancy[seat.id] === "held"
+          return lookupOccupancyStatus(occupancy, seat.id, element.id) === "held"
         })
       elementById.set(element.id, {
         sectorName:
@@ -828,7 +847,7 @@ export function InteractiveSeatingCanvas({
     const price = seatPrice(seat.sectorId, seat.price)
     const live = resolveLiveVenueSeatStatus({
       mapStatus: seat.mapStatus,
-      occupancy: occupancy[seat.id],
+      occupancy: lookupOccupancyStatus(occupancy, seat.id),
       selected: selectedIds.has(seat.id),
       held: heldSet.has(seat.id),
     })
@@ -928,7 +947,7 @@ export function InteractiveSeatingCanvas({
       for (const id of pickIds) {
         const pickLive = resolveLiveVenueSeatStatus({
           mapStatus: "available",
-          occupancy: occupancy[id],
+          occupancy: lookupOccupancyStatus(occupancy, id, live.id),
           selected: selectedIds.has(id) || selectedElementIds.includes(id),
           held: heldSet.has(id),
         })
@@ -949,7 +968,7 @@ export function InteractiveSeatingCanvas({
         mapStatus:
           live.seats.find((entry) => entry.id === seatId)?.status ??
           "available",
-        occupancy: occupancy[seatId],
+        occupancy: lookupOccupancyStatus(occupancy, seatId, live.id),
         selected: selectedIds.has(seatId),
         held: heldSet.has(seatId),
       })
@@ -1008,7 +1027,11 @@ export function InteractiveSeatingCanvas({
     }
     const elementLive = resolveLiveVenueSeatStatus({
       mapStatus: "available",
-      occupancy: occupancy[live.id],
+      occupancy: lookupOccupancyStatus(
+        occupancy,
+        live.id,
+        ...(live.seats?.map((seat) => seat.id) ?? []),
+      ),
       selected: selectedIds.has(live.id) || selectedElementIds.includes(live.id),
       held: heldSet.has(live.id),
     })
@@ -1352,6 +1375,7 @@ export function InteractiveSeatingCanvas({
             {revealElements.length > 0 || revealSeats.length > 0 ? (
             <g
               key={focusedZoneId ?? "overview"}
+              data-inventory-rev={inventoryRev}
               className={lodEnabled ? "venue-map-reveal" : undefined}
             >
             <VenueMapElementLayer
@@ -1396,7 +1420,7 @@ export function InteractiveSeatingCanvas({
               const price = seatPrice(seat.sectorId, seat.price)
               const live = resolveLiveVenueSeatStatus({
                 mapStatus: seat.mapStatus,
-                occupancy: occupancy[seat.id],
+                occupancy: lookupOccupancyStatus(occupancy, seat.id),
                 selected: selectedIds.has(seat.id),
                 held: heldSet.has(seat.id),
               })

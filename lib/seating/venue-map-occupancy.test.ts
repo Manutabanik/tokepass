@@ -4,6 +4,8 @@ import { describe, it } from "node:test"
 import {
   effectiveSeatingUnitStatus,
   hexToRgba,
+  expandOccupancyToVenueMap,
+  lookupOccupancyStatus,
   occupancyFromSeatingUnits,
   resolveLiveVenueSeatStatus,
   seatingUnitsForComboDays,
@@ -53,6 +55,39 @@ describe("venue-map-occupancy", () => {
         selected: false,
       }),
       "held",
+    )
+  })
+
+  it("indexes occupancy by layout item and seating unit id", () => {
+    const occupancy = occupancyFromSeatingUnits([
+      {
+        id: "unit-sold",
+        layoutItemId: "mesa-09",
+        status: "sold",
+      },
+    ])
+    assert.equal(occupancy["mesa-09"], "occupied")
+    assert.equal(occupancy["unit-sold"], "occupied")
+  })
+
+  it("copies table occupancy onto generated chair ids", () => {
+    const occupancy = expandOccupancyToVenueMap(
+      { "mesa-09": "occupied" },
+      {
+        elements: [
+          {
+            id: "mesa-09",
+            seats: [{ id: "mesa-09-S1" }, { id: "mesa-09-S2" }],
+          },
+        ],
+      },
+    )
+    assert.equal(occupancy["mesa-09"], "occupied")
+    assert.equal(occupancy["mesa-09-S1"], "occupied")
+    assert.equal(occupancy["mesa-09-S2"], "occupied")
+    assert.equal(
+      lookupOccupancyStatus(occupancy, "mesa-09-S1", "mesa-09"),
+      "occupied",
     )
   })
 

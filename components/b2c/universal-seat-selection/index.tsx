@@ -26,7 +26,10 @@ import {
   flattenVenueMapSeats,
   venueMapHasInventory,
 } from "@/lib/seating/venue-map-geometry"
-import { occupancyFromSeatingUnits } from "@/lib/seating/venue-map-occupancy"
+import {
+  expandOccupancyToVenueMap,
+  occupancyFromSeatingUnits,
+} from "@/lib/seating/venue-map-occupancy"
 import type { InteractiveVenueMap } from "@/types/venue-map"
 import type { EventSeatingUnit } from "@/types/venues"
 import { cn } from "@/lib/utils"
@@ -159,11 +162,21 @@ export function UniversalSeatSelectionFlow({
             ).flat()
         if (cancelled) return
         const knownIds = flattenVenueMapSeats(venueMap).map((seat) => seat.id)
-        setMapOccupancy(occupancyFromSeatingUnits(units, knownIds))
+        setMapOccupancy(
+          expandOccupancyToVenueMap(
+            occupancyFromSeatingUnits(units, knownIds),
+            venueMap,
+          ),
+        )
       } catch {
         if (!cancelled) {
           const knownIds = flattenVenueMapSeats(venueMap).map((seat) => seat.id)
-          setMapOccupancy(occupancyFromSeatingUnits([], knownIds))
+          setMapOccupancy(
+            expandOccupancyToVenueMap(
+              occupancyFromSeatingUnits([], knownIds),
+              venueMap,
+            ),
+          )
           setLoadError("No se pudieron cargar las ubicaciones del plano.")
         }
       } finally {
