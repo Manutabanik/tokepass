@@ -402,3 +402,21 @@ export function generalTicketNeedsDayPricing(
   if (dayCount < 2 || isMapDraftTicket(ticket)) return false
   return boundDayIds(ticket).length === 0
 }
+
+/** Align one ticket with the live schedule. `null` means the row can stay as-is. */
+export function nextDraftTicketAfterScheduleChange(
+  ticket: EventDraftV2LineItem,
+  days: EventDraftV2ScheduleDay[],
+): EventDraftV2LineItem | null {
+  if (isMapDraftTicket(ticket)) return null
+  const liveCount = liveScheduleDays(days).length
+  if (!generalTicketNeedsDayPricing(ticket, liveCount)) {
+    if (liveCount < 2 && (ticket.dayRates?.length ?? 0) > 0) {
+      return { ...ticket, dayRates: [] }
+    }
+    return null
+  }
+  const synced = ensureDraftDayRates(ticket, days)
+  if (sameDraftDayRateIds(ticket.dayRates, synced.dayRates)) return null
+  return synced
+}

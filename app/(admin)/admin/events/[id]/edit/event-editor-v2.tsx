@@ -20,6 +20,7 @@ import { persistErrorUserMessage } from "@/lib/errors/persist-error"
 import { Button } from "@/components/ui/button"
 import { useEventDraftV2Persist } from "@/hooks/use-event-draft-v2-persist"
 import { useOrphanMapTicketGarbageCollector } from "@/hooks/use-orphan-map-ticket-gc"
+import { useSyncDraftDayRates } from "@/hooks/use-sync-draft-day-rates"
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
 import { getArchetypeConfig, resolveDraftArchetype } from "@/lib/events/archetypes.config"
 import {
@@ -275,6 +276,7 @@ export function EventEditorV2({
     <EventEditorFeeProvider fee={fee}>
       <FormProvider {...form}>
       <OrphanMapTicketGarbageCollector />
+      <DraftDayRatesSync />
       <div className="w-full flex-1 overflow-x-hidden bg-background text-foreground">
         <EventEditorV2StickyHeader
           step={step}
@@ -387,5 +389,10 @@ export function EventEditorV2({
 
 function OrphanMapTicketGarbageCollector() {
   useOrphanMapTicketGarbageCollector()
+  return null
+}
+
+function DraftDayRatesSync() {
+  useSyncDraftDayRates()
   return null
 }

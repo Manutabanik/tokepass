@@ -43,6 +43,7 @@ export function EventEditorV2ScheduleFields({
     control,
     name: "schedule",
     keyName: "_rowId",
+    shouldUnregister: false,
   })
   const schedule = useWatch({ control, name: "schedule" }) ?? []
 
@@ -239,6 +240,7 @@ function DaySlotList({
     control,
     name: `schedule.${dayIndex}.slots`,
     keyName: "_rowId",
+    shouldUnregister: false,
   })
 
   function addSlot() {

@@ -88,16 +88,18 @@ export function EventEditorV2InventoryStep({
     control,
     name: "tickets",
     keyName: "_rowId",
+    shouldUnregister: false,
   })
   const extraArray = useFieldArray({
     control,
     name: "extras",
     keyName: "_rowId",
+    shouldUnregister: false,
   })
   const [editor, setEditor] = useState<InventoryEditorTarget | null>(null)
   const [mapOpen, setMapOpen] = useState(false)
   const snapshotRef = useRef<EventDraftV2LineItem | null>(null)
-  const closeIntentRef = useRef<"save" | "discard">("discard")
+  const closeIntentRef = useRef<"keep" | "discard">("discard")
   const editorRef = useRef<InventoryEditorTarget | null>(null)
   const revealKey = revealField?.trim() ?? ""
   const [lastRevealKey, setLastRevealKey] = useState(revealKey)
@@ -119,6 +121,14 @@ export function EventEditorV2InventoryStep({
       return
     }
     const current = getValues(`${editor.name}.${editor.index}`)
+    if (
+      snapshotRef.current &&
+      current &&
+      snapshotRef.current.id &&
+      snapshotRef.current.id === current.id
+    ) {
+      return
+    }
     snapshotRef.current = current
       ? (structuredClone(current) as EventDraftV2LineItem)
       : null
@@ -140,8 +150,14 @@ export function EventEditorV2InventoryStep({
     setEditor(null)
   }
 
+  function keepAndClose() {
+    closeIntentRef.current = "keep"
+    editorRef.current = null
+    closeEditor()
+  }
+
   function discardEditor() {
-    if (closeIntentRef.current === "save") {
+    if (closeIntentRef.current === "keep") {
       closeIntentRef.current = "discard"
       editorRef.current = null
       closeEditor()
@@ -163,12 +179,18 @@ export function EventEditorV2InventoryStep({
   }
 
   function saveEditor() {
-    closeIntentRef.current = "save"
-    closeEditor()
+    keepAndClose()
   }
 
   function removeRow(name: LineItemName, index: number) {
-    if (editor?.name === name && editor.index === index) closeEditor()
+    const current = editorRef.current
+    if (current?.name === name && current.index === index) {
+      keepAndClose()
+    } else if (current?.name === name && current.index > index) {
+      const next = { ...current, index: current.index - 1 }
+      editorRef.current = next
+      setEditor(next)
+    }
     if (name === "tickets") ticketArray.remove(index)
     else extraArray.remove(index)
   }

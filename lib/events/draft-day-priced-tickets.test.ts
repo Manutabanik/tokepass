@@ -9,6 +9,7 @@ import {
   draftTicketNameWithoutDay,
   expandDayPricedTicketsForPersist,
   generalTicketNeedsDayPricing,
+  nextDraftTicketAfterScheduleChange,
 } from "@/lib/events/draft-day-priced-tickets"
 import {
   createDraftLineItem,
@@ -143,6 +144,58 @@ describe("draft-day-priced-tickets", () => {
     assert.deepEqual(
       multi[0]?.dayRates.map((rate) => rate.dayId),
       [friday.id, saturday.id],
+    )
+  })
+
+  it("fills dayRates when the schedule grows and the drawer never opened", () => {
+    const ticket = {
+      ...createDraftLineItem(),
+      name: "General",
+      price: 15000,
+      stock: 40,
+      dayRates: [],
+    }
+    const synced = nextDraftTicketAfterScheduleChange(ticket, [friday, saturday])
+    assert.ok(synced)
+    assert.deepEqual(
+      synced.dayRates.map((rate) => rate.dayId),
+      [friday.id, saturday.id],
+    )
+    assert.equal(synced.price, 15000)
+    assert.equal(synced.stock, 80)
+  })
+
+  it("clears leftover dayRates when the event goes back to one day", () => {
+    const ticket = {
+      ...createDraftLineItem(),
+      dayRates: [
+        { dayId: friday.id, price: 10, stock: 5, ticketId: "" },
+        { dayId: saturday.id, price: 12, stock: 5, ticketId: "" },
+      ],
+    }
+    const synced = nextDraftTicketAfterScheduleChange(ticket, [friday])
+    assert.ok(synced)
+    assert.deepEqual(synced.dayRates, [])
+  })
+
+  it("does not rewrite map tickets or already-synced dayRates", () => {
+    const mapTicket = {
+      ...createDraftLineItem(),
+      source: "map" as const,
+      sectorId: "mesa-1",
+    }
+    assert.equal(
+      nextDraftTicketAfterScheduleChange(mapTicket, [friday, saturday]),
+      null,
+    )
+    const ready = nextDraftTicketAfterScheduleChange(
+      createDraftLineItem(),
+      [friday, saturday],
+    )
+    assert.ok(ready)
+    assert.equal(
+      nextDraftTicketAfterScheduleChange(ready, [friday, saturday]),
+      null,
     )
   })
 

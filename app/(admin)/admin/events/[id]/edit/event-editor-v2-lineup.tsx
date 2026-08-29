@@ -48,6 +48,7 @@ export function EventEditorV2LineupFields({
     control,
     name: "lineup",
     keyName: "_rowId",
+    shouldUnregister: false,
   })
   const schedule = useWatch({ control, name: "schedule" }) ?? EMPTY_SCHEDULE
   const lineup = useWatch({ control, name: "lineup" }) ?? EMPTY_LINEUP
