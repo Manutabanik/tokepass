@@ -43,10 +43,7 @@ export function InteractiveMapViewer({
         className,
       )}
     >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-40 [background-image:linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] [background-size:28px_28px]"
-      />
+      <BuyerMapGrid isEditMode={false} />
       <InteractiveSeatingCanvas
         map={map}
         eventId={eventId}
@@ -66,5 +63,16 @@ export function InteractiveMapViewer({
         buyerChrome
       />
     </div>
+  )
+}
+
+/** Cuadrícula técnica del Studio. En checkout / cliente no se dibuja. */
+function BuyerMapGrid({ isEditMode = false }: { isEditMode?: boolean }) {
+  if (!isEditMode) return null
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 opacity-40 [background-image:linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] [background-size:28px_28px]"
+    />
   )
 }

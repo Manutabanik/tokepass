@@ -22,6 +22,10 @@ export const CONTEXT_FOCUS_PADDING = 0.45
 export const CONTEXT_FOCUS_MIN_SPAN = 320
 export const CONTEXT_FOCUS_STAGE_TOP = -40
 export const CONTEXT_FOCUS_ANIM_MS = 400
+/** El contenido dibujable ocupa ~85% del viewport (rango 80–90%). */
+export const CLIENT_CONTENT_FILL = 0.85
+export const CLIENT_FIT_MAX_SCALE = 8
+export const CLIENT_FIT_MIN_SCALE = 1
 
 const SYNTH_PAD = 18
 
@@ -164,6 +168,55 @@ export function expandSelectionForContext(
     minY: Math.min(CONTEXT_FOCUS_STAGE_TOP, cy - spanY / 2),
     maxY: Math.min(canvas.height, Math.max(box.maxY, cy + spanY / 2)),
   }
+}
+
+const SEAT_AABB_PAD = 10
+
+/** AABB de mesas/asientos vendibles. Si no hay, usa polígonos de zona. */
+export function drawableContentAabb(input: {
+  elements?: readonly VenueMapElement[] | null
+  seats?: ReadonlyArray<{ x: number; y: number }> | null
+  zones?: readonly VenueMapZone[] | null
+}): Aabb | null {
+  const itemBoxes: Aabb[] = []
+  for (const element of input.elements ?? []) {
+    if (!isSellableElement(element)) continue
+    itemBoxes.push(elementAabb(element))
+  }
+  for (const seat of input.seats ?? []) {
+    if (!Number.isFinite(seat.x) || !Number.isFinite(seat.y)) continue
+    itemBoxes.push({
+      minX: seat.x - SEAT_AABB_PAD,
+      minY: seat.y - SEAT_AABB_PAD,
+      maxX: seat.x + SEAT_AABB_PAD,
+      maxY: seat.y + SEAT_AABB_PAD,
+    })
+  }
+  const items = unionAabb(itemBoxes)
+  if (items) return items
+  return unionAabb(
+    (input.zones ?? [])
+      .map((zone) => zoneCanvasAabb(zone))
+      .filter((box): box is Aabb => box != null),
+  )
+}
+
+export function clientFitPadding(fill = CLIENT_CONTENT_FILL): number {
+  const safe = Math.min(0.9, Math.max(0.8, fill))
+  return (1 / safe - 1) / 2
+}
+
+export function fitDrawableContentCamera(
+  box: Aabb,
+  wrapWidth: number,
+  wrapHeight: number,
+  fill = CLIENT_CONTENT_FILL,
+): { scale: number; positionX: number; positionY: number } {
+  return lodCameraTransform(box, wrapWidth, wrapHeight, {
+    padding: clientFitPadding(fill),
+    minScale: CLIENT_FIT_MIN_SCALE,
+    maxScale: CLIENT_FIT_MAX_SCALE,
+  })
 }
 
 export function lodCameraTransform(

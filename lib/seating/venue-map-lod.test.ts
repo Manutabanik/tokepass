@@ -7,7 +7,10 @@ import {
   CONTEXT_FOCUS_MIN_SCALE,
   CONTEXT_FOCUS_PADDING,
   CONTEXT_FOCUS_STAGE_TOP,
+  CLIENT_CONTENT_FILL,
+  drawableContentAabb,
   elementBelongsToZone,
+  fitDrawableContentCamera,
   expandSelectionForContext,
   lodCameraTransform,
   pointInPolygon,
@@ -18,6 +21,7 @@ import {
   synthesizeLodZones,
   zoneCanvasAabb,
 } from "./venue-map-lod"
+import { VENUE_MAP_CANVAS } from "@/lib/seating/venue-polygon"
 import { emptyVenueMap, parseVenueMap } from "@/types/venue-map"
 import type { VenueMapZone } from "@/types/venue-map"
 
@@ -139,6 +143,39 @@ describe("venue-map-lod", () => {
     map.zones = [zone()]
     assert.equal(resolveLodZones(map).length, 1)
     assert.equal(shouldEnableMapLod(map), true)
+  })
+
+  it("une mesas y asientos y no usa zonas si hay contenido", () => {
+    const table = createVenueElement("round_table", 0, { x: 120, y: 140 })
+    const box = drawableContentAabb({
+      elements: [table],
+      seats: [{ x: 200, y: 180 }],
+      zones: [zone()],
+    })
+    assert.ok(box)
+    assert.ok(box.minX <= 120)
+    assert.ok(box.maxX >= 200)
+    assert.ok(box.minY <= 140)
+    assert.ok(box.maxY >= 180)
+  })
+
+  it("cae a la zona si no hay mesas ni asientos", () => {
+    const vip = zone()
+    const box = drawableContentAabb({ elements: [], seats: [], zones: [vip] })
+    assert.deepEqual(box, zoneCanvasAabb(vip))
+  })
+
+  it("encuadra el contenido al 80-90% del viewport", () => {
+    const box = { minX: 100, minY: 80, maxX: 220, maxY: 180 }
+    const camera = fitDrawableContentCamera(box, 400, 280)
+    const visibleX =
+      ((box.maxX - box.minX) * camera.scale) / VENUE_MAP_CANVAS.width
+    const visibleY =
+      ((box.maxY - box.minY) * camera.scale) / VENUE_MAP_CANVAS.height
+    const fill = Math.max(visibleX, visibleY)
+    assert.ok(fill >= 0.8 && fill <= 0.9)
+    assert.equal(camera.scale >= 1, true)
+    assert.equal(CLIENT_CONTENT_FILL, 0.85)
   })
 
   it("calcula la camara para encuadrar el AABB con padding", () => {

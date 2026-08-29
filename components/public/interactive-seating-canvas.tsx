@@ -88,7 +88,10 @@ import {
   CONTEXT_FOCUS_MAX_SCALE,
   CONTEXT_FOCUS_MIN_SCALE,
   CONTEXT_FOCUS_PADDING,
+  CLIENT_FIT_MAX_SCALE,
+  drawableContentAabb,
   expandSelectionForContext,
+  fitDrawableContentCamera,
   lodCameraTransform,
   publicRevealElements,
   publicRevealSeats,
@@ -372,6 +375,17 @@ export function InteractiveSeatingCanvas({
     if (!revealReady || !focusedZone) return []
     return publicRevealSeats(plotSeats, focusedZone)
   }, [focusedZone, lodEnabled, map, plotSeats, revealReady, viewMode])
+  const buyerFitBox = useMemo(
+    () =>
+      buyerChrome
+        ? drawableContentAabb({
+            elements: revealElements,
+            seats: revealSeats,
+            zones: map.zones,
+          })
+        : null,
+    [buyerChrome, map.zones, revealElements, revealSeats],
+  )
   const spotlight = liveSelectedItems.length > 0
   const selectionCount = storefrontSelectionCount(liveSelectedItems)
   const subtotal = storefrontSelectionTotal(liveSelectedItems)
@@ -401,6 +415,36 @@ export function InteractiveSeatingCanvas({
     observer.observe(node)
     return () => observer.disconnect()
   }, [])
+
+  function applyBuyerContentFit(animate: boolean) {
+    if (!buyerChrome || viewMode !== "macro") return false
+    if (wrapWidth < 80 || wrapHeight < 80 || !buyerFitBox) return false
+    const controls = transformRef.current
+    if (!controls) return false
+    const camera = fitDrawableContentCamera(buyerFitBox, wrapWidth, wrapHeight)
+    controls.setTransform(
+      camera.positionX,
+      camera.positionY,
+      camera.scale,
+      animate ? 280 : 0,
+      "easeOut",
+    )
+    return true
+  }
+
+  useEffect(() => {
+    if (!buyerChrome || viewMode !== "macro") return
+    const frame = window.requestAnimationFrame(() => {
+      applyBuyerContentFit(true)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [
+    buyerChrome,
+    buyerFitBox,
+    viewMode,
+    wrapHeight,
+    wrapWidth,
+  ])
 
   useEffect(() => {
     if (!lodEnabled || viewMode !== "micro" || !focusedZoneId) {
@@ -767,10 +811,12 @@ export function InteractiveSeatingCanvas({
 
   function exitLodView() {
     markActivity()
-    transformRef.current?.resetTransform(400, "easeOut")
     setViewMode("macro")
     setFocusedZoneId(null)
     setRevealedZoneId(null)
+    if (!buyerChrome) {
+      transformRef.current?.resetTransform(400, "easeOut")
+    }
   }
 
   function handleZoneClick(zoneId: string, event?: React.SyntheticEvent) {
@@ -1149,10 +1195,10 @@ export function InteractiveSeatingCanvas({
       <TransformWrapper
         ref={transformRef}
         minScale={MIN_ZOOM}
-        maxScale={MAX_ZOOM}
+        maxScale={buyerChrome ? CLIENT_FIT_MAX_SCALE : MAX_ZOOM}
         initialScale={1}
-        centerOnInit
-        centerZoomedOut
+        centerOnInit={!buyerChrome}
+        centerZoomedOut={!buyerChrome}
         limitToBounds={!hideChrome && !buyerChrome}
         smooth
         wheel={wheelOptions}
@@ -1471,8 +1517,14 @@ export function InteractiveSeatingCanvas({
   }
 
   function handleResetView() {
-    if (lodEnabled && viewMode === "micro") exitLodView()
-    else transformRef.current?.resetTransform(280, "easeOut")
+    if (lodEnabled && viewMode === "micro") {
+      exitLodView()
+      markActivity()
+      return
+    }
+    if (!applyBuyerContentFit(true)) {
+      transformRef.current?.resetTransform(280, "easeOut")
+    }
     markActivity()
   }
 
