@@ -66,6 +66,7 @@ import {
 } from "@/lib/checkout/idempotency"
 import {
   clientCheckoutMoneyMatchesQuoted,
+  orderLedgerFromQuote,
   quoteCheckoutMoney,
   type CheckoutMoneyQuote,
 } from "@/lib/checkout/checkout-money"
@@ -1137,15 +1138,19 @@ async function resolveMappedSeatingUnits(
 async function loadEventServiceFeeRule(
   supabase: CheckoutSupabase,
   eventId: string,
-): Promise<{ rate: number; fixedFee: number }> {
+): Promise<{ rate: number; fixedFee: number; absorbFees: boolean }> {
   const { data: event } = await supabase
     .from("events")
-    .select("platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass")
+    .select(
+      "platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, absorb_fees",
+    )
     .eq("id", eventId)
     .maybeSingle()
 
+  const absorbFees = event?.absorb_fees === true
+
   if (event?.is_sponsored_by_tokepass) {
-    return { rate: 0, fixedFee: 0 }
+    return { rate: 0, fixedFee: 0, absorbFees }
   }
 
   let rate = Number(
@@ -1170,6 +1175,7 @@ async function loadEventServiceFeeRule(
   return {
     rate: Number.isFinite(rate) ? Math.max(0, rate) : 0,
     fixedFee: Number.isFinite(fixedFee) ? Math.max(0, fixedFee) : 0,
+    absorbFees,
   }
 }
 
@@ -1181,14 +1187,23 @@ async function persistOrderFeeLedger(
   if (!admin) return
   const { data: order } = await admin
     .from("orders")
-    .select("service_charge")
+    .select("service_charge, subtotal, total_amount")
     .eq("id", orderId)
     .maybeSingle()
   if (!order) return
-  if (amountsMatch(Number(order.service_charge ?? 0), quote.feeAmount)) return
+  const ledger = orderLedgerFromQuote(quote)
+  const sameLedger =
+    amountsMatch(Number(order.service_charge ?? 0), ledger.service_charge) &&
+    amountsMatch(Number(order.subtotal ?? 0), ledger.subtotal) &&
+    amountsMatch(Number(order.total_amount ?? 0), ledger.total_amount)
+  if (sameLedger) return
   const { error } = await admin
     .from("orders")
-    .update({ service_charge: quote.feeAmount })
+    .update({
+      subtotal: ledger.subtotal,
+      service_charge: ledger.service_charge,
+      total_amount: ledger.total_amount,
+    })
     .eq("id", orderId)
   if (error) {
     logger.error({
@@ -3383,6 +3398,9 @@ export async function startCheckoutWithPayment(
     subtotal?: number
     serviceFee?: number
     grandTotal?: number
+    ticketPrice?: number
+    feeAmount?: number
+    customerTotal?: number
     idempotencyKey?: string | null
     cartSessionId?: string | null
   },
@@ -3412,6 +3430,9 @@ export async function startCheckoutWithPayment(
     subtotal: options?.subtotal,
     serviceFee: options?.serviceFee,
     grandTotal: options?.grandTotal,
+    ticketPrice: options?.ticketPrice,
+    feeAmount: options?.feeAmount,
+    customerTotal: options?.customerTotal,
     idempotencyKey: options?.idempotencyKey,
     cartSessionId: options?.cartSessionId,
   })
@@ -3709,6 +3730,10 @@ export async function startCheckoutWithPayment(
         subtotal: payload.subtotal ?? options?.subtotal,
         serviceFee: payload.serviceFee ?? options?.serviceFee,
         grandTotal: payload.grandTotal ?? options?.grandTotal ?? displayedTotal,
+        ticketPrice: payload.ticketPrice ?? options?.ticketPrice,
+        feeAmount: payload.feeAmount ?? options?.feeAmount,
+        customerTotal:
+          payload.customerTotal ?? options?.customerTotal ?? displayedTotal,
       },
       quoted.quote,
       { skipPrePromoTotal: Boolean(payload.promoCodeId) },
@@ -4057,7 +4082,7 @@ export async function startCheckoutWithPayment(
     if (
       !skipReservedQuoteCheck &&
       (!Number.isFinite(reservedMerchandise) ||
-        !amountsMatch(reservedMerchandise, quoted.quote.grandTotal))
+        !amountsMatch(reservedMerchandise, quoted.quote.ticketPrice))
     ) {
       await cleanupPendingOrder(orderId)
       logger.error({
@@ -4103,9 +4128,7 @@ export async function startCheckoutWithPayment(
       captchaScore,
     })
 
-    if (!resumedPromoCodeId && !payload.promoCodeId) {
-      await persistOrderFeeLedger(orderId, quoted.quote)
-    }
+    await persistOrderFeeLedger(orderId, quoted.quote)
 
     const cleanPromoId = resumedPromoCodeId ? null : payload.promoCodeId
     if (cleanPromoId) {
@@ -4156,7 +4179,7 @@ export async function startCheckoutWithPayment(
 
     const { data: pricedOrder, error: pricedOrderError } = await db
       .from("orders")
-      .select("total_amount, subtotal, service_charge")
+      .select("total_amount, subtotal, service_charge, discount_amount")
       .eq("id", orderId)
       .eq("buyer_id", user.id)
       .maybeSingle()
@@ -4180,9 +4203,16 @@ export async function startCheckoutWithPayment(
       await cleanupPendingOrder(orderId)
       return { success: false, error: "El total de la orden es inválido." }
     }
+    const discountAmount = Number(
+      (pricedOrder as { discount_amount?: number }).discount_amount ?? 0,
+    )
     const allInLedger = amountsMatch(finalSubtotal, finalTotal)
-    const legacyMarkup = amountsMatch(finalSubtotal + finalFee, finalTotal)
-    if (!allInLedger && !legacyMarkup) {
+    const transferredLedger = amountsMatch(finalSubtotal + finalFee, finalTotal)
+    const discountedLedger =
+      Number.isFinite(discountAmount) &&
+      discountAmount > 0 &&
+      finalTotal <= finalSubtotal + finalFee + 0.009
+    if (!allInLedger && !transferredLedger && !discountedLedger) {
       await cleanupPendingOrder(orderId)
       return { success: false, error: "El total de la orden es inválido." }
     }
@@ -4580,6 +4610,9 @@ export async function startSandboxCheckout(
     subtotal?: number
     serviceFee?: number
     grandTotal?: number
+    ticketPrice?: number
+    feeAmount?: number
+    customerTotal?: number
     idempotencyKey?: string | null
     cartSessionId?: string | null
   },
@@ -4598,6 +4631,9 @@ export async function startSandboxCheckout(
     subtotal: guard?.subtotal,
     serviceFee: guard?.serviceFee,
     grandTotal: guard?.grandTotal,
+    ticketPrice: guard?.ticketPrice,
+    feeAmount: guard?.feeAmount,
+    customerTotal: guard?.customerTotal,
     idempotencyKey: guard?.idempotencyKey,
     cartSessionId: guard?.cartSessionId,
   })
@@ -4624,6 +4660,9 @@ export async function startSandboxCheckout(
       subtotal: parsed.data.subtotal ?? guard?.subtotal,
       serviceFee: parsed.data.serviceFee ?? guard?.serviceFee,
       grandTotal: parsed.data.grandTotal ?? guard?.grandTotal,
+      ticketPrice: parsed.data.ticketPrice ?? guard?.ticketPrice,
+      feeAmount: parsed.data.feeAmount ?? guard?.feeAmount,
+      customerTotal: parsed.data.customerTotal ?? guard?.customerTotal,
       idempotencyKey: parsed.data.idempotencyKey ?? guard?.idempotencyKey,
       cartSessionId: parsed.data.cartSessionId ?? guard?.cartSessionId,
     },

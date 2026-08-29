@@ -16,11 +16,9 @@ import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
 import {
   validateEventCompleteness as runEventPublishCheck,
 } from "@/lib/events/validate-event-publish"
-import { allInBreakdown } from "@/lib/pricing/all-in"
+import { splitAbsorbFee } from "@/lib/pricing/absorb-fee-split"
 import {
   DEFAULT_PLATFORM_FEE_PERCENTAGE,
-  eventFeeRate,
-  eventFixedFee,
   type EventFeeConfig,
 } from "@/lib/pricing/event-fees"
 import type { Database, Event, EventStatus, Json, Venue } from "@/types/database"
@@ -1033,6 +1031,13 @@ export async function updateEventCommercialSettings(
     return persistFailure(updateError)
   }
 
+  const { data: eventRow } = await admin
+    .from("events")
+    .select("absorb_fees")
+    .eq("id", eventId)
+    .maybeSingle()
+  const absorbFees = eventRow?.absorb_fees === true
+
   const { data: tiers, error: tiersError } = await admin
     .from("ticket_tiers")
     .select("id, price")
@@ -1044,18 +1049,19 @@ export async function updateEventCommercialSettings(
 
   let recalculatedTiers = 0
   for (const tier of tiers ?? []) {
-    const breakdown = allInBreakdown(
-      Number(tier.price),
-      eventFeeRate(feeConfig),
-      eventFixedFee(feeConfig),
-    )
+    const breakdown = splitAbsorbFee({
+      ticketPrice: tier.price,
+      feeRate: sponsored ? 0 : percentage,
+      absorbFees,
+      fixedFee: sponsored ? 0 : fixed,
+    })
     const { error } = await admin
       .from("ticket_tiers")
       .update({
         id: tier.id,
         event_id: eventId,
-        base_price: breakdown.basePrice,
-        platform_fee: breakdown.platformFee,
+        base_price: breakdown.organizerEarnings,
+        platform_fee: breakdown.feeAmount,
         updated_at: new Date().toISOString(),
       })
       .eq("id", tier.id)

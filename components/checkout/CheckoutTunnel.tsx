@@ -116,10 +116,12 @@ import {
   withCheckoutEventDateId,
 } from "@/lib/checkout/seat-hold-day"
 import {
+  calculateCartPriceBreakdown,
   cartLineQuantity,
   sumCartQuantities,
   toCartNumber,
 } from "@/lib/checkout/cart"
+import { splitAbsorbFee } from "@/lib/pricing/absorb-fee-split"
 import {
   cartHasPurchasableItems,
   resolveCheckoutProgressStep,
@@ -1497,12 +1499,24 @@ export function CheckoutTunnel({
 
   const extraNumbered = selectedSeat ? Math.max(0, layoutSeats.length - 1) : 0
   const seatLineCount = (selectedSeat ? 1 : layoutSeats.length) + extraNumbered
+  const feeRule = {
+    rate: feeRate,
+    fixedFee: platformFixedFee,
+    absorbFees,
+  }
+  const customerUnitTotal = (price: unknown) =>
+    splitAbsorbFee({
+      ticketPrice: price,
+      feeRate: feeRate,
+      absorbFees,
+      fixedFee: platformFixedFee,
+    }).customerTotal
   const numberedSubtotal = selectedSeat
-    ? toCartNumber(selectedSeat.price) +
+    ? customerUnitTotal(selectedSeat.price) +
       layoutSeats
         .slice(1)
-        .reduce((sum, seat) => sum + toCartNumber(seat.price), 0)
-    : layoutSeats.reduce((sum, seat) => sum + toCartNumber(seat.price), 0)
+        .reduce((sum, seat) => sum + customerUnitTotal(seat.price), 0)
+    : layoutSeats.reduce((sum, seat) => sum + customerUnitTotal(seat.price), 0)
   const mapTierIds = useMemo(() => {
     const ids = new Set<string>()
     for (const item of [...selectedItems, ...liveSelectedItems]) {
@@ -1521,7 +1535,8 @@ export function CheckoutTunnel({
     )
     .reduce(
       (sum, line) =>
-        sum + toCartNumber(line.price) * cartLineQuantity(line.quantity),
+        sum +
+        customerUnitTotal(line.price) * cartLineQuantity(line.quantity),
       0,
     )
   const extraQuantityCount = storeLines
@@ -1539,19 +1554,20 @@ export function CheckoutTunnel({
   const totalMapSelectedItemsPrice = storefrontSelectionTotal(
     liveSelectedItems.map((item) => ({
       ...item,
-      price: mapSelectionUnitPrice(
-        item.price,
-        resolveItemTierId(item),
-        displayTiers,
+      price: customerUnitTotal(
+        mapSelectionUnitPrice(
+          item.price,
+          resolveItemTierId(item),
+          displayTiers,
+        ),
       ),
     })),
   )
   const totalGeneralTicketsPrice = extraQuantitySubtotal + numberedExtra
-  const storeLinesMerchandise = storeLines.reduce(
-    (sum, line) =>
-      sum + toCartNumber(line.price) * cartLineQuantity(line.quantity),
-    0,
-  )
+  const storeLinesMerchandise = calculateCartPriceBreakdown(
+    storeLines,
+    feeRule,
+  ).grandTotal
   const ticketsSubtotal = roundMoney(
     storeLines.length > 0
       ? storeLinesMerchandise
@@ -1569,7 +1585,7 @@ export function CheckoutTunnel({
     storeLines.length > 0
       ? storeLinesCount
       : extraQuantityCount + mapSeatCount + numberedExtraCount
-  // All-In: tier.price already includes TokePass fee.
+  // customerTotal ya aplicado por línea según absorb_fees.
   const cartSubtotal = ticketsSubtotal
   const discountAmount = appliedPromo
     ? centsToMoney(
@@ -2331,13 +2347,16 @@ export function CheckoutTunnel({
           price: line.price,
           quantity: line.quantity,
         })),
-        { rate: feeRate, fixedFee: platformFixedFee },
+        { rate: feeRate, fixedFee: platformFixedFee, absorbFees },
       )
       const priceGuard = {
         displayedTotal: finalTotal,
-        subtotal: moneyQuote.subtotal,
-        serviceFee: moneyQuote.serviceFee,
+        subtotal: moneyQuote.ticketPrice,
+        serviceFee: moneyQuote.feeAmount,
         grandTotal: finalTotal,
+        ticketPrice: moneyQuote.ticketPrice,
+        feeAmount: moneyQuote.feeAmount,
+        customerTotal: moneyQuote.customerTotal,
         idempotencyKey,
       }
 
@@ -2373,6 +2392,9 @@ export function CheckoutTunnel({
               subtotal: priceGuard.subtotal,
               serviceFee: priceGuard.serviceFee,
               grandTotal: priceGuard.grandTotal,
+              ticketPrice: priceGuard.ticketPrice,
+              feeAmount: priceGuard.feeAmount,
+              customerTotal: priceGuard.customerTotal,
               idempotencyKey: priceGuard.idempotencyKey,
               cartSessionId,
             },

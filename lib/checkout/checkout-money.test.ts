@@ -8,34 +8,40 @@ import {
 } from "./checkout-money"
 
 describe("quoteCheckoutMoney", () => {
-  it("splits All-In public prices into ticket_amount and fee_amount without raising the charge", () => {
+  it("registers ticketPrice, feeAmount and customerTotal when the fee is passed through", () => {
     const quote = quoteCheckoutMoney([{ price: 10000, quantity: 2 }], {
       rate: 0.1,
       fixedFee: 200,
+      absorbFees: false,
     })
-    assert.equal(quote.subtotal, 20000)
-    assert.equal(quote.grandTotal, 20000)
-    assert.equal(quote.total, 20000)
-    assert.equal(quote.serviceFee, 2400)
+    assert.equal(quote.ticketPrice, 20000)
     assert.equal(quote.feeAmount, 2400)
-    assert.equal(quote.ticketAmount, 17600)
+    assert.equal(quote.customerTotal, 22400)
+    assert.equal(quote.grandTotal, 22400)
+    assert.equal(quote.ticketAmount, 20000)
     assert.deepEqual(orderLedgerFromQuote(quote), {
       subtotal: 20000,
       service_charge: 2400,
-      total_amount: 20000,
+      total_amount: 22400,
     })
   })
 
-  it("rejects a client grandTotal that added the service fee twice", () => {
+  it("accepts the client split only when it matches the server quote", () => {
     const server = quoteCheckoutMoney([{ price: 10000, quantity: 1 }], {
       rate: 0.1,
+      absorbFees: false,
     })
     assert.equal(
       clientCheckoutMoneyMatchesQuoted(
-        { subtotal: 10000, serviceFee: 1000, grandTotal: 11000 },
+        {
+          ticketPrice: 10000,
+          feeAmount: 1000,
+          customerTotal: 11000,
+          grandTotal: 11000,
+        },
         server,
       ),
-      false,
+      true,
     )
     assert.equal(
       clientCheckoutMoneyMatchesQuoted(
@@ -47,7 +53,7 @@ describe("quoteCheckoutMoney", () => {
         },
         server,
       ),
-      true,
+      false,
     )
   })
 

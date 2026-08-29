@@ -518,7 +518,7 @@ export type TicketTier = {
   id: string
   event_id: string
   name: string
-  /** Precio final All-In publicado al comprador. */
+  /** Precio ingresado por el organizador (`ticketPrice`). El cobro al comprador es `customerTotal`. */
   price: number
   /** Ingreso neto del organizador por entrada. */
   base_price: number

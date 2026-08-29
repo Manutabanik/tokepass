@@ -15,7 +15,7 @@ import {
 import { venueMapToSeatingLayout } from "@/lib/seating/venue-map-geometry"
 import { parseVenueMap } from "@/types/venue-map"
 import { parsePromoVideoUrl } from "@/lib/promo-video"
-import { calculateTierPricing } from "@/lib/pricing/flexible-pricing"
+import { splitAbsorbFee } from "@/lib/pricing/absorb-fee-split"
 import {
   defaultEventFeeConfig,
   sumFreeTicketCapacity,
@@ -291,13 +291,11 @@ function mapLineItemToTier(
   if (!name || !Number.isFinite(stock) || stock < 1) return null
 
   const inputPrice = Math.max(0, Number(item.price) || 0)
-  const priced = calculateTierPricing({
-    inputValue: inputPrice,
-    feePercentage: fee.platformFeePercentage,
-    fixedFee: fee.platformFixedFee,
-    feeStrategy: absorbFees ? "absorb_in_price" : "pass_to_customer",
-    calculationMode: absorbFees ? "public_price" : "net_income",
-    sponsored: fee.isSponsoredByTokePass,
+  const priced = splitAbsorbFee({
+    ticketPrice: inputPrice,
+    feeRate: fee.isSponsoredByTokePass ? 0 : fee.platformFeePercentage,
+    absorbFees,
+    fixedFee: fee.isSponsoredByTokePass ? 0 : fee.platformFixedFee,
   })
   const minPurchase = clampLimit(item.minOrder, 1)
   const explicitType = parseTicketCommerceType(item.ticketType)
@@ -321,9 +319,9 @@ function mapLineItemToTier(
     id: asPublishUuid(item.id),
     name,
     description: trimTicketDescription(item.description),
-    price: priced.publicPrice,
-    base_price: priced.organizerNet,
-    platform_fee: priced.serviceFee,
+    price: priced.ticketPrice,
+    base_price: priced.organizerEarnings,
+    platform_fee: priced.feeAmount,
     capacity: stock,
     min_purchase_limit: minPurchase,
     max_purchase_limit: optionalMaxLimit(item.maxOrder, minPurchase),

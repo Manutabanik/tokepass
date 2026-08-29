@@ -271,20 +271,26 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
       items: [{ tierId: generalId, quantity: 1 }],
       totalPrice: 999999,
       clientTotal: 1,
-      displayedTotal: 10000,
+      displayedTotal: 11000,
       subtotal: 10000,
       serviceFee: 1000,
-      grandTotal: 10000,
+      grandTotal: 11000,
+      ticketPrice: 10000,
+      feeAmount: 1000,
+      customerTotal: 11000,
       idempotencyKey: eventId,
     })
     assert.equal(parsed.success, true)
     if (!parsed.success) return
     assert.equal("totalPrice" in parsed.data, false)
     assert.equal("clientTotal" in parsed.data, false)
-    assert.equal(parsed.data.displayedTotal, 10000)
+    assert.equal(parsed.data.displayedTotal, 11000)
     assert.equal(parsed.data.subtotal, 10000)
     assert.equal(parsed.data.serviceFee, 1000)
-    assert.equal(parsed.data.grandTotal, 10000)
+    assert.equal(parsed.data.grandTotal, 11000)
+    assert.equal(parsed.data.ticketPrice, 10000)
+    assert.equal(parsed.data.feeAmount, 1000)
+    assert.equal(parsed.data.customerTotal, 11000)
     assert.equal(parsed.data.idempotencyKey, eventId)
   })
 

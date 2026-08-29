@@ -26,6 +26,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { resolveTicketHighlightBadge } from "@/lib/checkout/ticket-picker"
 import { resolveStockScarcity } from "@/lib/checkout/stock-scarcity"
+import { CustomerFacingTicketPrice } from "@/components/public/customer-facing-price"
 import { IncludesServiceFeeHint } from "@/components/public/includes-service-fee-hint"
 import { publicOfferPrice } from "@/lib/checkout/public-price"
 import { formatTicketPrice } from "@/lib/format"
@@ -342,7 +343,7 @@ export function EventCheckoutSelector({
             {selectedSeat ? (
               <div className="flex flex-col gap-0.5">
                 <p className="text-sm font-black text-foreground/90">
-                  {formatTicketPrice(selectedSeat.price)}
+                  <CustomerFacingTicketPrice price={selectedSeat.price} />
                   <span className="ml-2 text-xs font-medium text-muted-foreground">
                     Lugar reservado
                   </span>
@@ -1010,7 +1011,11 @@ export function UnifiedTicketCard({
               isSoldOut && "text-muted-foreground line-through",
             )}
           >
-            {shownPrice === 0 ? "Gratis" : formatTicketPrice(shownPrice)}
+            {shownPrice === 0 ? (
+              "Gratis"
+            ) : (
+              <CustomerFacingTicketPrice price={shownPrice} />
+            )}
           </span>
           {badges.map((badge) => (
             <span
@@ -1198,7 +1203,7 @@ export function QuantityList({
                       soldOut && "text-muted-foreground line-through",
                     )}
                   >
-                    {formatTicketPrice(unitPrice)}
+                    <CustomerFacingTicketPrice price={unitPrice} />
                   </span>
                   {highlight === "bestseller" ? (
                     <span className="text-xs font-semibold text-amber-500">

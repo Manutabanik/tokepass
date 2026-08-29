@@ -14,9 +14,10 @@ import { quantityForPublicTier } from "@/lib/checkout/ticket-day-groups"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { isFullPassDayId } from "@/lib/event-schedule"
+import { CustomerFacingTicketPrice } from "@/components/public/customer-facing-price"
 import { IncludesServiceFeeHint } from "@/components/public/includes-service-fee-hint"
 import { publicOfferPrice } from "@/lib/checkout/public-price"
-import { formatCurrency, formatEventDay, formatTicketPrice } from "@/lib/format"
+import { formatCurrency, formatEventDay } from "@/lib/format"
 import { generalTicketMaxQuantity } from "@/lib/checkout/general-ticket-quantity"
 import { ticketHasSeatingSector } from "@/lib/checkout/public-ticket-view"
 import { resolveStockScarcity } from "@/lib/checkout/stock-scarcity"
@@ -456,9 +457,11 @@ function TierList({
                     soldOut && "text-muted-foreground line-through",
                   )}
                 >
-                  {offerPrice === 0
-                    ? "Gratis"
-                    : formatTicketPrice(offerPrice)}
+                  {offerPrice === 0 ? (
+                    "Gratis"
+                  ) : (
+                    <CustomerFacingTicketPrice price={offerPrice} />
+                  )}
                 </span>
                 {saveAmt > 0 ? (
                   <span className="text-xs font-medium text-muted-foreground line-through">

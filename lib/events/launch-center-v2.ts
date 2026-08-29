@@ -1,3 +1,4 @@
+import { splitAbsorbFee } from "@/lib/pricing/absorb-fee-split"
 import {
   draftNumberValue,
   isEventDraftPublishable,
@@ -70,13 +71,17 @@ export function simulateDraftSale(
 ): DraftLaunchSaleSimulation {
   const price = Math.max(0, draftNumberValue(ticketPrice))
   const rate = Number.isFinite(platformFee) ? Math.max(0, platformFee) : DRAFT_LAUNCH_PLATFORM_FEE
-  const feeAmount = Math.round(price * rate)
-  return {
+  const split = splitAbsorbFee({
     ticketPrice: price,
-    feeAmount,
+    feeRate: rate,
     absorbFees,
-    customerPays: absorbFees ? price : price + feeAmount,
-    organizerReceives: absorbFees ? price - feeAmount : price,
+  })
+  return {
+    ticketPrice: split.ticketPrice,
+    feeAmount: split.feeAmount,
+    absorbFees: split.absorbFees,
+    customerPays: split.customerTotal,
+    organizerReceives: split.organizerEarnings,
   }
 }
 

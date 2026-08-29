@@ -2,8 +2,9 @@
 
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
 import { Button } from "@/components/ui/button"
+import { CustomerFacingTicketPrice } from "@/components/public/customer-facing-price"
 import { IncludesServiceFeeHint } from "@/components/public/includes-service-fee-hint"
-import { formatCurrency, formatTicketPrice } from "@/lib/format"
+import { formatCurrency } from "@/lib/format"
 import {
   BUNDLE_TYPE_LABELS,
   bundleSavings,
@@ -104,7 +105,7 @@ function BundlePromoCard({
         </p>
         <div className="flex min-w-0 items-center gap-2 text-sm font-black text-foreground/90">
           <span className="tabular-nums">
-            {formatTicketPrice(bundle.price)}
+            <CustomerFacingTicketPrice price={bundle.price} />
           </span>
           {bundle.listPrice != null && bundle.listPrice > bundle.price ? (
             <span className="text-xs font-medium text-muted-foreground line-through">

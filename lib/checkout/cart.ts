@@ -4,7 +4,7 @@ import {
   toCartNumber,
 } from "@/lib/checkout/cart-lines"
 import { centsToMoney, moneyToCents } from "@/lib/money/cents"
-import { allInBreakdown } from "@/lib/pricing/all-in"
+import { splitAbsorbFee } from "@/lib/pricing/absorb-fee-split"
 
 export { cartLineQuantity, toCartNumber } from "@/lib/checkout/cart-lines"
 
@@ -23,28 +23,39 @@ export type CartServiceFeeRule = {
   rate?: unknown
   /** Cargo fijo ARS por entrada paga. */
   fixedFee?: unknown
+  /** true = el organizador absorbe. false = se suma al comprador. */
+  absorbFees?: boolean | null
 }
 
 export type CartPriceBreakdown = {
-  /** Σ(price × quantity). Precio público All-In. */
+  /** Σ(ticketPrice × quantity). Precio ingresado. */
+  ticketPrice: number
+  /** Σ(price × quantity). Alias de ticketPrice. */
   subtotal: number
-  /** Σ(base extraída). `subtotal - serviceFee`. */
+  /** Igual a ticketPrice: la entrada sin el cargo trasladado. */
   baseAmount: number
-  /** Cargo Tokepass incluido (porcentaje + fijo). No se factura aparte. */
+  /** Σ(feeAmount × quantity). */
   serviceFee: number
-  /** Monto cobrado. En All-In es igual al subtotal público. */
+  feeAmount: number
+  /** Σ(customerTotal × quantity). Total a pagar. */
+  customerTotal: number
   grandTotal: number
+  absorbFees: boolean
 }
 
 export type CartLineMoney = {
-  /** Precio público All-In por unidad. */
+  /** Precio ingresado / catálogo por unidad. */
   price: number
-  /** Entrada base extraída por unidad. */
+  ticketPrice: number
+  /** Entrada (ticketPrice) para el tooltip. */
   basePrice: number
-  /** Comisión extraída por unidad. */
+  /** Cargo por unidad. */
   serviceFee: number
-  /** Total cobrado por unidad. All-In: igual a `price`. */
+  feeAmount: number
+  /** Total cobrado por unidad (`customerTotal`). */
   totalPrice: number
+  customerTotal: number
+  absorbFees: boolean
 }
 
 /**
@@ -87,52 +98,52 @@ export function includedServiceFee(subtotal: unknown, rate: unknown = 0.1): numb
   return centsToMoney(Math.round(moneyToCents(base) * safeRate))
 }
 
-function asServiceRate(rate: unknown): number {
-  const raw = toCartNumber(rate)
-  return raw > 1 ? raw / 100 : Math.max(0, raw)
-}
-
 /**
- * Comisión TokePass ya incluida en precios All-In.
- * No sumar este valor al total cobrado: total = subtotal público.
+ * Cargo Tokepass por línea. Si `absorbFees` es false, este monto se suma
+ * al total del comprador. Si es true, solo se usa para el split contable.
  */
 export function cartIncludedServiceFee(
   lines: ReadonlyArray<{ price?: unknown; quantity?: unknown }> | null | undefined,
   rate: unknown = 0,
   fixedFee: unknown = 0,
+  absorbFees: boolean | null = false,
 ): number {
-  const safeRate = asServiceRate(rate)
-  const perTicketFixed = toCartNumber(fixedFee)
   return centsToMoney(
     (lines ?? []).reduce((sum, line) => {
       const unit = toCartNumber(line.price)
       const quantity = cartLineQuantity(line.quantity)
       if (unit <= 0 || quantity <= 0) return sum
-      const { platformFee } = allInBreakdown(unit, safeRate, perTicketFixed)
-      return sum + moneyToCents(platformFee) * quantity
+      const split = splitAbsorbFee({
+        ticketPrice: unit,
+        feeRate: rate,
+        absorbFees,
+        fixedFee,
+      })
+      return sum + moneyToCents(split.feeAmount) * quantity
     }, 0),
   )
 }
 
-/** Split All-In de una unidad: base + fee = precio público. */
+/** Split por unidad según absorb_fees. El cobro es `customerTotal`. */
 export function cartLineUnitMoney(
-  publicPrice: unknown,
+  ticketPrice: unknown,
   rule: CartServiceFeeRule = {},
 ): CartLineMoney {
-  const price = toCartNumber(publicPrice)
-  if (price <= 0) {
-    return { price: 0, basePrice: 0, serviceFee: 0, totalPrice: 0 }
-  }
-  const split = allInBreakdown(
-    price,
-    asServiceRate(rule.rate ?? 0),
-    toCartNumber(rule.fixedFee),
-  )
+  const split = splitAbsorbFee({
+    ticketPrice,
+    feeRate: rule.rate,
+    absorbFees: rule.absorbFees,
+    fixedFee: rule.fixedFee,
+  })
   return {
-    price,
-    basePrice: split.basePrice,
-    serviceFee: split.platformFee,
-    totalPrice: price,
+    price: split.ticketPrice,
+    ticketPrice: split.ticketPrice,
+    basePrice: split.ticketPrice,
+    serviceFee: split.feeAmount,
+    feeAmount: split.feeAmount,
+    totalPrice: split.customerTotal,
+    customerTotal: split.customerTotal,
+    absorbFees: split.absorbFees,
   }
 }
 
@@ -151,39 +162,43 @@ export function stampCartLinesMoney<
   return (lines ?? []).map((line) => stampCartLineMoney(line, rule))
 }
 
+function sumStampedField(
+  lines: ReadonlyArray<{ quantity?: unknown } & CartLineMoney>,
+  field: "ticketPrice" | "feeAmount" | "customerTotal",
+): number {
+  return centsToMoney(
+    lines.reduce((sum, line) => {
+      const quantity = cartLineQuantity(line.quantity)
+      if (quantity <= 0) return sum
+      return sum + moneyToCents(line[field]) * quantity
+    }, 0),
+  )
+}
+
 /**
  * Motor de precios del carrito. Recalcular en cada cambio de ítem o de tarifa.
  *
- * All-In: `ticket_tiers.price` ya incluye el service fee del evento
- * (`platform_fee_percentage` + `platform_fixed_fee`). El comprador paga
- * `grandTotal === subtotal`. `serviceFee` es el split interno / UI.
- * `itemTotalPrice = itemBasePrice + itemFee` sin sumar la fee otra vez
- * encima del precio público.
+ * `ticket_tiers.price` es el precio ingresado (`ticketPrice`).
+ * El comprador paga `customerTotal` / `grandTotal` según `absorb_fees`.
  */
 export function calculateCartPriceBreakdown(
   items: ReadonlyArray<{ price?: unknown; quantity?: unknown }> | null | undefined,
   rule: CartServiceFeeRule = {},
 ): CartPriceBreakdown {
   const stamped = stampCartLinesMoney(items, rule)
-  const subtotal = sumCartAmounts(stamped)
-  const serviceFee = Math.min(
-    subtotal,
-    centsToMoney(
-      stamped.reduce((sum, line) => {
-        const quantity = cartLineQuantity(line.quantity)
-        if (quantity <= 0 || line.serviceFee <= 0) return sum
-        return sum + moneyToCents(line.serviceFee) * quantity
-      }, 0),
-    ),
-  )
-  const baseAmount = centsToMoney(
-    Math.max(0, moneyToCents(subtotal) - moneyToCents(serviceFee)),
-  )
+  const ticketPrice = sumStampedField(stamped, "ticketPrice")
+  const feeAmount = sumStampedField(stamped, "feeAmount")
+  const customerTotal = sumStampedField(stamped, "customerTotal")
+  const absorbFees = rule.absorbFees === true
   return {
-    subtotal,
-    baseAmount,
-    serviceFee,
-    grandTotal: subtotal,
+    ticketPrice,
+    subtotal: ticketPrice,
+    baseAmount: ticketPrice,
+    serviceFee: feeAmount,
+    feeAmount,
+    customerTotal,
+    grandTotal: customerTotal,
+    absorbFees,
   }
 }
 

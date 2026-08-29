@@ -5,14 +5,11 @@ import {
 } from "@/lib/checkout/cart"
 import { amountsMatch } from "@/lib/checkout/hybrid-cart"
 import { displayedTotalMatchesServer } from "@/lib/checkout/price-guard"
-import { centsToMoney, moneyToCents } from "@/lib/money/cents"
 
 export type CheckoutMoneyQuote = CartPriceBreakdown & {
-  /** Precio neto de entradas (público All-In menos comisión). */
+  /** Σ precio ingresado. Se persiste en `orders.subtotal`. */
   ticketAmount: number
-  /** Comisión Tokepass extraída. Se persiste en `orders.service_charge`. */
-  feeAmount: number
-  /** Alias de `grandTotal` para el quote histórico. */
+  /** Alias de `grandTotal` / `customerTotal`. */
   total: number
 }
 
@@ -21,14 +18,17 @@ export type ClientCheckoutMoney = {
   subtotal?: number | null
   serviceFee?: number | null
   grandTotal?: number | null
+  ticketPrice?: number | null
+  feeAmount?: number | null
+  customerTotal?: number | null
 }
 
 export type OrderMoneyLedger = {
-  /** Merchandise público All-In. */
+  /** Precio ingresado (ticketPrice). */
   subtotal: number
-  /** fee_amount contable. */
+  /** feeAmount. */
   service_charge: number
-  /** Monto cobrado. All-In: igual al subtotal. */
+  /** customerTotal cobrado al comprador. */
   total_amount: number
 }
 
@@ -37,22 +37,18 @@ export function quoteCheckoutMoney(
   rule: CartServiceFeeRule = {},
 ): CheckoutMoneyQuote {
   const quote = calculateCartPriceBreakdown(lines, rule)
-  const ticketAmount = centsToMoney(
-    Math.max(0, moneyToCents(quote.subtotal) - moneyToCents(quote.serviceFee)),
-  )
   return {
     ...quote,
-    ticketAmount,
-    feeAmount: quote.serviceFee,
-    total: quote.grandTotal,
+    ticketAmount: quote.ticketPrice,
+    total: quote.customerTotal,
   }
 }
 
 export function orderLedgerFromQuote(quote: CheckoutMoneyQuote): OrderMoneyLedger {
   return {
-    subtotal: quote.subtotal,
+    subtotal: quote.ticketPrice,
     service_charge: quote.feeAmount,
-    total_amount: quote.grandTotal,
+    total_amount: quote.customerTotal,
   }
 }
 
@@ -67,15 +63,18 @@ export function clientCheckoutMoneyMatchesQuoted(
 ): boolean {
   if (options?.skipPrePromoTotal) return true
 
-  const grand = client.grandTotal ?? client.displayedTotal
-  if (!displayedTotalMatchesServer(grand, server.grandTotal)) return false
+  const grand =
+    client.customerTotal ?? client.grandTotal ?? client.displayedTotal
+  if (!displayedTotalMatchesServer(grand, server.customerTotal)) return false
+  const ticketPrice = client.ticketPrice ?? client.subtotal
   if (
-    client.subtotal != null &&
-    !displayedTotalMatchesServer(client.subtotal, server.subtotal)
+    ticketPrice != null &&
+    !displayedTotalMatchesServer(ticketPrice, server.ticketPrice)
   ) {
     return false
   }
-  if (client.serviceFee != null && !amountsMatch(client.serviceFee, server.serviceFee)) {
+  const fee = client.feeAmount ?? client.serviceFee
+  if (fee != null && !amountsMatch(fee, server.feeAmount)) {
     return false
   }
   return true

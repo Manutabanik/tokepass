@@ -427,6 +427,30 @@ export const CheckoutPayloadSchema = z.preprocess(
       .transform((value) =>
         value == null ? value : centsToMoney(moneyToCents(value)),
       ),
+    ticketPrice: z
+      .number()
+      .finite()
+      .min(0)
+      .optional()
+      .transform((value) =>
+        value == null ? value : centsToMoney(moneyToCents(value)),
+      ),
+    feeAmount: z
+      .number()
+      .finite()
+      .min(0)
+      .optional()
+      .transform((value) =>
+        value == null ? value : centsToMoney(moneyToCents(value)),
+      ),
+    customerTotal: z
+      .number()
+      .finite()
+      .min(0)
+      .optional()
+      .transform((value) =>
+        value == null ? value : centsToMoney(moneyToCents(value)),
+      ),
     idempotencyKey: z.string().uuid(UUID_ERROR).optional().nullable(),
     cartSessionId: z.string().uuid(UUID_ERROR).optional().nullable(),
   })

@@ -17,7 +17,7 @@ import {
 } from "@/lib/checkout/ticket-stock"
 import { IncludesServiceFeeHint } from "@/components/public/includes-service-fee-hint"
 import { publicOfferPrice } from "@/lib/checkout/public-price"
-import { formatTicketPrice } from "@/lib/format"
+import { CustomerFacingTicketPrice } from "@/components/public/customer-facing-price"
 import { resolveTicketSaleState } from "@/lib/inventory/ticket-sale-window"
 import { isLogicalGeneralSectorId } from "@/lib/seating/venue-map-pricing"
 import { resolveTicketSectorName } from "@/lib/seating/storefront-selection"
@@ -212,9 +212,11 @@ export function TicketTierList({
                           soldOut && "text-muted-foreground line-through",
                         )}
                       >
-                        {offerPrice === 0
-                          ? "Gratis"
-                          : formatTicketPrice(offerPrice)}
+                        {offerPrice === 0 ? (
+                          "Gratis"
+                        ) : (
+                          <CustomerFacingTicketPrice price={offerPrice} />
+                        )}
                       </span>
                       {soldOut ? (
                         <span className={SOLD_OUT_BADGE_CLASS}>Agotado</span>

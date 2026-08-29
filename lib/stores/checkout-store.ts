@@ -77,14 +77,18 @@ export type StorefrontCartLine = {
   scheduleId?: string | null
   dateString?: string | null
   quantity: number
-  /** Precio público All-In por unidad. Nunca se envía a reserva/checkout. */
+  /** Precio ingresado / catálogo por unidad. Nunca se envía a reserva/checkout. */
   price: number
-  /** Entrada base extraída (unidad). */
+  ticketPrice?: number
+  /** Entrada (ticketPrice) para el tooltip. */
   basePrice?: number
-  /** Comisión extraída (unidad). */
+  /** Cargo por unidad. */
   serviceFee?: number
-  /** Total cobrado por unidad. All-In: igual a `price`. */
+  feeAmount?: number
+  /** Total cobrado por unidad (`customerTotal`). */
   totalPrice?: number
+  customerTotal?: number
+  absorbFees?: boolean
   seatId?: string | null
   elementId?: string | null
   sectorId?: string | null
@@ -280,11 +284,12 @@ function sameLines(left: StorefrontCartLine[], right: StorefrontCartLine[]) {
 
 function cartTotalsFromLines(
   lines: StorefrontCartLine[],
-  rule?: { rate?: number; fixedFee?: number },
+  rule?: { rate?: number; fixedFee?: number; absorbFees?: boolean },
 ) {
   const feeRule = {
     rate: rule?.rate ?? 0,
     fixedFee: rule?.fixedFee ?? 0,
+    absorbFees: rule?.absorbFees === true,
   }
   const stamped = stampCartLinesMoney(lines, feeRule)
   const quote = calculateCartPriceBreakdown(stamped, feeRule)
@@ -300,11 +305,16 @@ function cartTotalsFromLines(
 
 function totalsForLines(
   lines: StorefrontCartLine[],
-  state: { serviceChargeRate: number; serviceChargeFixedFee: number },
+  state: {
+    serviceChargeRate: number
+    serviceChargeFixedFee: number
+    absorbFees?: boolean
+  },
 ) {
   return cartTotalsFromLines(lines, {
     rate: state.serviceChargeRate,
     fixedFee: state.serviceChargeFixedFee,
+    absorbFees: state.absorbFees === true,
   })
 }
 
@@ -438,6 +448,7 @@ export const useCheckoutStore = create<CheckoutState>()(
         calculateCartPriceBreakdown(get().lines, {
           rate: get().serviceChargeRate,
           fixedFee: get().serviceChargeFixedFee,
+          absorbFees: get().absorbFees,
         }),
       holdExpiresAt: null,
       holdFrozen: false,
@@ -678,6 +689,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           ...totalsForLines(current.lines, {
             serviceChargeRate: nextRate,
             serviceChargeFixedFee: nextFixed,
+            absorbFees: nextAbsorb,
           }),
         })
       },
@@ -1084,10 +1096,12 @@ export function selectCartPriceBreakdown(state: {
   lines: StorefrontCartLine[]
   serviceChargeRate: number
   serviceChargeFixedFee: number
+  absorbFees?: boolean
 }): CartPriceBreakdown {
   return calculateCartPriceBreakdown(state.lines, {
     rate: state.serviceChargeRate,
     fixedFee: state.serviceChargeFixedFee,
+    absorbFees: state.absorbFees === true,
   })
 }
 
@@ -1101,13 +1115,18 @@ export function useCartServiceFeeRule() {
     useShallow((state) => ({
       rate: state.serviceChargeRate,
       fixedFee: state.serviceChargeFixedFee,
+      absorbFees: state.absorbFees,
     })),
   )
 }
 
-export function useCartLineUnitMoney(publicPrice: number): CartLineMoney {
+export function useCartLineUnitMoney(ticketPrice: number): CartLineMoney {
   const rule = useCartServiceFeeRule()
-  return cartLineUnitMoney(publicPrice, rule)
+  return cartLineUnitMoney(ticketPrice, rule)
+}
+
+export function useCustomerFacingUnitPrice(ticketPrice: number): number {
+  return useCartLineUnitMoney(ticketPrice).customerTotal
 }
 
 export function useActiveCheckoutSelection(eventId: string) {

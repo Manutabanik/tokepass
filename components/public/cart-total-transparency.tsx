@@ -17,8 +17,8 @@ export function CartTotalTransparencyTooltip({
 }: {
   className?: string
 }) {
-  const { baseAmount, serviceFee } = useCartPriceBreakdown()
-  if (serviceFee <= 0) return null
+  const { ticketPrice, feeAmount, absorbFees } = useCartPriceBreakdown()
+  if (absorbFees || feeAmount <= 0) return null
 
   return (
     <Tooltip>
@@ -30,7 +30,7 @@ export function CartTotalTransparencyTooltip({
         <Info className="size-3.5" aria-hidden="true" />
       </TooltipTrigger>
       <TooltipContent>
-        {serviceFeeSplitLabel(baseAmount, serviceFee)}
+        {serviceFeeSplitLabel(ticketPrice, feeAmount)}
       </TooltipContent>
     </Tooltip>
   )

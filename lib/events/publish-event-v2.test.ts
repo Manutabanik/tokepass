@@ -147,7 +147,7 @@ describe("buildPublishEventV2Payload", () => {
       isSponsoredByTokePass: false,
     })
     assert.equal(payload.tickets[0]?.base_price, 15000)
-    assert.equal(payload.tickets[0]?.price, 16500)
+    assert.equal(payload.tickets[0]?.price, 15000)
     assert.equal(payload.tickets[0]?.platform_fee, 1500)
   })
 

@@ -72,7 +72,7 @@ describe("cart math", () => {
     assert.equal(toCartNumber("10"), 10)
   })
 
-  it("splits All-In line prices into an included service fee without raising the total", () => {
+  it("computes the transferred service fee from the entered ticket price", () => {
     const lines = [
       { price: 10000, quantity: 2 },
       { price: 0, quantity: 1 },
@@ -94,58 +94,87 @@ describe("cart math", () => {
 })
 
 describe("calculateCartPriceBreakdown", () => {
-  it("returns a derived object instead of a bare total", () => {
+  it("adds the fee on top when absorb_fees is false", () => {
     const lines = [
       { price: 10000, quantity: 2 },
       { price: 5000, quantity: 1 },
     ]
-    const quote = calculateCartPriceBreakdown(lines, { rate: 8, fixedFee: 200 })
-    assert.equal(quote.subtotal, 25000)
-    assert.equal(quote.serviceFee, cartIncludedServiceFee(lines, 8, 200))
-    assert.equal(quote.baseAmount, quote.subtotal - quote.serviceFee)
-    assert.equal(quote.grandTotal, 25000)
-    assert.ok(quote.serviceFee > 0)
-    assert.ok(quote.serviceFee <= quote.grandTotal)
+    const quote = calculateCartPriceBreakdown(lines, {
+      rate: 0.1,
+      absorbFees: false,
+    })
+    assert.equal(quote.ticketPrice, 25000)
+    assert.equal(quote.feeAmount, 2500)
+    assert.equal(quote.customerTotal, 27500)
+    assert.equal(quote.grandTotal, 27500)
+    assert.equal(quote.serviceFee, cartIncludedServiceFee(lines, 0.1))
   })
 
-  it("recalculates when quantity changes without adding the fee twice", () => {
+  it("keeps the entered price as the charge when absorb_fees is true", () => {
     const one = calculateCartPriceBreakdown([{ price: 10000, quantity: 1 }], {
       rate: 0.1,
+      absorbFees: true,
     })
     const two = calculateCartPriceBreakdown([{ price: 10000, quantity: 2 }], {
       rate: 0.1,
+      absorbFees: true,
     })
-    assert.equal(one.subtotal, 10000)
-    assert.equal(one.baseAmount, 9000)
-    assert.equal(one.serviceFee, 1000)
-    assert.equal(one.grandTotal, 10000)
-    assert.equal(two.subtotal, 20000)
-    assert.equal(two.serviceFee, 2000)
+    assert.equal(one.ticketPrice, 10000)
+    assert.equal(one.feeAmount, 1000)
+    assert.equal(one.customerTotal, 10000)
+    assert.equal(one.ticketPrice - one.feeAmount, 9000)
+    assert.equal(two.ticketPrice, 20000)
+    assert.equal(two.feeAmount, 2000)
     assert.equal(two.grandTotal, 20000)
   })
 
   it("keeps a zero quote when the cart is empty or free", () => {
     assert.deepEqual(calculateCartPriceBreakdown([], { rate: 0.1, fixedFee: 200 }), {
+      ticketPrice: 0,
       subtotal: 0,
       baseAmount: 0,
       serviceFee: 0,
+      feeAmount: 0,
+      customerTotal: 0,
       grandTotal: 0,
+      absorbFees: false,
     })
     assert.deepEqual(
       calculateCartPriceBreakdown([{ price: 0, quantity: 3 }], {
         rate: 10,
         fixedFee: 200,
       }),
-      { subtotal: 0, baseAmount: 0, serviceFee: 0, grandTotal: 0 },
+      {
+        ticketPrice: 0,
+        subtotal: 0,
+        baseAmount: 0,
+        serviceFee: 0,
+        feeAmount: 0,
+        customerTotal: 0,
+        grandTotal: 0,
+        absorbFees: false,
+      },
     )
   })
 
-  it("stamps each line with base, fee and all-in total from the event rate", () => {
-    const unit = cartLineUnitMoney(10000, { rate: 0.1, fixedFee: 200 })
-    assert.equal(unit.price, 10000)
-    assert.equal(unit.serviceFee, 1200)
-    assert.equal(unit.basePrice, 8800)
-    assert.equal(unit.totalPrice, 10000)
-    assert.equal(unit.basePrice + unit.serviceFee, unit.totalPrice)
+  it("stamps each line with ticketPrice, feeAmount and customerTotal", () => {
+    const passed = cartLineUnitMoney(10000, {
+      rate: 0.1,
+      fixedFee: 200,
+      absorbFees: false,
+    })
+    assert.equal(passed.ticketPrice, 10000)
+    assert.equal(passed.feeAmount, 1200)
+    assert.equal(passed.customerTotal, 11200)
+    assert.equal(passed.totalPrice, 11200)
+    assert.equal(passed.absorbFees, false)
+
+    const absorbed = cartLineUnitMoney(10000, {
+      rate: 0.1,
+      absorbFees: true,
+    })
+    assert.equal(absorbed.customerTotal, 10000)
+    assert.equal(absorbed.feeAmount, 1000)
+    assert.equal(absorbed.absorbFees, true)
   })
 })
