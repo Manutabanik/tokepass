@@ -73,6 +73,7 @@ export type LiveEventSnapshotV2 = {
     restrictions?: string | null
     what_to_bring?: string | null
     lineup?: unknown
+    absorb_fees?: boolean | null
   }
   venue: LiveEventVenueSnapshotV2 | null
   tickets: LiveEventTicketSnapshotV2[]
@@ -219,7 +220,7 @@ export function rehydrateEventDraftV2(
     seatingMaps,
     settings: {
       isPublic: event.visibility === "public",
-      absorbFees: false,
+      absorbFees: event.absorb_fees === true,
       refundPolicy: parseEventRefundPolicy(event.refund_policy),
       checkoutMessage,
       deliveryMode: online ? "ONLINE" : "PRESENCIAL",

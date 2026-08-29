@@ -318,6 +318,8 @@ type TicketSelectorProps = {
   serviceChargeRate?: number
   /** Cargo fijo ARS por entrada paga (split All-In). */
   platformFixedFee?: number
+  /** true = el organizador absorbe. false = el comprador paga (precio All-In). */
+  absorbFees?: boolean
   /** Código RRPP desde ?rrpp= / cookie — nunca se envía promoter_id al servidor */
   referralCode?: string | null
   seatingUnits?: EventSeatingUnit[]
@@ -446,6 +448,7 @@ export function CheckoutTunnel({
   scheduleDays = [],
   serviceChargeRate,
   platformFixedFee = 0,
+  absorbFees = false,
   maxTicketsPerUser = null,
   fillViewport = false,
   isOnline = false,
@@ -545,21 +548,25 @@ export function CheckoutTunnel({
   const feeRate = fallbackServiceFeeRate(serviceChargeRate)
   const storedFeeRate = useCheckoutStore((state) => state.serviceChargeRate)
   const storedFeeFixed = useCheckoutStore((state) => state.serviceChargeFixedFee)
+  const storedAbsorbFees = useCheckoutStore((state) => state.absorbFees)
   if (
     storedFeeRate !== feeRate ||
-    storedFeeFixed !== platformFixedFee
+    storedFeeFixed !== platformFixedFee ||
+    storedAbsorbFees !== absorbFees
   ) {
     useCheckoutStore.getState().setServiceChargeRule({
       rate: feeRate,
       fixedFee: platformFixedFee,
+      absorbFees,
     })
   }
   useEffect(() => {
     useCheckoutStore.getState().setServiceChargeRule({
       rate: feeRate,
       fixedFee: platformFixedFee,
+      absorbFees,
     })
-  }, [feeRate, platformFixedFee])
+  }, [absorbFees, feeRate, platformFixedFee])
   const buyer = useCheckoutStore((state) => state.buyer)
   const setBuyer = useCheckoutStore((state) => state.setBuyer)
   const buyerForm = useForm<CheckoutBuyerInfo>({

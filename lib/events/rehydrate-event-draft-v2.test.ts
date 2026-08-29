@@ -130,6 +130,7 @@ describe("rehydrateEventDraftV2", () => {
     assert.equal(draft.location.address, "Av. Córdoba 1234")
     assert.equal(draft.venueCapacity, 200)
     assert.equal(draft.settings.isPublic, true)
+    assert.equal(draft.settings.absorbFees, false)
     assert.equal(draft.settings.refundPolicy, "no_refunds")
     assert.equal(draft.tickets.length, 2)
     assert.equal(draft.tickets[0]?.name, "VIP")
@@ -157,6 +158,31 @@ describe("rehydrateEventDraftV2", () => {
     assert.equal(draft.whatToBring, "DNI")
     assert.equal(draft.lineup[0]?.name, "Wos")
     assert.equal(draft.lineup[0]?.source, "local")
+  })
+
+  it("restores absorbFees from events.absorb_fees", () => {
+    const draft = rehydrateEventDraftV2({
+      event: {
+        title: "After",
+        date: "2026-09-01T22:00:00-03:00",
+        ends_at: null,
+        location: "CABA",
+        description: null,
+        flyer_url: null,
+        image_url: null,
+        social_share_image_url: null,
+        visibility: "public",
+        refund_policy: "organizer",
+        province: null,
+        department: null,
+        delivery_mode: "PRESENCIAL",
+        venue_map: null,
+        absorb_fees: true,
+      },
+      venue: null,
+      tickets: [],
+    })
+    assert.equal(draft.settings.absorbFees, true)
   })
 
   it("restores per-day seatingMaps from published seating_maps rows", () => {

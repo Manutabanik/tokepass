@@ -201,7 +201,9 @@ export function EventEditorV2({
       const latest = await getEventDraftV2(eventId)
       if (latest.success) {
         setFee(latest.fee)
-        reset(hydrateEventDraftV2ForEditor(latest.draftState))
+        const next = hydrateEventDraftV2ForEditor(latest.draftState)
+        next.settings.absorbFees = latest.absorbFees
+        reset(next)
       } else {
         markDraftClean()
       }
@@ -253,7 +255,9 @@ export function EventEditorV2({
       const latest = await getEventDraftV2(eventId)
       if (latest.success) {
         setFee(latest.fee)
-        reset(hydrateEventDraftV2ForEditor(latest.draftState))
+        const next = hydrateEventDraftV2ForEditor(latest.draftState)
+        next.settings.absorbFees = latest.absorbFees
+        reset(next)
       }
       setSuccessUpdated(wasPublished)
       setSuccessUrl(result.publicUrl)
@@ -312,6 +316,7 @@ export function EventEditorV2({
               ) : null}
               {step === 3 ? (
                 <EventEditorV2LaunchStep
+                  eventId={eventId}
                   isPublished={nowPublished}
                   publishing={busy === "publish"}
                   previewing={busy === "preview"}

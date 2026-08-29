@@ -27,6 +27,7 @@ function sampleEvent(): EventDetails {
     scheduleDays: [],
     serviceChargeRate: 0.15,
     platformFixedFee: 0,
+    absorbFees: false,
     isSponsoredByTokePass: false,
     maxFreeTickets: 0,
     organizerId: "org-1",

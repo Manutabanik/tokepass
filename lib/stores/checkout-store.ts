@@ -152,6 +152,8 @@ type CheckoutState = {
   grandTotal: number
   serviceChargeRate: number
   serviceChargeFixedFee: number
+  /** true = el organizador absorbe. false = el comprador paga (precio público All-In). */
+  absorbFees: boolean
   getTotals: () => CartPriceBreakdown
   holdExpiresAt: string | null
   holdFrozen: boolean
@@ -212,6 +214,7 @@ type CheckoutState = {
   setServiceChargeRule: (input: {
     rate?: number | null
     fixedFee?: number | null
+    absorbFees?: boolean | null
   }) => void
   setCartTotals: (input: { totalAmount: number; itemsCount: number }) => void
   setCartLines: (
@@ -430,6 +433,7 @@ export const useCheckoutStore = create<CheckoutState>()(
       grandTotal: 0,
       serviceChargeRate: fallbackServiceFeeRate(null),
       serviceChargeFixedFee: 0,
+      absorbFees: false,
       getTotals: () =>
         calculateCartPriceBreakdown(get().lines, {
           rate: get().serviceChargeRate,
@@ -577,6 +581,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           grandTotal: 0,
           serviceChargeRate: fallbackServiceFeeRate(null),
           serviceChargeFixedFee: 0,
+          absorbFees: false,
           holdExpiresAt: null,
           holdFrozen: false,
           holdFrozenSeconds: null,
@@ -651,21 +656,25 @@ export const useCheckoutStore = create<CheckoutState>()(
         set({ buyer: next })
       },
 
-      setServiceChargeRule: ({ rate, fixedFee = 0 }) => {
+      setServiceChargeRule: ({ rate, fixedFee = 0, absorbFees }) => {
         const current = get()
         const nextRate = fallbackServiceFeeRate(rate)
         const nextFixed = Number.isFinite(Number(fixedFee))
           ? Math.max(0, Number(fixedFee))
           : 0
+        const nextAbsorb =
+          absorbFees == null ? current.absorbFees : absorbFees === true
         if (
           current.serviceChargeRate === nextRate &&
-          current.serviceChargeFixedFee === nextFixed
+          current.serviceChargeFixedFee === nextFixed &&
+          current.absorbFees === nextAbsorb
         ) {
           return
         }
         set({
           serviceChargeRate: nextRate,
           serviceChargeFixedFee: nextFixed,
+          absorbFees: nextAbsorb,
           ...totalsForLines(current.lines, {
             serviceChargeRate: nextRate,
             serviceChargeFixedFee: nextFixed,

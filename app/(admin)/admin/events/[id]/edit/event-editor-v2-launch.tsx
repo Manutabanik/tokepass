@@ -1,9 +1,12 @@
 "use client"
 
+import { useState } from "react"
 import { CircleAlert, CircleCheck, Eye, MapPin } from "lucide-react"
 import Image from "next/image"
 import { Controller, useFormContext, useWatch } from "react-hook-form"
+import { toast } from "sonner"
 
+import { updateEventAbsorbFees } from "@/app/actions/events-v2"
 import { useEventEditorFee } from "./event-editor-fee-context"
 import { EventEditorV2SettingsStep } from "./event-editor-v2-settings"
 import { BENTO_GRID_CLASS, DraftCard, DraftHint } from "./event-editor-v2-ui"
@@ -27,6 +30,7 @@ import { cn } from "@/lib/utils"
 import type { EventDraftV2 } from "@/lib/validations/event-draft-v2"
 
 export function EventEditorV2LaunchStep({
+  eventId,
   isPublished,
   publishing,
   previewing,
@@ -34,6 +38,7 @@ export function EventEditorV2LaunchStep({
   launchBlockedReason,
   onPreview,
 }: {
+  eventId: string
   isPublished: boolean
   publishing: boolean
   previewing: boolean
@@ -42,6 +47,7 @@ export function EventEditorV2LaunchStep({
   onPreview: () => void
 }) {
   const { control } = useFormContext<EventDraftV2>()
+  const [savingAbsorb, setSavingAbsorb] = useState(false)
   const fee = useEventEditorFee()
   const platformFeeRate = fee.isSponsoredByTokePass
     ? 0
@@ -121,9 +127,23 @@ export function EventEditorV2LaunchStep({
                   <Switch
                     id="event-v2-absorb-fees"
                     checked={Boolean(field.value)}
-                    onCheckedChange={field.onChange}
+                    disabled={savingAbsorb}
+                    onCheckedChange={(checked) => {
+                      const previous = Boolean(field.value)
+                      field.onChange(checked)
+                      setSavingAbsorb(true)
+                      void updateEventAbsorbFees(eventId, checked).then(
+                        (result) => {
+                          setSavingAbsorb(false)
+                          if (result.success) return
+                          field.onChange(previous)
+                          toast.error(result.error)
+                        },
+                      )
+                    }}
                     className="data-checked:bg-emerald-500"
                     aria-label="Absorber cargos"
+                    aria-busy={savingAbsorb}
                   />
                 </div>
               )}

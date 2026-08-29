@@ -36,11 +36,14 @@ export default async function EditEventPage({
     )
   }
 
+  const initialDraft = hydrateEventDraftV2ForEditor(result.draftState)
+  initialDraft.settings.absorbFees = result.absorbFees
+
   return (
     <ClientErrorBoundary homeHref="/admin/events" homeLabel="Volver a eventos">
       <EventEditorV2
         eventId={result.eventId}
-        initialDraft={hydrateEventDraftV2ForEditor(result.draftState)}
+        initialDraft={initialDraft}
         isPublished={result.isPublished}
         fee={result.fee}
       />

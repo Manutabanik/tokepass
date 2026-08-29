@@ -144,6 +144,11 @@ export type EventDetails = {
   serviceChargeRate: number
   /** Cargo fijo ARS por entrada paga (split All-In). */
   platformFixedFee: number
+  /**
+   * true = el organizador absorbe el cargo.
+   * false (default) = el comprador lo paga. El precio público ya es All-In.
+   */
+  absorbFees: boolean
   isSponsoredByTokePass: boolean
   maxFreeTickets: number
   organizerId: string | null
@@ -291,6 +296,7 @@ type EventDetailRow = {
   max_tickets_per_user?: number | null
   platform_fee_percentage?: number | null
   platform_fixed_fee?: number | null
+  absorb_fees?: boolean | null
   meta_pixel_id?: string | null
   meta_pixel_enabled?: boolean | null
   tiktok_pixel_id?: string | null
@@ -1114,9 +1120,9 @@ async function loadEventDetails(
   const publicTierSelectCore =
     "id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type"
   const eventSelectWithPicker =
-    `id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, social_share_image_url, status, visibility, schedule_days, organizer_id, category_id, delivery_mode, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, restrictions, what_to_bring, lineup, default_ticket_tab, venue_id, has_seating_plan, venue_map, accepts_mercado_pago, accepts_pos_payments, refund_policy, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(${publicTierSelectWithType}), profiles!events_organizer_id_fkey(full_name)`
+    `id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, social_share_image_url, status, visibility, schedule_days, organizer_id, category_id, delivery_mode, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, absorb_fees, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, restrictions, what_to_bring, lineup, default_ticket_tab, venue_id, has_seating_plan, venue_map, accepts_mercado_pago, accepts_pos_payments, refund_policy, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(${publicTierSelectWithType}), profiles!events_organizer_id_fkey(full_name)`
   const eventSelectCore =
-    `id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venue_id, has_seating_plan, venue_map, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(${publicTierSelectCore}), profiles!events_organizer_id_fkey(full_name)`
+    `id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, absorb_fees, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venue_id, has_seating_plan, venue_map, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(${publicTierSelectCore}), profiles!events_organizer_id_fkey(full_name)`
 
   let query = supabase
     .from("events")
@@ -1383,6 +1389,7 @@ async function loadEventDetails(
     scheduleDays,
     serviceChargeRate,
     platformFixedFee,
+    absorbFees: event.absorb_fees === true,
     isSponsoredByTokePass,
     maxFreeTickets: Number(event.max_free_tickets ?? 100),
     maxTicketsPerUser: (() => {

@@ -53,6 +53,10 @@ import {
   readFileBytes,
 } from "@/lib/media/image-magic"
 import {
+  eventAbsorbFeesFromRow,
+  overlayDraftAbsorbFees,
+} from "@/lib/events/event-absorb-fees"
+import {
   DEFAULT_MAX_FREE_TICKETS,
   eventFeeConfigFromRow,
   type EventFeeConfig,
@@ -81,8 +85,13 @@ export type GetEventDraftV2Result =
       draftState: Json | null
       isPublished: boolean
       fee: EventFeeConfig
+      absorbFees: boolean
     }
   | { success: false; error: string; code?: string }
+
+export type UpdateEventAbsorbFeesResult =
+  | { success: true; absorbFees: boolean }
+  | { success: false; error: string }
 
 function publishActionError(error: unknown): string {
   return toUserFacingError(
@@ -146,7 +155,7 @@ export async function getEventDraftV2(
   const { data, error } = await gate.supabase
     .from("events")
     .select(
-      "id, organizer_id, status, draft_state, title, date, ends_at, location, description, flyer_url, image_url, social_share_image_url, visibility, refund_policy, province, department, delivery_mode, venue_map, venue_id, schedule_days, promo_video_url, gallery_urls, restrictions, what_to_bring, lineup, platform_fee_percentage, platform_fixed_fee, max_free_tickets, is_sponsored_by_tokepass",
+      "id, organizer_id, status, draft_state, title, date, ends_at, location, description, flyer_url, image_url, social_share_image_url, visibility, refund_policy, province, department, delivery_mode, venue_map, venue_id, schedule_days, promo_video_url, gallery_urls, restrictions, what_to_bring, lineup, platform_fee_percentage, platform_fixed_fee, absorb_fees, max_free_tickets, is_sponsored_by_tokepass",
     )
     .eq("id", id)
     .maybeSingle()
@@ -155,6 +164,8 @@ export async function getEventDraftV2(
   if (data.organizer_id !== gate.userId && !gate.isSuperAdmin) {
     return { success: false, error: "No tenés permiso para editar este evento." }
   }
+
+  const absorbFees = eventAbsorbFeesFromRow(data)
 
   if (data.status === "published" && isEventDraftStateEmpty(data.draft_state)) {
     const draftState = await persistRehydratedPublishedDraft({
@@ -167,6 +178,7 @@ export async function getEventDraftV2(
       draftState,
       isPublished: true,
       fee: eventFeeConfigFromRow(data),
+      absorbFees,
     }
   }
 
@@ -187,10 +199,12 @@ export async function getEventDraftV2(
     data.status === "published" &&
     overlay.draft.lineup.length === 0 &&
     liveLineup.length > 0
-  const nextDraft = restorePublishedLineup
+  const restoredDraft = restorePublishedLineup
     ? parseEventDraftV2({ ...overlay.draft, lineup: liveLineup })
     : overlay.draft
-  if (overlay.changed || restorePublishedLineup) {
+  const absorbOverlay = overlayDraftAbsorbFees(restoredDraft, absorbFees)
+  const nextDraft = absorbOverlay.draft
+  if (overlay.changed || restorePublishedLineup || absorbOverlay.changed) {
     const draftState = toEventDraftV2Payload(nextDraft) as Json
     const written = await gate.supabase
       .from("events")
@@ -207,6 +221,7 @@ export async function getEventDraftV2(
       draftState: (written.data?.draft_state ?? draftState) as Json,
       isPublished: data.status === "published",
       fee: eventFeeConfigFromRow(data),
+      absorbFees,
     }
   }
 
@@ -216,6 +231,7 @@ export async function getEventDraftV2(
     draftState: (data.draft_state ?? null) as Json | null,
     isPublished: data.status === "published",
     fee: eventFeeConfigFromRow(data),
+    absorbFees,
   }
 }
 
@@ -312,6 +328,7 @@ async function persistRehydratedPublishedDraft(input: {
     restrictions?: string | null
     what_to_bring?: string | null
     lineup?: unknown
+    absorb_fees?: boolean | null
   }
 }): Promise<Json> {
   const venueQuery = input.event.venue_id
@@ -411,7 +428,7 @@ export async function saveEventDraftV2(
 
   const { data: event, error: eventError } = await gate.supabase
     .from("events")
-    .select("id, organizer_id")
+    .select("id, organizer_id, absorb_fees")
     .eq("id", id)
     .maybeSingle()
   if (eventError) return { success: false, error: formatSupabaseError(eventError) }
@@ -420,7 +437,10 @@ export async function saveEventDraftV2(
     return { success: false, error: "No tenés permiso para editar este evento." }
   }
 
-  const parsed = sanitizeEventDraftForPersist(parseEventDraftV2(rawData))
+  const parsed = overlayDraftAbsorbFees(
+    sanitizeEventDraftForPersist(parseEventDraftV2(rawData)),
+    eventAbsorbFeesFromRow(event),
+  ).draft
   const locked = await assertDraftMapLayoutImmutable({
     eventId: id,
     draft: parsed,
@@ -456,6 +476,70 @@ export async function saveEventDraftV2(
     eventId: data.id,
     draftState: (data.draft_state ?? draftState) as Json,
   }
+}
+
+/**
+ * Fuente de verdad del switch "Absorber cargos".
+ * UPDATE inmediato de events.absorb_fees + espejo en draft_state.
+ */
+export async function updateEventAbsorbFees(
+  eventId: string,
+  absorbFees: boolean,
+): Promise<UpdateEventAbsorbFeesResult> {
+  const id = eventId.trim()
+  if (!id) return { success: false, error: "Evento inválido." }
+
+  const gate = await requireDraftWriter()
+  if (!gate.ok) return { success: false, error: gate.error }
+
+  const { data: event, error: eventError } = await gate.supabase
+    .from("events")
+    .select("id, organizer_id, draft_state, slug")
+    .eq("id", id)
+    .maybeSingle()
+  if (eventError) return { success: false, error: formatSupabaseError(eventError) }
+  if (!event) return { success: false, error: "Evento no encontrado." }
+  if (event.organizer_id !== gate.userId && !gate.isSuperAdmin) {
+    return { success: false, error: "No tenés permiso para editar este evento." }
+  }
+
+  const next = absorbFees === true
+  const parsed = overlayDraftAbsorbFees(
+    parseEventDraftV2(event.draft_state),
+    next,
+  ).draft
+  const draftState = toEventDraftV2Payload(parsed) as unknown as Json
+
+  const { data, error } = await gate.supabase
+    .from("events")
+    .update({
+      absorb_fees: next,
+      draft_state: draftState,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("organizer_id", event.organizer_id)
+    .select("id, absorb_fees")
+    .maybeSingle()
+
+  if (error) return { success: false, error: formatSupabaseError(error) }
+  if (!data?.id) {
+    return {
+      success: false,
+      error: formatSupabaseError({
+        code: "NO_ROWS",
+        message: "events.update absorb_fees no devolvió fila",
+        details: id,
+      }),
+    }
+  }
+
+  revalidatePath("/admin/events")
+  revalidatePath(`/admin/events/${id}`)
+  revalidatePath(`/admin/events/${id}/edit`)
+  revalidatePublicEventCache({ eventId: id, slug: event.slug })
+
+  return { success: true, absorbFees: eventAbsorbFeesFromRow(data) }
 }
 
 export type UploadEventDraftMediaV2Result =
@@ -1075,7 +1159,7 @@ export async function publishEventV2(
   const { data: event, error: eventError } = await gate.supabase
     .from("events")
     .select(
-      "id, organizer_id, venue_id, draft_state, slug, flyer_url, image_url, social_share_image_url, platform_fee_percentage, platform_fixed_fee, max_free_tickets, is_sponsored_by_tokepass",
+      "id, organizer_id, venue_id, draft_state, slug, flyer_url, image_url, social_share_image_url, platform_fee_percentage, platform_fixed_fee, absorb_fees, max_free_tickets, is_sponsored_by_tokepass",
     )
     .eq("id", id)
     .maybeSingle()
@@ -1102,7 +1186,10 @@ export async function publishEventV2(
     return { success: false, error: formatSupabaseError(latestDraft.error) }
   }
   const draftState = latestDraft.data?.draft_state ?? event.draft_state
-  const draft = sanitizeEventDraftForPersist(parseEventDraftV2(draftState))
+  const draft = overlayDraftAbsorbFees(
+    sanitizeEventDraftForPersist(parseEventDraftV2(draftState)),
+    eventAbsorbFeesFromRow(event),
+  ).draft
 
   const parsed = eventPublishSchema.safeParse(draft)
   if (!parsed.success) {

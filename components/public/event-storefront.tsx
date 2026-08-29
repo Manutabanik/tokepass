@@ -292,13 +292,16 @@ export function EventStorefront({
   const eventFeeRate = fallbackServiceFeeRate(event.serviceChargeRate)
   const checkoutFeeRate = useCheckoutStore((state) => state.serviceChargeRate)
   const checkoutFeeFixed = useCheckoutStore((state) => state.serviceChargeFixedFee)
+  const checkoutAbsorbFees = useCheckoutStore((state) => state.absorbFees)
   if (
     checkoutFeeRate !== eventFeeRate ||
-    checkoutFeeFixed !== event.platformFixedFee
+    checkoutFeeFixed !== event.platformFixedFee ||
+    checkoutAbsorbFees !== event.absorbFees
   ) {
     useCheckoutStore.getState().setServiceChargeRule({
       rate: eventFeeRate,
       fixedFee: event.platformFixedFee,
+      absorbFees: event.absorbFees,
     })
   }
 
@@ -311,8 +314,9 @@ export function EventStorefront({
     store.setServiceChargeRule({
       rate: eventFeeRate,
       fixedFee: event.platformFixedFee,
+      absorbFees: event.absorbFees,
     })
-  }, [event.id, event.platformFixedFee, eventFeeRate])
+  }, [event.absorbFees, event.id, event.platformFixedFee, eventFeeRate])
 
   useEffect(() => {
     const bind = () => useStorefrontSeatStore.getState().bindEvent(event.id)
@@ -682,6 +686,7 @@ export function EventStorefront({
             previewKey={previewKey}
             serviceChargeRate={event.serviceChargeRate}
             platformFixedFee={event.platformFixedFee}
+            absorbFees={event.absorbFees}
             scheduleDays={event.scheduleDays ?? []}
             seatingUnits={event.seatingUnits}
             seatingSectorSummaries={event.seatingSectorSummaries}

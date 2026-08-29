@@ -286,6 +286,11 @@ export type Event = {
   platform_fee_percentage: number
   /** Cargo fijo ARS por entrada paga (split All-In). */
   platform_fixed_fee: number
+  /**
+   * true = el organizador absorbe el cargo TokePass.
+   * false (default) = el comprador lo paga.
+   */
+  absorb_fees: boolean
   /** Tope de capacidad total en tiers a $0. */
   max_free_tickets: number
   /** Auspicio TokePass: fees a 0 + branding. */
@@ -1328,6 +1333,7 @@ type EventInsert = Omit<
   | "storefront_views"
   | "platform_fee_percentage"
   | "platform_fixed_fee"
+  | "absorb_fees"
   | "max_free_tickets"
   | "is_sponsored_by_tokepass"
   | "pos_supervisor_pin_hash"
@@ -1388,6 +1394,7 @@ type EventInsert = Omit<
   storefront_views?: number
   platform_fee_percentage?: number
   platform_fixed_fee?: number
+  absorb_fees?: boolean
   max_free_tickets?: number
   is_sponsored_by_tokepass?: boolean
   pos_supervisor_pin_hash?: string | null

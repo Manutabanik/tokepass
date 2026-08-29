@@ -131,6 +131,7 @@ export async function createEventDraftV2(options?: {
       status: "draft",
       has_seating_plan: false,
       platform_fee_percentage: platformFeePercentage,
+      absorb_fees: false,
       draft_state: toEventDraftV2Payload(emptyEventDraftV2()) as Json,
     })
     .select("id")
