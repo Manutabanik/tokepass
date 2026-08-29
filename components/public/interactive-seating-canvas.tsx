@@ -416,21 +416,24 @@ export function InteractiveSeatingCanvas({
     return () => observer.disconnect()
   }, [])
 
-  function applyBuyerContentFit(animate: boolean) {
-    if (!buyerChrome || viewMode !== "macro") return false
-    if (wrapWidth < 80 || wrapHeight < 80 || !buyerFitBox) return false
-    const controls = transformRef.current
-    if (!controls) return false
-    const camera = fitDrawableContentCamera(buyerFitBox, wrapWidth, wrapHeight)
-    controls.setTransform(
-      camera.positionX,
-      camera.positionY,
-      camera.scale,
-      animate ? 280 : 0,
-      "easeOut",
-    )
-    return true
-  }
+  const applyBuyerContentFit = useCallback(
+    (animate: boolean) => {
+      if (!buyerChrome || viewMode !== "macro") return false
+      if (wrapWidth < 80 || wrapHeight < 80 || !buyerFitBox) return false
+      const controls = transformRef.current
+      if (!controls) return false
+      const camera = fitDrawableContentCamera(buyerFitBox, wrapWidth, wrapHeight)
+      controls.setTransform(
+        camera.positionX,
+        camera.positionY,
+        camera.scale,
+        animate ? 280 : 0,
+        "easeOut",
+      )
+      return true
+    },
+    [buyerChrome, buyerFitBox, viewMode, wrapHeight, wrapWidth],
+  )
 
   useEffect(() => {
     if (!buyerChrome || viewMode !== "macro") return
@@ -438,13 +441,7 @@ export function InteractiveSeatingCanvas({
       applyBuyerContentFit(true)
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [
-    buyerChrome,
-    buyerFitBox,
-    viewMode,
-    wrapHeight,
-    wrapWidth,
-  ])
+  }, [applyBuyerContentFit, buyerChrome, viewMode])
 
   useEffect(() => {
     if (!lodEnabled || viewMode !== "micro" || !focusedZoneId) {
