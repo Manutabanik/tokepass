@@ -5,6 +5,7 @@ import { useFormContext, useWatch } from "react-hook-form"
 
 import { useDraftArchetype } from "./event-editor-v2-archetype"
 import { EventEditorV2SlotSelect } from "./event-editor-v2-slot-select"
+import { OrganizerPublicPriceHint } from "./organizer-public-price-hint"
 import { DraftCard, DraftHint } from "./event-editor-v2-ui"
 import {
   Accordion,
@@ -25,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { formatCurrency, formatNumber } from "@/lib/format"
+import { ORGANIZER_BASE_PRICE_LABEL } from "@/lib/pricing/organizer-public-price-preview"
 import { cn } from "@/lib/utils"
 import {
   formatDraftTicketValidDaysBadge,
@@ -320,14 +322,15 @@ export function InventorySummaryTable({
                   <div className="grid grid-cols-1 gap-3">
                     <label className="grid gap-1.5">
                       <span className="text-[11px] font-bold text-slate-700 dark:text-zinc-300">
-                        Precio
+                        {ORGANIZER_BASE_PRICE_LABEL}
                       </span>
                       <LedgerNumberInput
                         stacked
                         value={row.price}
-                        ariaLabel={`Precio de ${row.name}`}
+                        ariaLabel={`${ORGANIZER_BASE_PRICE_LABEL} de ${row.name}`}
                         onChange={(value) => writePrice(row, value)}
                       />
+                      <OrganizerPublicPriceHint price={row.price} />
                     </label>
                     <label className="grid gap-1.5">
                       <span className="text-[11px] font-bold text-slate-700 dark:text-zinc-300">
@@ -374,7 +377,9 @@ export function InventorySummaryTable({
                   {showSlots ? (
                     <th className="pb-2 pr-3 font-semibold">Turno</th>
                   ) : null}
-                  <th className="pb-2 pr-3 font-semibold">Precio</th>
+                  <th className="pb-2 pr-3 font-semibold">
+                    {ORGANIZER_BASE_PRICE_LABEL}
+                  </th>
                   <th className="pb-2 pr-3 font-semibold">Stock</th>
                   <th className="pb-2 text-right font-semibold">Recaudación</th>
                   <th className="pb-2 pl-2 text-right font-semibold">
@@ -430,11 +435,14 @@ export function InventorySummaryTable({
                         </td>
                       ) : null}
                       <td className="py-2.5 pr-3">
-                        <LedgerNumberInput
-                          value={row.price}
-                          ariaLabel={`Precio de ${row.name}`}
-                          onChange={(value) => writePrice(row, value)}
-                        />
+                        <div className="grid gap-1.5">
+                          <LedgerNumberInput
+                            value={row.price}
+                            ariaLabel={`${ORGANIZER_BASE_PRICE_LABEL} de ${row.name}`}
+                            onChange={(value) => writePrice(row, value)}
+                          />
+                          <OrganizerPublicPriceHint price={row.price} />
+                        </div>
                       </td>
                       <td className="py-2.5 pr-3">
                         <LedgerNumberInput

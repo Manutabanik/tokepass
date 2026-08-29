@@ -4,6 +4,7 @@ import { CircleAlert, CircleCheck, Eye, MapPin } from "lucide-react"
 import Image from "next/image"
 import { Controller, useFormContext, useWatch } from "react-hook-form"
 
+import { useEventEditorFee } from "./event-editor-fee-context"
 import { EventEditorV2SettingsStep } from "./event-editor-v2-settings"
 import { BENTO_GRID_CLASS, DraftCard, DraftHint } from "./event-editor-v2-ui"
 import { Button } from "@/components/ui/button"
@@ -24,8 +25,6 @@ import {
 import { cn } from "@/lib/utils"
 import type { EventDraftV2 } from "@/lib/validations/event-draft-v2"
 
-const PLATFORM_FEE = 0.1
-
 export function EventEditorV2LaunchStep({
   isPublished,
   publishing,
@@ -42,6 +41,10 @@ export function EventEditorV2LaunchStep({
   onPreview: () => void
 }) {
   const { control } = useFormContext<EventDraftV2>()
+  const fee = useEventEditorFee()
+  const platformFeeRate = fee.isSponsoredByTokePass
+    ? 0
+    : fee.platformFeePercentage / 100
   const tickets = useWatch({ control, name: "tickets" }) ?? []
   const absorbFees = Boolean(useWatch({ control, name: "settings.absorbFees" }))
   const name = useWatch({ control, name: "basicInfo.name" })
@@ -57,7 +60,7 @@ export function EventEditorV2LaunchStep({
   const sale =
     samplePrice == null
       ? null
-      : simulateDraftSale(samplePrice, absorbFees, PLATFORM_FEE)
+      : simulateDraftSale(samplePrice, absorbFees, platformFeeRate)
   const preview = draftLaunchPreview({
     basicInfo: { name, startDate, locationName },
     location: { venueName },
@@ -98,7 +101,8 @@ export function EventEditorV2LaunchStep({
                 Estrategia de Venta
               </h3>
               <DraftHint>
-                Comisión de plataforma simulada: {Math.round(PLATFORM_FEE * 100)}
+                Comisión de plataforma simulada:{" "}
+                {Math.round(platformFeeRate * 100)}
                 %. El ticket de muestra es la entrada más barata.
               </DraftHint>
             </div>

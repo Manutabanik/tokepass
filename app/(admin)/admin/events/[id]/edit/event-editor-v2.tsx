@@ -4,6 +4,7 @@ import { useCallback, useMemo, useRef, useState } from "react"
 import { FormProvider, useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 
+import { EventEditorFeeProvider } from "./event-editor-fee-context"
 import {
   EventEditorV2StickyHeader,
   type EditorV2StepId,
@@ -45,6 +46,10 @@ import {
 } from "@/lib/events/launch-center-v2"
 import { hydrateEventDraftV2ForEditor } from "@/lib/events/draft-day-priced-tickets"
 import {
+  defaultEventFeeConfig,
+  type EventFeeConfig,
+} from "@/lib/pricing/event-fees"
+import {
   eventPublishDisabledReason,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
@@ -53,12 +58,14 @@ type EventEditorV2Props = {
   eventId: string
   initialDraft: EventDraftV2
   isPublished: boolean
+  fee?: EventFeeConfig
 }
 
 export function EventEditorV2({
   eventId,
   initialDraft,
   isPublished,
+  fee: initialFee,
 }: EventEditorV2Props) {
   const [step, setStep] = useState<EditorV2StepId>(1)
   const [busy, setBusy] = useState<"idle" | "preview" | "publish">("idle")
@@ -70,6 +77,9 @@ export function EventEditorV2({
   const [successUrl, setSuccessUrl] = useState("")
   const [successUpdated, setSuccessUpdated] = useState(false)
   const [revealField, setRevealField] = useState<string | null>(null)
+  const [fee, setFee] = useState<EventFeeConfig>(
+    () => initialFee ?? defaultEventFeeConfig(),
+  )
 
   const form = useForm<EventDraftV2>({
     defaultValues: initialDraft,
@@ -190,6 +200,7 @@ export function EventEditorV2({
       }
       const latest = await getEventDraftV2(eventId)
       if (latest.success) {
+        setFee(latest.fee)
         reset(hydrateEventDraftV2ForEditor(latest.draftState))
       } else {
         markDraftClean()
@@ -241,6 +252,7 @@ export function EventEditorV2({
       setNowPublished(true)
       const latest = await getEventDraftV2(eventId)
       if (latest.success) {
+        setFee(latest.fee)
         reset(hydrateEventDraftV2ForEditor(latest.draftState))
       }
       setSuccessUpdated(wasPublished)
@@ -256,7 +268,8 @@ export function EventEditorV2({
   }
 
   return (
-    <FormProvider {...form}>
+    <EventEditorFeeProvider fee={fee}>
+      <FormProvider {...form}>
       <OrphanMapTicketGarbageCollector />
       <div className="w-full flex-1 overflow-x-hidden bg-background pb-24 text-foreground">
         <EventEditorV2StickyHeader
@@ -352,7 +365,8 @@ export function EventEditorV2({
           if (!open) revokeLeave()
         }}
       />
-    </FormProvider>
+      </FormProvider>
+    </EventEditorFeeProvider>
   )
 }
 

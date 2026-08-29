@@ -86,6 +86,7 @@ describe("rehydrateEventDraftV2", () => {
           name: "VIP",
           description: "Acceso preferencial",
           price: 25000,
+          base_price: 22000,
           capacity: 40,
           min_purchase_limit: 1,
           max_purchase_limit: 6,
@@ -132,6 +133,7 @@ describe("rehydrateEventDraftV2", () => {
     assert.equal(draft.settings.refundPolicy, "no_refunds")
     assert.equal(draft.tickets.length, 2)
     assert.equal(draft.tickets[0]?.name, "VIP")
+    assert.equal(draft.tickets[0]?.price, 22000)
     assert.equal(draft.tickets[0]?.ticketType, "standard")
     assert.deepEqual(draft.tickets[0]?.validDayIds, [
       "550e8400-e29b-41d4-a716-446655440001",

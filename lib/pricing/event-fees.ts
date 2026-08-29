@@ -23,6 +23,25 @@ export function defaultEventFeeConfig(): EventFeeConfig {
   }
 }
 
+export function eventFeeConfigFromRow(row: {
+  platform_fee_percentage?: unknown
+  platform_fixed_fee?: unknown
+  max_free_tickets?: unknown
+  is_sponsored_by_tokepass?: unknown
+}): EventFeeConfig {
+  const percentage = Number(row.platform_fee_percentage)
+  const fixed = Number(row.platform_fixed_fee)
+  const maxFree = Number(row.max_free_tickets)
+  return {
+    platformFeePercentage: Number.isFinite(percentage)
+      ? percentage
+      : DEFAULT_PLATFORM_FEE_PERCENTAGE,
+    platformFixedFee: Number.isFinite(fixed) ? fixed : DEFAULT_PLATFORM_FIXED_FEE,
+    maxFreeTickets: Number.isFinite(maxFree) ? maxFree : DEFAULT_MAX_FREE_TICKETS,
+    isSponsoredByTokePass: Boolean(row.is_sponsored_by_tokepass),
+  }
+}
+
 /** Acepta fracción (0.08) o puntos (8). */
 export function normalizeServiceFeeRate(
   value: unknown,

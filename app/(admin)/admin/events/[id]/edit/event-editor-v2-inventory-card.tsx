@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { EventEditorV2SlotSelect } from "./event-editor-v2-slot-select"
+import { OrganizerPublicPriceHint } from "./organizer-public-price-hint"
 import { hasDraftPresale } from "@/lib/events/inventory-summary-v2"
 import {
   draftScheduleDayChipLabel,
@@ -22,6 +23,7 @@ import {
   listDraftScheduleSlots,
 } from "@/lib/events/draft-schedule-slots-v2"
 import { formatCurrency, formatNumber } from "@/lib/format"
+import { ORGANIZER_BASE_PRICE_LABEL } from "@/lib/pricing/organizer-public-price-preview"
 import { cn } from "@/lib/utils"
 import {
   TICKET_COMMERCE_TYPES,
@@ -277,7 +279,7 @@ export function DraftInventoryAccordionCard({
                       htmlFor={`event-v2-${name}-${index}-price`}
                       required
                     >
-                      ¿Cuánto sale?
+                      {ORGANIZER_BASE_PRICE_LABEL}
                     </DraftFieldLabel>
                     <Input
                       id={`event-v2-${name}-${index}-price`}
@@ -291,6 +293,7 @@ export function DraftInventoryAccordionCard({
                       })}
                     />
                     <DraftFieldError message={itemErrors?.price?.message} />
+                    <OrganizerPublicPriceHint price={price} />
                   </div>
                   <div className="grid gap-1.5">
                     <DraftFieldLabel
@@ -512,6 +515,52 @@ export function DraftInventoryAccordionCard({
   )
 }
 
+function DraftDayRatePriceField({
+  name,
+  index,
+  rowIndex,
+  dayId,
+  register,
+  onRateChange,
+}: {
+  name: "tickets" | "extras"
+  index: number
+  rowIndex: number
+  dayId: string
+  register: UseFormRegister<EventDraftV2>
+  onRateChange: () => void
+}) {
+  const { control } = useFormContext<EventDraftV2>()
+  const price = useWatch({
+    control,
+    name: `${name}.${index}.dayRates.${rowIndex}.price`,
+  })
+
+  return (
+    <div className="grid gap-1.5">
+      <DraftFieldLabel
+        htmlFor={`event-v2-${name}-${index}-price-${dayId}`}
+        required
+      >
+        {ORGANIZER_BASE_PRICE_LABEL}
+      </DraftFieldLabel>
+      <Input
+        id={`event-v2-${name}-${index}-price-${dayId}`}
+        type="number"
+        min={0}
+        step={1}
+        inputMode="numeric"
+        className={DRAFT_FIELD_CLASS}
+        {...register(`${name}.${index}.dayRates.${rowIndex}.price`, {
+          setValueAs: draftNumberValue,
+          onChange: onRateChange,
+        })}
+      />
+      <OrganizerPublicPriceHint price={price} />
+    </div>
+  )
+}
+
 function DraftDayRateFields({
   name,
   index,
@@ -536,7 +585,7 @@ function DraftDayRateFields({
         {rows.map((row, rowIndex) => (
           <div
             key={row.dayId}
-            className="grid grid-cols-1 gap-2 sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)] sm:items-end"
+            className="grid grid-cols-1 gap-2 sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)] sm:items-start"
           >
             <input
               type="hidden"
@@ -546,29 +595,17 @@ function DraftDayRateFields({
               type="hidden"
               {...register(`${name}.${index}.dayRates.${rowIndex}.ticketId`)}
             />
-            <p className="text-sm font-semibold text-slate-800 dark:text-zinc-100">
+            <p className="text-sm font-semibold text-slate-800 sm:pt-7 dark:text-zinc-100">
               {row.label}
             </p>
-            <div className="grid gap-1.5">
-              <DraftFieldLabel
-                htmlFor={`event-v2-${name}-${index}-price-${row.dayId}`}
-                required
-              >
-                Precio
-              </DraftFieldLabel>
-              <Input
-                id={`event-v2-${name}-${index}-price-${row.dayId}`}
-                type="number"
-                min={0}
-                step={1}
-                inputMode="numeric"
-                className={DRAFT_FIELD_CLASS}
-                {...register(`${name}.${index}.dayRates.${rowIndex}.price`, {
-                  setValueAs: draftNumberValue,
-                  onChange: onRateChange,
-                })}
-              />
-            </div>
+            <DraftDayRatePriceField
+              name={name}
+              index={index}
+              rowIndex={rowIndex}
+              dayId={row.dayId}
+              register={register}
+              onRateChange={onRateChange}
+            />
             <div className="grid gap-1.5">
               <DraftFieldLabel
                 htmlFor={`event-v2-${name}-${index}-stock-${row.dayId}`}

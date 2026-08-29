@@ -27,6 +27,7 @@ export type LiveEventTicketSnapshotV2 = {
   name: string | null
   description: string | null
   price: number | null
+  base_price?: number | null
   capacity: number | null
   min_purchase_limit: number | null
   max_purchase_limit: number | null
@@ -230,6 +231,14 @@ export function rehydrateEventDraftV2(
   }
 }
 
+function liveTierOrganizerPrice(tier: LiveEventTicketSnapshotV2): number {
+  const base = Number(tier.base_price)
+  if (tier.base_price != null && Number.isFinite(base) && base >= 0) {
+    return Math.max(0, base)
+  }
+  return Math.max(0, Number(tier.price) || 0)
+}
+
 function liveTierToDraftItem(
   tier: LiveEventTicketSnapshotV2,
 ): EventDraftV2LineItem {
@@ -252,7 +261,7 @@ function liveTierToDraftItem(
     id: id || "item-0",
     name: (tier.name ?? "").trim(),
     description: (tier.description ?? "").trim(),
-    price: Math.max(0, Number(tier.price) || 0),
+    price: liveTierOrganizerPrice(tier),
     stock: Math.max(0, Math.floor(Number(tier.capacity) || 0)),
     minOrder: Math.max(1, Math.floor(Number(tier.min_purchase_limit) || 1)),
     maxOrder: (() => {

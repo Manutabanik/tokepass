@@ -296,7 +296,7 @@ function mapLineItemToTier(
     feePercentage: fee.platformFeePercentage,
     fixedFee: fee.platformFixedFee,
     feeStrategy: absorbFees ? "absorb_in_price" : "pass_to_customer",
-    calculationMode: "public_price",
+    calculationMode: absorbFees ? "public_price" : "net_income",
     sponsored: fee.isSponsoredByTokePass,
   })
   const minPurchase = clampLimit(item.minOrder, 1)

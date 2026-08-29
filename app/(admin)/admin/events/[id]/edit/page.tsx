@@ -42,6 +42,7 @@ export default async function EditEventPage({
         eventId={result.eventId}
         initialDraft={hydrateEventDraftV2ForEditor(result.draftState)}
         isPublished={result.isPublished}
+        fee={result.fee}
       />
     </ClientErrorBoundary>
   )

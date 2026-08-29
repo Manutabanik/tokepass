@@ -136,6 +136,21 @@ describe("buildPublishEventV2Payload", () => {
     assert.deepEqual(payload.schedule_days, [])
   })
 
+  it("treats the draft price as organizer net when fees are passed to the buyer", () => {
+    const draft = publishableDraft()
+    draft.settings.absorbFees = false
+    draft.tickets[0]!.price = 15000
+    const payload = buildPublishEventV2Payload(draft, {
+      platformFeePercentage: 10,
+      platformFixedFee: 0,
+      maxFreeTickets: 100,
+      isSponsoredByTokePass: false,
+    })
+    assert.equal(payload.tickets[0]?.base_price, 15000)
+    assert.equal(payload.tickets[0]?.price, 16500)
+    assert.equal(payload.tickets[0]?.platform_fee, 1500)
+  })
+
   it("writes the first day to events.date and the rest to schedule_days", () => {
     const draft = publishableDraft()
     draft.schedule = [

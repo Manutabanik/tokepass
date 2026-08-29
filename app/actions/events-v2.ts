@@ -54,8 +54,8 @@ import {
 } from "@/lib/media/image-magic"
 import {
   DEFAULT_MAX_FREE_TICKETS,
-  DEFAULT_PLATFORM_FEE_PERCENTAGE,
-  DEFAULT_PLATFORM_FIXED_FEE,
+  eventFeeConfigFromRow,
+  type EventFeeConfig,
 } from "@/lib/pricing/event-fees"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
@@ -80,6 +80,7 @@ export type GetEventDraftV2Result =
       eventId: string
       draftState: Json | null
       isPublished: boolean
+      fee: EventFeeConfig
     }
   | { success: false; error: string; code?: string }
 
@@ -145,7 +146,7 @@ export async function getEventDraftV2(
   const { data, error } = await gate.supabase
     .from("events")
     .select(
-      "id, organizer_id, status, draft_state, title, date, ends_at, location, description, flyer_url, image_url, social_share_image_url, visibility, refund_policy, province, department, delivery_mode, venue_map, venue_id, schedule_days, promo_video_url, gallery_urls, restrictions, what_to_bring, lineup",
+      "id, organizer_id, status, draft_state, title, date, ends_at, location, description, flyer_url, image_url, social_share_image_url, visibility, refund_policy, province, department, delivery_mode, venue_map, venue_id, schedule_days, promo_video_url, gallery_urls, restrictions, what_to_bring, lineup, platform_fee_percentage, platform_fixed_fee, max_free_tickets, is_sponsored_by_tokepass",
     )
     .eq("id", id)
     .maybeSingle()
@@ -165,6 +166,7 @@ export async function getEventDraftV2(
       eventId: data.id,
       draftState,
       isPublished: true,
+      fee: eventFeeConfigFromRow(data),
     }
   }
 
@@ -204,6 +206,7 @@ export async function getEventDraftV2(
       eventId: data.id,
       draftState: (written.data?.draft_state ?? draftState) as Json,
       isPublished: data.status === "published",
+      fee: eventFeeConfigFromRow(data),
     }
   }
 
@@ -212,6 +215,7 @@ export async function getEventDraftV2(
     eventId: data.id,
     draftState: (data.draft_state ?? null) as Json | null,
     isPublished: data.status === "published",
+    fee: eventFeeConfigFromRow(data),
   }
 }
 
@@ -320,9 +324,9 @@ async function persistRehydratedPublishedDraft(input: {
         .maybeSingle()
     : { data: null, error: null }
   const ticketSelectWithType =
-    "id, name, description, price, capacity, min_purchase_limit, max_purchase_limit, tier_type, category, layout_type, seating_sector_id, day_id, ticket_type"
+    "id, name, description, price, base_price, capacity, min_purchase_limit, max_purchase_limit, tier_type, category, layout_type, seating_sector_id, day_id, ticket_type"
   const ticketSelectCore =
-    "id, name, description, price, capacity, min_purchase_limit, max_purchase_limit, tier_type, category, layout_type, seating_sector_id, day_id"
+    "id, name, description, price, base_price, capacity, min_purchase_limit, max_purchase_limit, tier_type, category, layout_type, seating_sector_id, day_id"
   let ticketsQuery: {
     data: LiveEventTicketSnapshotV2[] | null
     error: { message: string } | null
@@ -1117,14 +1121,7 @@ export async function publishEventV2(
       draft,
       liveTickets,
       fee: {
-        platformFeePercentage: Number(
-          event.platform_fee_percentage ?? DEFAULT_PLATFORM_FEE_PERCENTAGE,
-        ),
-        platformFixedFee: Number(
-          event.platform_fixed_fee ?? DEFAULT_PLATFORM_FIXED_FEE,
-        ),
-        maxFreeTickets: Number(event.max_free_tickets ?? DEFAULT_MAX_FREE_TICKETS),
-        isSponsoredByTokePass: Boolean(event.is_sponsored_by_tokepass),
+        ...eventFeeConfigFromRow(event),
       },
     })
   } catch (error) {
