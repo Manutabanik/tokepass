@@ -4,6 +4,7 @@ import { ChevronUp, LoaderCircle } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 import { CheckoutCartBottomSheet } from "@/components/checkout/checkout-cart-bottom-sheet"
+import { CheckoutServiceFeeNotice } from "@/components/checkout/checkout-service-fee-notice"
 import { Button } from "@/components/ui/button"
 import {
   sumCartQuantities,
@@ -166,6 +167,7 @@ export function CheckoutFloatingBar({
               </span>
             ) : null}
           </Button>
+          <CheckoutServiceFeeNotice className="mt-2 px-1" />
         </div>
       </div>
 

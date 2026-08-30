@@ -3464,7 +3464,7 @@ export function CheckoutTunnel({
             </h2>
           ) : null}
           <div className="grid grid-cols-1 lg:grid-cols-12 lg:gap-8">
-            <div className="flex min-w-0 flex-col gap-4 lg:col-span-7">
+            <div className="flex min-w-0 flex-col gap-4 pb-2 lg:col-span-7 lg:pb-0">
         <AnimatePresence mode="wait" initial={false}>
           {visibleStep === "tickets" ? (
             <motion.div

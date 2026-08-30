@@ -12,7 +12,7 @@ import {
 } from "@/components/public/cart-total-transparency"
 import type { SeatSelectionContext } from "@/components/public/seat-selection-sheet"
 import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-clickwrap"
-import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
+import { CheckoutServiceFeeNotice } from "@/components/checkout/checkout-service-fee-notice"
 import { Button } from "@/components/ui/button"
 import { cartLineAmount, cartLineQuantity } from "@/lib/checkout/cart-lines"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
@@ -191,7 +191,6 @@ export function CheckoutSelectionSidebar({
             <CartTotalAmount amount={total} className="text-2xl font-black" />
           </p>
         </div>
-        <TokepassGuaranteeBadge variant="full" className="mt-3" />
 
         {cta ? (
           <div className="mt-4 hidden lg:block">
@@ -249,8 +248,11 @@ export function CheckoutSelectionSidebar({
                 </>
               )}
             </Button>
+            <CheckoutServiceFeeNotice className="mt-2" />
           </div>
-        ) : null}
+        ) : (
+          <CheckoutServiceFeeNotice className="mt-2" />
+        )}
       </div>
 
       {portalReady && isMapZoomed && seatSelection?.map

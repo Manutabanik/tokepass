@@ -3,6 +3,7 @@
 import { ArrowRight, LoaderCircle, Map, X } from "lucide-react"
 import { useEffect, useState } from "react"
 
+import { CheckoutServiceFeeNotice } from "@/components/checkout/checkout-service-fee-notice"
 import { CartSummary } from "@/components/public/cart-summary"
 import {
   CartTotalAmount,
@@ -167,6 +168,7 @@ export function CheckoutCartBottomSheet({
               Ver en mapa
             </button>
           ) : null}
+          <CheckoutServiceFeeNotice />
         </div>
       </SheetContent>
     </Sheet>

@@ -47,7 +47,17 @@ export function CartTotalLabel({
   children?: ReactNode
   className?: string
 }) {
-  return <span className={className}>{children}</span>
+  return (
+    <span
+      className={cn(
+        "inline-flex flex-row items-center gap-1.5 whitespace-nowrap",
+        className,
+      )}
+    >
+      {children}
+      <CartTotalTransparencyTooltip />
+    </span>
+  )
 }
 
 export function CartTotalAmount({
@@ -58,14 +68,8 @@ export function CartTotalAmount({
   className?: string
 }) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap tabular-nums",
-        className,
-      )}
-    >
+    <span className={cn("whitespace-nowrap tabular-nums", className)}>
       {formatCartTotal(amount)}
-      <CartTotalTransparencyTooltip />
     </span>
   )
 }

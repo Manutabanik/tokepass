@@ -4,7 +4,6 @@ import {
   AlertCircle,
   CalendarDays,
   Clock,
-  Info,
   Map,
   Package,
 } from "lucide-react"
@@ -252,8 +251,8 @@ export function EventCheckoutSelector({
       }),
     0,
   )
-  const showInclusionWarning =
-    includesGeneralAccess && hasMapSelection && generalQty > 0
+  const showReservationNotice =
+    selectedCount > 0 || hasMapSelection || generalQty > 0
   const showReservedSeat = Boolean(placeLabel) && !hasMapSelection
 
   function openSeatSelection(category: {
@@ -392,6 +391,7 @@ export function EventCheckoutSelector({
             onOpenGlobalMap={openGlobalMap}
             onFocusedTierIdChange={onFocusedTierIdChange}
           />
+        <ReservationHoldNotice visible={showReservationNotice} />
         </div>
 
       {hasInteractiveMap && mapSeatSelection ? (
@@ -421,8 +421,6 @@ export function EventCheckoutSelector({
           selectionMode={seatSheetMode}
         />
       ) : null}
-
-      <InclusionWarning visible={showInclusionWarning} />
 
     </section>
   )
@@ -1097,31 +1095,26 @@ export function groupCheckoutTiers(tiers: TicketSelectorTier[]) {
   return buckets
 }
 
-function InclusionWarning({ visible }: { visible: boolean }) {
+function ReservationHoldNotice({ visible }: { visible: boolean }) {
   const reduceMotion = useReducedMotion()
   return (
     <AnimatePresence initial={false}>
       {visible ? (
         <motion.div
-          key="inclusion-warning"
+          key="reservation-hold-notice"
           initial={reduceMotion ? false : { opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
           exit={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
           transition={{ duration: 0.22, ease: "easeInOut" }}
           className="overflow-hidden"
         >
-          <div
+          <p
             role="status"
-            className="flex items-start gap-2.5 rounded-2xl border border-amber-500/25 bg-background/70 px-4 py-3 text-sm text-foreground shadow-sm backdrop-blur-md"
+            className="border-t border-border/40 px-1 pt-3 text-xs leading-5 text-muted-foreground"
           >
-            <Info
-              className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-300"
-              aria-hidden="true"
-            />
-            <p>
-            Las entradas seleccionadas se reservan de forma temporal durante el proceso de pago.
-            </p>
-          </div>
+            Las entradas seleccionadas se reservan de forma temporal durante el
+            proceso de pago.
+          </p>
         </motion.div>
       ) : null}
     </AnimatePresence>

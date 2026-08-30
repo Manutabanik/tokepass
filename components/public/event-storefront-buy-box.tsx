@@ -58,7 +58,7 @@ export function EventStorefrontBuyBox({
           : price === 0
             ? "Entrada gratuita"
             : (
-              <CustomerFacingTicketPrice price={price} hintSize="lg" />
+              <CustomerFacingTicketPrice price={price} />
             )}
       </p>
 
