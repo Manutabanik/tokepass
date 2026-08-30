@@ -401,7 +401,7 @@ export function EventEditorV2InventoryStep({
       >
         <SheetContent
           side="right"
-          className="w-[400px] gap-0 p-0 sm:w-[540px]"
+          className="w-full max-w-full overflow-x-hidden gap-0 p-0 sm:max-w-md md:max-w-xl"
         >
           <SheetHeader className="text-left">
             <SheetTitle>Studio de Mapas</SheetTitle>
@@ -410,7 +410,7 @@ export function EventEditorV2InventoryStep({
               completa.
             </SheetDescription>
           </SheetHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <div className="min-h-0 w-full max-w-full flex-1 overflow-y-auto overflow-x-hidden px-4 py-4">
             {hasMap ? (
               <EventEditorV2SeatingMap eventId={eventId} embedded />
             ) : null}

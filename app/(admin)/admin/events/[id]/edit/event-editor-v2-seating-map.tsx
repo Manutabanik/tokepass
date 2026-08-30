@@ -208,9 +208,9 @@ export function EventEditorV2SeatingMap({
 
   const body = (
     <>
-      <div className={embedded ? "mb-3" : "mb-4"}>
+      <div className={embedded ? "mb-3 w-full max-w-full" : "mb-4 w-full max-w-full"}>
         <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-zinc-100">
-          <MapPinned className="size-4 text-emerald-400" aria-hidden />
+          <MapPinned className="size-4 shrink-0 text-emerald-400" aria-hidden />
           Mapas por jornada
         </h2>
         <DraftHint>
@@ -220,7 +220,13 @@ export function EventEditorV2SeatingMap({
         </DraftHint>
       </div>
 
-      <ul className={embedded ? "divide-y divide-border/50" : "space-y-4"}>
+      <ul
+        className={
+          embedded
+            ? "w-full max-w-full divide-y divide-border/50 overflow-x-hidden"
+            : "w-full max-w-full space-y-4 overflow-x-hidden"
+        }
+      >
         {days.map((day, index) => {
           const dateId = day.id || ""
           const instance = currentMaps.find((item) => item.dateId === dateId)
@@ -233,12 +239,12 @@ export function EventEditorV2SeatingMap({
               key={dateId || `day-${index}`}
               className={
                 embedded
-                  ? "py-3 first:pt-0 last:pb-0"
-                  : "rounded-2xl border border-border/60 p-3 sm:p-4"
+                  ? "w-full max-w-full overflow-x-hidden py-3 first:pt-0 last:pb-0"
+                  : "w-full max-w-full overflow-x-hidden rounded-2xl border border-border/60 p-3 sm:p-4"
               }
             >
-              <div className="mb-3 flex items-start justify-between gap-2">
-                <p className="min-w-0 text-sm font-semibold text-slate-800 dark:text-zinc-100">
+              <div className="mb-3 flex min-w-0 items-start justify-between gap-2">
+                <p className="min-w-0 truncate text-sm font-semibold text-slate-800 dark:text-zinc-100">
                   {label}
                 </p>
                 {hasMap ? (
@@ -322,7 +328,11 @@ export function EventEditorV2SeatingMap({
   )
 
   if (embedded) {
-    return <section className="w-full min-w-0">{body}</section>
+    return (
+      <section className="w-full max-w-full min-w-0 overflow-x-hidden">
+        {body}
+      </section>
+    )
   }
 
   return <DraftCard className="w-full">{body}</DraftCard>
@@ -361,8 +371,8 @@ function EmptyDayMapActions({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+    <div className="flex w-full max-w-full flex-col gap-4 overflow-x-hidden">
+      <div className="flex w-full min-w-0 flex-col gap-4 sm:flex-row sm:items-end">
         <label className="grid min-w-0 flex-1 gap-1.5">
           <span className="text-sm font-medium text-slate-700 dark:text-zinc-300">
             Copiar de

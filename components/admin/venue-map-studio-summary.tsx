@@ -26,16 +26,16 @@ export function VenueMapStudioSummary({
   const segments = inventory.sectors.filter((row) => row.share > 0)
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-zinc-100 sm:p-5">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
-          <p className="text-xs font-semibold tracking-wide text-zinc-400 uppercase">
+    <div className="w-full max-w-full overflow-x-hidden rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-zinc-100 sm:p-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <article className="min-w-0 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 sm:col-span-1">
+          <p className="truncate text-xs font-semibold tracking-wide text-zinc-400 uppercase">
             Aforo total
           </p>
-          <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-zinc-100">
+          <p className="mt-2 truncate text-3xl font-bold tabular-nums tracking-tight text-zinc-100">
             {formatNumber(inventory.capacity)}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
             {inventory.capacity === 1 ? "lugar" : "lugares"}
             {inventory.elementCount > 0
               ? ` · ${formatNumber(inventory.elementCount)} ${inventory.elementLabel.toLocaleLowerCase("es")}`
@@ -47,7 +47,7 @@ export function VenueMapStudioSummary({
             aria-label="Distribucion del aforo por sector"
           >
             {segments.length > 0 ? (
-              <div className="flex h-full w-full">
+              <div className="flex h-full w-full min-w-0">
                 {segments.map((row) => (
                   <div
                     key={row.id}
@@ -66,30 +66,30 @@ export function VenueMapStudioSummary({
           </div>
         </article>
 
-        <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
-          <p className="text-xs font-semibold tracking-wide text-zinc-400 uppercase">
+        <article className="min-w-0 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 sm:col-span-1">
+          <p className="truncate text-xs font-semibold tracking-wide text-zinc-400 uppercase">
             Proyección de recaudación
           </p>
-          <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-zinc-100">
+          <p className="mt-2 truncate text-3xl font-bold tabular-nums tracking-tight text-zinc-100">
             {formatCurrency(inventory.projectedRevenue)}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
             Suma de capacidad por precio de cada sector
           </p>
         </article>
 
-        <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
-          <p className="text-xs font-semibold tracking-wide text-zinc-400 uppercase">
+        <article className="col-span-1 min-w-0 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 sm:col-span-2">
+          <p className="truncate text-xs font-semibold tracking-wide text-zinc-400 uppercase">
             Configuración de sectores
           </p>
           {inventory.sectors.length > 0 ? (
-            <ul className="mt-3 max-h-44 space-y-2 overflow-y-auto pr-1">
+            <ul className="mt-3 space-y-2">
               {inventory.sectors.map((row) => (
-                <li key={row.id}>
+                <li key={row.id} className="min-w-0">
                   <button
                     type="button"
                     onClick={onOpen}
-                    className="flex w-full items-start justify-between gap-3 rounded-lg px-1 py-1 text-left transition hover:bg-zinc-800"
+                    className="flex w-full min-w-0 items-start justify-between gap-3 rounded-lg px-1 py-1 text-left transition hover:bg-zinc-800"
                   >
                     <span className="flex min-w-0 items-start gap-2">
                       <span
@@ -101,11 +101,11 @@ export function VenueMapStudioSummary({
                         <span className="block truncate font-medium text-zinc-100">
                           {row.name}
                         </span>
-                        <span className="mt-1 flex flex-wrap items-center gap-1.5">
-                          <Badge variant="outline" className="font-medium">
+                        <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+                          <Badge variant="outline" className="max-w-full truncate font-medium">
                             {row.modeLabel}
                           </Badge>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="truncate text-xs text-muted-foreground">
                             {formatNumber(row.unitCount)} {row.unitLabel}
                           </span>
                         </span>
@@ -119,7 +119,7 @@ export function VenueMapStudioSummary({
               ))}
             </ul>
           ) : (
-            <p className="mt-3 text-sm text-muted-foreground">
+            <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">
               Todavía no hay zonas ni mesas. Diseñá el plano para ver aforo,
               recaudación y sectores en un solo lugar.
             </p>
@@ -134,11 +134,11 @@ export function VenueMapStudioSummary({
           disabled={disabled}
           aria-disabled={disabled}
           className={cn(
-            "bg-primary hover:bg-primary/90 text-primary-foreground font-bold h-12 rounded-xl w-full",
+            "bg-primary hover:bg-primary/90 text-primary-foreground font-bold mt-0 h-12 w-full min-w-0 rounded-xl",
           )}
         >
-          <Map className="size-4" aria-hidden="true" />
-          {openLabel}
+          <Map className="size-4 shrink-0" aria-hidden="true" />
+          <span className="truncate">{openLabel}</span>
         </Button>
         {disabled && disabledReason ? (
           <p className="mt-2 text-center text-xs text-red-600 dark:text-red-400">
