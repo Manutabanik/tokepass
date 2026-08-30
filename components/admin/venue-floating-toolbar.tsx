@@ -1,60 +1,21 @@
 "use client"
 
-import {
-  Armchair,
-  CircleDot,
-  GripVertical,
-  HandGrab,
-  MousePointer2,
-  PenTool,
-  Plus,
-  Sparkles,
-  Square,
-  Type,
-  Users,
-} from "lucide-react"
+import { GripVertical, HandGrab, MousePointer2, PenTool } from "lucide-react"
 import { motion, useDragControls } from "motion/react"
-import { useState, type PointerEvent, type RefObject } from "react"
+import { type PointerEvent, type RefObject } from "react"
 
-import type { PalettePlacement } from "@/components/admin/venue-component-palette"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
-export type FloatingDrawTool = "select" | "pan" | "polygon" | "seat" | "table"
+export type FloatingDrawTool = "select" | "pan" | "polygon"
 
 const TOOLS: Array<{
   id: FloatingDrawTool
   label: string
   icon: typeof MousePointer2
 }> = [
-  { id: "select", label: "Cursor", icon: MousePointer2 },
+  { id: "select", label: "Selección", icon: MousePointer2 },
   { id: "pan", label: "Mover mapa", icon: HandGrab },
-  { id: "polygon", label: "Lapiz de zonas", icon: PenTool },
-  { id: "seat", label: "Asiento", icon: Armchair },
-  { id: "table", label: "Mesa", icon: CircleDot },
-]
-
-const PLUS_PLACEMENTS: Array<{ label: string; placement: PalettePlacement }> = [
-  { label: "Silla", placement: { kind: "element", type: "vip_chair" } },
-  { label: "Mesa redonda", placement: { kind: "element", type: "round_table" } },
-  {
-    label: "Mesa rectangular",
-    placement: { kind: "element", type: "long_table" },
-  },
-  {
-    label: "Sector de campo",
-    placement: { kind: "element", type: "standing_zone" },
-  },
-  {
-    label: "Escenario",
-    placement: { kind: "element", type: "infrastructure", subtype: "stage" },
-  },
-  { label: "Texto", placement: { kind: "label" } },
+  { id: "polygon", label: "Dibujar zona", icon: PenTool },
 ]
 
 function stopCanvas(event: PointerEvent<HTMLElement>) {
@@ -64,20 +25,17 @@ function stopCanvas(event: PointerEvent<HTMLElement>) {
 export function VenueFloatingToolbar({
   active,
   onChange,
-  onPlace,
   constraintRef,
   className,
   geometryLocked = false,
 }: {
   active: FloatingDrawTool
   onChange: (tool: FloatingDrawTool) => void
-  onPlace?: (placement: PalettePlacement) => void
   constraintRef?: RefObject<HTMLElement | null>
   className?: string
   geometryLocked?: boolean
 }) {
   const dragControls = useDragControls()
-  const [menuOpen, setMenuOpen] = useState(false)
   const visibleTools = geometryLocked
     ? TOOLS.filter((item) => item.id === "select" || item.id === "pan")
     : TOOLS
@@ -85,7 +43,7 @@ export function VenueFloatingToolbar({
   return (
     <motion.div
       role="toolbar"
-      aria-label="Herramientas de dibujo"
+      aria-label="Modos de cursor"
       drag
       dragControls={dragControls}
       dragListener={false}
@@ -137,57 +95,6 @@ export function VenueFloatingToolbar({
           </button>
         )
       })}
-
-      {onPlace && !geometryLocked ? (
-        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-          <DropdownMenuTrigger
-            className="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Agregar elemento"
-            title="Agregar elemento"
-            onPointerDown={stopCanvas}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <Plus className="size-4" aria-hidden="true" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="center"
-            className="min-w-52"
-            onPointerDown={stopCanvas}
-          >
-            {PLUS_PLACEMENTS.map((item) => {
-              const Icon =
-                item.placement.kind === "element" &&
-                item.placement.type === "vip_chair"
-                  ? Armchair
-                  : item.placement.kind === "element" &&
-                      item.placement.type === "round_table"
-                    ? CircleDot
-                    : item.placement.kind === "element" &&
-                        item.placement.type === "long_table"
-                      ? Square
-                      : item.placement.kind === "element" &&
-                          item.placement.type === "standing_zone"
-                        ? Users
-                        : item.placement.kind === "label"
-                          ? Type
-                          : Sparkles
-              return (
-                <DropdownMenuItem
-                  key={item.label}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onPlace(item.placement)
-                    setMenuOpen(false)
-                  }}
-                >
-                  <Icon className="size-4" aria-hidden="true" />
-                  {item.label}
-                </DropdownMenuItem>
-              )
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : null}
     </motion.div>
   )
 }

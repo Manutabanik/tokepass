@@ -3880,15 +3880,7 @@ export function InteractiveVenueMapEditor({
       return
     }
     setHandPan(false)
-    if (next === "polygon") {
-      pickPaletteItem({ kind: "zone_polygon" })
-      return
-    }
-    if (next === "seat") {
-      pickPaletteItem({ kind: "element", type: "vip_chair" })
-      return
-    }
-    pickPaletteItem({ kind: "element", type: "round_table" })
+    pickPaletteItem({ kind: "zone_polygon" })
   }
 
   function selectFromLayerTree(next: LayerTreeSelection) {
@@ -3904,17 +3896,11 @@ export function InteractiveVenueMapEditor({
     setSelection(next)
   }
 
-  const floatingTool: FloatingDrawTool =
-    handPan
-      ? "pan"
-      : tool === "polygon"
-        ? "polygon"
-        : placement?.kind === "element" && placement.type === "vip_chair"
-          ? "seat"
-          : placement?.kind === "element" &&
-              (placement.type === "round_table" || placement.type === "long_table")
-            ? "table"
-            : "select"
+  const floatingTool: FloatingDrawTool = handPan
+    ? "pan"
+    : tool === "polygon"
+      ? "polygon"
+      : "select"
 
   const hasPropertiesTarget =
     Boolean(selection) ||
@@ -4606,7 +4592,6 @@ export function InteractiveVenueMapEditor({
             <VenueFloatingToolbar
               active={floatingTool}
               onChange={pickFloatingTool}
-              onPlace={pickPaletteItem}
               geometryLocked={geometryLocked}
               constraintRef={canvasRef}
               className={compactChrome ? "top-16" : undefined}
