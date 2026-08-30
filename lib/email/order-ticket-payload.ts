@@ -19,6 +19,7 @@ export type OrderEmailData = {
   totalAmount: number | string
   tickets: OrderEmailTicket[]
   accountUrl?: string
+  isTest?: boolean
 }
 
 export type ExpandableAccessTicket = {

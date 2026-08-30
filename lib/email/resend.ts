@@ -17,7 +17,9 @@ import {
   type OrderEmailData,
 } from "@/lib/email/order-ticket-payload"
 import { escapeHtml, sanitizeEmailSubject, sanitizeEmailText } from "@/lib/email/sanitize"
+import { ticketConfirmationEmailSubject } from "@/lib/email/ticket-email-subject"
 import { formatCurrency, formatEventDate } from "@/lib/format"
+import { isSandboxIssuedOrder } from "@/lib/finance/order-test-flags"
 import { logger } from "@/lib/logger"
 import { getSiteUrl } from "@/lib/mercadopago"
 import { withCircuit } from "@/lib/resilience/circuit-breaker"
@@ -118,7 +120,9 @@ export async function sendOrderTicketsEmail(
     from: resendFromAddress(),
     to: [email],
     subject: sanitizeEmailSubject(
-      `¡Acá están tus entradas para ${payload.eventName}!`,
+      ticketConfirmationEmailSubject(payload.eventName, {
+        isTest: payload.isTest,
+      }),
     ),
     html,
     text,
@@ -151,6 +155,7 @@ export async function sendTicketConfirmationEmail({
   buyerName,
   walletUrl,
   otpCode,
+  isTest,
 }: {
   to: string
   orderDetails: TicketOrderDetails
@@ -158,6 +163,7 @@ export async function sendTicketConfirmationEmail({
   buyerName?: string
   walletUrl?: string
   otpCode?: string
+  isTest?: boolean
 }): Promise<void> {
   const email = to.trim().toLowerCase()
   if (!email || !email.includes("@")) {
@@ -222,7 +228,9 @@ export async function sendTicketConfirmationEmail({
     from,
     to: [email],
     subject: sanitizeEmailSubject(
-      `¡Acá están tus entradas para ${eventDetails.title}!`,
+      ticketConfirmationEmailSubject(eventDetails.title, {
+        isTest,
+      }),
     ),
     html,
     text,
@@ -261,7 +269,7 @@ export async function sendPaidOrderReceiptEmail(
 ): Promise<void> {
   const { data: order, error: orderError } = await admin
     .from("orders")
-    .select("id, total_amount, buyer_id")
+    .select("id, total_amount, buyer_id, is_test, payment_method, environment")
     .eq("id", orderId)
     .maybeSingle()
 
@@ -301,6 +309,7 @@ export async function sendPaidOrderReceiptEmail(
       .maybeSingle(),
   ])
 
+  const isTest = isSandboxIssuedOrder(order)
   const ticketRows = tickets ?? []
   const eventId = ticketRows[0]?.event_id
   if (!eventId) {
@@ -382,6 +391,7 @@ export async function sendPaidOrderReceiptEmail(
       totalAmount: Number(order.total_amount) || 0,
       tickets: emailTickets,
       accountUrl: walletUrl || `${appUrl}/cuenta/entradas`,
+      isTest,
     })
   } catch (error) {
     logger.error({
@@ -406,6 +416,7 @@ export async function sendPaidOrderReceiptEmail(
           date: event?.date || new Date().toISOString(),
           location,
         },
+        isTest,
       })
     } catch (fallbackError) {
       logger.error({

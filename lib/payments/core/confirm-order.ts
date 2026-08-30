@@ -119,6 +119,17 @@ async function applyPaidOrderFollowThrough(
   })
 }
 
+/** QR, acceso invitado y drenaje del outbox (mail). Lo usa el webhook y sandbox. */
+export async function fulfillPaidOrderAfterFinalize(
+  admin: ReturnType<typeof createAdminClient>,
+  orderId: string,
+  provider: PaymentProvider,
+  transactionId: string,
+): Promise<void> {
+  await applyPaidOrderFollowThrough(admin, orderId, provider, transactionId)
+  scheduleNotificationOutboxDrain()
+}
+
 async function ensurePaidOrderDynamicQrs(orderId: string): Promise<void> {
   const admin = createAdminClient()
   const { data, error } = await admin
@@ -189,7 +200,7 @@ export async function processPaidOrderNotification(
       paidOrder?.provider_transaction_id === transactionId ||
       paidOrder?.mp_payment_id === transactionId
     if (sameTransaction) {
-      await applyPaidOrderFollowThrough(admin, orderId, provider, transactionId)
+      await fulfillPaidOrderAfterFinalize(admin, orderId, provider, transactionId)
     }
     return { ok: true, code: "already_processed", idempotent: true }
   }
@@ -266,8 +277,7 @@ export async function processPaidOrderNotification(
     }
   }
 
-  await applyPaidOrderFollowThrough(admin, orderId, provider, transactionId)
-  scheduleNotificationOutboxDrain()
+  await fulfillPaidOrderAfterFinalize(admin, orderId, provider, transactionId)
 
   return {
     ok: true,

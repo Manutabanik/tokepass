@@ -17,3 +17,15 @@ export function shouldMarkOrderAsTest(input: {
 }): boolean {
   return Boolean(input.sandbox) || isSandboxEventStatus(input.eventStatus)
 }
+
+export function isSandboxIssuedOrder(row: {
+  is_test?: boolean | null
+  payment_method?: string | null
+  environment?: string | null
+}): boolean {
+  return (
+    row.is_test === true ||
+    row.payment_method === "test_sandbox" ||
+    row.environment === "test"
+  )
+}

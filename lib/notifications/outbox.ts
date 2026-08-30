@@ -3,6 +3,8 @@ import "server-only"
 import { after } from "next/server"
 
 import { sendPaidOrderReceiptEmail } from "@/lib/email/resend"
+import { ticketConfirmationEmailSubject } from "@/lib/email/ticket-email-subject"
+import { isSandboxIssuedOrder } from "@/lib/finance/order-test-flags"
 import {
   postNotificationWebhook,
   sendEmailWithFailover,
@@ -169,7 +171,11 @@ async function lookupOrderEmail(orderId: string): Promise<string> {
   const admin = createAdminClient()
   const [{ data: tickets }, { data: order }] = await Promise.all([
     admin.from("tickets").select("holder_email").eq("order_id", orderId),
-    admin.from("orders").select("buyer_id").eq("id", orderId).maybeSingle(),
+    admin
+      .from("orders")
+      .select("buyer_id, is_test, payment_method, environment")
+      .eq("id", orderId)
+      .maybeSingle(),
   ])
 
   const holder = (tickets ?? [])
@@ -188,15 +194,26 @@ async function lookupOrderEmail(orderId: string): Promise<string> {
   return profile?.email?.trim().toLowerCase() || ""
 }
 
+async function lookupSandboxOrder(orderId: string): Promise<boolean> {
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from("orders")
+    .select("is_test, payment_method, environment")
+    .eq("id", orderId)
+    .maybeSingle()
+  return isSandboxIssuedOrder(data ?? {})
+}
+
 async function deliverOrderEmail(
   type: NotificationOutboxType,
   orderId: string | null,
   payload: Record<string, unknown>,
 ): Promise<void> {
   const eventTitle = asString(payload.event_title) || "Evento TokePass"
+  const isTest = orderId ? await lookupSandboxOrder(orderId) : false
   const fallback = {
     subject: sanitizeEmailSubject(
-      `¡Acá están tus entradas para ${eventTitle}!`,
+      ticketConfirmationEmailSubject(eventTitle, { isTest }),
     ),
     text: `¡Hola! ¡Todo listo! Tu compra quedó confirmada. Podés ver tus códigos de acceso en Mis entradas en TokePass. ¿Tuviste algún problema con tu compra? Respondé a este mail o escribinos por WhatsApp.`,
   }
@@ -247,6 +264,10 @@ async function deliverWhatsApp(
     const posted = await postNotificationWebhook(row.type, payload)
     if (!posted && !isGobiConfigured()) return
     if (!posted) throw new Error("whatsapp_provider_unavailable")
+    return
+  }
+
+  if (await lookupSandboxOrder(row.order_id)) {
     return
   }
 

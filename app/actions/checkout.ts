@@ -34,6 +34,7 @@ import {
 import { isPastEvent, isSoldOut } from "@/lib/event-status"
 import { eventAcceptsMercadoPago } from "@/lib/events/checkout-policy"
 import { isSandboxEventStatus } from "@/lib/events/review-status"
+import { fulfillSandboxPaidOrder } from "@/lib/checkout/sandbox-fulfillment"
 import { orderTestFlags } from "@/lib/finance/order-test-flags"
 import { logger } from "@/lib/logger"
 import { DEFAULT_PLATFORM_FEE_PERCENTAGE } from "@/lib/pricing/event-fees"
@@ -3177,6 +3178,19 @@ async function persistOrderLegalGate(input: {
       }
     }
 
+    const { error: ticketFlagError } = await admin
+      .from("tickets")
+      .update({ is_test: true })
+      .eq("order_id", input.orderId)
+    if (ticketFlagError) {
+      logger.warn({
+        context: "checkout/legal",
+        message: "sandbox_ticket_flag_failed",
+        orderId: input.orderId,
+        error: ticketFlagError.message,
+      })
+    }
+
     return { ok: true }
   }
 
@@ -4503,6 +4517,17 @@ export async function startCheckoutWithPayment(
               "No se pudo completar la compra de prueba.",
             ),
         }
+      }
+
+      try {
+        await fulfillSandboxPaidOrder(orderId)
+      } catch (error) {
+        logger.error({
+          context: "checkout/sandbox",
+          message: "sandbox_fulfillment_follow_through_failed",
+          orderId,
+          error,
+        })
       }
 
       initPoint = `/checkout/success?order_id=${orderId}&sandbox=1`

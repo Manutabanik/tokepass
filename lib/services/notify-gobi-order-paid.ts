@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import { isSandboxIssuedOrder } from "@/lib/finance/order-test-flags"
 import { logger } from "@/lib/logger"
 import { dispatchOrderPaidToGobi } from "@/lib/services/gobi-dispatcher"
 
@@ -7,7 +8,12 @@ export type GobiNotifyOutcome =
   | { status: "sent" }
   | {
       status: "skipped"
-      reason: "no_order" | "no_phone" | "no_tickets" | "not_configured"
+      reason:
+        | "no_order"
+        | "no_phone"
+        | "no_tickets"
+        | "not_configured"
+        | "test_order"
     }
   | { status: "failed"; error: string }
 
@@ -23,7 +29,7 @@ export async function notifyGobiOrderPaid(
 ): Promise<GobiNotifyOutcome> {
   const { data: order, error: orderError } = await admin
     .from("orders")
-    .select("id, customer_phone, buyer_id")
+    .select("id, customer_phone, buyer_id, is_test, payment_method, environment")
     .eq("id", orderId)
     .maybeSingle()
 
@@ -35,6 +41,10 @@ export async function notifyGobiOrderPaid(
       error: orderError?.message,
     })
     return { status: "skipped", reason: "no_order" }
+  }
+
+  if (isSandboxIssuedOrder(order)) {
+    return { status: "skipped", reason: "test_order" }
   }
 
   const phone = String(order.customer_phone ?? "").trim()
