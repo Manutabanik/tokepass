@@ -76,7 +76,7 @@ export async function getActiveResaleListingsForEvent(
   const ticketIds = data.map((row) => row.ticket_id)
   const { data: tickets } = await supabase
     .from("tickets")
-    .select("id, ticket_tiers(name)")
+    .select("id, ticket_tiers!tickets_tier_id_fkey(name)")
     .in("id", ticketIds)
 
   const tierByTicket = new Map<string, string>()
@@ -323,7 +323,7 @@ export async function startResaleCheckoutAction(
 
     const { data: ticket } = await supabase
       .from("tickets")
-      .select("id, status, ticket_tiers(name), events(title)")
+      .select("id, status, ticket_tiers!tickets_tier_id_fkey(name), events(title)")
       .eq("id", reserved.ticket_id)
       .maybeSingle()
 
@@ -491,7 +491,7 @@ export async function getResaleListingPreview(
 
   const { data: ticket } = await supabase
     .from("tickets")
-    .select("owner_id, ticket_tiers(price, name)")
+    .select("owner_id, ticket_tiers!tickets_tier_id_fkey(price, name)")
     .eq("id", ticketId)
     .maybeSingle()
 

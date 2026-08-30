@@ -354,7 +354,7 @@ export async function getIssuedTicketsForEvent(
         admin
           .from("tickets")
           .select(
-            "id, status, qr_code, holder_name, holder_email, holder_dni, scanned_at, validated_at, admissions_used, created_at, transferred_from_id, owner_id, order_id, tier_id, seat_id, seating_unit_id, max_admissions, is_dynamic_qr, max_transfers_allowed, transfer_count, is_test, event_seating_units(label, sector_name, row_label), ticket_tiers(name)",
+            "id, status, qr_code, holder_name, holder_email, holder_dni, scanned_at, validated_at, admissions_used, created_at, transferred_from_id, owner_id, order_id, tier_id, seat_id, seating_unit_id, max_admissions, is_dynamic_qr, max_transfers_allowed, transfer_count, is_test, event_seating_units(label, sector_name, row_label), ticket_tiers!tickets_tier_id_fkey(name)",
           )
           .eq("event_id", eventId)
           .neq("status", "pending_payment")
@@ -438,7 +438,7 @@ export async function exportEventTicketsCSV(
         admin
           .from("tickets")
           .select(
-            "id, status, qr_code, holder_name, holder_email, holder_dni, scanned_at, validated_at, admissions_used, created_at, transferred_from_id, owner_id, order_id, tier_id, seat_id, seating_unit_id, max_admissions, is_dynamic_qr, max_transfers_allowed, transfer_count, is_test, event_seating_units(label, sector_name, row_label), ticket_tiers(name)",
+            "id, status, qr_code, holder_name, holder_email, holder_dni, scanned_at, validated_at, admissions_used, created_at, transferred_from_id, owner_id, order_id, tier_id, seat_id, seating_unit_id, max_admissions, is_dynamic_qr, max_transfers_allowed, transfer_count, is_test, event_seating_units(label, sector_name, row_label), ticket_tiers!tickets_tier_id_fkey(name)",
           )
           .eq("event_id", eventId)
           .neq("status", "pending_payment")

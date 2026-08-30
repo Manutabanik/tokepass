@@ -433,7 +433,7 @@ export async function getComplimentaryBatchTickets(input: {
   const { data } = await gate.supabase
     .from("tickets")
     .select(
-      "id, holder_name, holder_dni, holder_email, group_id, group_slot, status, totp_secret, ticket_tiers(name)",
+      "id, holder_name, holder_dni, holder_email, group_id, group_slot, status, totp_secret, ticket_tiers!tickets_tier_id_fkey(name)",
     )
     .eq("event_id", input.eventId)
     .eq("batch_id", input.batchId)

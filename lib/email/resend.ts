@@ -290,7 +290,7 @@ export async function sendPaidOrderReceiptEmail(
     admin
       .from("tickets")
       .select(
-        "id, event_id, qr_code, holder_email, holder_name, group_id, group_slot, ticket_tiers(name), event_seating_units(label, sector_name)",
+        "id, event_id, qr_code, holder_email, holder_name, group_id, group_slot, ticket_tiers!tickets_tier_id_fkey(name), event_seating_units(label, sector_name)",
       )
       .eq("order_id", orderId)
       .order("group_slot", { ascending: true, nullsFirst: true }),

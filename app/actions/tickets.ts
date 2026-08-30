@@ -16,6 +16,10 @@ import {
 } from "@/lib/ticket-visual-status"
 import type { EventDeliveryMode, QrType, TicketStatus } from "@/types/database"
 import { parseDeliveryMode } from "@/lib/events/delivery-mode"
+import {
+  isMissingTicketWalletColumnError,
+  ticketsTierSelect,
+} from "@/lib/tickets/wallet-query"
 
 export type MyTicket = {
   id: string
@@ -116,6 +120,17 @@ type TicketRow = {
 export async function getMyTickets(options?: {
   orderId?: string
 }): Promise<MyTicket[]> {
+  try {
+    return await loadMyTickets(options)
+  } catch (error) {
+    console.error("[getMyTickets]", error)
+    return []
+  }
+}
+
+async function loadMyTickets(options?: {
+  orderId?: string
+}): Promise<MyTicket[]> {
   const supabase = await createClient()
   const {
     data: { user },
@@ -123,7 +138,7 @@ export async function getMyTickets(options?: {
   } = await supabase.auth.getUser()
 
   if (authError || !user) {
-    throw new Error("auth_required")
+    return []
   }
 
   await supabase.rpc("claim_pending_ticket_transfers", {
@@ -140,10 +155,11 @@ export async function getMyTickets(options?: {
   const holderDni = profile?.dni ?? null
   const orderId = options?.orderId?.trim() || ""
 
+  const tierEmbed = ticketsTierSelect("name, bonus_reward, day_id, price")
   const ticketSelectWithDelivery =
-    "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ticket_tiers(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, delivery_mode, access_link, venues(name)), orders(status)"
+    `id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, delivery_mode, access_link, venues(name)), orders(status)`
   const ticketSelectLegacy =
-    "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ticket_tiers(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, venues(name)), orders(status)"
+    `id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, venues(name)), orders(status)`
 
   let query = supabase
     .from("tickets")
@@ -160,10 +176,7 @@ export async function getMyTickets(options?: {
   let { error } = queried
   let rows = queried.data as unknown
 
-  if (
-    error &&
-    /delivery_mode|access_link|schema cache|PGRST204|42703/i.test(error.message)
-  ) {
+  if (error && isMissingTicketWalletColumnError(error.message)) {
     let fallback = supabase
       .from("tickets")
       .select(ticketSelectLegacy)
@@ -179,7 +192,8 @@ export async function getMyTickets(options?: {
   }
 
   if (error) {
-    throw new Error(`No se pudieron cargar tus entradas: ${error.message}`)
+    console.error("[getMyTickets]", error.message)
+    return []
   }
 
   type WalletRow = TicketRow & {

@@ -34,7 +34,7 @@ import {
 import type { QrType, TicketStatus } from "@/types/database"
 
 const TICKET_SCAN_SELECT =
-  "id, status, event_id, order_id, totp_secret, scanned_at, validated_by, holder_name, holder_dni, max_admissions, admissions_used, is_test, is_dynamic_qr, ticket_type, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers(name, price, time_limit, bonus_reward, day_id, seating_sector_id), events(id, title, organizer_id, qr_type, date, schedule_days, status), orders!tickets_order_id_fkey(payment_method)"
+  "id, status, event_id, order_id, totp_secret, scanned_at, validated_by, holder_name, holder_dni, max_admissions, admissions_used, is_test, is_dynamic_qr, ticket_type, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers!tickets_tier_id_fkey(name, price, time_limit, bonus_reward, day_id, seating_sector_id), events(id, title, organizer_id, qr_type, date, schedule_days, status), orders!tickets_order_id_fkey(payment_method)"
 
 export type ScannerEventOption = {
   id: string
@@ -865,7 +865,7 @@ export async function fetchEventTicketManifest(
   const withHolder = await supabase
     .from("tickets")
     .select(
-      "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, ticket_type, holder_name, holder_dni, holder_email, group_id, group_slot, batch_id, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers(name, price, seating_sector_id, day_id), orders!tickets_order_id_fkey(payment_method)",
+      "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, ticket_type, holder_name, holder_dni, holder_email, group_id, group_slot, batch_id, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers!tickets_tier_id_fkey(name, price, seating_sector_id, day_id), orders!tickets_order_id_fkey(payment_method)",
     )
     .eq("event_id", eventId)
     .in("status", ["valid", "used", "scanned"])
@@ -874,7 +874,7 @@ export async function fetchEventTicketManifest(
     const fallback = await supabase
       .from("tickets")
       .select(
-        "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, ticket_type, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers(name, price, seating_sector_id, day_id), orders!tickets_order_id_fkey(payment_method)",
+        "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, ticket_type, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers!tickets_tier_id_fkey(name, price, seating_sector_id, day_id), orders!tickets_order_id_fkey(payment_method)",
       )
       .eq("event_id", eventId)
       .in("status", ["valid", "used", "scanned"])

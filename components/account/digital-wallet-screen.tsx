@@ -10,6 +10,7 @@ import type { StoreOfferBlock } from "@/components/public/ticket-wallet"
 import { OfflineTicketWallet } from "@/components/pwa/offline-ticket-wallet"
 import { loginUrlWithNext } from "@/lib/auth/post-login"
 import { countActiveTickets } from "@/lib/ticket-schedule"
+import { walletFriendlyLoadError } from "@/lib/tickets/wallet-query"
 import { getWalletUiFlags } from "@/lib/wallet-cache"
 
 export async function DigitalWalletScreen({
@@ -31,13 +32,10 @@ export async function DigitalWalletScreen({
     initialTickets = tickets
     storeRedemptions = redemptions
   } catch (error) {
-    if (error instanceof Error && error.message === "auth_required") {
+    if (walletFriendlyLoadError(error) === "auth_required") {
       redirect(loginUrlWithNext(loginNext))
     }
-    loadError =
-      error instanceof Error
-        ? error.message
-        : "No se pudieron cargar tus entradas."
+    loadError = null
   }
 
   const walletFlags = getWalletUiFlags()

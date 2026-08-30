@@ -36,6 +36,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { MyTicket } from "@/app/actions/tickets"
 import { parseDeliveryMode } from "@/lib/events/delivery-mode"
+import { isMissingTicketWalletColumnError } from "@/lib/tickets/wallet-query"
 import type { OrderStatus, TicketStatus } from "@/types/database"
 
 const MAX_OTP_ATTEMPTS = 5
@@ -119,7 +120,7 @@ export async function listGuestOrderTickets(): Promise<GuestTicketPreview[]> {
   const { data } = await admin
     .from("tickets")
     .select(
-      "id, status, ticket_tiers(name), events(title, date, location)",
+      "id, status, ticket_tiers!tickets_tier_id_fkey(name), events(title, date, location)",
     )
     .eq("order_id", parsed.orderId)
     .in("status", ["valid", "used", "scanned"])
@@ -144,7 +145,9 @@ export async function listGuestOrderTickets(): Promise<GuestTicketPreview[]> {
 }
 
 const GUEST_TICKET_DETAIL_SELECT =
-  "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, holder_name, holder_dni, ticket_tiers(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, delivery_mode, access_link, venues(name))"
+  "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, holder_name, holder_dni, ticket_tiers!tickets_tier_id_fkey(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, delivery_mode, access_link, venues(name))"
+const GUEST_TICKET_DETAIL_SELECT_LEGACY =
+  "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, holder_name, holder_dni, ticket_tiers!tickets_tier_id_fkey(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, venues(name))"
 
 type GuestTicketDetailRow = {
   id: string
@@ -260,30 +263,51 @@ export async function getGuestOrderWallet(
 ): Promise<GuestOrderWallet | null> {
   if (!isGuestOrderToken(guestToken)) return null
 
-  const admin = createAdminClient()
-  const { data: order } = await admin
-    .from("orders")
-    .select("id, status")
-    .eq("guest_token", guestToken.trim().toLowerCase())
-    .maybeSingle()
+  try {
+    const admin = createAdminClient()
+    const { data: order } = await admin
+      .from("orders")
+      .select("id, status")
+      .eq("guest_token", guestToken.trim().toLowerCase())
+      .maybeSingle()
 
-  if (!order) return null
+    if (!order) return null
 
-  const { data } = await admin
-    .from("tickets")
-    .select(GUEST_TICKET_DETAIL_SELECT)
-    .eq("order_id", order.id)
-    .in("status", ["valid", "used", "scanned", "pending_payment"])
-    .order("created_at", { ascending: true })
+    const queried = await admin
+      .from("tickets")
+      .select(GUEST_TICKET_DETAIL_SELECT)
+      .eq("order_id", order.id)
+      .in("status", ["valid", "used", "scanned", "pending_payment"])
+      .order("created_at", { ascending: true })
 
-  const tickets = (data ?? [])
-    .map((row) => mapGuestTicketRow(row as GuestTicketDetailRow, order.status === "paid"))
-    .filter((ticket): ticket is MyTicket => Boolean(ticket))
+    let rows = queried.data as GuestTicketDetailRow[] | null
+    if (
+      queried.error &&
+      isMissingTicketWalletColumnError(queried.error.message)
+    ) {
+      const retry = await admin
+        .from("tickets")
+        .select(GUEST_TICKET_DETAIL_SELECT_LEGACY)
+        .eq("order_id", order.id)
+        .in("status", ["valid", "used", "scanned", "pending_payment"])
+        .order("created_at", { ascending: true })
+      rows = (retry.data ?? null) as GuestTicketDetailRow[] | null
+    }
 
-  return {
-    orderId: order.id,
-    orderStatus: order.status,
-    tickets,
+    const tickets = (rows ?? [])
+      .map((row) =>
+        mapGuestTicketRow(row as GuestTicketDetailRow, order.status === "paid"),
+      )
+      .filter((ticket): ticket is MyTicket => Boolean(ticket))
+
+    return {
+      orderId: order.id,
+      orderStatus: order.status,
+      tickets,
+    }
+  } catch (error) {
+    console.error("[getGuestOrderWallet]", error)
+    return null
   }
 }
 
@@ -452,12 +476,23 @@ export async function getGuestTicketForAccess(
 
   const admin = createAdminClient()
   const otpOk = await isGuestOtpVerified(parsed.orderId)
-  const { data: row } = await admin
+  const queried = await admin
     .from("tickets")
     .select(GUEST_TICKET_DETAIL_SELECT)
     .eq("id", ticketId)
     .eq("order_id", parsed.orderId)
     .maybeSingle()
+
+  let row = queried.data as GuestTicketDetailRow | null
+  if (queried.error && isMissingTicketWalletColumnError(queried.error.message)) {
+    const retry = await admin
+      .from("tickets")
+      .select(GUEST_TICKET_DETAIL_SELECT_LEGACY)
+      .eq("id", ticketId)
+      .eq("order_id", parsed.orderId)
+      .maybeSingle()
+    row = (retry.data ?? null) as GuestTicketDetailRow | null
+  }
 
   if (!row) return null
   return mapGuestTicketRow(row as GuestTicketDetailRow, otpOk)

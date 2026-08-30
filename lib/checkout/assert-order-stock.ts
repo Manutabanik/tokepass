@@ -164,7 +164,7 @@ export async function assertPendingOrderStillReservable(
   const { data, error } = await asOrderStockClient(db)
     .from("tickets")
     .select(
-      "id, status, seating_unit_id, event_seating_units(status, reserved_until, reserved_order_id), ticket_tiers(id, name, capacity, sold)",
+      "id, status, seating_unit_id, event_seating_units(status, reserved_until, reserved_order_id), ticket_tiers!tickets_tier_id_fkey(id, name, capacity, sold)",
     )
     .eq("order_id", orderId)
 

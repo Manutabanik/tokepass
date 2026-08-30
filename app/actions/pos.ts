@@ -729,7 +729,7 @@ async function buildTicketZReport(
     paidOrderIds.length > 0
       ? await supabase
           .from("tickets")
-          .select("id, status, order_id, ticket_tiers(name, price)")
+          .select("id, status, order_id, ticket_tiers!tickets_tier_id_fkey(name, price)")
           .in("order_id", paidOrderIds)
       : { data: [] as Array<{
           id: string
@@ -1286,7 +1286,7 @@ export async function listOpenShiftOrders(
   const orderIds = orders.map((o) => o.id)
   const { data: tickets } = await supabase
     .from("tickets")
-    .select("id, order_id, holder_name, holder_dni, ticket_tiers(name)")
+    .select("id, order_id, holder_name, holder_dni, ticket_tiers!tickets_tier_id_fkey(name)")
     .in("order_id", orderIds)
 
   const metaByOrder = new Map<
@@ -1358,7 +1358,7 @@ export async function listShiftReprintReceipts(
   const { data: tickets } = await supabase
     .from("tickets")
     .select(
-      "id, order_id, totp_secret, holder_name, holder_dni, ticket_tiers(name, price), events(title, date, location)",
+      "id, order_id, totp_secret, holder_name, holder_dni, ticket_tiers!tickets_tier_id_fkey(name, price), events(title, date, location)",
     )
     .in("id", ticketIds)
 
@@ -1459,7 +1459,7 @@ export async function getPrintableTicket(
   const rich = await supabase
     .from("tickets")
     .select(
-      "id, status, totp_secret, scanned_at, is_dynamic_qr, is_test, owner_id, holder_name, holder_dni, event_seating_units(label, sector_name, row_label, layout_type), ticket_tiers(name, price, day_id), events(id, title, date, location, qr_type, organizer_id, flyer_url, image_url, schedule_days, venues(name))",
+      "id, status, totp_secret, scanned_at, is_dynamic_qr, is_test, owner_id, holder_name, holder_dni, event_seating_units(label, sector_name, row_label, layout_type), ticket_tiers!tickets_tier_id_fkey(name, price, day_id), events(id, title, date, location, qr_type, organizer_id, flyer_url, image_url, schedule_days, venues(name))",
     )
     .eq("id", ticketId)
     .maybeSingle()
@@ -1472,7 +1472,7 @@ export async function getPrintableTicket(
       ? await supabase
           .from("tickets")
           .select(
-            "id, status, totp_secret, scanned_at, is_dynamic_qr, is_test, owner_id, holder_name, holder_dni, ticket_tiers(name, price), events(id, title, date, location, qr_type, organizer_id)",
+            "id, status, totp_secret, scanned_at, is_dynamic_qr, is_test, owner_id, holder_name, holder_dni, ticket_tiers!tickets_tier_id_fkey(name, price), events(id, title, date, location, qr_type, organizer_id)",
           )
           .eq("id", ticketId)
           .maybeSingle()
