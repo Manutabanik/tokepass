@@ -14,8 +14,8 @@ import type { SeatSelectionContext } from "@/components/public/seat-selection-sh
 import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-clickwrap"
 import { CheckoutServiceFeeNotice } from "@/components/checkout/checkout-service-fee-notice"
 import { Button } from "@/components/ui/button"
-import { cartLineAmount, cartLineQuantity } from "@/lib/checkout/cart-lines"
-import { useCheckoutStore } from "@/lib/stores/checkout-store"
+import { cartLineQuantity } from "@/lib/checkout/cart-lines"
+import { useCartPriceBreakdown, useCheckoutStore } from "@/lib/stores/checkout-store"
 import {
   storefrontSelectionCount,
   storefrontSelectionTotal,
@@ -99,8 +99,8 @@ export function CheckoutSelectionSidebar({
     (sum, line) => sum + cartLineQuantity(line.quantity),
     0,
   )
+  const { cartTotal } = useCartPriceBreakdown()
   const placeTotal = storefrontSelectionTotal(selectedItems)
-  const cartTotal = cartLines.reduce((sum, line) => sum + cartLineAmount(line), 0)
   const itemCount = cartLines.length > 0 ? cartCount : placeCount
   const total = cartLines.length > 0 ? cartTotal : placeTotal
   const [isMapZoomed, setIsMapZoomed] = useState(false)

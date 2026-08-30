@@ -3517,6 +3517,13 @@ export async function startCheckoutWithPayment(
     ticketPrice?: number
     feeAmount?: number
     customerTotal?: number
+    lineQuotes?: Array<{
+      ticketTierId?: string | null
+      quantity: number
+      basePrice: number
+      feeAmount: number
+      finalPrice: number
+    }>
     idempotencyKey?: string | null
     cartSessionId?: string | null
   },
@@ -3549,6 +3556,7 @@ export async function startCheckoutWithPayment(
     ticketPrice: options?.ticketPrice,
     feeAmount: options?.feeAmount,
     customerTotal: options?.customerTotal,
+    lineQuotes: options?.lineQuotes,
     idempotencyKey: options?.idempotencyKey,
     cartSessionId: options?.cartSessionId,
   })
@@ -4789,6 +4797,13 @@ export async function startSandboxCheckout(
     ticketPrice?: number
     feeAmount?: number
     customerTotal?: number
+    lineQuotes?: Array<{
+      ticketTierId?: string | null
+      quantity: number
+      basePrice: number
+      feeAmount: number
+      finalPrice: number
+    }>
     idempotencyKey?: string | null
     cartSessionId?: string | null
   },
@@ -4810,6 +4825,7 @@ export async function startSandboxCheckout(
     ticketPrice: guard?.ticketPrice,
     feeAmount: guard?.feeAmount,
     customerTotal: guard?.customerTotal,
+    lineQuotes: guard?.lineQuotes,
     idempotencyKey: guard?.idempotencyKey,
     cartSessionId: guard?.cartSessionId,
   })
@@ -4839,6 +4855,7 @@ export async function startSandboxCheckout(
       ticketPrice: parsed.data.ticketPrice ?? guard?.ticketPrice,
       feeAmount: parsed.data.feeAmount ?? guard?.feeAmount,
       customerTotal: parsed.data.customerTotal ?? guard?.customerTotal,
+      lineQuotes: parsed.data.lineQuotes ?? guard?.lineQuotes,
       idempotencyKey: parsed.data.idempotencyKey ?? guard?.idempotencyKey,
       cartSessionId: parsed.data.cartSessionId ?? guard?.cartSessionId,
     },

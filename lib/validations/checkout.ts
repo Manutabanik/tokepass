@@ -451,6 +451,34 @@ export const CheckoutPayloadSchema = z.preprocess(
       .transform((value) =>
         value == null ? value : centsToMoney(moneyToCents(value)),
       ),
+    lineQuotes: z
+      .array(
+        z.object({
+          ticketTierId: z.string().uuid(UUID_ERROR).optional().nullable(),
+          quantity: z
+            .number()
+            .int()
+            .positive()
+            .max(ABSOLUTE_MAX_ITEMS_PER_PURCHASE),
+          basePrice: z
+            .number()
+            .finite()
+            .min(0)
+            .transform((value) => centsToMoney(moneyToCents(value))),
+          feeAmount: z
+            .number()
+            .finite()
+            .min(0)
+            .transform((value) => centsToMoney(moneyToCents(value))),
+          finalPrice: z
+            .number()
+            .finite()
+            .min(0)
+            .transform((value) => centsToMoney(moneyToCents(value))),
+        }),
+      )
+      .max(ABSOLUTE_MAX_ITEMS_PER_PURCHASE)
+      .optional(),
     idempotencyKey: z.string().uuid(UUID_ERROR).optional().nullable(),
     cartSessionId: z.string().uuid(UUID_ERROR).optional().nullable(),
   })

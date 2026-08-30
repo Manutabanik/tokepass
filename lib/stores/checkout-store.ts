@@ -88,6 +88,8 @@ export type StorefrontCartLine = {
   /** Total cobrado por unidad (`customerTotal`). */
   totalPrice?: number
   customerTotal?: number
+  /** Alias de `customerTotal`: cobro al comprador según absorb_fees. */
+  finalPrice?: number
   absorbFees?: boolean
   seatId?: string | null
   elementId?: string | null
@@ -254,6 +256,14 @@ function sameBuyer(left: CheckoutBuyerInfo, right: CheckoutBuyerInfo) {
   )
 }
 
+function sameOptionalMoney(
+  left: number | undefined,
+  right: number | undefined,
+) {
+  if (left == null || right == null) return true
+  return left === right
+}
+
 function sameLines(left: StorefrontCartLine[], right: StorefrontCartLine[]) {
   if (left.length !== right.length) return false
   return left.every((line, index) => {
@@ -269,9 +279,9 @@ function sameLines(left: StorefrontCartLine[], right: StorefrontCartLine[]) {
       line.dateString === other.dateString &&
       line.quantity === other.quantity &&
       line.price === other.price &&
-      line.basePrice === other.basePrice &&
-      line.serviceFee === other.serviceFee &&
-      line.totalPrice === other.totalPrice &&
+      sameOptionalMoney(line.basePrice, other.basePrice) &&
+      sameOptionalMoney(line.serviceFee, other.serviceFee) &&
+      sameOptionalMoney(line.totalPrice, other.totalPrice) &&
       line.ticketTierId === other.ticketTierId &&
       line.seatId === other.seatId &&
       line.elementId === other.elementId &&
@@ -742,18 +752,22 @@ export const useCheckoutStore = create<CheckoutState>()(
             })
             .filter((entry): entry is CheckoutCatalogEntry => entry != null),
         )
+        const nextTotals = totalsForLines(lines, current)
+        const nextQuantities = sameQuantities(current.quantities, quantities)
+          ? current.quantities
+          : quantities
         if (
-          sameLines(current.lines, lines) &&
+          sameLines(current.lines, nextTotals.lines) &&
           catalog === current.catalogByTierId &&
-          sameQuantities(current.quantities, quantities)
+          nextQuantities === current.quantities
         ) {
           return
         }
         set(
           withCartHoldClock(current, {
-            quantities,
+            quantities: nextQuantities,
             catalogByTierId: catalog,
-            ...totalsForLines(lines, current),
+            ...nextTotals,
           }),
         )
       },

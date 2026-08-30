@@ -11,9 +11,9 @@ import {
   isMapCartLine,
 } from "@/lib/checkout/cart-item-identity"
 import { cartItemScheduleId } from "@/lib/checkout/cart-line-stamp"
+import { cartLineChargeAmount } from "@/lib/checkout/cart"
 import {
   CART_TICKET_LINE_PREFIX,
-  cartLineAmount,
   cartLineOfferTitle,
   cartLinePlaceBadge,
   cartLineUnitPrice,
@@ -27,6 +27,7 @@ import {
 import { formatCartTotal } from "@/lib/format"
 import {
   useCartPriceBreakdown,
+  useCartServiceFeeRule,
   useCheckoutStore,
   type StorefrontCartLine,
 } from "@/lib/stores/checkout-store"
@@ -59,11 +60,18 @@ function SmartCartRow({
 }) {
   const removeItem = useCheckoutStore((state) => state.removeItem)
   const title = cartLineOfferTitle(item)
+  const feeRule = useCartServiceFeeRule()
   const amount = formatCartTotal(
-    cartLineAmount({
-      price: cartLineUnitPrice(item),
-      quantity: item.quantity,
-    }),
+    cartLineChargeAmount(
+      {
+        price: cartLineUnitPrice(item),
+        quantity: item.quantity,
+        finalPrice: item.finalPrice,
+        customerTotal: item.customerTotal,
+        totalPrice: item.totalPrice,
+      },
+      feeRule,
+    ),
   )
   const mapRow = isMapCartLine(item)
   const badge = cartLinePlaceBadge(item) || "Mapa"

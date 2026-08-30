@@ -360,14 +360,24 @@ export function dropUndatedGeneralState<T extends CartIdentityLine>(
     return { quantities, lines }
   }
   const keepKey = cartQuantityKey(ticket, keepScheduleId)
-  const nextQuantities = { ...quantities }
-  delete nextQuantities[cartQuantityKey(ticket, null)]
-  delete nextQuantities[ticket]
+  const undatedKey = cartQuantityKey(ticket, null)
+  const hasUndatedQty =
+    Object.prototype.hasOwnProperty.call(quantities, undatedKey) ||
+    Object.prototype.hasOwnProperty.call(quantities, ticket)
   const nextLines = lines.filter((line) => {
     if (isMapCartLine(line) || generalLineTierId(line) !== ticket) return true
     if (line.id === keepKey) return true
     return Boolean(cartItemScheduleId(line))
   })
+  const linesUnchanged =
+    nextLines.length === lines.length &&
+    nextLines.every((line, index) => line === lines[index])
+  if (!hasUndatedQty && linesUnchanged) {
+    return { quantities, lines }
+  }
+  const nextQuantities = { ...quantities }
+  delete nextQuantities[undatedKey]
+  delete nextQuantities[ticket]
   return { quantities: nextQuantities, lines: nextLines }
 }
 

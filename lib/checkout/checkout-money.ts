@@ -1,16 +1,31 @@
 import {
   calculateCartPriceBreakdown,
+  cartLineQuantity,
+  quoteCartLineCharges,
+  type CartLineChargeQuote,
   type CartPriceBreakdown,
   type CartServiceFeeRule,
 } from "@/lib/checkout/cart"
 import { amountsMatch } from "@/lib/checkout/hybrid-cart"
 import { displayedTotalMatchesServer } from "@/lib/checkout/price-guard"
+import { centsToMoney, moneyToCents } from "@/lib/money/cents"
+
+function sumLineQuoteFinalPrices(quotes: readonly CartLineChargeQuote[]) {
+  return centsToMoney(
+    quotes.reduce((sum, line) => {
+      const quantity = cartLineQuantity(line.quantity)
+      if (quantity <= 0) return sum
+      return sum + moneyToCents(line.finalPrice) * quantity
+    }, 0),
+  )
+}
 
 export type CheckoutMoneyQuote = CartPriceBreakdown & {
   /** Σ precio ingresado. Se persiste en `orders.subtotal`. */
   ticketAmount: number
   /** Alias de `grandTotal` / `customerTotal`. */
   total: number
+  lineQuotes: CartLineChargeQuote[]
 }
 
 export type ClientCheckoutMoney = {
@@ -21,6 +36,7 @@ export type ClientCheckoutMoney = {
   ticketPrice?: number | null
   feeAmount?: number | null
   customerTotal?: number | null
+  lineQuotes?: CartLineChargeQuote[] | null
 }
 
 export type OrderMoneyLedger = {
@@ -41,6 +57,7 @@ export function quoteCheckoutMoney(
     ...quote,
     ticketAmount: quote.ticketPrice,
     total: quote.customerTotal,
+    lineQuotes: quoteCartLineCharges(lines, rule),
   }
 }
 
@@ -76,6 +93,16 @@ export function clientCheckoutMoneyMatchesQuoted(
   const fee = client.feeAmount ?? client.serviceFee
   if (fee != null && !amountsMatch(fee, server.feeAmount)) {
     return false
+  }
+  if (client.lineQuotes && client.lineQuotes.length > 0) {
+    if (
+      !amountsMatch(
+        sumLineQuoteFinalPrices(client.lineQuotes),
+        server.customerTotal,
+      )
+    ) {
+      return false
+    }
   }
   return true
 }

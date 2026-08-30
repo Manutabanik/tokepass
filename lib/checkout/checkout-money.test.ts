@@ -19,6 +19,10 @@ describe("quoteCheckoutMoney", () => {
     assert.equal(quote.customerTotal, 22400)
     assert.equal(quote.grandTotal, 22400)
     assert.equal(quote.ticketAmount, 20000)
+    assert.equal(quote.cartTotal, 22400)
+    assert.equal(quote.lineQuotes[0]?.finalPrice, 11200)
+    assert.equal(quote.lineQuotes[0]?.basePrice, 10000)
+    assert.equal(quote.lineQuotes[0]?.feeAmount, 1200)
     assert.deepEqual(orderLedgerFromQuote(quote), {
       subtotal: 20000,
       service_charge: 2400,
@@ -50,6 +54,42 @@ describe("quoteCheckoutMoney", () => {
           serviceFee: 1000,
           grandTotal: 10000,
           displayedTotal: 10000,
+        },
+        server,
+      ),
+      false,
+    )
+    assert.equal(
+      clientCheckoutMoneyMatchesQuoted(
+        {
+          customerTotal: 11000,
+          lineQuotes: [
+            {
+              ticketTierId: "tier-a",
+              quantity: 1,
+              basePrice: 10000,
+              feeAmount: 1000,
+              finalPrice: 11000,
+            },
+          ],
+        },
+        server,
+      ),
+      true,
+    )
+    assert.equal(
+      clientCheckoutMoneyMatchesQuoted(
+        {
+          customerTotal: 11000,
+          lineQuotes: [
+            {
+              ticketTierId: "tier-a",
+              quantity: 1,
+              basePrice: 10000,
+              feeAmount: 1000,
+              finalPrice: 10000,
+            },
+          ],
         },
         server,
       ),

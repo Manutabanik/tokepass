@@ -2362,6 +2362,7 @@ export function CheckoutTunnel({
         ticketPrice: moneyQuote.ticketPrice,
         feeAmount: moneyQuote.feeAmount,
         customerTotal: moneyQuote.customerTotal,
+        lineQuotes: moneyQuote.lineQuotes,
         idempotencyKey,
       }
 
@@ -2400,6 +2401,7 @@ export function CheckoutTunnel({
               ticketPrice: priceGuard.ticketPrice,
               feeAmount: priceGuard.feeAmount,
               customerTotal: priceGuard.customerTotal,
+              lineQuotes: priceGuard.lineQuotes,
               idempotencyKey: priceGuard.idempotencyKey,
               cartSessionId,
             },

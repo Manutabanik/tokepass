@@ -5,12 +5,15 @@ import {
   calculateCartPriceBreakdown,
   calculateTotal,
   cartIncludedServiceFee,
+  cartLineChargeAmount,
   cartLineUnitMoney,
   cartItemCount,
   cartQuantityCount,
   hasActiveCheckoutSelection,
   includedServiceFee,
+  quoteCartLineCharges,
   sumCartAmounts,
+  sumCartChargeAmounts,
   sumCartQuantities,
   toCartNumber,
 } from "./cart"
@@ -133,10 +136,13 @@ describe("calculateCartPriceBreakdown", () => {
       ticketPrice: 0,
       subtotal: 0,
       baseAmount: 0,
+      cartBaseTotal: 0,
       serviceFee: 0,
       feeAmount: 0,
+      cartFeeTotal: 0,
       customerTotal: 0,
       grandTotal: 0,
+      cartTotal: 0,
       absorbFees: false,
     })
     assert.deepEqual(
@@ -148,10 +154,13 @@ describe("calculateCartPriceBreakdown", () => {
         ticketPrice: 0,
         subtotal: 0,
         baseAmount: 0,
+        cartBaseTotal: 0,
         serviceFee: 0,
         feeAmount: 0,
+        cartFeeTotal: 0,
         customerTotal: 0,
         grandTotal: 0,
+        cartTotal: 0,
         absorbFees: false,
       },
     )
@@ -167,6 +176,7 @@ describe("calculateCartPriceBreakdown", () => {
     assert.equal(passed.feeAmount, 1200)
     assert.equal(passed.customerTotal, 11200)
     assert.equal(passed.totalPrice, 11200)
+    assert.equal(passed.finalPrice, 11200)
     assert.equal(passed.absorbFees, false)
 
     const absorbed = cartLineUnitMoney(10000, {
@@ -175,6 +185,34 @@ describe("calculateCartPriceBreakdown", () => {
     })
     assert.equal(absorbed.customerTotal, 10000)
     assert.equal(absorbed.feeAmount, 1000)
+    assert.equal(absorbed.finalPrice, 10000)
     assert.equal(absorbed.absorbFees, true)
+  })
+
+  it("charges finalPrice × quantity, not the catalog price", () => {
+    const rule = { rate: 0.1, absorbFees: false }
+    const lines = [{ price: 10000, quantity: 2, ticketTierId: "tier-a" }]
+    const quote = calculateCartPriceBreakdown(lines, rule)
+    assert.equal(quote.cartBaseTotal, 20000)
+    assert.equal(quote.cartFeeTotal, 2000)
+    assert.equal(quote.cartTotal, 22000)
+    assert.equal(sumCartChargeAmounts(lines, rule), 22000)
+    assert.equal(
+      cartLineChargeAmount({ price: 10000, quantity: 2 }, rule),
+      22000,
+    )
+    assert.equal(
+      cartLineChargeAmount({ price: 10000, quantity: 2, finalPrice: 11000 }),
+      22000,
+    )
+    assert.deepEqual(quoteCartLineCharges(lines, rule), [
+      {
+        ticketTierId: "tier-a",
+        quantity: 2,
+        basePrice: 10000,
+        feeAmount: 1000,
+        finalPrice: 11000,
+      },
+    ])
   })
 })

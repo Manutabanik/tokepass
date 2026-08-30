@@ -406,6 +406,23 @@ describe("dropUndatedGeneralState", () => {
     assert.equal(cleaned.lines.length, 1)
     assert.equal(cleaned.lines[0]?.scheduleId, friday)
   })
+
+  it("keeps the same quantity and line refs when nothing undated remains", () => {
+    const dated = upsertGeneralCartLine([], {
+      ticketTierId: general,
+      name: "General",
+      price: 1,
+      quantity: 2,
+      scheduleId: friday,
+      dateString: "Vie",
+    })
+    const quantities = {
+      [cartCompositeItemId(general, friday)]: 2,
+    }
+    const cleaned = dropUndatedGeneralState(quantities, dated, general, friday)
+    assert.equal(cleaned.quantities, quantities)
+    assert.equal(cleaned.lines, dated)
+  })
 })
 
 describe("cartMapUnitIdsForSchedule", () => {

@@ -34,17 +34,20 @@ export type CartPriceBreakdown = {
   subtotal: number
   /** Igual a ticketPrice: la entrada sin el cargo trasladado. */
   baseAmount: number
+  cartBaseTotal: number
   /** Σ(feeAmount × quantity). */
   serviceFee: number
   feeAmount: number
+  cartFeeTotal: number
   /** Σ(customerTotal × quantity). Total a pagar. */
   customerTotal: number
   grandTotal: number
+  cartTotal: number
   absorbFees: boolean
 }
 
 export type CartLineMoney = {
-  /** Precio ingresado / catálogo por unidad. */
+  /** Precio ingresado / catálogo por unidad. Nunca se pisa con el cobro. */
   price: number
   ticketPrice: number
   /** Entrada (ticketPrice) para el tooltip. */
@@ -55,7 +58,17 @@ export type CartLineMoney = {
   /** Total cobrado por unidad (`customerTotal`). */
   totalPrice: number
   customerTotal: number
+  /** Alias de `customerTotal`: cobro al comprador según absorb_fees. */
+  finalPrice: number
   absorbFees: boolean
+}
+
+export type CartLineChargeQuote = {
+  ticketTierId?: string | null
+  quantity: number
+  basePrice: number
+  feeAmount: number
+  finalPrice: number
 }
 
 /**
@@ -143,8 +156,59 @@ export function cartLineUnitMoney(
     feeAmount: split.feeAmount,
     totalPrice: split.customerTotal,
     customerTotal: split.customerTotal,
+    finalPrice: split.customerTotal,
     absorbFees: split.absorbFees,
   }
+}
+
+function firstFiniteMoney(...values: unknown[]): number | null {
+  for (const value of values) {
+    if (value == null || value === "") continue
+    const parsed = toCartNumber(value)
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed
+  }
+  return null
+}
+
+/**
+ * Cobro de la línea: `finalPrice × quantity` en centavos.
+ * Si la línea no está sellada, recalcula desde `price` + tarifa.
+ */
+export function cartLineChargeAmount(
+  line: {
+    price?: unknown
+    quantity?: unknown
+    finalPrice?: unknown
+    customerTotal?: unknown
+    totalPrice?: unknown
+  },
+  rule: CartServiceFeeRule = {},
+): number {
+  const quantity = cartLineQuantity(line.quantity)
+  if (quantity <= 0) return 0
+  const stampedUnit = firstFiniteMoney(
+    line.finalPrice,
+    line.customerTotal,
+    line.totalPrice,
+  )
+  const unit =
+    stampedUnit ?? cartLineUnitMoney(line.price, rule).finalPrice
+  if (unit <= 0) return 0
+  return centsToMoney(moneyToCents(unit) * quantity)
+}
+
+/** Σ(finalPrice × quantity) — el total a cobrar, no el precio de catálogo. */
+export function sumCartChargeAmounts(
+  lines: ReadonlyArray<{
+    price?: unknown
+    quantity?: unknown
+    finalPrice?: unknown
+    customerTotal?: unknown
+    totalPrice?: unknown
+  }> | null | undefined,
+  rule: CartServiceFeeRule = {},
+): number {
+  return calculateCartPriceBreakdown(lines, rule).cartTotal
 }
 
 export function stampCartLineMoney<
@@ -194,12 +258,34 @@ export function calculateCartPriceBreakdown(
     ticketPrice,
     subtotal: ticketPrice,
     baseAmount: ticketPrice,
+    cartBaseTotal: ticketPrice,
     serviceFee: feeAmount,
     feeAmount,
+    cartFeeTotal: feeAmount,
     customerTotal,
     grandTotal: customerTotal,
+    cartTotal: customerTotal,
     absorbFees,
   }
+}
+
+export function quoteCartLineCharges(
+  items: ReadonlyArray<{
+    price?: unknown
+    quantity?: unknown
+    ticketTierId?: string | null
+  }> | null | undefined,
+  rule: CartServiceFeeRule = {},
+): CartLineChargeQuote[] {
+  return stampCartLinesMoney(items, rule)
+    .filter((line) => cartLineQuantity(line.quantity) > 0)
+    .map((line) => ({
+      ticketTierId: line.ticketTierId ?? null,
+      quantity: cartLineQuantity(line.quantity),
+      basePrice: line.basePrice,
+      feeAmount: line.feeAmount,
+      finalPrice: line.finalPrice,
+    }))
 }
 
 /** Counts selected tickets. $0 / Gratis quantities still count. */

@@ -278,6 +278,15 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
       ticketPrice: 10000,
       feeAmount: 1000,
       customerTotal: 11000,
+      lineQuotes: [
+        {
+          ticketTierId: generalId,
+          quantity: 1,
+          basePrice: 10000,
+          feeAmount: 1000,
+          finalPrice: 11000,
+        },
+      ],
       idempotencyKey: eventId,
     })
     assert.equal(parsed.success, true)
@@ -291,6 +300,8 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
     assert.equal(parsed.data.ticketPrice, 10000)
     assert.equal(parsed.data.feeAmount, 1000)
     assert.equal(parsed.data.customerTotal, 11000)
+    assert.equal(parsed.data.lineQuotes?.[0]?.finalPrice, 11000)
+    assert.equal(parsed.data.lineQuotes?.[0]?.basePrice, 10000)
     assert.equal(parsed.data.idempotencyKey, eventId)
   })
 
