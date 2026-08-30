@@ -56,6 +56,7 @@ import { BuyerViewModal } from "@/components/admin/buyer-view-modal"
 import { ConcentricRingGenerator } from "@/components/admin/concentric-ring-generator"
 import { VenueCanvasContextMenu } from "@/components/admin/venue-canvas-context-menu"
 import { VenueComponentPalette, type PalettePlacement } from "@/components/admin/venue-component-palette"
+import { VenueStudioSidebar } from "@/components/admin/venue-studio-sidebar"
 import { VenueFloatingToolbar, type FloatingDrawTool } from "@/components/admin/venue-floating-toolbar"
 import {
   VenueLayerTree,
@@ -241,6 +242,7 @@ import {
   applyVenueMapBackgroundPatch,
   type VenueMapBackgroundPatch,
 } from "@/lib/seating/venue-map-background"
+import { fallbackWorldCenter } from "@/lib/seating/venue-viewport"
 import {
   rebuildSectorSeats,
   venueMapCapacity,
@@ -470,6 +472,9 @@ export function InteractiveVenueMapEditor({
   })
   const [preview, setPreview] = useState(false)
   const [showRings, setShowRings] = useState(false)
+  const [ringCenter, setRingCenter] = useState<{ x: number; y: number } | null>(
+    null,
+  )
   const [workMode, setWorkMode] = useState<VenueWorkMode>("architecture")
   const [gridArrayOpen, setGridArrayOpen] = useState(false)
   const [gridArrayOrigin, setGridArrayOrigin] = useState<{
@@ -1950,6 +1955,7 @@ export function InteractiveVenueMapEditor({
     draft.seats = rebuildSectorSeats(draft)
     commit({ ...current, sectors: [...current.sectors, draft] })
     setSelection({ kind: "sector", id: draft.id })
+    setInspectorCollapsed(false)
     setTool("select")
   }
 
@@ -1988,6 +1994,7 @@ export function InteractiveVenueMapEditor({
       ],
     })
     setSelection({ kind: "label", id })
+    setInspectorCollapsed(false)
     setTool("select")
   }
 
@@ -2181,6 +2188,7 @@ export function InteractiveVenueMapEditor({
     )
     commit({ ...current, elements: [...ensureElements(current), created] })
     setSelection({ kind: "element", id: created.id })
+    setInspectorCollapsed(false)
     setPlacement(null)
     setTool("select")
   }
@@ -3806,10 +3814,25 @@ export function InteractiveVenueMapEditor({
     else setPreview(true)
   }
 
+  function viewportCenterWorld() {
+    const svg = svgRef.current
+    const rect = svg?.getBoundingClientRect()
+    if (!svg || !rect || rect.width < 2 || !svg.getScreenCTM()) {
+      return fallbackWorldCenter(CANVAS.width, CANVAS.height)
+    }
+    return pointerToSvg({
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2,
+    })
+  }
+
   function pickPaletteItem(next: PalettePlacement) {
+    if (workModeRef.current === "pricing") return
+    workModeRef.current = "architecture"
+    setWorkMode("architecture")
     setHandPan(false)
+    setInspectorCollapsed(false)
     if (next.kind === "zone_polygon") {
-      setWorkMode("architecture")
       setPlacement(next)
       setTool("polygon")
       setPolygonDraft([])
@@ -3819,16 +3842,25 @@ export function InteractiveVenueMapEditor({
       return
     }
     if (next.kind === "grid_array") {
-      setGridArrayOrigin(null)
+      setGridArrayOrigin(viewportCenterWorld())
       setGridArrayOpen(true)
       setPlacement(null)
       setTool("select")
       setToolsOpen(false)
       return
     }
-    setPlacement(next)
-    setTool("select")
+    if (next.kind === "rings") {
+      setRingCenter(viewportCenterWorld())
+      setShowRings(true)
+      setPlacement(null)
+      setTool("select")
+      setToolsOpen(false)
+      requestMobileProperties()
+      return
+    }
+    placeAt(viewportCenterWorld(), next)
     setToolsOpen(false)
+    requestMobileProperties()
   }
 
   function pickFloatingTool(next: FloatingDrawTool) {
@@ -4024,15 +4056,27 @@ export function InteractiveVenueMapEditor({
       >
         {(workMode === "architecture" || isWorkspace || isStudio) &&
         !compactChrome ? (
-          <VenueLayerTree
-            map={map}
-            selection={selection}
-            onSelect={selectFromLayerTree}
-            collapsed={isStudio ? paletteCollapsed : false}
-            onCollapsedChange={isStudio ? setPaletteCollapsed : undefined}
-            activeZoneId={activeZoneId}
-            className={cn(isStudio ? "w-72" : "w-full", isWorkspace && "h-full")}
-          />
+          isStudio ? (
+            <VenueStudioSidebar
+              map={map}
+              selection={selection}
+              onSelect={selectFromLayerTree}
+              onSpawn={pickPaletteItem}
+              activePlacement={placement}
+              collapsed={paletteCollapsed}
+              onCollapsedChange={setPaletteCollapsed}
+              activeZoneId={activeZoneId}
+              className={isWorkspace ? "h-full" : undefined}
+            />
+          ) : (
+            <VenueLayerTree
+              map={map}
+              selection={selection}
+              onSelect={selectFromLayerTree}
+              activeZoneId={activeZoneId}
+              className="w-full"
+            />
+          )
         ) : null}
         <div
           ref={canvasRef}
@@ -4894,7 +4938,10 @@ export function InteractiveVenueMapEditor({
           ) : (
             <>
           {showRings ? (
-            <ConcentricRingGenerator onGenerate={applyGeneratedRing} />
+            <ConcentricRingGenerator
+              onGenerate={applyGeneratedRing}
+              center={ringCenter}
+            />
           ) : null}
 
           {orientationState ? (

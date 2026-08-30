@@ -1,7 +1,7 @@
 "use client"
 
 import { CircleDot, Layers } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,8 +22,10 @@ const KIND_OPTIONS: Array<{ id: RingElementKind; label: string }> = [
 
 export function ConcentricRingGenerator({
   onGenerate,
+  center,
 }: {
   onGenerate: (elements: VenueMapElement[], replaceGroupId: string) => void
+  center?: { x: number; y: number } | null
 }) {
   const [groupName, setGroupName] = useState("Grada Naranja")
   const [color, setColor] = useState("#ea580c")
@@ -38,8 +40,13 @@ export function ConcentricRingGenerator({
   const [aisle, setAisle] = useState(true)
   const [aisleWidthDeg, setAisleWidthDeg] = useState(14)
   const [price, setPrice] = useState(45000)
-  const [centerX, setCenterX] = useState(400)
-  const [centerY, setCenterY] = useState(470)
+  const [centerX, setCenterX] = useState(center?.x ?? 400)
+  const [centerY, setCenterY] = useState(center?.y ?? 470)
+  useEffect(() => {
+    if (center == null) return
+    setCenterX(center.x)
+    setCenterY(center.y)
+  }, [center])
 
   const config = useMemo<ConcentricRingConfig>(() => {
     const safeRows = Math.min(40, Math.max(1, rows))

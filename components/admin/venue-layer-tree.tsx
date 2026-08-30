@@ -258,6 +258,7 @@ export function VenueLayerTree({
   collapsed = false,
   onCollapsedChange,
   activeZoneId = null,
+  embedded = false,
   className,
 }: {
   map: InteractiveVenueMap
@@ -266,6 +267,7 @@ export function VenueLayerTree({
   collapsed?: boolean
   onCollapsedChange?: (collapsed: boolean) => void
   activeZoneId?: string | null
+  embedded?: boolean
   className?: string
 }) {
   const nodes = useMemo(() => buildVenueLayerTree(map), [map])
@@ -317,30 +319,35 @@ export function VenueLayerTree({
     )
   }
 
+  const Frame = embedded ? "div" : "aside"
+
   return (
-    <aside
+    <Frame
       className={cn(
-        "flex h-full w-full shrink-0 flex-col overflow-hidden border-r border-border bg-card text-card-foreground",
+        "flex h-full w-full shrink-0 flex-col overflow-hidden bg-card text-card-foreground",
+        !embedded && "border-r border-border",
         className,
       )}
     >
       <div className="flex shrink-0 flex-col gap-2 border-b border-border px-3 py-2">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold tracking-wide text-foreground uppercase">
-            Estructura del Recinto
-          </p>
-          {onCollapsedChange ? (
-            <button
-              type="button"
-              title="Contraer panel"
-              aria-label="Contraer panel"
-              onClick={() => onCollapsedChange(true)}
-              className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <PanelLeftClose className="size-4" />
-            </button>
-          ) : null}
-        </div>
+        {embedded ? null : (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold tracking-wide text-foreground uppercase">
+              Estructura del Recinto
+            </p>
+            {onCollapsedChange ? (
+              <button
+                type="button"
+                title="Contraer panel"
+                aria-label="Contraer panel"
+                onClick={() => onCollapsedChange(true)}
+                className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <PanelLeftClose className="size-4" />
+              </button>
+            ) : null}
+          </div>
+        )}
         <div className="relative">
           <Search
             className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
@@ -358,8 +365,8 @@ export function VenueLayerTree({
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 scrollbar-thin">
         {nodes.length === 0 ? (
           <p className="px-2 py-6 text-xs leading-relaxed text-muted-foreground">
-            Todavía no hay zonas ni elementos. Usá la barra de herramientas
-            sobre el lienzo para empezar a dibujar.
+            Todavía no hay zonas ni elementos. Usá la pestaña Construir para
+            agregar mesas, butacas o el escenario.
           </p>
         ) : visibleNodes.length === 0 ? (
           <p className="px-2 py-6 text-xs leading-relaxed text-muted-foreground">
@@ -381,7 +388,7 @@ export function VenueLayerTree({
           </ul>
         )}
       </div>
-    </aside>
+    </Frame>
   )
 }
 
