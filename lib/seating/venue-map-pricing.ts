@@ -146,6 +146,7 @@ export function eventNeedsInteractiveCanvas(
   tickets: ReadonlyArray<Parameters<typeof isMapBackedTicket>[0]>,
   options?: { hasSeatingPlan?: boolean | null },
 ): boolean {
+  if (options?.hasSeatingPlan === false) return false
   if (!venueMapHasInventory(venueMap)) return false
   const needsReservedCanvas = tickets.some((ticket) =>
     ticketRequiresInteractiveMap({
@@ -154,7 +155,6 @@ export function eventNeedsInteractiveCanvas(
     }),
   )
   if (needsReservedCanvas) return true
-  if (options?.hasSeatingPlan === false) return false
   return tickets.some(isMapBackedTicket)
 }
 

@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import type { MutableRefObject } from "react"
 import type { UseFormGetValues } from "react-hook-form"
 
 import { saveEventDraftV2 } from "@/app/actions/events-v2"
@@ -30,7 +31,10 @@ export function useEventDraftV2Persist(
   eventId: string,
   getValues: UseFormGetValues<EventDraftV2>,
   watched: unknown,
-  options?: { onSaved?: (saved: EventDraftV2) => void },
+  options?: {
+    onSaved?: (saved: EventDraftV2) => void
+    holdRef?: MutableRefObject<boolean>
+  },
 ) {
   const [saveStatus, setSaveStatus] = useState<DraftSaveStatus>("idle")
   const [saveError, setSaveError] = useState("")
@@ -42,9 +46,13 @@ export function useEventDraftV2Persist(
   const busy = useRef(false)
   const queued = useRef<QueuedPersist | null>(null)
   const onSavedRef = useRef(options?.onSaved)
+  const holdRef = useRef(options?.holdRef)
   useLayoutEffect(() => {
     onSavedRef.current = options?.onSaved
   }, [options?.onSaved])
+  useLayoutEffect(() => {
+    holdRef.current = options?.holdRef
+  }, [options?.holdRef])
 
   const runWrite = useCallback(
     async (shouldForce: boolean): Promise<PersistDraftResult> => {
@@ -54,6 +62,9 @@ export function useEventDraftV2Persist(
           success: false,
           error: "Sin conexión. El borrador quedó en este dispositivo.",
         }
+      }
+      if (holdRef.current?.current && !shouldForce) {
+        return { success: true }
       }
       const snapshot = getValues()
       const sanitized = sanitizeEventDraftForPersist(snapshot)
@@ -158,6 +169,10 @@ export function useEventDraftV2Persist(
 
   const flushAndPause = useCallback(async (): Promise<PersistDraftResult> => {
     paused.current = true
+    const started = Date.now()
+    while (holdRef.current?.current && Date.now() - started < 8000) {
+      await new Promise((resolve) => window.setTimeout(resolve, 50))
+    }
     return persistDraft(true)
   }, [persistDraft])
 
@@ -194,7 +209,7 @@ export function useEventDraftV2Persist(
     }
     if (paused.current) return
     const timer = window.setTimeout(() => {
-      if (paused.current) return
+      if (paused.current || holdRef.current?.current) return
       void persistDraft()
     }, EDITOR_V2_AUTOSAVE_MS)
     return () => {

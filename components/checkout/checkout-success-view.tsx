@@ -237,6 +237,11 @@ export function CheckoutSuccessView({
                 <h1 className="text-4xl font-black tracking-tight text-foreground md:text-5xl">
                   ¡Pago confirmado! Ya estás adentro
                 </h1>
+                {fulfillment.checkoutMessage ? (
+                  <p className="mx-auto max-w-md text-lg font-medium text-foreground md:text-xl">
+                    {fulfillment.checkoutMessage}
+                  </p>
+                ) : null}
                 <p className="mx-auto max-w-md text-lg font-medium text-muted-foreground md:text-xl">
                   Las entradas fueron enviadas a tu correo. No hace falta
                   contraseña: también las tenés en &quot;Mis entradas&quot;

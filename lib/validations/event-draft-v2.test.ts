@@ -250,6 +250,8 @@ describe("eventPublishSchema", () => {
     }
     draft.basicInfo.locationName = ""
     draft.settings.deliveryMode = "ONLINE"
+    assert.equal(eventPublishSchema.safeParse(draft).success, false)
+    draft.virtualLink = "https://meet.example/clase"
     assert.equal(eventPublishSchema.safeParse(draft).success, true)
   })
 
@@ -408,6 +410,7 @@ describe("parseEventDraftV2", () => {
     assert.equal(parsed.tickets[0]?.startDate, "")
     assert.equal(parsed.tickets[0]?.endDate, "")
     assert.equal(parsed.extras[0]?.minOrder, 1)
+    assert.equal(parsed.settings.refundPolicy, "no_refunds")
     assert.equal(parsed.settings.checkoutMessage, "Gracias")
     assert.equal(parsed.promoVideoUrl, "")
     assert.deepEqual(parsed.galleryUrls, [])

@@ -5,6 +5,8 @@
  * available = MIN(sku.capacity - sku.sold, venue.max_capacity_per_day - occupied_day)
  */
 
+import { resolveTicketCommerceType } from "@/lib/events/ticket-commerce-type"
+
 export type PublicStockTier = {
   id?: string
   capacity: number
@@ -14,6 +16,8 @@ export type PublicStockTier = {
   tier_type?: string | null
   layout_type?: string | null
   capacity_per_unit?: number | null
+  ticket_type?: string | null
+  category?: string | null
 }
 
 function asInt(value: unknown): number {
@@ -29,6 +33,7 @@ export function isFullPassDayId(dayId: string | null | undefined): boolean {
 
 export function occupiesVenuePublicStock(tier: PublicStockTier): boolean {
   if ((tier.visibility ?? "public") === "private") return false
+  if (resolveTicketCommerceType(tier) === "extra") return false
   const type = (tier.tier_type ?? "general").trim()
   return type !== "addon" && type !== "bundle"
 }
@@ -130,10 +135,14 @@ export function publicCatalogTicketsLeft(input: {
   const publicTiers = (input.tiers ?? []).filter(
     (tier) => (tier.visibility ?? "public") !== "private",
   )
+  const admissions = publicTiers.filter(
+    (tier) => resolveTicketCommerceType(tier) !== "extra",
+  )
   if (!publicTiers.length) return { soldRatio: null, ticketsLeft: null }
-  const capacity = publicTiers.reduce((sum, tier) => sum + asInt(tier.capacity), 0)
-  const sold = publicTiers.reduce((sum, tier) => sum + asInt(tier.sold), 0)
-  if (capacity <= 0) return { soldRatio: null, ticketsLeft: null }
+  if (!admissions.length) return { soldRatio: 1, ticketsLeft: 0 }
+  const capacity = admissions.reduce((sum, tier) => sum + asInt(tier.capacity), 0)
+  const sold = admissions.reduce((sum, tier) => sum + asInt(tier.sold), 0)
+  if (capacity <= 0) return { soldRatio: null, ticketsLeft: 0 }
   const skuLeft = Math.max(0, capacity - sold)
   const venueCap = asInt(input.venueCapacity)
   const venueLeft =

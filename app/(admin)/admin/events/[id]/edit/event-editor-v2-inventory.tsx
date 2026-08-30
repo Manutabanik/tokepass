@@ -1,7 +1,7 @@
 "use client"
 
 import { MapPinned, Package, Pencil, Plus, Ticket, Trash2, Users } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useFieldArray, useFormContext, useWatch } from "react-hook-form"
 
 import { useDraftArchetype } from "./event-editor-v2-archetype"
@@ -57,9 +57,11 @@ type InventoryEditorTarget = {
 export function EventEditorV2InventoryStep({
   eventId,
   revealField = null,
+  active = true,
 }: {
   eventId: string
   revealField?: string | null
+  active?: boolean
 }) {
   const { control, register, setValue, getValues } =
     useFormContext<EventDraftV2>()
@@ -103,6 +105,7 @@ export function EventEditorV2InventoryStep({
   const editorRef = useRef<InventoryEditorTarget | null>(null)
   const revealKey = revealField?.trim() ?? ""
   const [lastRevealKey, setLastRevealKey] = useState(revealKey)
+  const [lastActive, setLastActive] = useState(active)
   if (revealKey !== lastRevealKey) {
     setLastRevealKey(revealKey)
     const match = revealKey.match(/^(tickets|extras)\.(\d+)/)
@@ -113,6 +116,20 @@ export function EventEditorV2InventoryStep({
       }
     }
   }
+  if (active !== lastActive) {
+    setLastActive(active)
+    if (!active) {
+      setEditor(null)
+      setMapOpen(false)
+    }
+  }
+
+  useLayoutEffect(() => {
+    return () => {
+      closeIntentRef.current = "keep"
+      editorRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     editorRef.current = editor
@@ -295,6 +312,7 @@ export function EventEditorV2InventoryStep({
         <LineItemSummaryList
           name="tickets"
           items={tickets}
+          hideMapTickets={hasMap}
           emptyTitle={`Aún no has creado ${ticketsLabel.toLowerCase()}`}
           emptyHint={`Armá el primer ítem de ${ticketsLabel.toLowerCase()} para definir el inventario.`}
           emptyIcon={Ticket}
@@ -313,6 +331,7 @@ export function EventEditorV2InventoryStep({
         <LineItemSummaryList
           name="extras"
           items={extras}
+          hideMapTickets={false}
           emptyTitle="Aún no has creado adicionales"
           emptyHint={`Sumá un extra cuando quieras vender algo además de ${ticketsLabel.toLowerCase()}.`}
           emptyIcon={Package}
@@ -324,9 +343,9 @@ export function EventEditorV2InventoryStep({
       </SplitRowSection>
 
       <Sheet
-        open={editor != null}
+        open={active && editor != null}
         onOpenChange={(open) => {
-          if (!open) discardEditor()
+          if (!open && active) discardEditor()
         }}
       >
         <SheetContent
@@ -374,7 +393,12 @@ export function EventEditorV2InventoryStep({
         </SheetContent>
       </Sheet>
 
-      <Sheet open={mapOpen} onOpenChange={setMapOpen}>
+      <Sheet
+        open={active && mapOpen}
+        onOpenChange={(open) => {
+          if (!open) setMapOpen(false)
+        }}
+      >
         <SheetContent
           side="right"
           className="w-[400px] gap-0 p-0 sm:w-[540px]"
@@ -400,6 +424,7 @@ export function EventEditorV2InventoryStep({
 function LineItemSummaryList({
   name,
   items,
+  hideMapTickets,
   emptyTitle,
   emptyHint,
   emptyIcon: EmptyIcon,
@@ -410,6 +435,7 @@ function LineItemSummaryList({
 }: {
   name: LineItemName
   items: EventDraftV2LineItem[]
+  hideMapTickets: boolean
   emptyTitle: string
   emptyHint: string
   emptyIcon: typeof Ticket
@@ -420,7 +446,10 @@ function LineItemSummaryList({
 }) {
   const visible = items
     .map((item, index) => ({ item, index }))
-    .filter(({ item }) => name === "extras" || !isMapDraftTicket(item))
+    .filter(
+      ({ item }) =>
+        name === "extras" || !hideMapTickets || !isMapDraftTicket(item),
+    )
 
   if (visible.length === 0) {
     return (

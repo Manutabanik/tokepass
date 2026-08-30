@@ -48,6 +48,7 @@ function sampleEvent(): EventDetails {
       seating_layout: [],
       venue_map: emptyVenueMap(),
     },
+    hasSeatingPlan: false,
     hasInteractiveMap: false,
     seatingMaps: [],
     seatingUnits: [],
@@ -131,6 +132,16 @@ describe("event-catalog-realtime", () => {
     assert.equal(next.zoneTierPricing[0]?.price, 12500)
   })
 
+  it("resta vendidas sin soltar el techo de recinto", () => {
+    const event = sampleEvent()
+    event.tiers[0] = { ...event.tiers[0]!, available: 12 }
+    const next = applyTicketTierCatalogRow(event, "UPDATE", {
+      id: "tier-1",
+      sold: 21,
+    })
+    assert.equal(next.tiers[0]?.available, 11)
+  })
+
   it("saca la tarifa eliminada del catalogo", () => {
     const next = applyTicketTierCatalogRow(sampleEvent(), "DELETE", {
       id: "tier-1",
@@ -194,6 +205,30 @@ describe("event-catalog-realtime", () => {
     })
     assert.equal(next.title, "Fiesta VIP")
     assert.equal(next.venue?.venue_map.zones[0]?.id, "zona-a")
+  })
+
+  it("no inserta un extra como entrada general", () => {
+    const extra = applyTicketTierCatalogRow(sampleEvent(), "INSERT", {
+      id: "extra-1",
+      name: "Trago",
+      price: 2500,
+      capacity: 40,
+      sold: 0,
+      ticket_type: "extra",
+      tier_type: "general",
+    })
+    assert.equal(extra.tiers.length, 2)
+    assert.equal(extra.tiers[1]?.ticket_type, "extra")
+    assert.equal(extra.tiers[1]?.category, "special")
+
+    const partial = applyTicketTierCatalogRow(sampleEvent(), "INSERT", {
+      id: "mystery-1",
+      name: "Nueva",
+      price: 1000,
+      capacity: 10,
+      sold: 0,
+    })
+    assert.equal(partial.tiers.length, 1)
   })
 
   it("arma el patch del selector de tickets", () => {

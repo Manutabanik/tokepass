@@ -27,13 +27,17 @@ import {
   flattenDraftScheduleOccurrences,
   type DraftScheduleOccurrence,
 } from "@/lib/events/draft-schedule-slots-v2"
-import { parseTicketCommerceType } from "@/lib/events/ticket-commerce-type"
+import {
+  parseTicketCommerceType,
+  resolveTicketCommerceType,
+} from "@/lib/events/ticket-commerce-type"
 import {
   EVENT_DRAFT_GALLERY_MAX,
   eventPublishSchema,
   isEventDraftOnline,
   isMapDraftTicket,
   parseEventDraftV2,
+  resolveDraftHasMap,
   resolveDraftSchedule,
   type EventDraftV2LineItem,
 } from "@/lib/validations/event-draft-v2"
@@ -42,6 +46,9 @@ import {
   STREAMING_VENUE_LOCATION,
   STREAMING_VENUE_NAME,
 } from "@/lib/venues/streaming-venue"
+import { saleWindowToIso } from "@/lib/inventory/ticket-sale-window"
+import { parseDraftRefundPolicy } from "@/lib/events/refund-policy"
+import type { EventRefundPolicy } from "@/lib/validations/event-form"
 import type { Json } from "@/types/database"
 
 const UUID_RE =
@@ -68,6 +75,8 @@ export type PublishEventV2TierPayload = {
   seating_sector_id: string | null
   day_id: string | null
   ticket_type: "standard" | "combo" | "extra"
+  sale_starts_at?: string | null
+  sale_ends_at?: string | null
   combo_schedule_ids?: string[]
 }
 
@@ -84,7 +93,7 @@ export type PublishEventV2Payload = {
   ends_at: string | null
   schedule_days: PublishEventV2ScheduleDay[]
   location: string
-  visibility: "public" | "private"
+  visibility: "public" | "private" | "guest_list_only"
   flyer_url: string | null
   image_url: string | null
   social_share_image_url: string | null
@@ -99,6 +108,10 @@ export type PublishEventV2Payload = {
     longitude: number | null
   }
   delivery_mode: "PRESENCIAL" | "ONLINE"
+  access_link: string | null
+  refund_policy: EventRefundPolicy
+  checkout_message: string | null
+  absorb_fees: boolean
   venue_map?: Json
   has_seating_plan: boolean
   promo_video_url: string | null
@@ -280,6 +293,8 @@ function mapLineItemToTier(
     layoutType?: string
     slotId?: string
     validDayIds?: string[]
+    startDate?: string
+    endDate?: string
     ticketType?: EventDraftV2LineItem["ticketType"]
   },
   kind: "ticket" | "extra",
@@ -329,8 +344,14 @@ function mapLineItemToTier(
     category: isExtra ? "special" : "standard",
     layout_type: isExtra ? "general" : publishLayoutType(item, isMap),
     seating_sector_id: isMap && sectorId ? sectorId : null,
-    day_id: asPublishUuid((item as { slotId?: string }).slotId),
+    day_id: isExtra
+      ? null
+      : asPublishUuid((item as { slotId?: string }).slotId),
     ticket_type: ticketType,
+    sale_starts_at: saleWindowToIso(
+      (item as { startDate?: string }).startDate,
+    ),
+    sale_ends_at: saleWindowToIso((item as { endDate?: string }).endDate),
   }
 }
 
@@ -407,8 +428,16 @@ export function composePublishDescription(input: {
   title: string
   checkoutMessage?: string
 }): string {
-  const checkout = input.checkoutMessage?.trim() ?? ""
-  return checkout || input.title
+  return input.title.trim()
+}
+
+export function resolvePublishedSaleWindowTierId(
+  ticket: { id?: string | null },
+  candidates: readonly { id: string }[],
+): string | null {
+  const id = asPublishUuid(ticket.id)
+  if (id) return id
+  return candidates.length === 1 ? (candidates[0]?.id ?? null) : null
 }
 
 function publishOptionalText(value?: string | null): string | null {
@@ -476,12 +505,18 @@ function sanitizePublishedTicketSectors(
 ): PublishEventV2TierPayload[] {
   const live = new Set(liveSectors.map((sector) => sector.id).filter(Boolean))
   return tickets.map((ticket) => {
-    if (
-      !hasSeatingPlan ||
-      ticket.tier_type === "general" ||
-      ticket.tier_type === "addon" ||
-      ticket.ticket_type === "extra"
-    ) {
+    if (resolveTicketCommerceType(ticket) === "extra") {
+      return { ...ticket, seating_sector_id: null }
+    }
+    if (!hasSeatingPlan) {
+      return {
+        ...ticket,
+        seating_sector_id: null,
+        tier_type: "general",
+        layout_type: "general",
+      }
+    }
+    if (ticket.tier_type === "general") {
       return { ...ticket, seating_sector_id: null }
     }
     const healed = healTicketSeatingSector(
@@ -613,6 +648,9 @@ export function buildPublishEventV2Payload(
       title,
       checkoutMessage: parsed.settings?.checkoutMessage,
     }),
+    refund_policy: parseDraftRefundPolicy(parsed.settings?.refundPolicy),
+    checkout_message: publishOptionalText(parsed.settings?.checkoutMessage),
+    absorb_fees: absorbFees,
     promo_video_url: publishPromoVideoUrl(parsed.promoVideoUrl),
     gallery_urls: publishGalleryUrls(parsed.galleryUrls),
     restrictions: publishOptionalText(parsed.restrictions),
@@ -633,6 +671,7 @@ export function buildPublishEventV2Payload(
           : null,
     },
     delivery_mode: isOnline ? "ONLINE" : "PRESENCIAL",
+    access_link: isOnline ? publishOptionalText(parsed.virtualLink) : null,
     has_seating_plan: publishedMaps.has_seating_plan,
     ...(publishedMaps.venue_map ? { venue_map: publishedMaps.venue_map } : {}),
     seating_maps: publishedMaps.seating_maps,
@@ -665,6 +704,7 @@ export function sanitizePublishPayloadForDatabase(
 
 function publishSeatingMapsFromDraft(
   draft: {
+    hasMap?: boolean
     seatingMaps?: Array<{
       dateId?: string
       mapConfig?: unknown
@@ -678,6 +718,19 @@ function publishSeatingMapsFromDraft(
   venue_map?: Json
   has_seating_plan: boolean
 } {
+  if (
+    !resolveDraftHasMap({
+      hasMap: draft.hasMap,
+      seatingMaps: draft.seatingMaps,
+      seatingMap: draft.seatingMap,
+    })
+  ) {
+    return {
+      seating_maps: [],
+      venue_map: undefined,
+      has_seating_plan: false,
+    }
+  }
   const instances = Array.isArray(draft.seatingMaps) ? draft.seatingMaps : []
   const seating_maps = instances.flatMap((item) => {
     const published = publishVenueMapFromDraft(item.mapConfig)

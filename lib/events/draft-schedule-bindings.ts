@@ -76,6 +76,7 @@ export function pruneDraftScheduleBindings<
     tickets?: DayBoundTicket[]
     extras?: DayBoundTicket[]
     seatingMaps?: Array<{ dateId?: string }> | null
+    lineup?: Array<{ dayIds?: string[] }>
   },
 >(draft: T): T {
   const schedule = draft.schedule ?? []
@@ -105,6 +106,12 @@ export function pruneDraftScheduleBindings<
 
   return {
     ...draft,
+    lineup: (draft.lineup ?? []).map((item) => ({
+      ...item,
+      dayIds: (item.dayIds ?? [])
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0 && live.has(id)),
+    })),
     seatingMaps: (draft.seatingMaps ?? []).filter((item) => {
       const dateId = item.dateId?.trim() ?? ""
       return !dateId || live.has(dateId)

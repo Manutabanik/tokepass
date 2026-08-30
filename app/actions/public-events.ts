@@ -173,6 +173,8 @@ export type EventDetails = {
         venue_map: InteractiveVenueMap
       })
     | null
+  /** Columna live: el organizador publicó con mapa. */
+  hasSeatingPlan: boolean
   /** El recinto tiene plano SVG (zonas, fondo o butacas) para el takeover B2C. */
   hasInteractiveMap: boolean
   seatingMaps: Array<{
@@ -269,6 +271,12 @@ type EventListRow = {
     capacity: number
     sold: number
     visibility?: string | null
+    sale_starts_at?: string | null
+    sale_ends_at?: string | null
+    category?: string | null
+    tier_type?: string | null
+    layout_type?: string | null
+    ticket_type?: string | null
   }[] | null
   profiles: { full_name: string | null } | null
   lineup?: unknown
@@ -376,13 +384,23 @@ function computeStartingPrice(
     category?: string | null
     tier_type?: string | null
     layout_type?: string | null
+    ticket_type?: string | null
   }> | null,
 ): number | null {
   return startingPriceFromSellable(tiers)
 }
 
 function computeInventory(
-  tiers: { capacity: number; sold: number; visibility?: string | null }[] | null,
+  tiers: {
+    capacity: number
+    sold: number
+    visibility?: string | null
+    ticket_type?: string | null
+    tier_type?: string | null
+    category?: string | null
+    layout_type?: string | null
+    day_id?: string | null
+  }[] | null,
   venueCapacity?: number | null,
 ): {
   soldRatio: number | null
@@ -395,7 +413,7 @@ function computeInventory(
 }
 
 const EVENT_LIST_SELECT =
-  "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, sale_starts_at, sale_ends_at, category, tier_type, layout_type), profiles!events_organizer_id_fkey(full_name)"
+  "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, sale_starts_at, sale_ends_at, category, tier_type, layout_type, ticket_type), profiles!events_organizer_id_fkey(full_name)"
 const EVENT_LIST_SELECT_MINIMAL =
   "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, category, tier_type, layout_type), profiles!events_organizer_id_fkey(full_name)"
 const EVENT_LIST_SELECT_WITH_DELIVERY = `${EVENT_LIST_SELECT}, delivery_mode`
@@ -403,7 +421,7 @@ const EVENT_LIST_SELECT_WITH_DELIVERY = `${EVENT_LIST_SELECT}, delivery_mode`
 function isCatalogListRetryable(message: string): boolean {
   return (
     isMissingArtistSchema(message) ||
-    /lineup|delivery_mode|sale_starts_at|sale_ends_at|schedule_days|is_deleted|schema cache|PGRST204|42703/i.test(
+    /lineup|delivery_mode|sale_starts_at|sale_ends_at|schedule_days|is_deleted|ticket_type|schema cache|PGRST204|42703/i.test(
       message,
     )
   )
@@ -968,10 +986,13 @@ export async function getPublicEventVenueMap(
 
   const { data: event } = await supabase
     .from("events")
-    .select("id, venue_id")
+    .select("id, venue_id, has_seating_plan")
     .eq("id", resolvedId)
     .maybeSingle()
   if (!event) return null
+  if ((event as { has_seating_plan?: boolean | null }).has_seating_plan === false) {
+    return null
+  }
 
   const raw = await loadVenueMapJson(
     supabase,
@@ -1064,18 +1085,34 @@ async function loadEventCoreRow(
   eventId: string,
   mode: EventLoadMode,
 ) {
-  let query = supabase
-    .from("events")
-    .select(
-      "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, promo_video_url, gallery_urls, accepts_mercado_pago, accepts_pos_payments, refund_policy, ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type)",
-    )
-    .eq("id", eventId)
+  const coreWithAbsorb =
+    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, absorb_fees, promo_video_url, gallery_urls, accepts_mercado_pago, accepts_pos_payments, refund_policy, ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type)"
+  const coreWithoutAbsorb =
+    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, promo_video_url, gallery_urls, accepts_mercado_pago, accepts_pos_payments, refund_policy, ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type)"
 
+  let query = supabase.from("events").select(coreWithAbsorb).eq("id", eventId)
   if (mode === "public") {
     query = query.eq("status", "published").neq("visibility", "guest_list_only")
   }
 
-  const { data, error } = await query.maybeSingle()
+  let { data, error } = await query.maybeSingle()
+  if (
+    error &&
+    /absorb_fees|schema cache|PGRST204|42703/i.test(error.message)
+  ) {
+    let fallback = supabase
+      .from("events")
+      .select(coreWithoutAbsorb)
+      .eq("id", eventId)
+    if (mode === "public") {
+      fallback = fallback
+        .eq("status", "published")
+        .neq("visibility", "guest_list_only")
+    }
+    const retry = await fallback.maybeSingle()
+    data = retry.data as typeof data
+    error = retry.error
+  }
   if (error) {
     logger.error({
       context: "public-events",
@@ -1123,6 +1160,8 @@ async function loadEventDetails(
     `id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, social_share_image_url, status, visibility, schedule_days, organizer_id, category_id, delivery_mode, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, absorb_fees, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, restrictions, what_to_bring, lineup, default_ticket_tab, venue_id, has_seating_plan, venue_map, accepts_mercado_pago, accepts_pos_payments, refund_policy, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(${publicTierSelectWithType}), profiles!events_organizer_id_fkey(full_name)`
   const eventSelectCore =
     `id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, absorb_fees, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venue_id, has_seating_plan, venue_map, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(${publicTierSelectCore}), profiles!events_organizer_id_fkey(full_name)`
+  const eventSelectCoreNoAbsorb =
+    `id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venue_id, has_seating_plan, venue_map, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(${publicTierSelectCore}), profiles!events_organizer_id_fkey(full_name)`
 
   let query = supabase
     .from("events")
@@ -1137,13 +1176,30 @@ async function loadEventDetails(
 
   if (
     error &&
-    /default_ticket_tab|highlight_badge|min_purchase_limit|max_purchase_limit|ticket_tiers.*description|sale_starts_at|sale_ends_at|venue_map|lineup|max_capacity|has_seating_plan|social_share_image_url|delivery_mode|access_link|accepts_mercado_pago|accepts_pos_payments|refund_policy|restrictions|what_to_bring|ticket_type|schema cache|PGRST204|42703/i.test(
+    /default_ticket_tab|highlight_badge|min_purchase_limit|max_purchase_limit|ticket_tiers.*description|sale_starts_at|sale_ends_at|venue_map|lineup|max_capacity|has_seating_plan|social_share_image_url|delivery_mode|access_link|accepts_mercado_pago|accepts_pos_payments|refund_policy|restrictions|what_to_bring|ticket_type|absorb_fees|schema cache|PGRST204|42703/i.test(
       error.message,
     )
   ) {
     let fallback = supabase
       .from("events")
       .select(eventSelectCore)
+      .eq("id", resolvedId)
+    if (options.mode === "public") {
+      fallback = fallback
+        .eq("status", "published")
+        .neq("visibility", "guest_list_only")
+    }
+    const retry = await fallback.maybeSingle()
+    data = retry.data as typeof data
+    error = retry.error
+  }
+  if (
+    error &&
+    /absorb_fees|schema cache|PGRST204|42703/i.test(error.message)
+  ) {
+    let fallback = supabase
+      .from("events")
+      .select(eventSelectCoreNoAbsorb)
       .eq("id", resolvedId)
     if (options.mode === "public") {
       fallback = fallback
@@ -1235,7 +1291,14 @@ async function loadEventDetails(
     })
   }
   let ticketRows = Array.isArray(event.ticket_tiers) ? event.ticket_tiers : null
-  if (!ticketRows || ticketRows.length === 0) {
+  const embedLacksCommerceType =
+    !ticketRows ||
+    ticketRows.length === 0 ||
+    ticketRows.some(
+      (tier) =>
+        !Object.prototype.hasOwnProperty.call(tier as object, "ticket_type"),
+    )
+  if (embedLacksCommerceType) {
     const fetched = await loadPublicTicketTierRows(supabase, resolvedId)
     if (fetched.length > 0) ticketRows = fetched
   }
@@ -1276,6 +1339,7 @@ async function loadEventDetails(
         }> }
 
   const comboScheduleIdsByTier: Record<string, string[]> = {}
+  let comboScheduleQueryFailed = false
   if (tiers.length > 0) {
     const comboDayRows = await supabase
       .from("combo_items")
@@ -1284,7 +1348,9 @@ async function loadEventDetails(
         "combo_tier_id",
         tiers.map((tier) => tier.id),
       )
-    if (!comboDayRows.error) {
+    if (comboDayRows.error) {
+      comboScheduleQueryFailed = true
+    } else {
       for (const row of comboDayRows.data ?? []) {
         const list = comboScheduleIdsByTier[row.combo_tier_id] ?? []
         if (!list.includes(row.schedule_id)) list.push(row.schedule_id)
@@ -1292,18 +1358,20 @@ async function loadEventDetails(
       }
     }
   }
-  for (const tier of tiers) {
-    if ((comboScheduleIdsByTier[tier.id]?.length ?? 0) > 0) continue
-    if (
-      resolveTicketCommerceType({
-        ticket_type: (tier as { ticket_type?: TicketTier["ticket_type"] }).ticket_type,
-        name: tier.name,
-        dayId: tier.day_id,
-        bundle_type: (tier as { bundle_type?: TicketTier["bundle_type"] }).bundle_type,
-      }) === "combo" &&
-      scheduleIds.length > 1
-    ) {
-      comboScheduleIdsByTier[tier.id] = scheduleIds
+  if (comboScheduleQueryFailed) {
+    for (const tier of tiers) {
+      if ((comboScheduleIdsByTier[tier.id]?.length ?? 0) > 0) continue
+      if (
+        resolveTicketCommerceType({
+          ticket_type: (tier as { ticket_type?: TicketTier["ticket_type"] }).ticket_type,
+          name: tier.name,
+          dayId: tier.day_id,
+          bundle_type: (tier as { bundle_type?: TicketTier["bundle_type"] }).bundle_type,
+        }) === "combo" &&
+        scheduleIds.length > 1
+      ) {
+        comboScheduleIdsByTier[tier.id] = scheduleIds
+      }
     }
   }
 
@@ -1358,9 +1426,16 @@ async function loadEventDetails(
   const seatingLayout = event.venues
     ? parsePublicSeatingLayout(event.venues.seating_layout)
     : []
+  const seatingPlanOn = event.has_seating_plan === true
   const [venueMap, seatingMaps] = await Promise.all([
-    resolvePublicVenueMap(supabase, event, seatingLayout),
-    loadPublishedSeatingMaps(supabase, event.id),
+    seatingPlanOn
+      ? resolvePublicVenueMap(supabase, event, seatingLayout)
+      : Promise.resolve(parseVenueMap(null)),
+    seatingPlanOn
+      ? loadPublishedSeatingMaps(supabase, event.id)
+      : Promise.resolve(
+          [] as Array<{ eventDateId: string | null; map: InteractiveVenueMap }>,
+        ),
   ])
   const hasInteractiveMap = eventNeedsInteractiveCanvas(
     seatingMaps[0]?.map ?? venueMap,
@@ -1435,6 +1510,7 @@ async function loadEventDetails(
             venue_map: venueMap,
           }
         : null,
+    hasSeatingPlan: event.has_seating_plan === true,
     hasInteractiveMap,
     seatingMaps,
     seatingUnits: [],
@@ -1493,6 +1569,9 @@ async function loadEventDetails(
           sold: live?.sold ?? Number(tier.sold),
           day_id: tier.day_id,
           visibility: tier.visibility,
+          ticket_type: (tier as { ticket_type?: TicketTier["ticket_type"] })
+            .ticket_type,
+          category: tier.category,
           tier_type:
             (tier as { tier_type?: TicketTier["tier_type"] }).tier_type ??
             "general",
@@ -1509,6 +1588,9 @@ async function loadEventDetails(
         sold: live?.sold ?? Number(tier.sold),
         day_id: tier.day_id,
         visibility: tier.visibility,
+        ticket_type: (tier as { ticket_type?: TicketTier["ticket_type"] })
+          .ticket_type,
+        category: tier.category,
         tier_type: "general" as const,
         layout_type: tier.layout_type ?? null,
         capacity_per_unit: Number(tier.capacity_per_unit) || 1,

@@ -751,7 +751,6 @@ export const useCheckoutStore = create<CheckoutState>()(
         }
         set(
           withCartHoldClock(current, {
-            lines,
             quantities,
             catalogByTierId: catalog,
             ...totalsForLines(lines, current),
@@ -812,7 +811,6 @@ export const useCheckoutStore = create<CheckoutState>()(
           const current = get()
           set(
             withCartHoldClock(current, {
-              lines,
               catalogByTierId: mergeCatalog(current.catalogByTierId, [
                 {
                   id: input.ticketTierId,
@@ -860,7 +858,6 @@ export const useCheckoutStore = create<CheckoutState>()(
         set(
           withCartHoldClock(current, {
             quantities: stamped.quantities,
-            lines: stamped.lines,
             catalogByTierId: mergeCatalog(current.catalogByTierId, [
               {
                 id: input.ticketTierId,
@@ -907,7 +904,6 @@ export const useCheckoutStore = create<CheckoutState>()(
         set(
           withCartHoldClock(current, {
             quantities: stamped.quantities,
-            lines: stamped.lines,
             catalogByTierId: mergeCatalog(current.catalogByTierId, [
               {
                 id: input.ticketTierId,
@@ -973,7 +969,6 @@ export const useCheckoutStore = create<CheckoutState>()(
         set(
           withCartHoldClock(current, {
             quantities,
-            lines,
             ...totalsForLines(lines, current),
           }),
         )

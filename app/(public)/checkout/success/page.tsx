@@ -46,6 +46,7 @@ export default async function CheckoutSuccessPage({
         eventTitle: null,
         totalAmount: 0,
         holdExpiresAt: null,
+        checkoutMessage: null,
       }
 
   const purchaseAnalytics = orderId

@@ -5,11 +5,13 @@ import {
   toDatetimeLocalInput,
 } from "@/lib/event-schedule"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
-import { asTicketCommerceType, resolveTicketCommerceType } from "@/lib/events/ticket-commerce-type"
+import { resolveTicketCommerceType } from "@/lib/events/ticket-commerce-type"
 import {
+  emptyDraftSeatingMap,
   parseDraftSeatingMaps,
   toDraftSeatingMap,
 } from "@/lib/events/draft-seating-map-v2"
+import { saleWindowToFormValue } from "@/lib/inventory/ticket-sale-window"
 import { parseEventRefundPolicy } from "@/lib/validations/event-form"
 import { collapseDayPricedTicketsForEditor } from "@/lib/events/draft-day-priced-tickets"
 import {
@@ -37,6 +39,8 @@ export type LiveEventTicketSnapshotV2 = {
   seating_sector_id: string | null
   day_id?: string | null
   ticket_type?: string | null
+  sale_starts_at?: string | null
+  sale_ends_at?: string | null
 }
 
 export type LiveEventVenueSnapshotV2 = {
@@ -74,6 +78,9 @@ export type LiveEventSnapshotV2 = {
     what_to_bring?: string | null
     lineup?: unknown
     absorb_fees?: boolean | null
+    access_link?: string | null
+    checkout_message?: string | null
+    has_seating_plan?: boolean | null
   }
   venue: LiveEventVenueSnapshotV2 | null
   tickets: LiveEventTicketSnapshotV2[]
@@ -128,10 +135,12 @@ export function rehydrateEventDraftV2(
     province: event.province,
   })
 
+  const planOff = event.has_seating_plan === false
+  const leftoverMap = planOff ? null : (event.venue_map ?? venue?.venue_map)
   const tickets: EventDraftV2LineItem[] = []
   const extras: EventDraftV2LineItem[] = []
   for (const tier of snapshot.tickets) {
-    const item = liveTierToDraftItem(tier)
+    const item = liveTierToDraftItem(tier, { planOff })
     if (item.ticketType === "extra") {
       extras.push({ ...item, source: "general", sectorId: "", layoutType: "general" })
       continue
@@ -141,8 +150,7 @@ export function rehydrateEventDraftV2(
 
   const title = (event.title ?? "").trim()
   const description = (event.description ?? "").trim()
-  const checkoutMessage =
-    description && description !== title ? description : ""
+  const checkoutMessage = liveCheckoutMessage(event, title, description)
 
   const lat = asOptionalCoord(venue?.latitude)
   const lng = asOptionalCoord(venue?.longitude)
@@ -172,19 +180,21 @@ export function rehydrateEventDraftV2(
         ]
   const primary = schedule[0]
   const seatingMaps = parseDraftSeatingMaps(
-    (snapshot.seatingMaps ?? []).map((row) => ({
-      dateId: row.dateId ?? row.event_date_id ?? "",
-      mapConfig: row.mapConfig ?? row.map_config,
-      pricing: row.pricing,
-    })),
-    event.venue_map ?? venue?.venue_map,
+    planOff
+      ? []
+      : (snapshot.seatingMaps ?? []).map((row) => ({
+          dateId: row.dateId ?? row.event_date_id ?? "",
+          mapConfig: row.mapConfig ?? row.map_config,
+          pricing: row.pricing,
+        })),
+    leftoverMap,
     primary?.id ?? "",
   )
 
   const parsed = parseEventDraftV2({
     archetype: "show",
     isVirtual: online,
-    virtualLink: "",
+    virtualLink: online ? (event.access_link ?? "").trim() : "",
     basicInfo: {
       name: title,
       startDate: primary?.startDate ?? "",
@@ -216,7 +226,7 @@ export function rehydrateEventDraftV2(
     extras,
     seatingMap:
       seatingMaps[0]?.mapConfig ??
-      toDraftSeatingMap(event.venue_map ?? venue?.venue_map),
+      (leftoverMap ? toDraftSeatingMap(leftoverMap) : emptyDraftSeatingMap()),
     seatingMaps,
     settings: {
       isPublic: event.visibility === "public",
@@ -232,16 +242,23 @@ export function rehydrateEventDraftV2(
   }
 }
 
+function liveCheckoutMessage(
+  event: LiveEventSnapshotV2["event"],
+  title: string,
+  description: string,
+): string {
+  const dedicated = event.checkout_message?.trim() ?? ""
+  if (dedicated) return dedicated
+  return description && description !== title ? description : ""
+}
+
 function liveTierOrganizerPrice(tier: LiveEventTicketSnapshotV2): number {
-  const base = Number(tier.base_price)
-  if (tier.base_price != null && Number.isFinite(base) && base >= 0) {
-    return Math.max(0, base)
-  }
   return Math.max(0, Number(tier.price) || 0)
 }
 
 function liveTierToDraftItem(
   tier: LiveEventTicketSnapshotV2,
+  options: { planOff?: boolean } = {},
 ): EventDraftV2LineItem {
   const kind = inferInventoryTierType({
     tierType: tier.tier_type,
@@ -249,7 +266,7 @@ function liveTierToDraftItem(
     category: tier.category,
   })
   const sectorId = (tier.seating_sector_id ?? "").trim()
-  const isMap = kind === "seated"
+  const isMap = kind === "seated" && options.planOff !== true
   const layoutType =
     tier.layout_type === "table_combo" || tier.layout_type === "numbered_seat"
       ? tier.layout_type
@@ -274,17 +291,16 @@ function liveTierToDraftItem(
     layoutType,
     slotId: (tier.day_id ?? "").trim(),
     validDayIds: (tier.day_id ?? "").trim() ? [(tier.day_id ?? "").trim()] : [],
-    ticketType: asTicketCommerceType(
-      tier.ticket_type,
-      resolveTicketCommerceType({
-        ticket_type: tier.ticket_type,
-        tierType: tier.tier_type,
-        layoutType: tier.layout_type,
-        category: tier.category,
-        name: tier.name,
-        dayId: tier.day_id,
-      }),
-    ),
+    startDate: saleWindowToFormValue(tier.sale_starts_at),
+    endDate: saleWindowToFormValue(tier.sale_ends_at),
+    ticketType: resolveTicketCommerceType({
+      ticket_type: tier.ticket_type,
+      tierType: tier.tier_type,
+      layoutType: tier.layout_type,
+      category: tier.category,
+      name: tier.name,
+      dayId: tier.day_id,
+    }),
   }
 }
 
@@ -297,6 +313,68 @@ function asOptionalCoord(value: unknown): number | undefined {
 function rawHasKeys(raw: unknown, keys: string[]): boolean {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false
   return keys.some((key) => key in raw)
+}
+
+function rawSettingsHasKeys(raw: unknown, keys: string[]): boolean {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false
+  const settings = (raw as { settings?: unknown }).settings
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+    return false
+  }
+  return keys.some((key) => key in settings)
+}
+
+/** Drafts older than the refund/checkout pickers pick up the live columns. */
+export function overlayLivePurchaseCopyOnDraft(
+  draft: EventDraftV2,
+  live: {
+    refundPolicy?: string | null
+    checkoutMessage?: string | null
+    accessLink?: string | null
+    visibility?: string | null
+  },
+  raw?: unknown,
+): { draft: EventDraftV2; changed: boolean } {
+  const refundPolicy = rawSettingsHasKeys(raw, ["refundPolicy", "refund_policy"])
+    ? draft.settings.refundPolicy
+    : parseEventRefundPolicy(live.refundPolicy ?? draft.settings.refundPolicy)
+  const liveCheckout = live.checkoutMessage?.trim() ?? ""
+  const checkoutMessage = rawSettingsHasKeys(raw, [
+    "checkoutMessage",
+    "checkout_message",
+  ])
+    ? draft.settings.checkoutMessage
+    : draft.settings.checkoutMessage.trim() || liveCheckout
+  const liveAccess = live.accessLink?.trim() ?? ""
+  const virtualLink = rawHasKeys(raw, ["virtualLink", "virtual_link"])
+    ? draft.virtualLink
+    : draft.virtualLink.trim() || liveAccess
+  const isPublic = rawSettingsHasKeys(raw, ["isPublic", "is_public"])
+    ? draft.settings.isPublic
+    : live.visibility != null
+      ? live.visibility === "public"
+      : draft.settings.isPublic
+  if (
+    refundPolicy === draft.settings.refundPolicy &&
+    checkoutMessage === draft.settings.checkoutMessage &&
+    virtualLink === draft.virtualLink &&
+    isPublic === draft.settings.isPublic
+  ) {
+    return { draft, changed: false }
+  }
+  return {
+    draft: parseEventDraftV2({
+      ...draft,
+      virtualLink,
+      settings: {
+        ...draft.settings,
+        isPublic,
+        refundPolicy,
+        checkoutMessage,
+      },
+    }),
+    changed: true,
+  }
 }
 
 export function overlayLiveExperienceOnDraft(

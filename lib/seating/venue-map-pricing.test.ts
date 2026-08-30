@@ -1042,7 +1042,7 @@ describe("venue-map-pricing", () => {
         [{ seatingSectorId: "campo", layoutType: "general" }],
         { hasSeatingPlan: false },
       ),
-      true,
+      false,
     )
   })
 

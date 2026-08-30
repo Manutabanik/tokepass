@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import {
   comboSchedulesFromPublishedTickets,
+  syncPublishedComboItems,
   ticketsWithoutComboScheduleIds,
 } from "./sync-published-combo-items"
 
@@ -37,5 +38,58 @@ describe("published combo items", () => {
       "combo_schedule_ids" in ticketsWithoutComboScheduleIds(tickets)[0]!,
       false,
     )
+  })
+
+  it("binds a combo even if the live ticket_type is still the column default", async () => {
+    const dayA = "550e8400-e29b-41d4-a716-446655440001"
+    const dayB = "550e8400-e29b-41d4-a716-446655440002"
+    let synced: { p_combo_tier_id: string; p_schedule_ids: string[] } | null =
+      null
+    const result = await syncPublishedComboItems({
+      db: {
+        from: () => ({
+          select: () => ({
+            eq: async () => ({
+              data: [
+                {
+                  id: "tier-1",
+                  name: "Pack 2 días",
+                  ticket_type: "standard",
+                },
+              ],
+              error: null,
+            }),
+          }),
+        }),
+        rpc: async (_fn, args) => {
+          synced = args
+          return { error: null }
+        },
+      },
+      eventId: "evt",
+      tickets: [
+        {
+          id: "combo-1",
+          name: "Pack 2 días",
+          description: null,
+          price: 20000,
+          base_price: 18000,
+          platform_fee: 2000,
+          capacity: 40,
+          min_purchase_limit: 1,
+          max_purchase_limit: null,
+          tier_type: "general",
+          category: "standard",
+          layout_type: "general",
+          seating_sector_id: null,
+          day_id: null,
+          ticket_type: "combo",
+          combo_schedule_ids: [dayA, dayB],
+        },
+      ],
+    })
+    assert.equal(result.ok, true)
+    assert.equal(synced?.p_combo_tier_id, "tier-1")
+    assert.deepEqual(synced?.p_schedule_ids, [dayA, dayB])
   })
 })

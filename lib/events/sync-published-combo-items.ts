@@ -48,20 +48,30 @@ export async function syncPublishedComboItems(input: {
   const packs = comboSchedulesFromPublishedTickets(input.tickets)
   if (packs.length === 0) return { ok: true }
 
-  const published = await input.db
+  let published = await input.db
     .from("ticket_tiers")
     .select("id, name, ticket_type")
     .eq("event_id", input.eventId)
+  if (
+    published.error &&
+    /ticket_type|schema cache|PGRST204|42703/i.test(published.error.message)
+  ) {
+    published = await input.db
+      .from("ticket_tiers")
+      .select("id, name")
+      .eq("event_id", input.eventId)
+  }
   if (published.error) {
     return { ok: false, error: published.error.message }
   }
 
   for (const pack of packs) {
-    const row = (published.data ?? []).find(
-      (tier) =>
-        tier.name.trim() === pack.name &&
-        (tier.ticket_type ?? "standard") === "combo",
+    const rows = (published.data ?? []).filter(
+      (tier) => tier.name.trim() === pack.name,
     )
+    const row =
+      rows.find((tier) => (tier.ticket_type ?? "") === "combo") ??
+      (rows.length === 1 ? rows[0] : undefined)
     if (!row) continue
     const synced = await input.db.rpc("sync_combo_items", {
       p_combo_tier_id: row.id,

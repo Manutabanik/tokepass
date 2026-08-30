@@ -89,10 +89,13 @@ export function toReserveRpcItem(
     unitSectorId?: string | null
     allowedSectorKeys?: ReadonlySet<string> | null
     phaseId?: string | null
+    isNumbered?: boolean | null
+    hasMap?: boolean | null
   } = {},
 ) {
   const mapped = isMappedCheckoutItem(item)
-  const isNumbered = item.isNumbered ?? item.is_numbered
+  const isNumbered = input.isNumbered ?? item.isNumbered ?? item.is_numbered
+  const hasMap = input.hasMap ?? item.hasMap ?? item.has_map ?? null
   const seatId = mapped ? checkoutItemSeatId(item) : null
   const hints = trustedReserveZoneHints({
     seatingUnitId: seatId,
@@ -116,9 +119,9 @@ export function toReserveRpcItem(
     event_date_id: checkoutItemEventDateId(item),
     eventDateId: checkoutItemEventDateId(item),
     dateId: checkoutItemEventDateId(item),
-    has_map: item.hasMap ?? item.has_map ?? null,
+    has_map: hasMap,
     is_numbered: isNumbered ?? mapped,
-    hasMap: item.hasMap ?? item.has_map ?? null,
+    hasMap,
     isNumbered: isNumbered ?? mapped,
     phase_id: input.phaseId ?? null,
   }

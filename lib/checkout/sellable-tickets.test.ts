@@ -2,6 +2,11 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  assertCartHasAdmissionSku,
+  assertLoadedCheckoutTiersCoverCart,
+  cartIncludesAdmissionSku,
+  CHECKOUT_TIERS_UNREADABLE_ERROR,
+  EXTRAS_REQUIRE_ADMISSION_ERROR,
   hasSellablePublicTickets,
   isSellablePublicTicket,
   startingPriceFromSellable,
@@ -140,6 +145,34 @@ describe("sellable public tickets", () => {
     )
   })
 
+  it("rejects extras even when inventory still looks like a general ticket", () => {
+    assert.equal(
+      isSellablePublicTicket(
+        {
+          price: 2500,
+          available: 40,
+          visibility: "public",
+          ticket_type: "extra",
+          tier_type: "general",
+        },
+        now,
+      ),
+      false,
+    )
+    assert.equal(
+      isSellablePublicTicket(
+        {
+          price: 2500,
+          available: 40,
+          visibility: "public",
+          category: "special",
+        },
+        now,
+      ),
+      false,
+    )
+  })
+
   it("uses the cheapest sellable admission price, never an addon", () => {
     assert.equal(
       startingPriceFromSellable(
@@ -168,6 +201,60 @@ describe("sellable public tickets", () => {
         now,
       ),
       false,
+    )
+  })
+
+  it("rejects a cart that only has extras", () => {
+    assert.equal(cartIncludesAdmissionSku([{ ticket_type: "extra" }]), false)
+    assert.equal(
+      cartIncludesAdmissionSku([
+        { ticket_type: "extra" },
+        { ticket_type: "standard" },
+      ]),
+      true,
+    )
+    assert.equal(cartIncludesAdmissionSku([{ ticket_type: "combo" }]), true)
+    assert.equal(
+      cartIncludesAdmissionSku([{ tier_type: "addon", category: "special" }]),
+      false,
+    )
+    assert.equal(
+      cartIncludesAdmissionSku([
+        { ticket_type: "standard", tier_type: "addon", name: "Cerveza" },
+      ]),
+      false,
+    )
+    assert.deepEqual(assertCartHasAdmissionSku(1, []), {
+      ok: false,
+      error: CHECKOUT_TIERS_UNREADABLE_ERROR,
+    })
+    assert.deepEqual(
+      assertCartHasAdmissionSku(1, [{ ticket_type: "extra" }]),
+      { ok: false, error: EXTRAS_REQUIRE_ADMISSION_ERROR },
+    )
+    assert.deepEqual(
+      assertCartHasAdmissionSku(2, [
+        { ticket_type: "extra" },
+        { ticket_type: "standard" },
+      ]),
+      { ok: true },
+    )
+    assert.deepEqual(
+      assertLoadedCheckoutTiersCoverCart(
+        ["adm", "extra"],
+        [{ id: "adm", ticket_type: "standard" }],
+      ),
+      { ok: false, error: CHECKOUT_TIERS_UNREADABLE_ERROR },
+    )
+    assert.deepEqual(
+      assertLoadedCheckoutTiersCoverCart(
+        ["adm", "extra"],
+        [
+          { id: "adm", ticket_type: "standard" },
+          { id: "extra", ticket_type: "extra" },
+        ],
+      ),
+      { ok: true },
     )
   })
 })

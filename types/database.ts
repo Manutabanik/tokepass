@@ -320,6 +320,8 @@ export type Event = {
   delivery_mode: EventDeliveryMode
   /** URL de acceso post-compra (Zoom/Meet/LMS). */
   access_link: string | null
+  /** Mensaje del organizador en la pantalla de éxito. */
+  checkout_message?: string | null
   /** Taxonomía centralizada (Super Admin). */
   category_id: string | null
   /** ATP | +16 | +18 (enum DB: atp, 16, 18). */
@@ -1319,6 +1321,7 @@ type EventInsert = Omit<
   | "location"
   | "delivery_mode"
   | "access_link"
+  | "checkout_message"
   | "accepts_mercado_pago"
   | "accepts_pos_payments"
   | "refund_policy"
@@ -1373,6 +1376,7 @@ type EventInsert = Omit<
   location?: string | null
   delivery_mode?: EventDeliveryMode
   access_link?: string | null
+  checkout_message?: string | null
   default_ticket_tab?: Event["default_ticket_tab"]
   has_schedule?: boolean
   lineup?: Json | null

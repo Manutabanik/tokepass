@@ -112,6 +112,21 @@ describe("hybrid cart quote", () => {
     assert.equal(rpc.eventDateId, friday)
   })
 
+  it("lets the server override a spoofed is_numbered flag", () => {
+    const rpc = toReserveRpcItem(
+      {
+        ...mapped,
+        is_numbered: false,
+        isNumbered: false,
+        has_map: false,
+        hasMap: false,
+      },
+      { isNumbered: true, hasMap: true },
+    )
+    assert.equal(rpc.is_numbered, true)
+    assert.equal(rpc.has_map, true)
+  })
+
   it("reads scheduleId when eventDateId is missing", () => {
     const friday = "550e8400-e29b-41d4-a716-446655440001"
     const rpc = toReserveRpcItem({

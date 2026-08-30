@@ -82,6 +82,7 @@ import {
   startingPriceFromSellable,
 } from "@/lib/checkout/sellable-tickets"
 import { deriveEventSaleState } from "@/lib/event-status"
+import { resolveTicketCommerceType } from "@/lib/events/ticket-commerce-type"
 import { publicProducerPath } from "@/lib/seo/site"
 import { useEventCatalogRealtime } from "@/hooks/use-event-catalog-realtime"
 import {
@@ -148,15 +149,18 @@ type EventStorefrontProps = {
 }
 
 function demandLabel(tiers: EventDetails["tiers"]): string | null {
-  const active = tiers.filter((tier) => tier.available > 0)
+  const admissions = tiers.filter(
+    (tier) => resolveTicketCommerceType(tier) !== "extra",
+  )
+  const active = admissions.filter((tier) => tier.available > 0)
   if (active.length === 0) return null
   const lowest = Math.min(...active.map((tier) => tier.available))
   if (lowest <= 15) return "¡Quedan pocas entradas!"
   const soldRatio =
-    tiers.reduce((sum, tier) => sum + tier.sold, 0) /
+    admissions.reduce((sum, tier) => sum + tier.sold, 0) /
     Math.max(
       1,
-      tiers.reduce((sum, tier) => sum + tier.capacity, 0),
+      admissions.reduce((sum, tier) => sum + tier.capacity, 0),
     )
   if (soldRatio >= 0.65) return "¡Quedan pocas entradas!"
   return null
@@ -222,9 +226,9 @@ export function EventStorefront({
   const address = isOnlineEvent
     ? "Online"
     : (event.venue?.location ?? event.location)
-  const description =
-    event.description?.trim() ||
-    "El organizador todavía no cargó una descripción detallada."
+  const description = event.description?.trim() ?? ""
+  const showAbout =
+    Boolean(description) && description !== event.title.trim()
   const organizerName = event.organizerName?.trim() || "Organizador TokePass"
   const organizerBio =
     event.organizerBio?.trim() || "Productora en TokePass"
@@ -406,9 +410,15 @@ export function EventStorefront({
         toPublicTicketSelectorTier(tier, {
           comboItems: event.comboItemsByTier[tier.id] ?? [],
           comboScheduleIds: event.comboScheduleIdsByTier?.[tier.id] ?? [],
+          hasSeatingPlan: event.hasSeatingPlan,
         }),
       ),
-    [admissionTickets, event.comboItemsByTier, event.comboScheduleIdsByTier],
+    [
+      admissionTickets,
+      event.comboItemsByTier,
+      event.comboScheduleIdsByTier,
+      event.hasSeatingPlan,
+    ],
   )
 
   const reduceMotion = useSyncExternalStore(
@@ -444,7 +454,7 @@ export function EventStorefront({
               showBackLink={showBackLink}
               date={event.date}
               location={address ?? undefined}
-              details={event.description}
+              details={showAbout ? description : undefined}
             />
             
             {/* Badges de estado (Solo se muestran si son estados especiales) */}
@@ -498,12 +508,14 @@ export function EventStorefront({
             />
           </motion.div>
 
-          <motion.div
-            variants={reduceMotion ? undefined : storefrontFade}
-            className="px-4 md:px-0"
-          >
-            <EventAboutExpandable description={description} />
-          </motion.div>
+          {showAbout ? (
+            <motion.div
+              variants={reduceMotion ? undefined : storefrontFade}
+              className="px-4 md:px-0"
+            >
+              <EventAboutExpandable description={description} />
+            </motion.div>
+          ) : null}
 
           <motion.div variants={reduceMotion ? undefined : storefrontFade}>
             <EventDateSelector
@@ -691,9 +703,16 @@ export function EventStorefront({
             seatingUnits={event.seatingUnits}
             seatingSectorSummaries={event.seatingSectorSummaries}
             seatingBackgroundUrl={event.venue?.seating_background_url}
-            venueMap={event.venue?.venue_map ?? null}
-            seatingMaps={event.seatingMaps ?? []}
+            venueMap={
+              event.hasSeatingPlan === false
+                ? null
+                : (event.venue?.venue_map ?? null)
+            }
+            seatingMaps={
+              event.hasSeatingPlan === false ? [] : (event.seatingMaps ?? [])
+            }
             hasInteractiveMap={hasInteractiveMap}
+            hasSeatingPlan={event.hasSeatingPlan !== false}
             seatingLayout={event.venue?.seating_layout ?? []}
             venueId={event.venue?.id}
             venueName={event.venue?.name}

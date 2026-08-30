@@ -25,6 +25,8 @@ import {
   type TicketCommerceType,
 } from "@/lib/events/ticket-commerce-type"
 import { parsePromoVideoUrl } from "@/lib/promo-video"
+import { parseDraftRefundPolicy } from "@/lib/events/refund-policy"
+import { EVENT_REFUND_POLICIES } from "@/lib/validations/event-form"
 
 export {
   EVENT_DRAFT_ARCHETYPES,
@@ -165,14 +167,17 @@ const draftSettingsSchema = z
   .object({
     isPublic: z.boolean().optional().default(true),
     absorbFees: z.boolean().optional().default(false),
-    refundPolicy: z.string().optional().default(""),
+    refundPolicy: z.preprocess(
+      (value) => parseDraftRefundPolicy(value),
+      z.enum(EVENT_REFUND_POLICIES),
+    ).optional().default("organizer"),
     checkoutMessage: z.string().optional().default(""),
     deliveryMode: z.enum(EVENT_DRAFT_DELIVERY_MODES).optional().default("PRESENCIAL"),
   })
   .default({
     isPublic: true,
     absorbFees: false,
-    refundPolicy: "",
+    refundPolicy: "organizer",
     checkoutMessage: "",
     deliveryMode: "PRESENCIAL",
   })
@@ -364,7 +369,12 @@ export const eventPublishSchema = z
       .object({
         isPublic: z.boolean().optional(),
         absorbFees: z.boolean().optional(),
-        refundPolicy: z.string().optional(),
+        refundPolicy: z
+          .preprocess(
+            (value) => parseDraftRefundPolicy(value),
+            z.enum(EVENT_REFUND_POLICIES),
+          )
+          .optional(),
         checkoutMessage: z.string().optional(),
         deliveryMode: z.enum(EVENT_DRAFT_DELIVERY_MODES).optional(),
       })
@@ -450,6 +460,14 @@ export const eventPublishSchema = z
     }
 
     if (data.isVirtual === true || data.settings?.deliveryMode === "ONLINE") {
+      const link = (data.virtualLink ?? "").trim()
+      if (!link || !isDraftHttpUrl(link)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["virtualLink"],
+          message: "El link de acceso es obligatorio para un evento online",
+        })
+      }
       return
     }
     const venueName = (
@@ -579,7 +597,7 @@ export function emptyEventDraftV2(): EventDraftV2 {
     settings: {
       isPublic: true,
       absorbFees: false,
-      refundPolicy: "",
+      refundPolicy: "organizer",
       checkoutMessage: "",
       deliveryMode: "PRESENCIAL",
     },
@@ -1027,10 +1045,7 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
     settings: {
       isPublic: settingsRaw.isPublic !== false,
       absorbFees: settingsRaw.absorbFees === true,
-      refundPolicy: sanitizeDraftText(
-        asOptionalString(settingsRaw.refundPolicy),
-        EVENT_DRAFT_TEXT_MAX,
-      ),
+      refundPolicy: parseDraftRefundPolicy(settingsRaw.refundPolicy),
       checkoutMessage: sanitizeDraftText(
         asOptionalString(settingsRaw.checkoutMessage),
         EVENT_DRAFT_TEXT_MAX,

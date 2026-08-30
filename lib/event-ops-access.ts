@@ -53,27 +53,66 @@ export async function assertEventOpsAccess(
   return { ok: true, userId: user.id, isOrganizer: false }
 }
 
+export type OperableEventTier = {
+  id: string
+  name: string
+  price: number
+  capacity: number
+  sold: number
+  admit_count?: number
+  seating_sector_id?: string | null
+  ticket_type?: string | null
+  tier_type?: string | null
+  category?: string | null
+}
+
+export type OperableEventRow = {
+  id: string
+  title: string
+  date: string
+  location: string | null
+  status: string
+  qr_type: string | null
+  ticket_tiers?: OperableEventTier[] | null
+}
+
+const OPERABLE_TIER_SELECTS = [
+  "id, name, price, capacity, sold, admit_count, seating_sector_id, ticket_type, tier_type, category",
+  "id, name, price, capacity, sold, admit_count, seating_sector_id, tier_type, category",
+  "id, name, price, capacity, sold, admit_count, seating_sector_id",
+] as const
+
+function operableEventsSelect(tierSelect: string) {
+  return `id, title, date, location, status, qr_type, ticket_tiers(${tierSelect})`
+}
+
+function isMissingOperableTierColumn(message: string) {
+  return /ticket_type|tier_type|category|schema cache|PGRST204|42703/i.test(
+    message,
+  )
+}
+
+async function queryOperableEvents(
+  run: (select: string) => PromiseLike<{
+    data: unknown
+    error: { message: string } | null
+  }>,
+): Promise<OperableEventRow[]> {
+  let lastError: { message: string } | null = null
+  for (const tierSelect of OPERABLE_TIER_SELECTS) {
+    const { data, error } = await run(operableEventsSelect(tierSelect))
+    if (!error) return (data ?? []) as OperableEventRow[]
+    lastError = error
+    if (!isMissingOperableTierColumn(error.message)) {
+      throw new Error(error.message)
+    }
+  }
+  throw new Error(lastError?.message ?? "No se pudieron leer los eventos.")
+}
+
 export async function listOperableEvents(input: {
   roles: EventStaffRole[]
-}): Promise<
-  Array<{
-    id: string
-    title: string
-    date: string
-    location: string | null
-    status: string
-    qr_type: string | null
-    ticket_tiers?: Array<{
-      id: string
-      name: string
-      price: number
-      capacity: number
-      sold: number
-      admit_count?: number
-      seating_sector_id?: string | null
-    }> | null
-  }>
-> {
+}): Promise<OperableEventRow[]> {
   const supabase = await createClient()
   const {
     data: { user },
@@ -86,23 +125,18 @@ export async function listOperableEvents(input: {
     .eq("id", user.id)
     .maybeSingle()
 
-  const selectCols =
-    "id, title, date, location, status, qr_type, ticket_tiers(id, name, price, capacity, sold, admit_count, seating_sector_id)"
-
   if (profile?.role === "admin" || profile?.role === "super_admin") {
-    let query = supabase
-      .from("events")
-      .select(selectCols)
-      .in("status", ["published", "draft"])
-      .order("date", { ascending: true })
-
-    if (profile.role === "admin") {
-      query = query.eq("organizer_id", user.id)
-    }
-
-    const { data, error } = await query
-    if (error) throw new Error(error.message)
-    return (data ?? []) as never
+    return queryOperableEvents((selectCols) => {
+      let query = supabase
+        .from("events")
+        .select(selectCols)
+        .in("status", ["published", "draft"])
+        .order("date", { ascending: true })
+      if (profile.role === "admin") {
+        query = query.eq("organizer_id", user.id)
+      }
+      return query
+    })
   }
 
   const { data: assignments, error: assignError } = await supabase
@@ -120,13 +154,12 @@ export async function listOperableEvents(input: {
   ]
   if (eventIds.length === 0) return []
 
-  const { data, error } = await supabase
-    .from("events")
-    .select(selectCols)
-    .in("id", eventIds)
-    .in("status", ["published", "draft"])
-    .order("date", { ascending: true })
-
-  if (error) throw new Error(error.message)
-  return (data ?? []) as never
+  return queryOperableEvents((selectCols) =>
+    supabase
+      .from("events")
+      .select(selectCols)
+      .in("id", eventIds)
+      .in("status", ["published", "draft"])
+      .order("date", { ascending: true }),
+  )
 }

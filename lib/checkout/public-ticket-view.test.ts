@@ -35,6 +35,30 @@ describe("public ticket view", () => {
     assert.equal(tickets[0]?.id, gaId)
   })
 
+  it("never uses the map selector when the seating plan is off", () => {
+    assert.equal(
+      ticketUsesMapSelector({
+        hasSeatingPlan: false,
+        layoutType: "numbered_seat",
+        seatingSectorId: "platea-a",
+      }),
+      false,
+    )
+    const leftover = toPublicTicketSelectorTier(
+      {
+        id: mapId,
+        name: "Platea",
+        price: 18000,
+        stock_available: 12,
+        seating_sector_id: "platea-a",
+        layout_type: "numbered_seat",
+      },
+      { hasSeatingPlan: false },
+    )
+    assert.equal(leftover.hasMap, false)
+    assert.equal(leftover.isMapped, false)
+  })
+
   it("uses hasMap / isMapped before seating heuristics", () => {
     assert.equal(ticketUsesMapSelector({ hasMap: true }), true)
     assert.equal(ticketUsesMapSelector({ isMapped: true }), true)

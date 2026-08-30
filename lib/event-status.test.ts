@@ -84,6 +84,23 @@ describe("event-status", () => {
       }),
       true,
     )
+    assert.equal(
+      isSoldOut({
+        tiers: [
+          { capacity: 100, sold: 100, visibility: "public", tier_type: "general" },
+          { capacity: 40, sold: 0, visibility: "public", ticket_type: "extra" },
+        ],
+      }),
+      true,
+    )
+    assert.equal(
+      isSoldOut({
+        tiers: [
+          { capacity: 20, sold: 0, visibility: "public", ticket_type: "extra" },
+        ],
+      }),
+      true,
+    )
   })
 
   it("prioriza finalizado sobre agotado", () => {

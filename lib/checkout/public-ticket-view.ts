@@ -85,7 +85,9 @@ export function ticketUsesMapSelector(tier: {
   tier_type?: string | null
   category?: string | null
   comboItems?: Array<{ name: string; quantity: number }>
+  hasSeatingPlan?: boolean | null
 }): boolean {
+  if (tier.hasSeatingPlan === false) return false
   if (tier.hasMap === true || tier.has_map === true) return true
   if (tier.isMapped === true || tier.is_mapped === true) return true
   if (tier.hasMap === false || tier.has_map === false) return false
@@ -143,6 +145,7 @@ export function toPublicTicketSelectorTier(
   extras: {
     comboItems?: Array<{ name: string; quantity: number }>
     comboScheduleIds?: string[]
+    hasSeatingPlan?: boolean | null
   } = {},
 ): TicketSelectorTier {
   const comboItems = extras.comboItems ?? []
@@ -155,6 +158,7 @@ export function toPublicTicketSelectorTier(
     tier_type: tier.tier_type,
     category: tier.category,
     comboItems,
+    hasSeatingPlan: extras.hasSeatingPlan,
   })
   return {
     id: tier.id,

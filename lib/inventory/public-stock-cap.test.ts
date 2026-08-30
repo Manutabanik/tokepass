@@ -70,6 +70,72 @@ describe("public venue stock cap", () => {
     assert.equal(inventory.ticketsLeft, 80)
   })
 
+  it("does not keep the catalog live when only extras remain", () => {
+    const soldOut = publicCatalogTicketsLeft({
+      tiers: [
+        {
+          capacity: 100,
+          sold: 100,
+          visibility: "public",
+          tier_type: "general",
+        },
+        {
+          capacity: 80,
+          sold: 10,
+          visibility: "public",
+          ticket_type: "extra",
+          tier_type: "general",
+        },
+      ],
+    })
+    assert.equal(soldOut.ticketsLeft, 0)
+    assert.equal(soldOut.soldRatio, 1)
+
+    const extrasOnly = publicCatalogTicketsLeft({
+      tiers: [
+        {
+          capacity: 40,
+          sold: 0,
+          visibility: "public",
+          ticket_type: "extra",
+          category: "special",
+        },
+      ],
+    })
+    assert.equal(extrasOnly.ticketsLeft, 0)
+    assert.equal(extrasOnly.soldRatio, 1)
+  })
+
+  it("does not occupy venue stock with extras that look like general tickets", () => {
+    const extra = {
+      id: "trago",
+      capacity: 200,
+      sold: 50,
+      day_id: "day-1",
+      visibility: "public",
+      ticket_type: "extra",
+      tier_type: "general",
+    }
+    const general = {
+      id: "ga",
+      capacity: 100,
+      sold: 10,
+      day_id: "day-1",
+      visibility: "public",
+      tier_type: "general",
+    }
+    assert.equal(occupiedVenueUnitsForDay([extra, general], "day-1"), 10)
+    assert.equal(
+      publicTierAvailable({
+        tier: extra,
+        tiers: [extra, general],
+        venueCapacity: 100,
+        skuAvailable: 150,
+      }),
+      150,
+    )
+  })
+
   it("counts a sold table_combo by people, not by tables", () => {
     const mesa = {
       id: "mesa",

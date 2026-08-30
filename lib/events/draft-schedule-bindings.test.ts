@@ -104,4 +104,18 @@ describe("pruneDraftScheduleBindings", () => {
     )
     assert.deepEqual(next.tickets?.[1]?.validDayIds, [dayId])
   })
+
+  it("drops lineup day chips that no longer exist", () => {
+    const next = pruneDraftScheduleBindings({
+      schedule: twoSlotDay,
+      lineup: [
+        { dayIds: [dayId, "dead-day"] },
+        { dayIds: ["dead-day"] },
+      ],
+      tickets: [],
+      extras: [],
+    })
+    assert.deepEqual(next.lineup?.[0]?.dayIds, [dayId])
+    assert.deepEqual(next.lineup?.[1]?.dayIds, [])
+  })
 })

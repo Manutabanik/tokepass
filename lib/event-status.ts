@@ -1,3 +1,4 @@
+import { resolveTicketCommerceType } from "@/lib/events/ticket-commerce-type"
 import { parseScheduleDays } from "@/lib/event-schedule"
 import type { ScheduleDay } from "@/types/events"
 
@@ -16,6 +17,12 @@ export type EventInventoryInput = {
     sold: number
     available?: number
     visibility?: string | null
+    ticket_type?: string | null
+    ticketType?: string | null
+    tier_type?: string | null
+    tierType?: string | null
+    category?: string | null
+    layout_type?: string | null
   }> | null
 }
 
@@ -100,12 +107,18 @@ export function isSoldOut(event: EventInventoryInput): boolean {
     return event.ticketsLeft <= 0
   }
 
-  const tiers = (event.tiers ?? []).filter(
+  const visible = (event.tiers ?? []).filter(
     (tier) => (tier.visibility ?? "public") !== "private",
   )
+  const admissions = visible.filter(
+    (tier) => resolveTicketCommerceType(tier) !== "extra",
+  )
+  if (visible.length > 0 && admissions.length === 0) {
+    return true
+  }
 
-  if (tiers.length > 0) {
-    const available = tiers.reduce((sum, tier) => {
+  if (admissions.length > 0) {
+    const available = admissions.reduce((sum, tier) => {
       if (typeof tier.available === "number") {
         return sum + Math.max(0, tier.available)
       }

@@ -37,6 +37,7 @@ export function EventEditorV2LaunchStep({
   launchReady,
   launchBlockedReason,
   onPreview,
+  onAbsorbHold,
 }: {
   eventId: string
   isPublished: boolean
@@ -45,6 +46,7 @@ export function EventEditorV2LaunchStep({
   launchReady: boolean
   launchBlockedReason?: string
   onPreview: () => void
+  onAbsorbHold?: (hold: boolean) => void
 }) {
   const { control } = useFormContext<EventDraftV2>()
   const [savingAbsorb, setSavingAbsorb] = useState(false)
@@ -62,13 +64,11 @@ export function EventEditorV2LaunchStep({
   const bannerUrl = useWatch({ control, name: "bannerUrl" })
   const venueCapacity = useWatch({ control, name: "venueCapacity" })
   const schedule = useWatch({ control, name: "schedule" })
+  const hasMap = useWatch({ control, name: "hasMap" })
+  const seatingMaps = useWatch({ control, name: "seatingMaps" })
+  const seatingMap = useWatch({ control, name: "seatingMap" })
 
-  const samplePrice = cheapestDraftTicketPrice(tickets)
-  const sale =
-    samplePrice == null
-      ? null
-      : simulateDraftSale(samplePrice, absorbFees, platformFeeRate)
-  const preview = draftLaunchPreview({
+  const launchValues = {
     basicInfo: { name, startDate, locationName },
     location: { venueName },
     schedule,
@@ -76,13 +76,17 @@ export function EventEditorV2LaunchStep({
     bannerUrl,
     tickets,
     venueCapacity,
-  })
-  const checks = draftLaunchChecklist({
-    basicInfo: { name, startDate },
-    schedule,
-    tickets,
-    venueCapacity,
-  })
+    hasMap,
+    seatingMaps,
+    seatingMap,
+  }
+  const samplePrice = cheapestDraftTicketPrice(tickets, launchValues)
+  const sale =
+    samplePrice == null
+      ? null
+      : simulateDraftSale(samplePrice, absorbFees, platformFeeRate)
+  const preview = draftLaunchPreview(launchValues)
+  const checks = draftLaunchChecklist(launchValues)
 
   return (
     <div>
@@ -147,9 +151,11 @@ export function EventEditorV2LaunchStep({
                   const previous = Boolean(field.value)
                   field.onChange(checked)
                   setSavingAbsorb(true)
+                  onAbsorbHold?.(true)
                   void updateEventAbsorbFees(eventId, checked).then(
                     (result) => {
                       setSavingAbsorb(false)
+                      onAbsorbHold?.(false)
                       if (result.success) return
                       field.onChange(previous)
                       toast.error(result.error)
@@ -202,7 +208,7 @@ export function EventEditorV2LaunchStep({
         description="Quién puede encontrar el evento y qué ve el comprador después de pagar."
         className="mb-0 border-b-0 pb-0"
       >
-        <EventEditorV2SettingsStep />
+        <EventEditorV2SettingsStep isPublished={isPublished} />
         <CatalogPreviewCard preview={preview} />
       </SplitRowSection>
 
@@ -210,7 +216,7 @@ export function EventEditorV2LaunchStep({
         <p className="text-sm text-muted-foreground">
           {launchReady
             ? isPublished
-              ? "El evento ya está en el catálogo. Usá Publicar abajo para actualizarlo."
+              ? "El evento ya está publicado. Usá Publicar abajo para actualizar ficha y entradas."
               : "Usá Publicar en la barra inferior cuando quieras subirlo al catálogo."
             : launchBlockedReason ||
               "Completá el checklist. Publicar te lleva al campo que falta."}

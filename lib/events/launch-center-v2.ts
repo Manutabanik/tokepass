@@ -1,7 +1,10 @@
 import { splitAbsorbFee } from "@/lib/pricing/absorb-fee-split"
+import { isMapDraftTicket } from "@/lib/events/draft-seating-map-v2"
 import {
   draftNumberValue,
+  isEventDraftOnline,
   isEventDraftPublishable,
+  resolveDraftHasMap,
   resolveDraftSchedule,
 } from "@/lib/validations/event-draft-v2"
 
@@ -19,12 +22,29 @@ export type DraftLaunchValues = {
   } | null
   schedule?: unknown
   tickets?: Array<
-    { price?: unknown; name?: unknown; stock?: unknown } | null | undefined
+    {
+      price?: unknown
+      name?: unknown
+      stock?: unknown
+      source?: unknown
+      sectorId?: unknown
+      seatingSectorId?: unknown
+      seating_sector_id?: unknown
+      dayRates?: Array<{ price?: unknown; stock?: unknown }> | null
+    } | null | undefined
   > | null
   flyerUrl?: string | null
   bannerUrl?: string | null
   venueCapacity?: unknown
-  settings?: { absorbFees?: boolean | null } | null
+  hasMap?: boolean | null
+  seatingMaps?: unknown
+  seatingMap?: unknown
+  virtualLink?: string | null
+  isVirtual?: boolean | null
+  settings?: {
+    absorbFees?: boolean | null
+    deliveryMode?: string | null
+  } | null
 }
 
 export type DraftLaunchSaleSimulation = {
@@ -35,7 +55,7 @@ export type DraftLaunchSaleSimulation = {
   absorbFees: boolean
 }
 
-export type DraftLaunchCheckId = "identity" | "tickets" | "capacity"
+export type DraftLaunchCheckId = "identity" | "tickets" | "capacity" | "access"
 
 export type DraftLaunchCheck = {
   id: DraftLaunchCheckId
@@ -51,14 +71,54 @@ export type DraftLaunchPreview = {
   minPrice: number | null
 }
 
+export function launchSellableTickets(
+  values: DraftLaunchValues,
+): NonNullable<DraftLaunchValues["tickets"]> {
+  const tickets = Array.isArray(values.tickets) ? values.tickets : []
+  const mapEnabled = resolveDraftHasMap({
+    hasMap: values.hasMap,
+    seatingMaps: Array.isArray(values.seatingMaps)
+      ? values.seatingMaps
+      : null,
+    seatingMap: values.seatingMap,
+  })
+  return tickets.filter((ticket) => {
+    if (!ticket || typeof ticket !== "object") return false
+    return mapEnabled || !isMapDraftTicket(ticket)
+  })
+}
+
+function ticketSamplePrice(ticket: {
+  price?: unknown
+  dayRates?: Array<{ price?: unknown }> | null
+}): number | null {
+  const rates = Array.isArray(ticket.dayRates) ? ticket.dayRates : []
+  let min: number | null = null
+  for (const rate of rates) {
+    const price = draftNumberValue(rate?.price)
+    if (!Number.isFinite(price)) continue
+    if (min == null || price < min) min = price
+  }
+  if (min != null) return min
+  const headline = draftNumberValue(ticket.price)
+  return Number.isFinite(headline) ? headline : null
+}
+
 export function cheapestDraftTicketPrice(
   tickets: DraftLaunchValues["tickets"],
+  values?: Pick<DraftLaunchValues, "hasMap" | "seatingMaps" | "seatingMap">,
 ): number | null {
-  if (!Array.isArray(tickets) || tickets.length === 0) return null
+  const rows = values
+    ? launchSellableTickets({ ...values, tickets })
+    : Array.isArray(tickets)
+      ? tickets
+      : []
+  if (rows.length === 0) return null
   let min: number | null = null
-  for (const ticket of tickets) {
-    const price = draftNumberValue(ticket?.price)
-    if (!Number.isFinite(price)) continue
+  for (const ticket of rows) {
+    if (!ticket) continue
+    const price = ticketSamplePrice(ticket)
+    if (price == null) continue
     if (min == null || price < min) min = price
   }
   return min
@@ -89,25 +149,37 @@ export function draftLaunchChecklist(values: DraftLaunchValues): DraftLaunchChec
   const name =
     typeof values.basicInfo?.name === "string" ? values.basicInfo.name.trim() : ""
   const days = resolveDraftSchedule(values)
+  const dated = days.filter((day) => day.startDate.trim())
   const start = days[0]?.startDate.trim() ?? ""
   const end = days[0]?.endDate.trim() ?? ""
-  const tickets = Array.isArray(values.tickets) ? values.tickets : []
+  const tickets = launchSellableTickets(values)
   const capacity = draftNumberValue(values.venueCapacity)
+  const identityReady = Boolean(
+    name && start && (dated.length < 2 || Boolean(end)),
+  )
 
   return [
     {
       id: "identity",
       label: "Nombre y fechas completas",
-      ok: Boolean(name && start && end),
+      ok: identityReady,
     },
     {
       id: "tickets",
       label: "Al menos una entrada",
       ok: tickets.some((ticket) => {
         if (!ticket || typeof ticket !== "object") return false
-        const name =
+        const ticketName =
           typeof ticket.name === "string" ? ticket.name.trim() : ""
-        return Boolean(name) && draftNumberValue(ticket.stock) >= 1
+        const rates = Array.isArray(ticket.dayRates) ? ticket.dayRates : []
+        const stock =
+          rates.length > 0
+            ? rates.reduce(
+                (sum, rate) => sum + draftNumberValue(rate.stock),
+                0,
+              )
+            : draftNumberValue(ticket.stock)
+        return Boolean(ticketName) && stock >= 1
       }),
     },
     {
@@ -115,7 +187,31 @@ export function draftLaunchChecklist(values: DraftLaunchValues): DraftLaunchChec
       label: "Aforo mayor a 0",
       ok: capacity > 0,
     },
+    ...(isEventDraftOnline(values)
+      ? [
+          {
+            id: "access" as const,
+            label: "Link de acceso online",
+            ok: isLaunchHttpUrl(
+              typeof values.virtualLink === "string"
+                ? values.virtualLink
+                : "",
+            ),
+          },
+        ]
+      : []),
   ]
+}
+
+function isLaunchHttpUrl(url: string): boolean {
+  const text = url.trim()
+  if (!text) return false
+  try {
+    const parsed = new URL(text)
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+  } catch {
+    return false
+  }
 }
 
 export function isDraftLaunchReady(values: DraftLaunchValues): boolean {
@@ -143,7 +239,7 @@ export function draftLaunchPreview(values: DraftLaunchValues): DraftLaunchPrevie
     startDate: days[0]?.startDate.trim() ?? "",
     imageUrl: flyer || banner,
     locationName: locationName || "Ubicación pendiente",
-    minPrice: cheapestDraftTicketPrice(values.tickets),
+    minPrice: cheapestDraftTicketPrice(values.tickets, values),
   }
 }
 

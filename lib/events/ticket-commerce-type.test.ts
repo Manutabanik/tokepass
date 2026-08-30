@@ -39,6 +39,22 @@ describe("ticket commerce type", () => {
       resolveTicketCommerceType({ name: "General", tierType: "general" }),
       "standard",
     )
+    assert.equal(
+      resolveTicketCommerceType({
+        ticketType: "standard",
+        tierType: "addon",
+        name: "Cerveza",
+      }),
+      "extra",
+    )
+    assert.equal(
+      resolveTicketCommerceType({
+        ticket_type: "standard",
+        tier_type: "bundle",
+        name: "Combo VIP",
+      }),
+      "combo",
+    )
   })
 
   it("partitions the buyer catalog into standard, combo and extra", () => {

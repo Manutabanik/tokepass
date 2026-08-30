@@ -129,9 +129,11 @@ export function EventEditorV2({
     allowLeaveRef.current = false
     setAllowLeave(false)
   }, [])
+  const persistHoldRef = useRef(false)
   const { saveStatus, saveError, online, persistDraft, flushAndPause, resume } =
     useEventDraftV2Persist(eventId, getValues, watched, {
       onSaved: markDraftClean,
+      holdRef: persistHoldRef,
     })
   const title = watched?.basicInfo?.name
   const labels = getArchetypeConfig(resolveDraftArchetype(watched?.archetype)).labels
@@ -169,7 +171,7 @@ export function EventEditorV2({
     setStep(stepId)
     window.setTimeout(() => {
       focusInvalidFormField(field)
-    }, 220)
+    }, 400)
   }
 
   useUnsavedChanges(leaveBlocked, DRAFT_LEAVE_GUARD_MESSAGE, {
@@ -303,20 +305,26 @@ export function EventEditorV2({
           </div>
 
           <section className="min-w-0">
-            <div key={step} className="animate-in fade-in duration-200">
-              {step === 1 ? (
+            {step === 1 ? (
+              <div className="animate-in fade-in duration-200">
                 <EventEditorV2InfoStep
                   eventId={eventId}
                   revealField={revealField}
                 />
-              ) : null}
-              {step === 2 ? (
-                <EventEditorV2InventoryStep
-                  eventId={eventId}
-                  revealField={revealField}
-                />
-              ) : null}
-              {step === 3 ? (
+              </div>
+            ) : null}
+            <div
+              hidden={step !== 2}
+              className={step === 2 ? "animate-in fade-in duration-200" : undefined}
+            >
+              <EventEditorV2InventoryStep
+                eventId={eventId}
+                revealField={revealField}
+                active={step === 2}
+              />
+            </div>
+            {step === 3 ? (
+              <div className="animate-in fade-in duration-200">
                 <EventEditorV2LaunchStep
                   eventId={eventId}
                   isPublished={nowPublished}
@@ -325,9 +333,13 @@ export function EventEditorV2({
                   launchReady={launchReady}
                   launchBlockedReason={launchBlockedReason}
                   onPreview={() => void handlePreviewDraft()}
+                  onAbsorbHold={(hold) => {
+                    persistHoldRef.current = hold
+                    if (!hold) void persistDraft()
+                  }}
                 />
-              ) : null}
-            </div>
+              </div>
+            ) : null}
 
             {saveStatus === "error" ? (
               <div className="mt-6 space-y-3">

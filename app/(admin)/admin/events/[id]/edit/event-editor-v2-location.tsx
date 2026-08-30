@@ -464,6 +464,8 @@ export function EventEditorV2LocationFields({
             />
             <Input
               id="event-v2-address"
+              name="location.address"
+              data-field="location.address"
               role="combobox"
               aria-expanded={menuOpen}
               aria-controls={listboxId}

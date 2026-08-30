@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { ticketDisplayCode } from "@/lib/admin/issued-tickets"
+import { resolveTicketCommerceType } from "@/lib/events/ticket-commerce-type"
 import {
   notifyLivingTicketEmail,
   notifyPosTicketIssued,
@@ -81,27 +82,120 @@ async function assertEventOrganizer(eventId: string) {
   return { ok: true as const, supabase, user, event }
 }
 
+const COMPLIMENTARY_EXTRAS_ERROR =
+  "Los extras no se emiten como cortesía. Elegí una entrada."
+
+const COMPLIMENTARY_TIER_SELECTS = [
+  "id, name, price, capacity, sold, admit_count, ticket_type, tier_type, category",
+  "id, name, price, capacity, sold, admit_count, tier_type, category",
+  "id, name, price, capacity, sold, admit_count",
+] as const
+
+async function loadComplimentaryTierRows(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  eventId: string,
+) {
+  type ComplimentaryTierRow = {
+    id: string
+    name: string
+    price: number
+    capacity: number
+    sold: number
+    admit_count?: number | null
+    ticket_type?: string | null
+    tier_type?: string | null
+    category?: string | null
+  }
+  for (const columns of COMPLIMENTARY_TIER_SELECTS) {
+    const query = await supabase
+      .from("ticket_tiers")
+      .select(columns as never)
+      .eq("event_id", eventId)
+      .order("price", { ascending: true })
+    if (!query.error) {
+      return (query.data ?? []) as unknown as ComplimentaryTierRow[]
+    }
+    if (
+      !/ticket_type|tier_type|category|schema cache|PGRST204|42703/i.test(
+        query.error.message,
+      )
+    ) {
+      break
+    }
+  }
+  return []
+}
+
+async function assertComplimentaryAdmissionTier(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  eventId: string,
+  tierId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const id = tierId.trim()
+  if (!id) return { ok: false, error: "Elegí una entrada para la cortesía." }
+  let lastError: { message: string } | null = null
+  for (const columns of [
+    "id, ticket_type, tier_type, category",
+    "id, tier_type, category",
+    "id",
+  ] as const) {
+    const query = await supabase
+      .from("ticket_tiers")
+      .select(columns as never)
+      .eq("id", id)
+      .eq("event_id", eventId)
+      .maybeSingle()
+    if (!query.error) {
+      if (!query.data) {
+        return { ok: false, error: "Esa entrada no está disponible." }
+      }
+      if (
+        resolveTicketCommerceType(
+          query.data as {
+            ticket_type?: string | null
+            tier_type?: string | null
+            category?: string | null
+          },
+        ) === "extra"
+      ) {
+        return { ok: false, error: COMPLIMENTARY_EXTRAS_ERROR }
+      }
+      return { ok: true }
+    }
+    lastError = query.error
+    if (
+      !/ticket_type|tier_type|category|schema cache|PGRST204|42703/i.test(
+        query.error.message,
+      )
+    ) {
+      return { ok: false, error: query.error.message }
+    }
+  }
+  return {
+    ok: false,
+    error: lastError?.message ?? "No se pudo leer la entrada.",
+  }
+}
+
 export async function getComplimentaryTiers(
   eventId: string,
 ): Promise<ComplimentaryTierOption[]> {
   const gate = await assertEventOrganizer(eventId)
   if (!gate.ok) return []
 
-  const { data } = await gate.supabase
-    .from("ticket_tiers")
-    .select("id, name, price, capacity, sold, admit_count")
-    .eq("event_id", eventId)
-    .order("price", { ascending: true })
+  const rows = await loadComplimentaryTierRows(gate.supabase, eventId)
 
-  return (data ?? []).map((tier) => ({
-    id: tier.id,
-    name: tier.name,
-    price: Number(tier.price),
-    admitCount: Math.max(1, Number(tier.admit_count ?? 1)),
-    capacity: Number(tier.capacity),
-    sold: Number(tier.sold),
-    available: Math.max(0, Number(tier.capacity) - Number(tier.sold)),
-  }))
+  return rows
+    .filter((tier) => resolveTicketCommerceType(tier) !== "extra")
+    .map((tier) => ({
+      id: tier.id,
+      name: tier.name,
+      price: Number(tier.price),
+      admitCount: Math.max(1, Number(tier.admit_count ?? 1)),
+      capacity: Number(tier.capacity),
+      sold: Number(tier.sold),
+      available: Math.max(0, Number(tier.capacity) - Number(tier.sold)),
+    }))
 }
 
 export async function getEventStoreItemsForCombo(eventId: string) {
@@ -212,6 +306,13 @@ export async function issueComplimentaryNamed(input: {
   const gate = await assertEventOrganizer(input.eventId)
   if (!gate.ok) return { success: false, error: gate.error }
 
+  const admission = await assertComplimentaryAdmissionTier(
+    gate.supabase,
+    input.eventId,
+    input.tierId,
+  )
+  if (!admission.ok) return { success: false, error: admission.error }
+
   if (!input.guests.length) {
     return { success: false, error: "Cargá al menos un invitado." }
   }
@@ -270,6 +371,13 @@ export async function issueComplimentaryUnnamed(input: {
 }): Promise<ComplimentaryBatchResult> {
   const gate = await assertEventOrganizer(input.eventId)
   if (!gate.ok) return { success: false, error: gate.error }
+
+  const admission = await assertComplimentaryAdmissionTier(
+    gate.supabase,
+    input.eventId,
+    input.tierId,
+  )
+  if (!admission.ok) return { success: false, error: admission.error }
 
   const count = Math.floor(input.count)
   if (!Number.isFinite(count) || count < 1) {
@@ -358,6 +466,13 @@ function mapBatchError(message: string): string {
   }
   if (lower.includes("sold out")) {
     return "No hay cupo suficiente en ese tipo de entrada."
+  }
+  if (
+    lower.includes("complimentary_extras") ||
+    lower.includes("pos_extras_not_sold") ||
+    lower.includes("extras no se")
+  ) {
+    return "Los extras no se emiten como cortesía. Elegí una entrada."
   }
   if (lower.includes("dni_required") || lower.includes("dni_invalid")) {
     return "Si cargás DNI, usá 7 a 11 dígitos."

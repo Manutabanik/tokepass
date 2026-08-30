@@ -25,6 +25,11 @@ export const CHECKOUT_GENERIC_ERROR =
 
 const POS_RULES: Array<{ match: RegExp; message: string }> = [
   {
+    match: /POS_EXTRAS_NOT_SOLD|extras no se venden/i,
+    message:
+      "Los extras no se venden como entrada. Cobrálos en la tienda del evento.",
+  },
+  {
     match: /sold out|agotad|sin stock|out_of_stock/i,
     message: "Sin stock para ese tipo de entrada.",
   },

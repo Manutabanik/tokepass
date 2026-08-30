@@ -119,7 +119,6 @@ import {
   calculateCartPriceBreakdown,
   cartLineQuantity,
   sumCartQuantities,
-  toCartNumber,
 } from "@/lib/checkout/cart"
 import { splitAbsorbFee } from "@/lib/pricing/absorb-fee-split"
 import {
@@ -333,6 +332,7 @@ type TicketSelectorProps = {
     map: InteractiveVenueMap
   }>
   hasInteractiveMap?: boolean
+  hasSeatingPlan?: boolean
   seatingLayout?: VenueSeatingLayout
   venueId?: string | null
   venueName?: string | null
@@ -436,6 +436,7 @@ export function CheckoutTunnel({
   venueMap = null,
   seatingMaps = [],
   hasInteractiveMap: hasInteractiveMapProp = false,
+  hasSeatingPlan = true,
   seatingLayout = [],
   venueId = null,
   venueName = null,
@@ -1200,8 +1201,12 @@ export function CheckoutTunnel({
   }
 
   const hasInteractiveMap =
-    eventNeedsInteractiveCanvas(liveMap, funnelTiers) ||
-    (mapLoading && hasInteractiveMapProp)
+    hasSeatingPlan &&
+    hasInteractiveMapProp &&
+    (eventNeedsInteractiveCanvas(liveMap, funnelTiers, {
+      hasSeatingPlan: true,
+    }) ||
+      mapLoading)
   useLockBodyScroll(showSeatFlow)
 
   const hasSeatingFlow = hasInteractiveMap
@@ -3316,6 +3321,8 @@ export function CheckoutTunnel({
 
   useEffect(() => {
     if (!hasInteractiveMap) return
+    // Occupancy is server state. setState runs after the fetch resolves.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set
     void loadAllUnits()
   }, [hasInteractiveMap, loadAllUnits])
 

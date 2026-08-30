@@ -7,6 +7,7 @@ import {
 } from "@/lib/events/checkout-policy"
 import {
   REFUND_POLICY_OPTIONS,
+  parseDraftRefundPolicy,
   refundPolicyBuyerCopy,
 } from "@/lib/events/refund-policy"
 import {
@@ -20,6 +21,15 @@ describe("refund and checkout policy", () => {
     assert.match(refundPolicyBuyerCopy("no_refunds"), /no admite devoluciones/)
     assert.match(refundPolicyBuyerCopy("until_24h"), /24 horas/)
   })
+
+  it("maps leftover free-text refund copy onto the live enum", () => {
+    assert.equal(parseDraftRefundPolicy("Sin devoluciones"), "no_refunds")
+    assert.equal(parseDraftRefundPolicy("Reintegro a criterio"), "organizer")
+    assert.equal(parseDraftRefundPolicy("Hasta 24 h antes"), "until_24h")
+    assert.equal(parseDraftRefundPolicy(""), "organizer")
+    assert.equal(parseDraftRefundPolicy("no_refunds"), "no_refunds")
+  })
+
 
   it("hides Mercado Pago when the event disabled it", () => {
     const all = listCheckoutPaymentOptions(true)

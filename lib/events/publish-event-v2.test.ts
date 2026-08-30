@@ -13,10 +13,12 @@ import {
   freePublishCapacity,
   isPublishScheduleForeignKeyError,
   publishedScheduleUpsertRows,
+  resolvePublishedSaleWindowTierId,
   resolvePublishedTicketDayIds,
   sanitizePublishPayloadForDatabase,
   shouldPublishEventV2Sequentially,
 } from "@/lib/events/publish-event-v2"
+import { saleWindowToIso } from "@/lib/inventory/ticket-sale-window"
 import { emptyEventDraftV2, eventPublishSchema } from "@/lib/validations/event-draft-v2"
 
 function publishableDraft() {
@@ -109,8 +111,10 @@ describe("buildPublishEventV2Payload", () => {
     assert.equal(payload.venue.latitude, -34.6037)
     assert.equal(payload.delivery_mode, "PRESENCIAL")
     assert.equal(payload.visibility, "public")
-    assert.equal("refund_policy" in payload, false)
-    assert.equal(payload.description, "Gracias por venir")
+    assert.equal(payload.refund_policy, "no_refunds")
+    assert.equal(payload.checkout_message, "Gracias por venir")
+    assert.equal(payload.absorb_fees, true)
+    assert.equal(payload.description, "After")
     assert.equal(payload.promo_video_url, "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
     assert.deepEqual(payload.gallery_urls, ["https://cdn.example/exp-1.jpg"])
     assert.equal(payload.restrictions, "+18. DNI en puerta.")
@@ -131,9 +135,41 @@ describe("buildPublishEventV2Payload", () => {
     assert.equal(payload.tickets[1]?.tier_type, "addon")
     assert.equal(payload.tickets[1]?.ticket_type, "extra")
     assert.equal(payload.tickets[1]?.category, "special")
+    assert.equal(payload.tickets[1]?.day_id, null)
     assert.equal(payload.tickets[1]?.id, null)
+    assert.equal(payload.tickets[0]?.sale_starts_at, null)
+    assert.equal(payload.tickets[0]?.sale_ends_at, null)
+    assert.equal(payload.access_link, null)
     assert.match(payload.date, /^2026-09-0[12]T/)
     assert.deepEqual(payload.schedule_days, [])
+  })
+
+  it("does not bind extras to a leftover jornada slot", () => {
+    const draft = publishableDraft()
+    draft.extras[0] = {
+      ...draft.extras[0]!,
+      slotId: "550e8400-e29b-41d4-a716-446655440001",
+      validDayIds: ["550e8400-e29b-41d4-a716-446655440001"],
+    }
+    const payload = buildPublishEventV2Payload(draft)
+    const extra = payload.tickets.find((ticket) => ticket.ticket_type === "extra")
+    assert.equal(extra?.day_id, null)
+  })
+
+  it("writes presale windows and the online access link", () => {
+    const draft = publishableDraft()
+    draft.isVirtual = true
+    draft.virtualLink = "https://meet.example/clase"
+    draft.tickets[0] = {
+      ...draft.tickets[0]!,
+      startDate: "2026-08-20T10:00",
+      endDate: "2026-08-31T23:59",
+    }
+    const payload = buildPublishEventV2Payload(draft)
+    assert.equal(payload.delivery_mode, "ONLINE")
+    assert.equal(payload.access_link, "https://meet.example/clase")
+    assert.equal(payload.tickets[0]?.sale_starts_at, saleWindowToIso("2026-08-20T10:00"))
+    assert.equal(payload.tickets[0]?.sale_ends_at, saleWindowToIso("2026-08-31T23:59"))
   })
 
   it("treats the draft price as organizer net when fees are passed to the buyer", () => {
@@ -315,6 +351,7 @@ describe("buildPublishEventV2Payload", () => {
 
   it("keeps general tickets off the seating map and skips nameless extras", () => {
     const draft = publishableDraft()
+    draft.hasMap = true
     draft.seatingMap = {
       ...draft.seatingMap,
       url: "https://cdn.example/map.png",
@@ -336,6 +373,7 @@ describe("buildPublishEventV2Payload", () => {
 
   it("unpacks map tickets with seating sector ids", () => {
     const draft = publishableDraft()
+    draft.hasMap = true
     draft.tickets.push({
       id: "map-platea",
       name: "Platea",
@@ -380,6 +418,37 @@ describe("buildPublishEventV2Payload", () => {
     assert.equal(seated?.seating_sector_id, "sector-platea")
     assert.equal(general?.tier_type, "general")
     assert.equal(general?.seating_sector_id, null)
+  })
+
+  it("does not publish a seating plan when the organizer turned the map off", () => {
+    const draft = publishableDraft()
+    draft.hasMap = false
+    draft.seatingMap = {
+      ...draft.seatingMap,
+      version: 1,
+      url: "",
+      sectors: [
+        {
+          id: "sector-platea",
+          name: "Platea",
+          color: "#f97316",
+          price: 18000,
+          x: 0,
+          y: 0,
+          rows: 1,
+          seatsPerRow: 2,
+          curvature: 0,
+          aisle: false,
+          seats: [
+            { id: "s1", row: "1", number: 1, x: 0, y: 0, status: "available" },
+            { id: "s2", row: "1", number: 2, x: 10, y: 0, status: "available" },
+          ],
+        },
+      ],
+    }
+    const payload = buildPublishEventV2Payload(draft)
+    assert.equal(payload.has_seating_plan, false)
+    assert.equal(payload.seating_maps.length, 0)
   })
 
   it("nulls leftover seating_sector_id on general tickets", () => {
@@ -442,6 +511,9 @@ describe("buildPublishEventV2Payload", () => {
       payload.tickets.every((ticket) => ticket.seating_sector_id == null),
       true,
     )
+    const leftoverMap = payload.tickets.find((ticket) => ticket.name === "Platea")
+    assert.equal(leftoverMap?.tier_type, "general")
+    assert.equal(leftoverMap?.layout_type, "general")
   })
 
   it("drops orphan map tickets that are no longer in the venue map", () => {
@@ -494,6 +566,7 @@ describe("buildPublishEventV2Payload", () => {
 
   it("heals a map ticket whose seating_sector_id changed but the name still matches", () => {
     const draft = publishableDraft()
+    draft.hasMap = true
     draft.tickets.push({
       id: "map-platea",
       name: "Platea",
@@ -539,6 +612,7 @@ describe("buildPublishEventV2Payload", () => {
     const dayA = "550e8400-e29b-41d4-a716-446655440001"
     const dayB = "550e8400-e29b-41d4-a716-446655440002"
     const draft = publishableDraft()
+    draft.hasMap = true
     draft.schedule = [
       {
         id: dayA,
@@ -624,6 +698,7 @@ describe("buildPublishEventV2Payload", () => {
     const dayB = "550e8400-e29b-41d4-a716-446655440002"
     assert.equal(dayIdFromMapTicketId(`map:${dayA}:grada-naranja`), dayA)
     const draft = publishableDraft()
+    draft.hasMap = true
     const gradaMap = {
       version: 1,
       url: "",
@@ -708,6 +783,7 @@ describe("buildPublishEventV2Payload", () => {
     const dayA = "550e8400-e29b-41d4-a716-446655440001"
     const dayB = "550e8400-e29b-41d4-a716-446655440002"
     const draft = publishableDraft()
+    draft.hasMap = true
     draft.schedule = [
       {
         id: dayA,
@@ -888,8 +964,9 @@ describe("buildPublishEventV2Payload", () => {
     draft.settings.refundPolicy = "Reintegro a criterio"
     const payload = buildPublishEventV2Payload(draft)
     assert.equal(payload.visibility, "private")
-    assert.equal("refund_policy" in payload, false)
-    assert.equal(payload.description, "Gracias por venir")
+    assert.equal(payload.refund_policy, "organizer")
+    assert.equal(payload.checkout_message, "Gracias por venir")
+    assert.equal(payload.description, "After")
     assert.equal(payload.description.includes("Reintegro"), false)
   })
 })
@@ -956,6 +1033,7 @@ describe("publish helpers", () => {
 
   it("publishes one seating_maps row per day instance", () => {
     const draft = publishableDraft()
+    draft.hasMap = true
     const dayA = "550e8400-e29b-41d4-a716-446655440001"
     const dayB = "550e8400-e29b-41d4-a716-446655440002"
     draft.schedule = [
@@ -1037,6 +1115,7 @@ describe("publish helpers", () => {
 
   it("expands a day map onto each published slot occurrence", () => {
     const draft = publishableDraft()
+    draft.hasMap = true
     const dayId = "550e8400-e29b-41d4-a716-446655440010"
     const slotA = "550e8400-e29b-41d4-a716-446655440011"
     const slotB = "550e8400-e29b-41d4-a716-446655440012"
@@ -1196,10 +1275,38 @@ describe("publish helpers", () => {
     )
   })
 
-  it("falls back to the title when there is no checkout copy", () => {
+  it("keeps the public about as the title, never the thank-you note", () => {
     assert.equal(
       composePublishDescription({ title: "After" }),
       "After",
+    )
+    assert.equal(
+      composePublishDescription({
+        title: "After",
+        checkoutMessage: "Gracias por venir",
+      }),
+      "After",
+    )
+  })
+
+  it("patches sale windows only when the live row is unique", () => {
+    const known = "550e8400-e29b-41d4-a716-446655440000"
+    assert.equal(
+      resolvePublishedSaleWindowTierId({ id: known }, [
+        { id: "550e8400-e29b-41d4-a716-446655440099" },
+      ]),
+      known,
+    )
+    assert.equal(
+      resolvePublishedSaleWindowTierId({ id: null }, [{ id: known }]),
+      known,
+    )
+    assert.equal(
+      resolvePublishedSaleWindowTierId({ id: null }, [
+        { id: known },
+        { id: "550e8400-e29b-41d4-a716-446655440099" },
+      ]),
+      null,
     )
   })
 

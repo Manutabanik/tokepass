@@ -48,6 +48,7 @@ export function EventEditorV2ArchetypePicker({
     if (!archetypeSupportsVirtual(id) && getValues("isVirtual")) {
       setValue("isVirtual", false, { shouldDirty: true, shouldTouch: true })
       setValue("settings.deliveryMode", "PRESENCIAL", { shouldDirty: true })
+      setValue("virtualLink", "", { shouldDirty: true })
     }
   }
 

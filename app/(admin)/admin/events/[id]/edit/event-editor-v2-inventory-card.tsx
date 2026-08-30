@@ -452,6 +452,7 @@ function DraftDayRatePriceField({
         step={1}
         inputMode="numeric"
         className={DRAFT_FIELD_CLASS}
+        data-field={`${name}.${index}.dayRates.${rowIndex}.price`}
         {...register(`${name}.${index}.dayRates.${rowIndex}.price`, {
           setValueAs: draftNumberValue,
           onChange: onRateChange,
@@ -521,6 +522,7 @@ function DraftDayRateFields({
                 step={1}
                 inputMode="numeric"
                 className={DRAFT_FIELD_CLASS}
+                data-field={`${name}.${index}.dayRates.${rowIndex}.stock`}
                 {...register(`${name}.${index}.dayRates.${rowIndex}.stock`, {
                   setValueAs: draftNumberValue,
                   onChange: onRateChange,

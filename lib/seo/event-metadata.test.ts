@@ -172,6 +172,36 @@ describe("eventSeoFromDetails", () => {
     assert.equal(seo.organizer?.name, "Productora Luna")
     assert.equal(seo.performers?.[0]?.name, "DJ Norte")
   })
+
+  it("ignores extras when computing offer prices and remaining stock", () => {
+    const seo = eventSeoFromDetails({
+      id: "11111111-1111-4111-8111-111111111111",
+      title: "Luna en el Anfiteatro",
+      description: "Show en vivo.",
+      date: "2026-09-20T22:00:00.000Z",
+      endsAt: "2026-09-21T02:00:00.000Z",
+      location: "Jachal, San Juan",
+      imageUrl: null,
+      venue: {
+        name: "Anfiteatro",
+        location: "Jachal, San Juan",
+        city: "Jachal",
+        address: null,
+      },
+      tiers: [
+        { price: 18000, available: 0, tier_type: "general" },
+        {
+          price: 2500,
+          available: 40,
+          ticket_type: "extra",
+          tier_type: "general",
+        },
+      ],
+    })
+
+    assert.deepEqual(seo.prices, [18000])
+    assert.equal(seo.ticketsLeft, 0)
+  })
 })
 
 describe("website json-ld", () => {

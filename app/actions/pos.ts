@@ -7,6 +7,7 @@ import {
   pickSeatingUnitRowForRequestedDay,
 } from "@/lib/checkout/seat-hold-day"
 import { eventAcceptsPosPayments } from "@/lib/events/checkout-policy"
+import { resolveTicketCommerceType } from "@/lib/events/ticket-commerce-type"
 import { isSandboxEventStatus } from "@/lib/events/review-status"
 import { findScheduleDay, parseScheduleDays } from "@/lib/event-schedule"
 import { orderTestFlags } from "@/lib/finance/order-test-flags"
@@ -405,7 +406,9 @@ export async function getPosEvents(): Promise<PosEventOption[]> {
       qrType: event.qr_type === "static" ? "static" : "dynamic",
       hasSupervisorPin,
       hasInteractiveMap: mapByEvent.get(event.id) ?? false,
-      tiers: (event.ticket_tiers ?? []).map((tier) => {
+      tiers: (event.ticket_tiers ?? [])
+        .filter((tier) => resolveTicketCommerceType(tier) !== "extra")
+        .map((tier) => {
         const name = tier.name
         const price = Number(tier.price)
         const lower = name.toLowerCase()
@@ -798,6 +801,72 @@ export async function getTicketZReport(
   return buildTicketZReport(mapShift(data as Parameters<typeof mapShift>[0]))
 }
 
+const POS_TIER_COMMERCE_SELECTS = [
+  "layout_type, ticket_type, tier_type, category",
+  "layout_type, tier_type, category",
+  "layout_type, tier_type",
+  "layout_type",
+] as const
+
+async function loadPosTierCommerce(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  eventId: string,
+  tierId: string,
+): Promise<
+  | {
+      ok: true
+      row: {
+        layout_type?: string | null
+        ticket_type?: string | null
+        tier_type?: string | null
+        category?: string | null
+      }
+    }
+  | { ok: false; error: string }
+> {
+  let lastError: { message: string } | null = null
+  for (const columns of POS_TIER_COMMERCE_SELECTS) {
+    const query = await supabase
+      .from("ticket_tiers")
+      .select(columns as never)
+      .eq("id", tierId)
+      .eq("event_id", eventId)
+      .maybeSingle()
+    if (!query.error) {
+      if (!query.data) {
+        return { ok: false, error: "Esa entrada no está disponible." }
+      }
+      return {
+        ok: true,
+        row: query.data as {
+          layout_type?: string | null
+          ticket_type?: string | null
+          tier_type?: string | null
+          category?: string | null
+        },
+      }
+    }
+    lastError = query.error
+    if (
+      !/ticket_type|tier_type|category|schema cache|PGRST204|42703/i.test(
+        query.error.message,
+      )
+    ) {
+      return {
+        ok: false,
+        error: toPosUserError(query.error, "No se pudo leer la entrada."),
+      }
+    }
+  }
+  return {
+    ok: false,
+    error: toPosUserError(
+      lastError,
+      "No se pudo leer la entrada. Probá de nuevo.",
+    ),
+  }
+}
+
 export async function createPosSale(
   input: PosSaleRequest,
 ): Promise<PosSaleResult> {
@@ -868,18 +937,48 @@ export async function createPosSale(
       seatingLayoutItemId = null
     }
 
-    if (!seatingUnitId && !seatingLayoutItemId) {
-      const { data: saleTier } = await supabase
-        .from("ticket_tiers")
-        .select("layout_type")
-        .eq("id", sale.tierId)
-        .eq("event_id", sale.eventId)
-        .maybeSingle()
-      if (layoutRequiresSeatSelection(saleTier?.layout_type)) {
-        return {
-          success: false,
-          error: "Elegí una mesa o asiento en el plano para esa entrada.",
-        }
+    const saleTierRes = await loadPosTierCommerce(
+      supabase,
+      sale.eventId,
+      sale.tierId,
+    )
+    if (!saleTierRes.ok) {
+      return { success: false, error: saleTierRes.error }
+    }
+    const saleTier = saleTierRes.row
+    if (resolveTicketCommerceType(saleTier) === "extra") {
+      return {
+        success: false,
+        error:
+          "Los extras no se venden como entrada. Cobrálos en la tienda del evento.",
+      }
+    }
+    const posAdmission = await supabase.rpc(
+      "assert_pos_admission_tier" as never,
+      {
+        p_event_id: sale.eventId,
+        p_tier_id: sale.tierId,
+      } as never,
+    )
+    if (
+      posAdmission.error &&
+      !/assert_pos_admission_tier|Could not find the function|schema cache|PGRST202|42883|does not exist/i.test(
+        posAdmission.error.message,
+      )
+    ) {
+      return {
+        success: false,
+        error: toPosUserError(posAdmission.error),
+      }
+    }
+    if (
+      !seatingUnitId &&
+      !seatingLayoutItemId &&
+      layoutRequiresSeatSelection(saleTier?.layout_type)
+    ) {
+      return {
+        success: false,
+        error: "Elegí una mesa o asiento en el plano para esa entrada.",
       }
     }
 

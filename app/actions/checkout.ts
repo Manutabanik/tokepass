@@ -94,10 +94,16 @@ import {
 import {
   MISSING_EVENT_DATE_ID,
   asHoldEventDateId,
+  pickExclusiveHoldRowForRequestedDay,
   pickSeatingUnitRowForRequestedDay,
   requireHoldEventDateId,
   seatingUnitMatchesEventDate,
 } from "@/lib/checkout/seat-hold-day"
+import {
+  assertCartHasAdmissionSku,
+  assertLoadedCheckoutTiersCoverCart,
+} from "@/lib/checkout/sellable-tickets"
+import { resolveTicketCommerceType } from "@/lib/events/ticket-commerce-type"
 import {
   assertSeatedCartItemsHaveUnits,
   generalRemainingWithOwnHolds,
@@ -887,6 +893,70 @@ async function evaluateCartPhaseRollover(
   return null
 }
 
+async function loadCheckoutTierCommerce(
+  supabase: CheckoutSupabase,
+  eventId: string,
+  tierIds: string[],
+): Promise<
+  | {
+      ok: true
+      rows: Array<{
+        id: string
+        name?: string | null
+        seating_sector_id?: string | null
+        layout_type?: string | null
+        tier_type?: string | null
+        category?: string | null
+        ticket_type?: string | null
+        min_purchase_limit?: number | null
+        max_purchase_limit?: number | null
+      }>
+    }
+  | { ok: false; error: string }
+> {
+  if (tierIds.length === 0) return { ok: true, rows: [] }
+  const selects = [
+    "id, name, min_purchase_limit, max_purchase_limit, seating_sector_id, layout_type, tier_type, category, ticket_type",
+    "id, name, min_purchase_limit, max_purchase_limit, seating_sector_id, layout_type, tier_type, category",
+    "id, name, min_purchase_limit, max_purchase_limit, seating_sector_id, layout_type, category",
+    "id, name, min_purchase_limit, max_purchase_limit, seating_sector_id, layout_type",
+  ]
+  for (const columns of selects) {
+    const res = await supabase
+      .from("ticket_tiers")
+      .select(columns as never)
+      .eq("event_id", eventId)
+      .in("id", tierIds)
+    if (!res.error) {
+      return {
+        ok: true,
+        rows: (res.data ?? []) as unknown as Array<{
+          id: string
+          name?: string | null
+          seating_sector_id?: string | null
+          layout_type?: string | null
+          tier_type?: string | null
+          category?: string | null
+          ticket_type?: string | null
+          min_purchase_limit?: number | null
+          max_purchase_limit?: number | null
+        }>,
+      }
+    }
+    if (
+      !/ticket_type|tier_type|category|schema cache|PGRST204|42703/i.test(
+        res.error.message,
+      )
+    ) {
+      break
+    }
+  }
+  return {
+    ok: false,
+    error: "No se pudieron leer las entradas. Probá de nuevo.",
+  }
+}
+
 async function evaluateCartSaleWindows(
   supabase: CheckoutSupabase,
   eventId: string,
@@ -924,7 +994,9 @@ async function evaluateCartSaleWindows(
   for (const item of items) {
     const tierId = checkoutItemTierId(item)
     const row = (data ?? []).find((tier) => tier.id === tierId)
-    if (!row) continue
+    if (!row) {
+      return { success: false, error: CHECKOUT_PRICES_CHANGED_ERROR }
+    }
     const state = resolveTicketSaleState({
       capacity: row.capacity,
       sold: row.sold,
@@ -1139,14 +1211,26 @@ async function loadEventServiceFeeRule(
   supabase: CheckoutSupabase,
   eventId: string,
 ): Promise<{ rate: number; fixedFee: number; absorbFees: boolean }> {
-  const { data: event } = await supabase
+  let feeRow = await supabase
     .from("events")
     .select(
       "platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, absorb_fees",
     )
     .eq("id", eventId)
     .maybeSingle()
-
+  if (
+    feeRow.error &&
+    /absorb_fees|schema cache|PGRST204|42703/i.test(feeRow.error.message)
+  ) {
+    feeRow = await supabase
+      .from("events")
+      .select(
+        "platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass",
+      )
+      .eq("id", eventId)
+      .maybeSingle()
+  }
+  const event = feeRow.data
   const absorbFees = event?.absorb_fees === true
 
   if (event?.is_sponsored_by_tokepass) {
@@ -1712,12 +1796,15 @@ export async function holdSeat(
           ? [combo.data]
           : []
       const requestedDay = asHoldEventDateId(parsed.data.eventDateId)
-      const preferred =
-        (requestedDay
-          ? rows.find((row) => row.event_date_id === requestedDay)
-          : null) ?? rows[0]
-      const reservedUntil = preferred?.expires_at
-      const seatingUnitId = preferred?.seating_unit_id
+      const preferred = pickExclusiveHoldRowForRequestedDay(rows, requestedDay)
+      if (!preferred) {
+        return {
+          success: false,
+          error: requestedDay ? "out_of_stock" : MISSING_EVENT_DATE_ID,
+        }
+      }
+      const reservedUntil = preferred.expires_at
+      const seatingUnitId = preferred.seating_unit_id
       if (!reservedUntil || !seatingUnitId) {
         return { success: false, error: "out_of_stock" }
       }
@@ -2056,23 +2143,21 @@ export async function holdSeatingUnitForCartByLayoutItem(
     return { success: false, error: "No se pudo abrir la reserva temporal. Probá de nuevo." }
   }
   const scheduleDayIds = await loadEventScheduleDayIds(db, eventId)
-  if (!parsed.data.comboTierId) {
-    const dayGate = requireHoldEventDateId({
-      eventDateId,
-      scheduleDayIds,
+  const dayGate = requireHoldEventDateId({
+    eventDateId,
+    scheduleDayIds,
+  })
+  if (!dayGate.ok) {
+    logger.error({
+      context: "checkout/cart-hold",
+      message: MISSING_EVENT_DATE_ID,
+      eventId,
+      sectorId,
+      layoutItemId,
     })
-    if (!dayGate.ok) {
-      logger.error({
-        context: "checkout/cart-hold",
-        message: MISSING_EVENT_DATE_ID,
-        eventId,
-        sectorId,
-        layoutItemId,
-      })
-      return { success: false, error: MISSING_EVENT_DATE_ID }
-    }
-    eventDateId = dayGate.eventDateId
+    return { success: false, error: MISSING_EVENT_DATE_ID }
   }
+  eventDateId = dayGate.eventDateId
 
   const room = await assertCheckoutWaitingRoom({
     eventId: access.eventId,
@@ -2105,11 +2190,11 @@ export async function holdSeatingUnitForCartByLayoutItem(
         : combo.data
           ? [combo.data]
           : []
-      const requestedDay = asHoldEventDateId(eventDateId)
-      const preferred =
-        (requestedDay
-          ? rows.find((row) => row.event_date_id === requestedDay)
-          : null) ?? rows[0]
+      const preferred = pickSeatingUnitRowForRequestedDay(
+        rows,
+        eventDateId,
+        scheduleDayIds.length,
+      )
       if (!preferred?.reserved_until || !preferred?.seating_unit_id) {
         return { success: false, error: "out_of_stock" }
       }
@@ -2533,17 +2618,22 @@ async function executeLockTickets(
       .select("max_tickets_per_user, has_seating_plan")
       .eq("id", eventId)
       .maybeSingle(),
-    access.db
-      .from("ticket_tiers")
-      .select(
-        "id, name, min_purchase_limit, max_purchase_limit, seating_sector_id, layout_type",
-      )
-      .eq("event_id", eventId)
-      .in("id", allTierIds),
+    loadCheckoutTierCommerce(access.db, eventId, allTierIds),
     access.db.rpc("get_event_tier_live_stock", { p_event_id: eventId }),
   ])
+  if (!tiersRes.ok) {
+    return { success: false, error: tiersRes.error }
+  }
+  const holdTiers = tiersRes.rows
   const holdEvent = eventRes.data
-  const holdTiers = tiersRes.data
+  const covered = assertLoadedCheckoutTiersCoverCart(allTierIds, holdTiers)
+  if (!covered.ok) {
+    return { success: false, error: covered.error }
+  }
+  const extrasGate = assertCartHasAdmissionSku(cartItems.length, holdTiers)
+  if (!extrasGate.ok) {
+    return { success: false, error: extrasGate.error }
+  }
   const mappedSectors = (holdTiers ?? [])
     .filter(
       (tier) =>
@@ -2567,15 +2657,18 @@ async function executeLockTickets(
     }
   }
 
+  const eventHasSeatingPlan = holdEvent?.has_seating_plan !== false
   const { mapItems, generalItems } = partitionMixedCartItems({
     items: cartItems,
     tiers: (holdTiers ?? []).map((tier) => ({
       id: tier.id,
       name: tier.name,
-      layoutType: tier.layout_type,
-      seatingSectorId: tier.seating_sector_id,
-      hasMap: Boolean(tier.seating_sector_id?.trim()),
-      isNumbered: layoutRequiresSeatSelection(tier.layout_type),
+      layoutType: eventHasSeatingPlan ? tier.layout_type : "general",
+      seatingSectorId: eventHasSeatingPlan ? tier.seating_sector_id : null,
+      hasMap:
+        eventHasSeatingPlan && Boolean(tier.seating_sector_id?.trim()),
+      isNumbered:
+        eventHasSeatingPlan && layoutRequiresSeatSelection(tier.layout_type),
     })),
     linkedSectorIds: linkedSectors,
   })
@@ -2587,7 +2680,7 @@ async function executeLockTickets(
       item.isNumbered !== false &&
       item.is_numbered !== false &&
       tierIsNumbered({
-        layoutType: tier?.layout_type,
+        layoutType: eventHasSeatingPlan ? tier?.layout_type : "general",
         isNumbered: item.isNumbered ?? item.is_numbered,
       })
     )
@@ -2652,7 +2745,7 @@ async function executeLockTickets(
     })),
     tiers: (holdTiers ?? []).map((tier) => ({
       id: tier.id,
-      name: tier.name,
+      name: tier.name ?? "",
       minPurchaseLimit: (tier as { min_purchase_limit?: number | null })
         .min_purchase_limit,
       maxPurchaseLimit: (tier as { max_purchase_limit?: number | null })
@@ -2674,7 +2767,17 @@ async function executeLockTickets(
   }
 
   const rpcItems = sortReserveRpcItems(
-    cartItems.map((item) => toReserveRpcItem(item)),
+    cartItems.map((item) => {
+      const tier = (holdTiers ?? []).find(
+        (row) => row.id === checkoutItemTierId(item),
+      )
+      return toReserveRpcItem(item, {
+        isNumbered:
+          eventHasSeatingPlan && layoutRequiresSeatSelection(tier?.layout_type),
+        hasMap:
+          eventHasSeatingPlan && Boolean(tier?.seating_sector_id?.trim()),
+      })
+    }),
   )
   const mixed = await access.db.rpc("hold_mixed_cart_for_checkout", {
     p_event_id: eventId,
@@ -3346,19 +3449,32 @@ export async function createComboReservation(
   promoCodeId = parsed.data.promoCodeId
   buyerInfo = buyerToHolderFields(parsed.data.buyer)
   const supabase = await createClient()
-  const { data: bundle } = await supabase
+  let bundleQuery = await supabase
     .from("ticket_tiers")
-    .select("id, event_id, tier_type, category, capacity, sold, bundle_items")
+    .select(
+      "id, event_id, tier_type, category, ticket_type, capacity, sold, bundle_items",
+    )
     .eq("id", bundleTierId)
     .eq("event_id", eventId)
     .maybeSingle()
+  if (
+    bundleQuery.error &&
+    /ticket_type|schema cache|PGRST204|42703/i.test(bundleQuery.error.message)
+  ) {
+    bundleQuery = await supabase
+      .from("ticket_tiers")
+      .select("id, event_id, tier_type, category, capacity, sold, bundle_items")
+      .eq("id", bundleTierId)
+      .eq("event_id", eventId)
+      .maybeSingle()
+  }
 
+  const bundle = bundleQuery.data
   if (!bundle) {
     return { success: false, error: "Combo no encontrado." }
   }
 
-  const isBundle =
-    bundle.tier_type === "bundle" || bundle.category === "bundle"
+  const isBundle = resolveTicketCommerceType(bundle) === "combo"
   if (!isBundle) {
     return { success: false, error: "Esa tarifa no es un combo." }
   }
@@ -3527,21 +3643,59 @@ export async function startCheckoutWithPayment(
     }
   }
 
-  const [eventResult, { data: eventTiers }] = await Promise.all([
+  const [eventResult, tiersFirst] = await Promise.all([
     db
       .from("events")
       .select(
-        "date, ends_at, schedule_days, title, max_tickets_per_user, accepts_mercado_pago",
+        "date, ends_at, schedule_days, title, max_tickets_per_user, accepts_mercado_pago, has_seating_plan",
       )
       .eq("id", payload.eventId)
       .maybeSingle(),
     db
       .from("ticket_tiers")
       .select(
-        "id, name, capacity, sold, visibility, min_purchase_limit, max_purchase_limit",
+        "id, name, capacity, sold, visibility, min_purchase_limit, max_purchase_limit, ticket_type, tier_type, category",
       )
       .eq("event_id", payload.eventId),
   ])
+  type CheckoutSoldOutTier = {
+    id: string
+    name: string
+    capacity: number
+    sold: number
+    visibility: "public" | "private"
+    min_purchase_limit: number
+    max_purchase_limit: number | null
+    ticket_type?: string | null
+    tier_type?: string | null
+    category?: string | null
+  }
+  let eventTiers = (tiersFirst.data ?? null) as CheckoutSoldOutTier[] | null
+  if (
+    tiersFirst.error &&
+    /ticket_type|tier_type|category|schema cache|PGRST204|42703/i.test(
+      tiersFirst.error.message,
+    )
+  ) {
+    const retry = await db
+      .from("ticket_tiers")
+      .select(
+        "id, name, capacity, sold, visibility, min_purchase_limit, max_purchase_limit, tier_type, category",
+      )
+      .eq("event_id", payload.eventId)
+    eventTiers = (
+      retry.error
+        ? (
+            await db
+              .from("ticket_tiers")
+              .select(
+                "id, name, capacity, sold, visibility, min_purchase_limit, max_purchase_limit",
+              )
+              .eq("event_id", payload.eventId)
+          ).data
+        : retry.data
+    ) as CheckoutSoldOutTier[] | null
+  }
   let eventRow = eventResult.data as {
     date: string
     ends_at: string | null
@@ -3549,10 +3703,11 @@ export async function startCheckoutWithPayment(
     title: string
     max_tickets_per_user: number | null
     accepts_mercado_pago?: boolean | null
+    has_seating_plan?: boolean | null
   } | null
   if (
     eventResult.error &&
-    /accepts_mercado_pago|schema cache|PGRST204|42703/i.test(
+    /accepts_mercado_pago|has_seating_plan|schema cache|PGRST204|42703/i.test(
       eventResult.error.message,
     )
   ) {
@@ -3672,17 +3827,28 @@ export async function startCheckoutWithPayment(
   })
 
   const tierIds = [...new Set(cartItems.map((item) => checkoutItemTierId(item)))]
-  const { data: tierMeta } = await db
-    .from("ticket_tiers")
-    .select("id, seating_sector_id, tier_type, category, layout_type")
-    .eq("event_id", payload.eventId)
-    .in("id", tierIds)
+  const tierMetaRes = await loadCheckoutTierCommerce(
+    db,
+    payload.eventId,
+    tierIds,
+  )
+  if (!tierMetaRes.ok) {
+    await recordCheckoutFailure(ctx)
+    return { success: false, error: tierMetaRes.error }
+  }
+  const tierMeta = tierMetaRes.rows
+  const covered = assertLoadedCheckoutTiersCoverCart(tierIds, tierMeta)
+  if (!covered.ok) {
+    await recordCheckoutFailure(ctx)
+    return { success: false, error: covered.error }
+  }
 
+  const eventHasSeatingPlan = eventRow?.has_seating_plan !== false
   const seatedCart = assertSeatedCartItemsHaveUnits(
     cartItems,
-    (tierMeta ?? []).map((row) => ({
+    tierMeta.map((row) => ({
       id: row.id,
-      layoutType: row.layout_type,
+      layoutType: eventHasSeatingPlan ? row.layout_type : "general",
     })),
   )
   if (!seatedCart.ok) {
@@ -3690,8 +3856,14 @@ export async function startCheckoutWithPayment(
     return { success: false, error: SEAT_SELECTION_REQUIRED }
   }
 
+  const extrasGate = assertCartHasAdmissionSku(cartItems.length, tierMeta)
+  if (!extrasGate.ok) {
+    await recordCheckoutFailure(ctx)
+    return { success: false, error: extrasGate.error }
+  }
+
   const sectorByTier = new Map(
-    (tierMeta ?? []).map((row) => [row.id, row.seating_sector_id]),
+    tierMeta.map((row) => [row.id, row.seating_sector_id]),
   )
 
   const quantityItemsForPhases = cartItems.filter(
@@ -3805,6 +3977,7 @@ export async function startCheckoutWithPayment(
         item.quantity,
       )
       const seatId = checkoutItemSeatId(item)
+      const tier = (tierMeta ?? []).find((row) => row.id === tierId)
       const tierSector = sectorByTier.get(tierId)
       const allowed = new Set<string>()
       if (tierSector) allowed.add(tierSector)
@@ -3813,6 +3986,9 @@ export async function startCheckoutWithPayment(
         unitSectorId: seatId ? (unitSectorById.get(seatId) ?? null) : null,
         allowedSectorKeys: allowed,
         phaseId: decision.kind === "ok" ? decision.phase.id : null,
+        isNumbered:
+          eventHasSeatingPlan && layoutRequiresSeatSelection(tier?.layout_type),
+        hasMap: eventHasSeatingPlan && Boolean(tierSector?.trim()),
       })
     }),
   )

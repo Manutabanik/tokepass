@@ -1,11 +1,14 @@
 import { isValidPublicPrice } from "@/lib/checkout/public-price"
-import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
+import {
+  resolveTicketCommerceType,
+  type TicketCommerceSource,
+} from "@/lib/events/ticket-commerce-type"
 import {
   isTicketOnSale,
   resolveTicketSaleState,
 } from "@/lib/inventory/ticket-sale-window"
 
-export type SellableTicketInput = {
+export type SellableTicketInput = TicketCommerceSource & {
   price?: number | null
   available?: number | null
   stock_available?: number | null
@@ -20,11 +23,6 @@ export type SellableTicketInput = {
   saleEndsAt?: string | Date | null
   sale_starts_at?: string | Date | null
   sale_ends_at?: string | Date | null
-  category?: string | null
-  tierType?: string | null
-  tier_type?: string | null
-  layoutType?: string | null
-  layout_type?: string | null
   bundleItems?: Array<unknown> | null
 }
 
@@ -41,18 +39,61 @@ function isSellableTicketActive(ticket: SellableTicketInput): boolean {
   return status.toUpperCase() === "ACTIVE"
 }
 
-/** Admission SKU: public, on sale, with remaining stock. Add-ons are excluded. */
+export const EXTRAS_REQUIRE_ADMISSION_ERROR =
+  "Sumá una entrada para poder comprar extras."
+
+export function cartIncludesAdmissionSku(
+  tiers: readonly TicketCommerceSource[],
+): boolean {
+  return tiers.some((tier) => resolveTicketCommerceType(tier) !== "extra")
+}
+
+export const CHECKOUT_TIERS_UNREADABLE_ERROR =
+  "No se pudieron leer las entradas. Probá de nuevo."
+
+/** Fail closed: missing rows must not skip the extras-only rule. */
+export function assertCartHasAdmissionSku(
+  cartItemCount: number,
+  tiers: readonly TicketCommerceSource[] | null | undefined,
+): { ok: true } | { ok: false; error: string } {
+  if (cartItemCount <= 0) return { ok: true }
+  const rows = tiers ?? []
+  if (rows.length === 0) {
+    return { ok: false, error: CHECKOUT_TIERS_UNREADABLE_ERROR }
+  }
+  if (!cartIncludesAdmissionSku(rows)) {
+    return { ok: false, error: EXTRAS_REQUIRE_ADMISSION_ERROR }
+  }
+  return { ok: true }
+}
+
+/** Fail closed: a missing cart SKU must not skip extras or seat rules. */
+export function assertLoadedCheckoutTiersCoverCart(
+  requestedTierIds: readonly string[],
+  tiers: ReadonlyArray<{ id?: string | null }> | null | undefined,
+): { ok: true } | { ok: false; error: string } {
+  if (requestedTierIds.length === 0) return { ok: true }
+  const loaded = new Set(
+    (tiers ?? [])
+      .map((row) => String(row.id ?? "").trim())
+      .filter(Boolean),
+  )
+  if (requestedTierIds.some((id) => !loaded.has(id))) {
+    return { ok: false, error: CHECKOUT_TIERS_UNREADABLE_ERROR }
+  }
+  return { ok: true }
+}
+
+/** Admission SKU: public, on sale, with remaining stock. Extras are excluded. */
 export function isAdmissionTicket(ticket: SellableTicketInput): boolean {
-  const type = inferInventoryTierType({
-    tierType: ticket.tierType ?? ticket.tier_type,
-    layoutType: ticket.layoutType ?? ticket.layout_type,
-    category: ticket.category,
-    bundleItems:
-      Array.isArray(ticket.bundleItems) && ticket.bundleItems.length > 0
-        ? [{ tierId: "combo", quantity: 1 }]
-        : null,
-  })
-  return type !== "addon"
+  return resolveTicketCommerceType({
+    ...ticket,
+    comboItems:
+      ticket.comboItems ??
+      (Array.isArray(ticket.bundleItems) && ticket.bundleItems.length > 0
+        ? ticket.bundleItems
+        : null),
+  }) !== "extra"
 }
 
 export function isSellablePublicTicket(

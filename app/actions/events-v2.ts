@@ -18,16 +18,23 @@ import { eventArtistRowsToDraftLineup } from "@/lib/events/publish-event-v2-line
 import {
   isEventDraftStateEmpty,
   overlayLiveExperienceOnDraft,
+  overlayLivePurchaseCopyOnDraft,
   rehydrateEventDraftV2,
   type LiveEventTicketSnapshotV2,
 } from "@/lib/events/rehydrate-event-draft-v2"
 import { preparePublishDraftV2 } from "@/lib/events/prepare-publish-draft-v2"
+import {
+  nextMirroredAccessLink,
+  nextMirroredCatalogVisibility,
+  preservePublishedEventVisibility,
+} from "@/lib/events/published-purchase-mirror"
 import {
   formatEventPublishIssues,
   freePublishCapacity,
   isPublishScheduleForeignKeyError,
   publishedExperienceColumns,
   publishedScheduleUpsertRows,
+  resolvePublishedSaleWindowTierId,
   sanitizePublishPayloadForDatabase,
   shouldPublishEventV2Sequentially,
   type PublishEventV2Issue,
@@ -42,6 +49,7 @@ import {
   syncPublishedComboItems,
   ticketsWithoutComboScheduleIds,
 } from "@/lib/events/sync-published-combo-items"
+import { isMissingSaleWindowSchema } from "@/lib/inventory/ticket-sale-window"
 import { venueMapToSeatingLayout } from "@/lib/seating/venue-map-geometry"
 import { eventPreviewPath } from "@/lib/events/editor-v2-ux"
 import { revalidatePublicEventCache } from "@/lib/events/revalidate-public-event"
@@ -68,9 +76,13 @@ import {
   parseDraftLineup,
   parseEventDraftV2,
   toEventDraftV2Payload,
+  type EventDraftV2,
   type EventDraftV2LineupItem,
 } from "@/lib/validations/event-draft-v2"
-import { MAX_EVENT_FLYER_BYTES } from "@/lib/validations/event-form"
+import {
+  MAX_EVENT_FLYER_BYTES,
+  parseEventRefundPolicy,
+} from "@/lib/validations/event-form"
 import type { EventDeliveryMode, EventStatus, Json, TicketTier } from "@/types/database"
 import { parseVenueMap } from "@/types/venue-map"
 
@@ -152,13 +164,40 @@ export async function getEventDraftV2(
     return { success: false, error: gate.error, code: gate.code }
   }
 
-  const { data, error } = await gate.supabase
+  const draftEventSelect =
+    "id, organizer_id, status, draft_state, title, date, ends_at, location, description, flyer_url, image_url, social_share_image_url, visibility, refund_policy, province, department, delivery_mode, access_link, checkout_message, venue_map, venue_id, has_seating_plan, schedule_days, promo_video_url, gallery_urls, restrictions, what_to_bring, lineup, platform_fee_percentage, platform_fixed_fee, absorb_fees, max_free_tickets, is_sponsored_by_tokepass"
+  const draftEventSelectCore =
+    "id, organizer_id, status, draft_state, title, date, ends_at, location, description, flyer_url, image_url, social_share_image_url, visibility, refund_policy, province, department, delivery_mode, venue_map, venue_id, schedule_days, promo_video_url, gallery_urls, restrictions, what_to_bring, lineup, platform_fee_percentage, platform_fixed_fee, absorb_fees, max_free_tickets, is_sponsored_by_tokepass"
+  const draftEventSelectLegacy =
+    "id, organizer_id, status, draft_state, title, date, ends_at, location, description, flyer_url, image_url, social_share_image_url, visibility, refund_policy, province, department, delivery_mode, venue_map, venue_id, schedule_days, promo_video_url, gallery_urls, restrictions, what_to_bring, lineup, platform_fee_percentage, platform_fixed_fee, max_free_tickets, is_sponsored_by_tokepass"
+  let eventQuery = await gate.supabase
     .from("events")
-    .select(
-      "id, organizer_id, status, draft_state, title, date, ends_at, location, description, flyer_url, image_url, social_share_image_url, visibility, refund_policy, province, department, delivery_mode, venue_map, venue_id, schedule_days, promo_video_url, gallery_urls, restrictions, what_to_bring, lineup, platform_fee_percentage, platform_fixed_fee, absorb_fees, max_free_tickets, is_sponsored_by_tokepass",
-    )
+    .select(draftEventSelect)
     .eq("id", id)
     .maybeSingle()
+  if (
+    eventQuery.error &&
+    /access_link|checkout_message|absorb_fees|has_seating_plan|schema cache|PGRST204|42703/i.test(
+      eventQuery.error.message,
+    )
+  ) {
+    eventQuery = await gate.supabase
+      .from("events")
+      .select(draftEventSelectCore)
+      .eq("id", id)
+      .maybeSingle()
+  }
+  if (
+    eventQuery.error &&
+    /absorb_fees|schema cache|PGRST204|42703/i.test(eventQuery.error.message)
+  ) {
+    eventQuery = await gate.supabase
+      .from("events")
+      .select(draftEventSelectLegacy)
+      .eq("id", id)
+      .maybeSingle()
+  }
+  const { data, error } = eventQuery
   if (error) return { success: false, error: formatSupabaseError(error) }
   if (!data) return { success: false, error: "Evento no encontrado.", code: "NOT_FOUND" }
   if (data.organizer_id !== gate.userId && !gate.isSuperAdmin) {
@@ -202,9 +241,24 @@ export async function getEventDraftV2(
   const restoredDraft = restorePublishedLineup
     ? parseEventDraftV2({ ...overlay.draft, lineup: liveLineup })
     : overlay.draft
-  const absorbOverlay = overlayDraftAbsorbFees(restoredDraft, absorbFees)
+  const purchaseOverlay = overlayLivePurchaseCopyOnDraft(
+    restoredDraft,
+    {
+      refundPolicy: data.refund_policy,
+      checkoutMessage: data.checkout_message,
+      accessLink: data.access_link,
+      visibility: data.visibility,
+    },
+    data.draft_state,
+  )
+  const absorbOverlay = overlayDraftAbsorbFees(purchaseOverlay.draft, absorbFees)
   const nextDraft = absorbOverlay.draft
-  if (overlay.changed || restorePublishedLineup || absorbOverlay.changed) {
+  if (
+    overlay.changed ||
+    restorePublishedLineup ||
+    purchaseOverlay.changed ||
+    absorbOverlay.changed
+  ) {
     const draftState = toEventDraftV2Payload(nextDraft) as Json
     const written = await gate.supabase
       .from("events")
@@ -329,6 +383,9 @@ async function persistRehydratedPublishedDraft(input: {
     what_to_bring?: string | null
     lineup?: unknown
     absorb_fees?: boolean | null
+    access_link?: string | null
+    checkout_message?: string | null
+    has_seating_plan?: boolean | null
   }
 }): Promise<Json> {
   const venueQuery = input.event.venue_id
@@ -341,7 +398,7 @@ async function persistRehydratedPublishedDraft(input: {
         .maybeSingle()
     : { data: null, error: null }
   const ticketSelectWithType =
-    "id, name, description, price, base_price, capacity, min_purchase_limit, max_purchase_limit, tier_type, category, layout_type, seating_sector_id, day_id, ticket_type"
+    "id, name, description, price, base_price, capacity, min_purchase_limit, max_purchase_limit, tier_type, category, layout_type, seating_sector_id, day_id, ticket_type, sale_starts_at, sale_ends_at"
   const ticketSelectCore =
     "id, name, description, price, base_price, capacity, min_purchase_limit, max_purchase_limit, tier_type, category, layout_type, seating_sector_id, day_id"
   let ticketsQuery: {
@@ -354,7 +411,7 @@ async function persistRehydratedPublishedDraft(input: {
     .order("created_at", { ascending: true })
   if (
     ticketsQuery.error &&
-    /ticket_type|schema cache|PGRST204|42703/i.test(ticketsQuery.error.message)
+    /ticket_type|sale_starts_at|sale_ends_at|schema cache|PGRST204|42703/i.test(ticketsQuery.error.message)
   ) {
     ticketsQuery = await input.supabase
       .from("ticket_tiers")
@@ -413,8 +470,8 @@ async function persistRehydratedPublishedDraft(input: {
 }
 
 /**
- * JSON Draft Pattern. Only writes events.draft_state.
- * No ticket_tiers. No venues.
+ * Writes events.draft_state. Published events also mirror refund,
+ * checkout copy, the stream URL and catalog hide — never ticket_tiers.
  */
 export async function saveEventDraftV2(
   eventId: string,
@@ -426,11 +483,47 @@ export async function saveEventDraftV2(
   const gate = await requireDraftWriter()
   if (!gate.ok) return { success: false, error: gate.error }
 
-  const { data: event, error: eventError } = await gate.supabase
+  type PersistLiveEvent = {
+    id: string
+    organizer_id: string
+    status: string
+    slug: string | null
+    absorb_fees?: boolean | null
+    refund_policy?: string | null
+    checkout_message?: string | null
+    access_link?: string | null
+    visibility?: string | null
+  }
+  const persistEventSelects = [
+    "id, organizer_id, status, slug, absorb_fees, refund_policy, checkout_message, access_link, visibility",
+    "id, organizer_id, status, slug, refund_policy, checkout_message, access_link, visibility",
+    "id, organizer_id, status, slug, absorb_fees, refund_policy, access_link, visibility",
+    "id, organizer_id, status, slug, absorb_fees, refund_policy, checkout_message, visibility",
+    "id, organizer_id, status, slug, refund_policy, access_link, visibility",
+    "id, organizer_id, status, slug, refund_policy, visibility",
+  ]
+  let eventQuery = await gate.supabase
     .from("events")
-    .select("id, organizer_id, absorb_fees")
+    .select(persistEventSelects[0])
     .eq("id", id)
     .maybeSingle()
+  for (const columns of persistEventSelects.slice(1)) {
+    if (
+      !eventQuery.error ||
+      !/absorb_fees|checkout_message|access_link|schema cache|PGRST204|42703/i.test(
+        eventQuery.error.message,
+      )
+    ) {
+      break
+    }
+    eventQuery = await gate.supabase
+      .from("events")
+      .select(columns as never)
+      .eq("id", id)
+      .maybeSingle()
+  }
+  const eventError = eventQuery.error
+  const event = (eventQuery.data ?? null) as PersistLiveEvent | null
   if (eventError) return { success: false, error: formatSupabaseError(eventError) }
   if (!event) return { success: false, error: "Evento no encontrado." }
   if (event.organizer_id !== gate.userId && !gate.isSuperAdmin) {
@@ -471,10 +564,112 @@ export async function saveEventDraftV2(
     }
   }
 
+  if (event.status === "published") {
+    await mirrorPublishedPurchaseCopy({
+      supabase: gate.supabase,
+      eventId: id,
+      organizerId: event.organizer_id,
+      slug: event.slug,
+      draft: parsed,
+      live: event,
+    })
+  }
+
   return {
     success: true,
     eventId: data.id,
     draftState: (data.draft_state ?? draftState) as Json,
+  }
+}
+
+async function mirrorPublishedPurchaseCopy(input: {
+  supabase: Awaited<ReturnType<typeof createClient>>
+  eventId: string
+  organizerId: string
+  slug?: string | null
+  draft: EventDraftV2
+  live: {
+    refund_policy?: string | null
+    checkout_message?: string | null
+    access_link?: string | null
+    visibility?: string | null
+  }
+}) {
+  const nextRefund = parseEventRefundPolicy(input.draft.settings.refundPolicy)
+  const checkoutLoaded = Object.prototype.hasOwnProperty.call(
+    input.live,
+    "checkout_message",
+  )
+  const accessLoaded = Object.prototype.hasOwnProperty.call(
+    input.live,
+    "access_link",
+  )
+  const nextCheckout = checkoutLoaded
+    ? input.draft.settings.checkoutMessage.trim() || null
+    : undefined
+  const nextAccess = accessLoaded
+    ? nextMirroredAccessLink({
+        draft: input.draft,
+        liveAccessLink: input.live.access_link,
+      })
+    : undefined
+  const nextVisibility = nextMirroredCatalogVisibility({
+    liveVisibility: input.live.visibility,
+    isPublic: input.draft.settings.isPublic !== false,
+  })
+  if (
+    nextRefund === parseEventRefundPolicy(input.live.refund_policy) &&
+    (nextCheckout === undefined ||
+      nextCheckout === (input.live.checkout_message?.trim() || null)) &&
+    (nextAccess === undefined ||
+      nextAccess === (input.live.access_link?.trim() || null)) &&
+    nextVisibility == null
+  ) {
+    return
+  }
+  const listing = nextVisibility ? { visibility: nextVisibility } : {}
+  const checkoutPatch =
+    nextCheckout === undefined ? {} : { checkout_message: nextCheckout }
+  const accessPatch =
+    nextAccess === undefined ? {} : { access_link: nextAccess }
+  const patches: Array<Record<string, unknown>> = [
+    {
+      refund_policy: nextRefund,
+      ...checkoutPatch,
+      ...accessPatch,
+      ...listing,
+    },
+    { refund_policy: nextRefund, ...accessPatch, ...listing },
+    { refund_policy: nextRefund, ...checkoutPatch, ...listing },
+    { ...accessPatch, ...checkoutPatch, ...listing },
+    { refund_policy: nextRefund, ...listing },
+    ...(!checkoutLoaded ? [] : [{ checkout_message: nextCheckout, ...listing }]),
+    ...(!accessLoaded ? [] : [{ access_link: nextAccess, ...listing }]),
+    ...(!nextVisibility
+      ? []
+      : [{ visibility: nextVisibility }]),
+  ]
+  const ignorable =
+    /schema cache|PGRST204|42703|access_link|refund_policy|checkout_message|visibility/i
+  for (const patch of patches) {
+    const written = await input.supabase
+      .from("events")
+      .update({
+        ...patch,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", input.eventId)
+      .eq("organizer_id", input.organizerId)
+    if (!written.error) {
+      revalidatePath("/admin/events")
+      revalidatePath(`/admin/events/${input.eventId}`)
+      revalidatePublicEventCache({
+        eventId: input.eventId,
+        slug: input.slug,
+      })
+      return
+    }
+    if (!ignorable.test(written.error.message)) return
   }
 }
 
@@ -504,22 +699,15 @@ export async function updateEventAbsorbFees(
   }
 
   const next = absorbFees === true
-  const parsed = overlayDraftAbsorbFees(
-    parseEventDraftV2(event.draft_state),
-    next,
-  ).draft
-  const draftState = toEventDraftV2Payload(parsed) as unknown as Json
-
   const { data, error } = await gate.supabase
     .from("events")
     .update({
       absorb_fees: next,
-      draft_state: draftState,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)
     .eq("organizer_id", event.organizer_id)
-    .select("id, absorb_fees")
+    .select("id, absorb_fees, draft_state")
     .maybeSingle()
 
   if (error) return { success: false, error: formatSupabaseError(error) }
@@ -532,6 +720,21 @@ export async function updateEventAbsorbFees(
         details: id,
       }),
     }
+  }
+
+  const mirrored = overlayDraftAbsorbFees(
+    parseEventDraftV2(data.draft_state),
+    eventAbsorbFeesFromRow(data),
+  )
+  if (mirrored.changed) {
+    await gate.supabase
+      .from("events")
+      .update({
+        draft_state: toEventDraftV2Payload(mirrored.draft) as unknown as Json,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .eq("organizer_id", event.organizer_id)
   }
 
   revalidatePath("/admin/events")
@@ -675,7 +878,9 @@ function shouldFallbackPublishRpc(error: {
     isMissingPublishRpc(error) ||
     isPublishEnumMismatch(error) ||
     isPublishScheduleForeignKeyError(error) ||
-    /ticket_type|schema cache|PGRST204|42703/i.test(text)
+    /ticket_type|checkout_message|absorb_fees|access_link|schema cache|PGRST204|42703/i.test(
+      text,
+    )
   )
 }
 
@@ -791,6 +996,9 @@ function relationalTierRow(
     layout_type: ticket.layout_type as TicketTier["layout_type"],
     seating_sector_id: ticket.seating_sector_id?.trim() || null,
     day_id: ticket.day_id,
+    category: ticket.category as TicketTier["category"],
+    sale_starts_at: ticket.sale_starts_at ?? null,
+    sale_ends_at: ticket.sale_ends_at ?? null,
     visibility: "public" as const,
     capacity_per_unit: 1,
     admit_count: 1,
@@ -831,30 +1039,34 @@ async function writePublishedTicketRow(
           .insert(insertPayload)
           .select("id")
           .maybeSingle()
+  const missingCommerce =
+    /ticket_type|sale_starts_at|sale_ends_at|schema cache|PGRST204|42703/i
+  const { sale_starts_at, sale_ends_at, ticket_type, ...withoutCommerce } =
+    input.row
+  const withoutSaleWindows = {
+    ...withoutCommerce,
+    ticket_type,
+  }
+  const withoutTicketType = {
+    ...withoutCommerce,
+    sale_starts_at,
+    sale_ends_at,
+  }
+  const fallbacks = [withoutSaleWindows, withoutTicketType, withoutCommerce]
   let written = first
-  if (
-    written.error &&
-    /ticket_type|schema cache|PGRST204|42703/i.test(written.error.message)
-  ) {
-    const { ticket_type: _ticketType, ...withoutType } = input.row
-    void _ticketType
-    const fallbackInsert = input.ticketId
-      ? { id: input.ticketId, ...withoutType }
-      : withoutType
+  for (const row of fallbacks) {
+    if (!written.error || !missingCommerce.test(written.error.message)) break
+    const payload = input.ticketId ? { id: input.ticketId, ...row } : row
     written =
       input.mode === "update"
         ? await admin
             .from("ticket_tiers")
-            .update(withoutType)
+            .update(row)
             .eq("id", input.ticketId ?? "")
             .eq("event_id", input.eventId)
             .select("id")
             .maybeSingle()
-        : await admin
-            .from("ticket_tiers")
-            .insert(fallbackInsert)
-            .select("id")
-            .maybeSingle()
+        : await admin.from("ticket_tiers").insert(payload).select("id").maybeSingle()
   }
   if (written.error) throw new Error(formatSupabaseError(written.error))
   if (!written.data?.id) {
@@ -1004,7 +1216,7 @@ async function ensurePublishedCatalogListing(
     .from("events")
     .update({
       status: "published" as EventStatus,
-      visibility: "public",
+      visibility: payload.visibility,
       date: payload.date,
       ends_at: payload.ends_at,
       updated_at: new Date().toISOString(),
@@ -1048,6 +1260,173 @@ async function unpackPublishedExperience(
     return
   }
   throw new Error(formatSupabaseError(written.error))
+}
+
+async function patchPublishedEventPurchaseFields(
+  admin: ReturnType<typeof createAdminClient>,
+  eventId: string,
+  payload: PublishEventV2Payload,
+) {
+  const mapOff = payload.has_seating_plan
+    ? {}
+    : { venue_map: null }
+  const patches: Array<Record<string, unknown>> = [
+    {
+      access_link: payload.access_link,
+      refund_policy: payload.refund_policy,
+      checkout_message: payload.checkout_message,
+      absorb_fees: payload.absorb_fees,
+      ...mapOff,
+    },
+    {
+      access_link: payload.access_link,
+      refund_policy: payload.refund_policy,
+      absorb_fees: payload.absorb_fees,
+      ...mapOff,
+    },
+    {
+      access_link: payload.access_link,
+      absorb_fees: payload.absorb_fees,
+      ...mapOff,
+    },
+    { absorb_fees: payload.absorb_fees, ...mapOff },
+    {
+      access_link: payload.access_link,
+      refund_policy: payload.refund_policy,
+      ...mapOff,
+    },
+    { access_link: payload.access_link, ...mapOff },
+    { refund_policy: payload.refund_policy, ...mapOff },
+    ...(!payload.has_seating_plan ? [{ venue_map: null }] : []),
+  ]
+  const ignorable =
+    /schema cache|PGRST204|42703|access_link|refund_policy|checkout_message|absorb_fees|venue_map/i
+  let lastError: { message: string } | null = null
+  for (const patch of patches) {
+    const written = await admin
+      .from("events")
+      .update(patch as never)
+      .eq("id", eventId)
+    if (!written.error) return
+    lastError = written.error
+    if (!ignorable.test(written.error.message)) {
+      throw new Error(formatSupabaseError(written.error))
+    }
+  }
+  if (lastError && !ignorable.test(lastError.message)) {
+    throw new Error(formatSupabaseError(lastError))
+  }
+}
+
+async function resolveSaleWindowTierId(
+  admin: ReturnType<typeof createAdminClient>,
+  eventId: string,
+  ticket: PublishEventV2TierPayload,
+): Promise<string | null> {
+  const known = resolvePublishedSaleWindowTierId(ticket, [])
+  if (known) return known
+
+  const withType = await applyPublishedTierDayFilter(
+    admin
+      .from("ticket_tiers")
+      .select("id")
+      .eq("event_id", eventId)
+      .eq("name", ticket.name)
+      .eq("ticket_type", ticket.ticket_type),
+    ticket.day_id,
+  )
+  if (!withType.error) {
+    const matched = resolvePublishedSaleWindowTierId(ticket, withType.data ?? [])
+    if (matched) return matched
+  } else if (
+    !/ticket_type|schema cache|PGRST204|42703/i.test(withType.error.message)
+  ) {
+    throw new Error(formatSupabaseError(withType.error))
+  }
+
+  const core = await applyPublishedTierDayFilter(
+    admin
+      .from("ticket_tiers")
+      .select("id")
+      .eq("event_id", eventId)
+      .eq("name", ticket.name),
+    ticket.day_id,
+  )
+  if (core.error) throw new Error(formatSupabaseError(core.error))
+  const byDay = resolvePublishedSaleWindowTierId(ticket, core.data ?? [])
+  if (byDay) return byDay
+
+  const byName = await admin
+    .from("ticket_tiers")
+    .select("id")
+    .eq("event_id", eventId)
+    .eq("name", ticket.name)
+  if (byName.error) throw new Error(formatSupabaseError(byName.error))
+  return resolvePublishedSaleWindowTierId(ticket, byName.data ?? [])
+}
+
+function applyPublishedTierDayFilter<
+  T extends { eq: (column: string, value: string) => T; is: (column: string, value: null) => T },
+>(query: T, dayId: string | null): T {
+  return dayId ? query.eq("day_id", dayId) : query.is("day_id", null)
+}
+
+async function applyPublishedPurchaseFields(
+  eventId: string,
+  payload: PublishEventV2Payload,
+) {
+  const admin = createAdminClient()
+  await patchPublishedEventPurchaseFields(admin, eventId, payload)
+
+  for (const ticket of payload.tickets) {
+    const tierId = await resolveSaleWindowTierId(admin, eventId, ticket)
+    if (!tierId) {
+      throw new Error(
+        `No se pudo actualizar la tarifa "${ticket.name}" después de publicar.`,
+      )
+    }
+    const tierPatches: Array<Record<string, unknown>> = [
+      {
+        sale_starts_at: ticket.sale_starts_at ?? null,
+        sale_ends_at: ticket.sale_ends_at ?? null,
+        ticket_type: ticket.ticket_type,
+        category: ticket.category,
+      },
+      {
+        ticket_type: ticket.ticket_type,
+        category: ticket.category,
+      },
+      {
+        sale_starts_at: ticket.sale_starts_at ?? null,
+        sale_ends_at: ticket.sale_ends_at ?? null,
+      },
+    ]
+    let lastError: { message: string } | null = null
+    let patched = false
+    for (const patch of tierPatches) {
+      const written = await admin
+        .from("ticket_tiers")
+        .update(patch as never)
+        .eq("event_id", eventId)
+        .eq("id", tierId)
+      if (!written.error) {
+        patched = true
+        break
+      }
+      lastError = written.error
+      if (
+        !isMissingSaleWindowSchema(written.error.message) &&
+        !/ticket_type|category|schema cache|PGRST204|42703/i.test(
+          written.error.message,
+        )
+      ) {
+        throw new Error(formatSupabaseError(written.error))
+      }
+    }
+    if (patched) continue
+    if (lastError && isMissingSaleWindowSchema(lastError.message)) continue
+    if (lastError) throw new Error(formatSupabaseError(lastError))
+  }
 }
 
 async function unpackPublishEventV2Sequential(input: {
@@ -1101,41 +1480,94 @@ async function unpackPublishEventV2Sequential(input: {
       )
     }
   }
-  const written = await admin
+  const eventPatch = {
+    title: payload.title,
+    description: payload.description,
+    date: payload.date,
+    ends_at: payload.ends_at,
+    location: payload.location,
+    province: payload.venue.province,
+    department: payload.venue.city,
+    delivery_mode: payload.delivery_mode as EventDeliveryMode,
+    refund_policy: payload.refund_policy,
+    absorb_fees: payload.absorb_fees,
+    checkout_message: payload.checkout_message,
+    visibility:
+      input.targetStatus === "draft" ? "private" : payload.visibility,
+    flyer_url: payload.flyer_url ?? input.existingFlyerUrl,
+    image_url:
+      payload.image_url ??
+      payload.flyer_url ??
+      input.existingImageUrl,
+    social_share_image_url:
+      payload.social_share_image_url ?? input.existingShareUrl,
+    venue_id: venueId,
+    venue_map: payload.venue_map ?? null,
+    has_seating_plan: payload.has_seating_plan,
+    status: (input.targetStatus ?? "published") as EventStatus,
+    ...(input.keepDraftState ? {} : { draft_state: null }),
+    updated_at: new Date().toISOString(),
+  }
+  let written = await admin
     .from("events")
-    .update({
-      title: payload.title,
-      description: payload.description,
-      date: payload.date,
-      ends_at: payload.ends_at,
-      location: payload.location,
-      province: payload.venue.province,
-      department: payload.venue.city,
-      delivery_mode: payload.delivery_mode as EventDeliveryMode,
-      visibility: input.targetStatus === "draft" ? "private" : "public",
-      flyer_url: payload.flyer_url ?? input.existingFlyerUrl,
-      image_url:
-        payload.image_url ??
-        payload.flyer_url ??
-        input.existingImageUrl,
-      social_share_image_url:
-        payload.social_share_image_url ?? input.existingShareUrl,
-      venue_id: venueId,
-      ...(payload.venue_map ? { venue_map: payload.venue_map } : {}),
-      has_seating_plan: payload.has_seating_plan,
-      status: (input.targetStatus ?? "published") as EventStatus,
-      ...(input.keepDraftState ? {} : { draft_state: null }),
-      updated_at: new Date().toISOString(),
-    } as never)
+    .update(eventPatch as never)
     .eq("id", input.eventId)
     .eq("organizer_id", input.organizerId)
     .select("id, slug")
     .maybeSingle()
+  if (
+    written.error &&
+    /checkout_message|schema cache|PGRST204|42703/i.test(written.error.message)
+  ) {
+    const { checkout_message, ...withoutCheckout } = eventPatch
+    void checkout_message
+    written = await admin
+      .from("events")
+      .update(withoutCheckout as never)
+      .eq("id", input.eventId)
+      .eq("organizer_id", input.organizerId)
+      .select("id, slug")
+      .maybeSingle()
+  }
+  if (
+    written.error &&
+    /absorb_fees|schema cache|PGRST204|42703/i.test(written.error.message)
+  ) {
+    const { absorb_fees, checkout_message, ...corePatch } = eventPatch
+    void absorb_fees
+    void checkout_message
+    written = await admin
+      .from("events")
+      .update(corePatch as never)
+      .eq("id", input.eventId)
+      .eq("organizer_id", input.organizerId)
+      .select("id, slug")
+      .maybeSingle()
+  }
+  if (
+    written.error &&
+    (isPublishEnumMismatch(written.error) ||
+      /refund_policy|schema cache|PGRST204|42703/i.test(written.error.message))
+  ) {
+    const { refund_policy, absorb_fees, checkout_message, ...corePatch } =
+      eventPatch
+    void refund_policy
+    void absorb_fees
+    void checkout_message
+    written = await admin
+      .from("events")
+      .update(corePatch as never)
+      .eq("id", input.eventId)
+      .eq("organizer_id", input.organizerId)
+      .select("id, slug")
+      .maybeSingle()
+  }
   if (written.error) throw new Error(formatSupabaseError(written.error))
   if (!written.data?.id) {
     throw new Error("events.update publish no devolvió fila")
   }
   await unpackPublishedExperience(input.eventId, payload)
+  await applyPublishedPurchaseFields(input.eventId, payload)
   return written.data
 }
 
@@ -1156,13 +1588,26 @@ export async function publishEventV2(
   const gate = await requireDraftWriter()
   if (!gate.ok) return { success: false, error: gate.error }
 
-  const { data: event, error: eventError } = await gate.supabase
+  let eventQuery = await gate.supabase
     .from("events")
     .select(
-      "id, organizer_id, venue_id, draft_state, slug, flyer_url, image_url, social_share_image_url, platform_fee_percentage, platform_fixed_fee, absorb_fees, max_free_tickets, is_sponsored_by_tokepass",
+      "id, organizer_id, venue_id, draft_state, slug, flyer_url, image_url, social_share_image_url, platform_fee_percentage, platform_fixed_fee, absorb_fees, max_free_tickets, is_sponsored_by_tokepass, visibility",
     )
     .eq("id", id)
     .maybeSingle()
+  if (
+    eventQuery.error &&
+    /absorb_fees|schema cache|PGRST204|42703/i.test(eventQuery.error.message)
+  ) {
+    eventQuery = await gate.supabase
+      .from("events")
+      .select(
+        "id, organizer_id, venue_id, draft_state, slug, flyer_url, image_url, social_share_image_url, platform_fee_percentage, platform_fixed_fee, max_free_tickets, is_sponsored_by_tokepass, visibility",
+      )
+      .eq("id", id)
+      .maybeSingle()
+  }
+  const { data: event, error: eventError } = eventQuery
   if (eventError) return { success: false, error: formatSupabaseError(eventError) }
   if (!event) return { success: false, error: "Evento no encontrado." }
   if (event.organizer_id !== gate.userId && !gate.isSuperAdmin) {
@@ -1218,7 +1663,13 @@ export async function publishEventV2(
     }
   }
 
-  payload = sanitizePublishPayloadForDatabase(payload)
+  payload = sanitizePublishPayloadForDatabase({
+    ...payload,
+    visibility: preservePublishedEventVisibility(
+      (event as { visibility?: string | null }).visibility,
+      payload.visibility === "private" ? "private" : "public",
+    ),
+  })
 
   const locked = await assertDraftMapLayoutImmutable({
     eventId: id,
@@ -1238,14 +1689,12 @@ export async function publishEventV2(
   }
 
   const lineup = parsed.data.lineup ?? []
-  if (targetStatus === "published") {
-    payload = { ...payload, visibility: "public" }
-  }
   const persistPayload: PublishEventV2Payload = {
     ...payload,
     tickets: ticketsWithoutComboScheduleIds(payload.tickets),
   }
   let slug = event.slug
+  let postRpcError: unknown = null
   if (targetStatus === "draft") {
     try {
       const written = await unpackPublishEventV2Sequential({
@@ -1312,11 +1761,9 @@ export async function publishEventV2(
           // publish_event_v2 already wrote tickets, maps and units in one TX.
           await hardReplacePublishedEventArtists({ eventId: id, lineup })
           await unpackPublishedExperience(id, payload)
+          await applyPublishedPurchaseFields(id, payload)
         } catch (error) {
-          return {
-            success: false,
-            error: publishActionError(error),
-          }
+          postRpcError = error
         }
       }
     }
@@ -1360,6 +1807,13 @@ export async function publishEventV2(
         success: false,
         error: publishActionError(error),
       }
+    }
+  }
+
+  if (postRpcError) {
+    return {
+      success: false,
+      error: publishActionError(postRpcError),
     }
   }
 

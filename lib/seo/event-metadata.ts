@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 
+import { resolveTicketCommerceType } from "@/lib/events/ticket-commerce-type"
 import { formatEventDay } from "@/lib/format"
 import { publicEventUrl, toArgentinaIso8601 } from "@/lib/seo/site"
 
@@ -255,7 +256,16 @@ export function eventSeoFromDetails(event: {
     city?: string | null
     address?: string | null
   } | null
-  tiers: Array<{ price: number; available?: number }>
+  tiers: Array<{
+    price: number
+    available?: number
+    ticket_type?: string | null
+    ticketType?: string | null
+    tier_type?: string | null
+    tierType?: string | null
+    category?: string | null
+    layout_type?: string | null
+  }>
 }): EventSeoInput {
   const locationText = event.venue?.location ?? event.location ?? ""
   const bits = locationText
@@ -263,6 +273,9 @@ export function eventSeoFromDetails(event: {
     .map((part) => part.trim())
     .filter(Boolean)
   const organizerName = event.organizerName?.trim() || null
+  const admissions = event.tiers.filter(
+    (tier) => resolveTicketCommerceType(tier) !== "extra",
+  )
 
   return {
     id: event.id,
@@ -282,11 +295,11 @@ export function eventSeoFromDetails(event: {
     venueRegion: bits[1] ?? null,
     cityHint: bits[0] ?? null,
     status: event.status,
-    ticketsLeft: event.tiers.reduce(
+    ticketsLeft: admissions.reduce(
       (sum, tier) => sum + Math.max(0, tier.available ?? 0),
       0,
     ),
-    prices: event.tiers.map((tier) => Number(tier.price)),
+    prices: admissions.map((tier) => Number(tier.price)),
     organizer: organizerName
       ? {
           name: organizerName,

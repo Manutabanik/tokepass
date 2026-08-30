@@ -40,3 +40,15 @@ export const REFUND_POLICY_OPTIONS = (
 export function refundPolicyBuyerCopy(value: unknown): string {
   return REFUND_POLICY_COPY[parseEventRefundPolicy(value)].buyer
 }
+
+/** Drafts used to store free text. Map known phrases onto the live enum. */
+export function parseDraftRefundPolicy(value: unknown): EventRefundPolicy {
+  if (typeof value === "string") {
+    const text = value.trim().toLowerCase()
+    if (!text) return "organizer"
+    if (text === "no_refunds" || /sin devoluci/.test(text)) return "no_refunds"
+    if (text === "until_24h" || /24\s*h/.test(text)) return "until_24h"
+    if (text === "organizer" || /criterio/.test(text)) return "organizer"
+  }
+  return parseEventRefundPolicy(value)
+}

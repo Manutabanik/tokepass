@@ -116,6 +116,7 @@ export function EventEditorV2ScheduleFields({
                     })
                     setValue("tickets", next.tickets ?? [], { shouldDirty: true })
                     setValue("extras", next.extras ?? [], { shouldDirty: true })
+                    setValue("lineup", next.lineup ?? [], { shouldDirty: true })
                   }}
                 >
                   <Trash2 className="size-4" />
@@ -156,6 +157,7 @@ export function EventEditorV2ScheduleFields({
                         id={`event-v2-schedule-${index}-date`}
                         type="date"
                         className={DRAFT_FIELD_CLASS}
+                        data-field={`schedule.${index}.startDate`}
                         {...register(`schedule.${index}.date`, {
                           onChange: () => syncDay(index),
                         })}

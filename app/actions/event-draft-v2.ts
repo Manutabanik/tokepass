@@ -122,20 +122,31 @@ export async function createEventDraftV2(options?: {
     platformFeePercentage = DEFAULT_PLATFORM_FEE_PERCENTAGE
   }
 
-  const { data, error } = await writer
+  const draftState = toEventDraftV2Payload(emptyEventDraftV2()) as Json
+  const insertRow = {
+    organizer_id: organizerId,
+    title: "Nuevo evento",
+    date: new Date().toISOString(),
+    status: "draft" as const,
+    has_seating_plan: false,
+    platform_fee_percentage: platformFeePercentage,
+    absorb_fees: false,
+    draft_state: draftState,
+  }
+  let inserted = await writer
     .from("events")
-    .insert({
-      organizer_id: organizerId,
-      title: "Nuevo evento",
-      date: new Date().toISOString(),
-      status: "draft",
-      has_seating_plan: false,
-      platform_fee_percentage: platformFeePercentage,
-      absorb_fees: false,
-      draft_state: toEventDraftV2Payload(emptyEventDraftV2()) as Json,
-    })
+    .insert(insertRow)
     .select("id")
     .maybeSingle()
+  if (
+    inserted.error &&
+    /absorb_fees|schema cache|PGRST204|42703/i.test(inserted.error.message)
+  ) {
+    const { absorb_fees, ...coreRow } = insertRow
+    void absorb_fees
+    inserted = await writer.from("events").insert(coreRow).select("id").maybeSingle()
+  }
+  const { data, error } = inserted
 
   if (error) return { success: false, error: formatSupabaseError(error) }
   if (!data?.id) {

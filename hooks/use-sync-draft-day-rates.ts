@@ -13,7 +13,9 @@ import type { EventDraftV2 } from "@/lib/validations/event-draft-v2"
  */
 export function useSyncDraftDayRates() {
   const { getValues, setValue } = useFormContext<EventDraftV2>()
-  const schedule = useWatch({ name: "schedule" }) ?? []
+  const schedule =
+    (useWatch({ name: "schedule" }) as EventDraftV2["schedule"] | undefined) ??
+    []
   const scheduleKey = schedule
     .map((day) => day.id?.trim())
     .filter(Boolean)

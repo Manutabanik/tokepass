@@ -4,17 +4,26 @@ import { Eye } from "lucide-react"
 import { Controller, useFormContext } from "react-hook-form"
 
 import {
+  DRAFT_FIELD_CLASS,
   DRAFT_TEXTAREA_CLASS,
   DraftFieldError,
   DraftFieldLabel,
   DraftHint,
 } from "./event-editor-v2-ui"
+import {
+  REFUND_POLICY_OPTIONS,
+  parseDraftRefundPolicy,
+} from "@/lib/events/refund-policy"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import type { EventDraftV2 } from "@/lib/validations/event-draft-v2"
 
-export function EventEditorV2SettingsStep() {
+export function EventEditorV2SettingsStep({
+  isPublished = false,
+}: {
+  isPublished?: boolean
+}) {
   const {
     control,
     register,
@@ -40,12 +49,17 @@ export function EventEditorV2SettingsStep() {
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 {field.value
-                  ? "Sí: aparece en Tokepass cuando lo subas al catálogo."
-                  : "No: solo lo ven quienes tengan el link."}
+                  ? isPublished
+                    ? "Sí: está en el catálogo. Si lo apagás, se oculta al guardar."
+                    : "Sí: aparece en Tokepass cuando lo subas al catálogo."
+                  : isPublished
+                    ? "No: solo lo ven quienes tengan el link. Para listarlo de nuevo, publicá."
+                    : "No: solo lo ven quienes tengan el link."}
               </p>
             </div>
             <Switch
               id="event-v2-is-public"
+              data-field="settings.isPublic"
               checked={Boolean(field.value)}
               onCheckedChange={field.onChange}
               className="mt-0.5 shrink-0 data-checked:bg-emerald-500"
@@ -54,6 +68,41 @@ export function EventEditorV2SettingsStep() {
           </div>
         )}
       />
+
+      <div className="grid gap-2">
+        <DraftFieldLabel htmlFor="event-v2-refund-policy" className="text-sm">
+          Política de reintegro
+        </DraftFieldLabel>
+        <Controller
+          name="settings.refundPolicy"
+          control={control}
+          render={({ field }) => {
+            const selected = parseDraftRefundPolicy(field.value)
+            return (
+              <>
+                <select
+                  id="event-v2-refund-policy"
+                  data-field="settings.refundPolicy"
+                  className={DRAFT_FIELD_CLASS}
+                  value={selected}
+                  onChange={(event) => field.onChange(event.target.value)}
+                >
+                  {REFUND_POLICY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <DraftHint>
+                  {REFUND_POLICY_OPTIONS.find((option) => option.value === selected)
+                    ?.hint ?? "Se muestra en la ficha pública y en el checkout."}
+                </DraftHint>
+              </>
+            )
+          }}
+        />
+        <DraftFieldError message={errors.settings?.refundPolicy?.message} />
+      </div>
 
       <div className="grid gap-2">
         <DraftFieldLabel

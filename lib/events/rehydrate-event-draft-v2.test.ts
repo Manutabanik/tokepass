@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import {
   isEventDraftStateEmpty,
   overlayLiveExperienceOnDraft,
+  overlayLivePurchaseCopyOnDraft,
   rehydrateEventDraftV2,
 } from "@/lib/events/rehydrate-event-draft-v2"
 import { emptyEventDraftV2 } from "@/lib/validations/event-draft-v2"
@@ -118,6 +119,7 @@ describe("rehydrateEventDraftV2", () => {
           min_purchase_limit: 1,
           max_purchase_limit: 10,
           tier_type: "addon",
+          ticket_type: "standard",
           category: "special",
           layout_type: "general",
           seating_sector_id: null,
@@ -134,7 +136,8 @@ describe("rehydrateEventDraftV2", () => {
     assert.equal(draft.settings.refundPolicy, "no_refunds")
     assert.equal(draft.tickets.length, 2)
     assert.equal(draft.tickets[0]?.name, "VIP")
-    assert.equal(draft.tickets[0]?.price, 22000)
+    assert.equal(draft.tickets[0]?.price, 25000)
+    assert.equal(draft.settings.checkoutMessage, "Gracias por venir")
     assert.equal(draft.tickets[0]?.ticketType, "standard")
     assert.deepEqual(draft.tickets[0]?.validDayIds, [
       "550e8400-e29b-41d4-a716-446655440001",
@@ -160,6 +163,50 @@ describe("rehydrateEventDraftV2", () => {
     assert.equal(draft.lineup[0]?.source, "local")
   })
 
+  it("restores the online access link and ticket sale windows", () => {
+    const draft = rehydrateEventDraftV2({
+      event: {
+        title: "Clase",
+        date: "2026-09-01T22:00:00-03:00",
+        ends_at: null,
+        location: "Online",
+        description: null,
+        flyer_url: null,
+        image_url: null,
+        social_share_image_url: null,
+        visibility: "private",
+        refund_policy: "organizer",
+        province: null,
+        department: null,
+        delivery_mode: "ONLINE",
+        access_link: "https://meet.example/aula",
+        venue_map: null,
+      },
+      venue: null,
+      tickets: [
+        {
+          id: "550e8400-e29b-41d4-a716-446655440000",
+          name: "General",
+          description: null,
+          price: 5000,
+          capacity: 20,
+          min_purchase_limit: 1,
+          max_purchase_limit: 4,
+          tier_type: "general",
+          category: "standard",
+          layout_type: "general",
+          seating_sector_id: null,
+          sale_starts_at: "2026-08-20T13:00:00.000Z",
+          sale_ends_at: "2026-08-31T02:59:00.000Z",
+        },
+      ],
+    })
+    assert.equal(draft.virtualLink, "https://meet.example/aula")
+    assert.equal(draft.settings.isPublic, false)
+    assert.ok(draft.tickets[0]?.startDate)
+    assert.ok(draft.tickets[0]?.endDate)
+  })
+
   it("restores absorbFees from events.absorb_fees", () => {
     const draft = rehydrateEventDraftV2({
       event: {
@@ -183,6 +230,32 @@ describe("rehydrateEventDraftV2", () => {
       tickets: [],
     })
     assert.equal(draft.settings.absorbFees, true)
+  })
+
+  it("reads checkout_message from the dedicated column", () => {
+    const draft = rehydrateEventDraftV2({
+      event: {
+        title: "After",
+        date: "2026-09-01T22:00:00-03:00",
+        ends_at: null,
+        location: "CABA",
+        description: "After",
+        flyer_url: null,
+        image_url: null,
+        social_share_image_url: null,
+        visibility: "public",
+        refund_policy: "until_24h",
+        province: null,
+        department: null,
+        delivery_mode: "PRESENCIAL",
+        venue_map: null,
+        checkout_message: "Nos vemos en la puerta",
+      },
+      venue: null,
+      tickets: [],
+    })
+    assert.equal(draft.settings.checkoutMessage, "Nos vemos en la puerta")
+    assert.equal(draft.settings.refundPolicy, "until_24h")
   })
 
   it("restores per-day seatingMaps from published seating_maps rows", () => {
@@ -339,6 +412,93 @@ describe("rehydrateEventDraftV2", () => {
     assert.equal(draft.location.venueName, "")
     assert.equal(draft.location.address, "")
   })
+
+  it("does not resurrect a leftover map when the seating plan is off", () => {
+    const draft = rehydrateEventDraftV2({
+      event: {
+        title: "After",
+        date: "2026-09-01T22:00:00-03:00",
+        ends_at: null,
+        location: "CABA",
+        description: null,
+        flyer_url: null,
+        image_url: null,
+        social_share_image_url: null,
+        visibility: "public",
+        refund_policy: "organizer",
+        province: null,
+        department: null,
+        delivery_mode: "PRESENCIAL",
+        has_seating_plan: false,
+        venue_map: {
+          version: 1,
+          sectors: [
+            {
+              id: "sector-platea",
+              name: "Platea",
+              color: "#f97316",
+              price: 18000,
+              x: 0,
+              y: 0,
+              rows: 1,
+              seatsPerRow: 1,
+              curvature: 0,
+              aisle: false,
+              seats: [
+                { id: "s1", row: "1", number: 1, x: 0, y: 0, status: "available" },
+              ],
+            },
+          ],
+        },
+      },
+      venue: {
+        name: "Niceto",
+        location: "CABA",
+        address: "Av. Córdoba 1234",
+        city: "CABA",
+        latitude: null,
+        longitude: null,
+        capacity: 200,
+        max_capacity: 200,
+        venue_map: {
+          version: 1,
+          sectors: [
+            {
+              id: "sector-platea",
+              name: "Platea",
+              color: "#f97316",
+              price: 18000,
+              x: 0,
+              y: 0,
+              rows: 1,
+              seatsPerRow: 1,
+              curvature: 0,
+              aisle: false,
+              seats: [],
+            },
+          ],
+        },
+      },
+      tickets: [
+        {
+          id: "550e8400-e29b-41d4-a716-446655440099",
+          name: "Platea",
+          description: null,
+          price: 18000,
+          capacity: 24,
+          min_purchase_limit: 1,
+          max_purchase_limit: 4,
+          tier_type: "seated",
+          category: "standard",
+          layout_type: "numbered_seat",
+          seating_sector_id: "sector-platea",
+        },
+      ],
+    })
+    assert.equal(draft.seatingMap.sectors.length, 0)
+    assert.equal(draft.tickets[0]?.source, "general")
+    assert.equal(draft.tickets[0]?.sectorId, "")
+  })
 })
 
 describe("overlayLiveExperienceOnDraft", () => {
@@ -400,5 +560,84 @@ describe("overlayLiveExperienceOnDraft", () => {
     assert.equal(overlay.changed, false)
     assert.equal(overlay.draft.restrictions, "")
     assert.deepEqual(overlay.draft.lineup, [])
+  })
+})
+
+describe("overlayLivePurchaseCopyOnDraft", () => {
+  it("fills refund and checkout copy when the draft never stored them", () => {
+    const overlay = overlayLivePurchaseCopyOnDraft(
+      emptyEventDraftV2(),
+      {
+        refundPolicy: "no_refunds",
+        checkoutMessage: "Nos vemos en la puerta",
+      },
+      { basicInfo: { name: "After" } },
+    )
+    assert.equal(overlay.changed, true)
+    assert.equal(overlay.draft.settings.refundPolicy, "no_refunds")
+    assert.equal(overlay.draft.settings.checkoutMessage, "Nos vemos en la puerta")
+  })
+
+  it("fills the online access link when the draft never stored it", () => {
+    const overlay = overlayLivePurchaseCopyOnDraft(
+      {
+        ...emptyEventDraftV2(),
+        isVirtual: true,
+        settings: {
+          ...emptyEventDraftV2().settings,
+          deliveryMode: "ONLINE",
+        },
+      },
+      {
+        accessLink: "https://meet.example/aula",
+      },
+      { basicInfo: { name: "Clase" } },
+    )
+    assert.equal(overlay.changed, true)
+    assert.equal(overlay.draft.virtualLink, "https://meet.example/aula")
+  })
+
+  it("fills catalog visibility when the draft never stored isPublic", () => {
+    const overlay = overlayLivePurchaseCopyOnDraft(
+      {
+        ...emptyEventDraftV2(),
+        settings: {
+          ...emptyEventDraftV2().settings,
+          isPublic: true,
+        },
+      },
+      {
+        visibility: "private",
+      },
+      { basicInfo: { name: "After" } },
+    )
+    assert.equal(overlay.changed, true)
+    assert.equal(overlay.draft.settings.isPublic, false)
+  })
+
+  it("keeps an explicit empty thank-you the organizer already saved", () => {
+    const overlay = overlayLivePurchaseCopyOnDraft(
+      {
+        ...emptyEventDraftV2(),
+        settings: {
+          ...emptyEventDraftV2().settings,
+          checkoutMessage: "",
+          refundPolicy: "organizer",
+        },
+      },
+      {
+        refundPolicy: "until_24h",
+        checkoutMessage: "Gracias",
+      },
+      {
+        settings: {
+          refundPolicy: "organizer",
+          checkoutMessage: "",
+        },
+      },
+    )
+    assert.equal(overlay.changed, false)
+    assert.equal(overlay.draft.settings.refundPolicy, "organizer")
+    assert.equal(overlay.draft.settings.checkoutMessage, "")
   })
 })

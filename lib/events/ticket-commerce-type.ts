@@ -56,7 +56,6 @@ export function resolveTicketCommerceType(
     parseTicketCommerceType(ticket.ticket_type) ??
     parseTicketCommerceType(ticket.commerceType) ??
     parseTicketCommerceType(ticket.commerce_type)
-  if (explicit) return explicit
 
   const inventory = inferInventoryTierType({
     tierType: ticket.tierType ?? ticket.tier_type,
@@ -67,6 +66,15 @@ export function resolveTicketCommerceType(
         ? [{ tierId: "combo", quantity: 1 }]
         : null,
   })
+  // RPC P158 wrote tier_type=addon but left ticket_type at the column
+  // default (`standard`). Trust inventory over that stale default.
+  if (explicit === "standard") {
+    if (inventory === "addon") return "extra"
+    if (inventory === "bundle") return "combo"
+    return "standard"
+  }
+  if (explicit) return explicit
+
   if (inventory === "addon" || ticket.category === "special") return "extra"
   if (
     inventory === "bundle" ||

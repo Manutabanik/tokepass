@@ -1031,12 +1031,13 @@ export async function updateEventCommercialSettings(
     return persistFailure(updateError)
   }
 
-  const { data: eventRow } = await admin
+  const absorbQuery = await admin
     .from("events")
     .select("absorb_fees")
     .eq("id", eventId)
     .maybeSingle()
-  const absorbFees = eventRow?.absorb_fees === true
+  const absorbFees =
+    !absorbQuery.error && absorbQuery.data?.absorb_fees === true
 
   const { data: tiers, error: tiersError } = await admin
     .from("ticket_tiers")

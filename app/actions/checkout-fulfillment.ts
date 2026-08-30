@@ -21,6 +21,7 @@ export type CheckoutOrderFulfillment = {
   eventTitle: string | null
   totalAmount: number
   holdExpiresAt: string | null
+  checkoutMessage: string | null
 }
 
 type FulfillmentOrderRow = {
@@ -41,6 +42,7 @@ function emptyFulfillment(orderId: string): CheckoutOrderFulfillment {
     eventTitle: null,
     totalAmount: 0,
     holdExpiresAt: null,
+    checkoutMessage: null,
   }
 }
 
@@ -103,6 +105,7 @@ export async function getCheckoutOrderFulfillment(
       eventTitle: null,
       totalAmount,
       holdExpiresAt,
+      checkoutMessage: null,
     }
   }
 
@@ -121,6 +124,43 @@ export async function getCheckoutOrderFulfillment(
     eventTitle: tickets[0]?.eventTitle ?? null,
     totalAmount,
     holdExpiresAt,
+    checkoutMessage: await loadEventCheckoutMessage(
+      tickets[0]?.eventId ?? (await loadOrderEventId(clean)),
+    ),
+  }
+}
+
+async function loadOrderEventId(orderId: string): Promise<string | null> {
+  try {
+    const admin = createAdminClient()
+    const { data } = await admin
+      .from("tickets")
+      .select("event_id")
+      .eq("order_id", orderId)
+      .limit(1)
+      .maybeSingle()
+    return data?.event_id ?? null
+  } catch {
+    return null
+  }
+}
+
+async function loadEventCheckoutMessage(
+  eventId: string | null,
+): Promise<string | null> {
+  if (!eventId) return null
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from("events")
+      .select("checkout_message")
+      .eq("id", eventId)
+      .maybeSingle()
+    if (error) return null
+    const text = data?.checkout_message?.trim() ?? ""
+    return text || null
+  } catch {
+    return null
   }
 }
 

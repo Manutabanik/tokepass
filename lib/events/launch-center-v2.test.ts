@@ -24,6 +24,21 @@ describe("cheapestDraftTicketPrice", () => {
       ]),
       9000,
     )
+    assert.equal(
+      cheapestDraftTicketPrice(
+        [
+          { price: 18000, name: "General" },
+          {
+            price: 0,
+            name: "Mesa",
+            source: "map",
+            sectorId: "mesa-1",
+          },
+        ],
+        { hasMap: false },
+      ),
+      18000,
+    )
   })
 })
 
@@ -75,8 +90,23 @@ describe("draftLaunchChecklist", () => {
           },
         ],
         venueCapacity: 200,
-        tickets: [{ price: 10000 }],
+        tickets: [{ name: "General", price: 10000, stock: 10 }],
       }).find((item) => item.id === "identity")?.ok,
+      true,
+    )
+    assert.equal(
+      draftLaunchChecklist({
+        hasMap: false,
+        tickets: [
+          {
+            name: "Platea",
+            price: 0,
+            stock: 40,
+            source: "map",
+            sectorId: "sector-1",
+          },
+        ],
+      }).find((item) => item.id === "tickets")?.ok,
       false,
     )
 
