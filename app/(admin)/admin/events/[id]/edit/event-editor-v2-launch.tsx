@@ -203,14 +203,25 @@ export function EventEditorV2LaunchStep({
         )}
       </SplitRowSection>
 
-      <SplitRowSection
-        title="Comunicación y Visibilidad"
-        description="Quién puede encontrar el evento y qué ve el comprador después de pagar."
-        className="mb-0 border-b-0 pb-0"
-      >
-        <EventEditorV2SettingsStep isPublished={isPublished} />
+      <section className="mb-0 grid grid-cols-1 gap-8 border-b-0 pb-0 md:grid-cols-2">
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">
+              Visibilidad del Evento
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Elegí si el evento aparece en el catálogo o solo con el link
+              directo.
+            </p>
+          </div>
+          <EventEditorV2SettingsStep
+            eventId={eventId}
+            isPublished={isPublished}
+            onPersistHold={onAbsorbHold}
+          />
+        </div>
         <CatalogPreviewCard preview={preview} />
-      </SplitRowSection>
+      </section>
 
       <div className="mt-8">
         <p className="text-sm text-muted-foreground">

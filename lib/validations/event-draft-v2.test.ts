@@ -206,6 +206,17 @@ describe("eventPublishSchema", () => {
     assert.equal(isEventDraftPublishable(publishableDraft()), true)
   })
 
+  it("publishes without refund policy or checkout message", () => {
+    const parsed = eventPublishSchema.safeParse({
+      ...publishableDraft(),
+      settings: {
+        isPublic: true,
+        absorbFees: false,
+      },
+    })
+    assert.equal(parsed.success, true)
+  })
+
   it("does not block publish when the promo video lacks https", () => {
     const draft = {
       ...publishableDraft(),

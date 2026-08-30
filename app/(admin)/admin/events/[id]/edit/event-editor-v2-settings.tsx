@@ -1,127 +1,112 @@
 "use client"
 
-import { Eye } from "lucide-react"
+import { useState } from "react"
+import { Eye, EyeOff } from "lucide-react"
 import { Controller, useFormContext } from "react-hook-form"
+import { toast } from "sonner"
 
-import {
-  DRAFT_FIELD_CLASS,
-  DRAFT_TEXTAREA_CLASS,
-  DraftFieldError,
-  DraftFieldLabel,
-  DraftHint,
-} from "./event-editor-v2-ui"
-import {
-  REFUND_POLICY_OPTIONS,
-  parseDraftRefundPolicy,
-} from "@/lib/events/refund-policy"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Textarea } from "@/components/ui/textarea"
+import { updateEventCatalogVisibility } from "@/app/actions/events-v2"
+import { cn } from "@/lib/utils"
 import type { EventDraftV2 } from "@/lib/validations/event-draft-v2"
 
+const VISIBILITY_OPTIONS = [
+  {
+    value: true,
+    title: "Público",
+    description: "Aparece en la página principal y buscador de Tokepass.",
+    Icon: Eye,
+  },
+  {
+    value: false,
+    title: "Privado (Oculto)",
+    description:
+      "Solo se puede acceder con el enlace directo. Ideal para eventos exclusivos.",
+    Icon: EyeOff,
+  },
+] as const
+
 export function EventEditorV2SettingsStep({
+  eventId,
   isPublished = false,
+  onPersistHold,
 }: {
+  eventId: string
   isPublished?: boolean
+  onPersistHold?: (hold: boolean) => void
 }) {
-  const {
-    control,
-    register,
-    formState: { errors },
-  } = useFormContext<EventDraftV2>()
+  const { control } = useFormContext<EventDraftV2>()
+  const [saving, setSaving] = useState(false)
 
   return (
-    <div className="space-y-4">
-      <Controller
-        name="settings.isPublic"
-        control={control}
-        render={({ field }) => (
-          <div className="flex items-start justify-between gap-4 rounded-xl border border-border/60 px-3 py-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <Eye className="size-4 text-emerald-400" aria-hidden />
-                <Label
-                  htmlFor="event-v2-is-public"
-                  className="text-sm font-medium text-foreground"
+    <Controller
+      name="settings.isPublic"
+      control={control}
+      render={({ field }) => {
+        const isPublic = field.value !== false
+        return (
+          <div
+            role="radiogroup"
+            aria-label="Visibilidad del evento"
+            className="grid gap-3"
+          >
+            {VISIBILITY_OPTIONS.map((option) => {
+              const selected = isPublic === option.value
+              return (
+                <button
+                  key={option.title}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  data-field={
+                    option.value ? "settings.isPublic" : "settings.isPrivate"
+                  }
+                  disabled={saving}
+                  onClick={() => {
+                    if (selected) return
+                    const previous = isPublic
+                    field.onChange(option.value)
+                    if (!isPublished) return
+                    setSaving(true)
+                    onPersistHold?.(true)
+                    void updateEventCatalogVisibility(eventId, option.value).then(
+                      (result) => {
+                        setSaving(false)
+                        onPersistHold?.(false)
+                        if (result.success) return
+                        field.onChange(previous)
+                        toast.error(result.error)
+                      },
+                    )
+                  }}
+                  className={cn(
+                    "flex min-h-[4.5rem] items-start gap-3 rounded-xl border px-3 py-3 text-left transition-all duration-200",
+                    selected
+                      ? "border-emerald-500/60 bg-emerald-500/10"
+                      : "border-border/60 bg-card hover:border-emerald-500/40",
+                    saving && "opacity-70",
+                  )}
                 >
-                  ¿Sale en el catálogo?
-                </Label>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {field.value
-                  ? isPublished
-                    ? "Sí: está en el catálogo. Si lo apagás, se oculta al guardar."
-                    : "Sí: aparece en Tokepass cuando lo subas al catálogo."
-                  : isPublished
-                    ? "No: solo lo ven quienes tengan el link. Para listarlo de nuevo, publicá."
-                    : "No: solo lo ven quienes tengan el link."}
-              </p>
-            </div>
-            <Switch
-              id="event-v2-is-public"
-              data-field="settings.isPublic"
-              checked={Boolean(field.value)}
-              onCheckedChange={field.onChange}
-              className="mt-0.5 shrink-0 data-checked:bg-emerald-500"
-              aria-label="¿Sale en el catálogo?"
-            />
+                  <option.Icon
+                    className={cn(
+                      "mt-0.5 size-4 shrink-0",
+                      selected ? "text-emerald-400" : "text-muted-foreground",
+                    )}
+                    aria-hidden
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-foreground">
+                      {option.title}
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {option.description}
+                    </span>
+                  </span>
+                </button>
+              )
+            })}
           </div>
-        )}
-      />
-
-      <div className="grid gap-2">
-        <DraftFieldLabel htmlFor="event-v2-refund-policy" className="text-sm">
-          Política de reintegro
-        </DraftFieldLabel>
-        <Controller
-          name="settings.refundPolicy"
-          control={control}
-          render={({ field }) => {
-            const selected = parseDraftRefundPolicy(field.value)
-            return (
-              <>
-                <select
-                  id="event-v2-refund-policy"
-                  data-field="settings.refundPolicy"
-                  className={DRAFT_FIELD_CLASS}
-                  value={selected}
-                  onChange={(event) => field.onChange(event.target.value)}
-                >
-                  {REFUND_POLICY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <DraftHint>
-                  {REFUND_POLICY_OPTIONS.find((option) => option.value === selected)
-                    ?.hint ?? "Se muestra en la ficha pública y en el checkout."}
-                </DraftHint>
-              </>
-            )
-          }}
-        />
-        <DraftFieldError message={errors.settings?.refundPolicy?.message} />
-      </div>
-
-      <div className="grid gap-2">
-        <DraftFieldLabel
-          htmlFor="event-v2-checkout-message"
-          optional
-          className="text-sm"
-        >
-          Mensaje después de pagar
-        </DraftFieldLabel>
-        <Textarea
-          id="event-v2-checkout-message"
-          rows={5}
-          className={DRAFT_TEXTAREA_CLASS}
-          placeholder="Ej. Gracias por tu compra. Revisá el mail para el acceso."
-          {...register("settings.checkoutMessage")}
-        />
-        <DraftHint>Aparece en la pantalla de éxito después del pago.</DraftHint>
-        <DraftFieldError message={errors.settings?.checkoutMessage?.message} />
-      </div>
-    </div>
+        )
+      }}
+    />
   )
 }

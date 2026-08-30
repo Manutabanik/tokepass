@@ -18,6 +18,7 @@ import {
   type OmniEventHit,
   type OmniSearchResult,
 } from "@/lib/omni-search"
+import { PUBLIC_CATALOG_VISIBILITY } from "@/lib/catalog/public-visibility"
 import { createClient } from "@/lib/supabase/server"
 
 function sanitizeOmniQuery(query: string): string {
@@ -65,7 +66,7 @@ async function searchPublishedEventsLight(
           "id, slug, title, date, location, image_url, flyer_url, venues(name, location)",
         )
         .eq("status", "published")
-        .eq("visibility", "public"),
+        .eq("visibility", PUBLIC_CATALOG_VISIBILITY),
       hideDeleted,
     )
       .or(buildCatalogSearchOr(safeNeedle, artistEventIds))
@@ -81,7 +82,7 @@ async function searchPublishedEventsLight(
             "id, slug, title, date, location, image_url, flyer_url, venues(name, location)",
           )
           .eq("status", "published")
-          .eq("visibility", "public"),
+          .eq("visibility", PUBLIC_CATALOG_VISIBILITY),
         hideDeleted,
       )
         .or(buildCatalogSearchOr(safeNeedle, artistEventIds))
@@ -136,7 +137,7 @@ async function countActiveEventsByArtistIds(
       .select("artist_id, events!inner(status, visibility)")
       .in("artist_id", artistIds)
       .eq("events.status", "published")
-      .eq("events.visibility", "public")
+      .eq("events.visibility", PUBLIC_CATALOG_VISIBILITY)
 
     if (error) {
       if (!isMissingArtistSchema(error.message)) {

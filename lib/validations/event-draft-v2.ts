@@ -376,8 +376,9 @@ export const eventPublishSchema = z
             (value) => parseDraftRefundPolicy(value),
             z.enum(EVENT_REFUND_POLICIES),
           )
-          .optional(),
-        checkoutMessage: z.string().optional(),
+          .optional()
+          .default("organizer"),
+        checkoutMessage: z.string().optional().default(""),
         deliveryMode: z.enum(EVENT_DRAFT_DELIVERY_MODES).optional(),
       })
       .optional(),

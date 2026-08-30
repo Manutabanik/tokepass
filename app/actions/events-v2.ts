@@ -61,6 +61,10 @@ import {
   readFileBytes,
 } from "@/lib/media/image-magic"
 import {
+  catalogVisibilityFromDraft,
+  overlayDraftCatalogVisibility,
+} from "@/lib/catalog/public-visibility"
+import {
   eventAbsorbFeesFromRow,
   overlayDraftAbsorbFees,
 } from "@/lib/events/event-absorb-fees"
@@ -103,6 +107,10 @@ export type GetEventDraftV2Result =
 
 export type UpdateEventAbsorbFeesResult =
   | { success: true; absorbFees: boolean }
+  | { success: false; error: string }
+
+export type UpdateEventCatalogVisibilityResult =
+  | { success: true; isPublic: boolean }
   | { success: false; error: string }
 
 function publishActionError(error: unknown): string {
@@ -743,6 +751,83 @@ export async function updateEventAbsorbFees(
   revalidatePublicEventCache({ eventId: id, slug: event.slug })
 
   return { success: true, absorbFees: eventAbsorbFeesFromRow(data) }
+}
+
+/**
+ * Fuente de verdad del catálogo público: settings.isPublic → events.visibility.
+ * UPDATE inmediato + espejo en draft_state. No toca guest_list_only.
+ */
+export async function updateEventCatalogVisibility(
+  eventId: string,
+  isPublic: boolean,
+): Promise<UpdateEventCatalogVisibilityResult> {
+  const id = eventId.trim()
+  if (!id) return { success: false, error: "Evento inválido." }
+
+  const gate = await requireDraftWriter()
+  if (!gate.ok) return { success: false, error: gate.error }
+
+  const { data: event, error: eventError } = await gate.supabase
+    .from("events")
+    .select("id, organizer_id, draft_state, slug, visibility")
+    .eq("id", id)
+    .maybeSingle()
+  if (eventError) return { success: false, error: formatSupabaseError(eventError) }
+  if (!event) return { success: false, error: "Evento no encontrado." }
+  if (event.organizer_id !== gate.userId && !gate.isSuperAdmin) {
+    return { success: false, error: "No tenés permiso para editar este evento." }
+  }
+
+  const nextPublic = isPublic !== false
+  if (event.visibility === "guest_list_only") {
+    return { success: true, isPublic: false }
+  }
+
+  const nextVisibility = catalogVisibilityFromDraft(nextPublic)
+  const { data, error } = await gate.supabase
+    .from("events")
+    .update({
+      visibility: nextVisibility,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("organizer_id", event.organizer_id)
+    .select("id, visibility, draft_state")
+    .maybeSingle()
+
+  if (error) return { success: false, error: formatSupabaseError(error) }
+  if (!data?.id) {
+    return {
+      success: false,
+      error: formatSupabaseError({
+        code: "NO_ROWS",
+        message: "events.update visibility no devolvió fila",
+        details: id,
+      }),
+    }
+  }
+
+  const mirrored = overlayDraftCatalogVisibility(
+    parseEventDraftV2(data.draft_state),
+    nextPublic,
+  )
+  if (mirrored.changed) {
+    await gate.supabase
+      .from("events")
+      .update({
+        draft_state: toEventDraftV2Payload(mirrored.draft) as unknown as Json,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .eq("organizer_id", event.organizer_id)
+  }
+
+  revalidatePath("/admin/events")
+  revalidatePath(`/admin/events/${id}`)
+  revalidatePath(`/admin/events/${id}/edit`)
+  revalidatePublicEventCache({ eventId: id, slug: event.slug })
+
+  return { success: true, isPublic: nextPublic }
 }
 
 export type UploadEventDraftMediaV2Result =

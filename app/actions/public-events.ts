@@ -74,6 +74,7 @@ import {
   CATALOG_PAGE_SIZE,
   type PublishedEventsOptions,
 } from "@/lib/catalog/constants"
+import { PUBLIC_CATALOG_VISIBILITY } from "@/lib/catalog/public-visibility"
 import {
   isSeatingSummaryMinUuidError,
   mapSeatingSectorSummaryRows,
@@ -538,7 +539,7 @@ export async function getPublishedEvents(
           .from("events")
           .select(select)
           .eq("status", "published")
-          .eq("visibility", "public"),
+          .eq("visibility", PUBLIC_CATALOG_VISIBILITY),
         hideDeleted,
       ).order("date", { ascending: true })
 
@@ -634,7 +635,7 @@ export async function getFeaturedDiscoveryArtists(
         "artist_id, artists(id, name, image_url), events!inner(status, visibility)",
       )
       .eq("events.status", "published")
-      .eq("events.visibility", "public")
+      .eq("events.visibility", PUBLIC_CATALOG_VISIBILITY)
 
     if (error) {
       if (!isMissingArtistSchema(error.message)) {
@@ -742,7 +743,7 @@ export async function getFeaturedEvents(options?: {
         .from("events")
         .select(select)
         .eq("status", "published")
-        .eq("visibility", "public"),
+        .eq("visibility", PUBLIC_CATALOG_VISIBILITY),
       hideDeleted,
     ).or("is_sponsored_by_tokepass.eq.true,is_featured.eq.true")
 
@@ -753,7 +754,7 @@ export async function getFeaturedEvents(options?: {
           .from("events")
           .select(select)
           .eq("status", "published")
-          .eq("visibility", "public"),
+          .eq("visibility", PUBLIC_CATALOG_VISIBILITY),
         hideDeleted,
       ).or("is_sponsored_by_tokepass.eq.true,is_featured.eq.true")
     }
@@ -1949,7 +1950,7 @@ export async function getRelatedEvents(input: {
         "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, sale_starts_at, sale_ends_at, category, tier_type, layout_type), profiles!events_organizer_id_fkey(full_name)",
       )
       .eq("status", "published")
-      .eq("visibility", "public"),
+      .eq("visibility", PUBLIC_CATALOG_VISIBILITY),
     hideDeleted,
   )
     .neq("id", currentEventId)
@@ -1965,7 +1966,7 @@ export async function getRelatedEvents(input: {
           "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, sale_starts_at, sale_ends_at, category, tier_type, layout_type), profiles!events_organizer_id_fkey(full_name)",
         )
         .eq("status", "published")
-        .eq("visibility", "public"),
+        .eq("visibility", PUBLIC_CATALOG_VISIBILITY),
       hideDeleted,
     )
       .neq("id", currentEventId)

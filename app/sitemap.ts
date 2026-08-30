@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next"
 
+import { PUBLIC_CATALOG_VISIBILITY } from "@/lib/catalog/public-visibility"
 import { createPublicClient } from "@/lib/supabase/public"
 import { getSeoOrigin, publicEventPath } from "@/lib/seo/site"
 
@@ -36,7 +37,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .from("events")
       .select("id, slug, updated_at, date")
       .eq("status", "published")
-      .eq("visibility", "public")
+      .eq("visibility", PUBLIC_CATALOG_VISIBILITY)
       .order("date", { ascending: true })
       .limit(5000)
 
