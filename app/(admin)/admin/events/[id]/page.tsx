@@ -21,6 +21,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
+import { getEventDashboardMetrics } from "@/app/actions/event-dashboard-metrics"
 import { EventBoosterCard } from "@/components/admin/booster/event-booster-card"
 import { DoorAccessPinCard } from "@/components/admin/door-access-pin-card"
 import { EventCommandHeader } from "@/components/admin/event-command-header"
@@ -87,25 +88,10 @@ export default async function ManageEventPage({
     redirect("/admin/events")
   }
 
-  const reader =
-    event.organizer_id !== user.id ? createAdminClient() : supabase
-  const { data: tiers } = await reader
-    .from("ticket_tiers")
-    .select("capacity, sold, price")
-    .eq("event_id", id)
-
-  const capacity = (tiers ?? []).reduce(
-    (sum, tier) => sum + Number(tier.capacity),
-    0,
-  )
-  const sold = (tiers ?? []).reduce(
-    (sum, tier) => sum + Number(tier.sold),
-    0,
-  )
-  const recaudacion = (tiers ?? []).reduce(
-    (sum, tier) => sum + Number(tier.sold) * Number(tier.price),
-    0,
-  )
+  const metrics = await getEventDashboardMetrics(id)
+  const capacity = metrics.capacity
+  const sold = metrics.ticketsSold
+  const recaudacion = metrics.revenue
 
   const dressCards = [
     {

@@ -3901,6 +3901,12 @@ export type Database = {
         }
         Returns: Json
       }
+      get_event_dashboard_metrics: {
+        Args: {
+          p_event_id: string
+        }
+        Returns: Json
+      }
       organizer_paid_ledger: {
         Args: {
           p_organizer_id: string

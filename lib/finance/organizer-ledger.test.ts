@@ -20,6 +20,12 @@ describe("organizer paid ledger", () => {
       { status: "paid", total_amount: 9000, service_charge: 900, is_test: true },
       {
         status: "paid",
+        total_amount: 11000,
+        service_charge: 1000,
+        payment_method: "test_sandbox",
+      },
+      {
+        status: "paid",
         total_amount: 3000,
         service_charge: 300,
         eventStatus: "draft",

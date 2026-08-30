@@ -29,6 +29,8 @@ export type PaidLedgerOrderLike = {
   is_test?: boolean | null
   isTest?: boolean | null
   environment?: string | null
+  payment_method?: string | null
+  paymentMethod?: string | null
   event_status?: string | null
   eventStatus?: string | null
 }
@@ -57,6 +59,14 @@ export function isProductionPaidOrder(
   if (includeTest) return true
   if (order.is_test === true || order.isTest === true) return false
   if (String(order.environment ?? "").trim().toLowerCase() === "test") {
+    return false
+  }
+  const paymentMethod = String(
+    order.payment_method ?? order.paymentMethod ?? "",
+  )
+    .trim()
+    .toLowerCase()
+  if (paymentMethod === "test_sandbox") {
     return false
   }
   const eventStatus = order.event_status ?? order.eventStatus
