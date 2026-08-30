@@ -579,7 +579,7 @@ export function venueMapHasInventory(map: InteractiveVenueMap | null | undefined
   if (!map) return false
   const sellable = (map.elements ?? []).some((element) => isSellableElement(element))
   return (
-    map.sectors.length > 0 ||
+    (map.sectors ?? []).length > 0 ||
     sellable ||
     (map.zones?.length ?? 0) > 0
   )

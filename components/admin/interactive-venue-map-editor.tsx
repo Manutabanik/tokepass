@@ -29,7 +29,17 @@ import {
   PenTool,
   Send,
 } from "lucide-react"
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react"
+import {
+  Component,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type ErrorInfo,
+  type ReactNode,
+} from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
@@ -214,6 +224,10 @@ import {
   type PinchOrigin,
 } from "@/lib/seating/venue-touch"
 import {
+  pruneVenueMapSelection,
+  venueMapSelectionsEqual,
+} from "@/lib/seating/venue-map-selection"
+import {
   createVenueZone,
 } from "@/lib/seating/adaptive-seating"
 import {
@@ -319,6 +333,42 @@ type TransformDrag =
       cy: number
       startAngle: number
     }
+
+class VenueCanvasErrorBoundary extends Component<
+  { children: ReactNode; onReset: () => void },
+  { failed: boolean }
+> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.warn("venue-map-canvas-recovered", error.message, info.componentStack)
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children
+    return (
+      <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-slate-100/90 px-6 text-center dark:bg-zinc-950/90">
+        <p className="text-sm font-medium text-foreground">
+          El lienzo quedó vacío. Las herramientas siguen activas.
+        </p>
+        <button
+          type="button"
+          className="h-10 rounded-lg border border-border bg-background px-4 text-sm font-medium"
+          onClick={() => {
+            this.props.onReset()
+            this.setState({ failed: false })
+          }}
+        >
+          Seguir dibujando
+        </button>
+      </div>
+    )
+  }
+}
 
 type ContextTarget =
   | { kind: "stage" }
@@ -686,7 +736,7 @@ export function InteractiveVenueMapEditor({
 
   const selectedSector =
     selection?.kind === "sector"
-      ? map.sectors.find((sector) => sector.id === selection.id) ?? null
+      ? (map.sectors ?? []).find((sector) => sector.id === selection.id) ?? null
       : null
   const selectedZone =
     selection?.kind === "zone"
@@ -694,7 +744,7 @@ export function InteractiveVenueMapEditor({
       : null
   const selectedAisle =
     selection?.kind === "aisle"
-      ? map.aisles.find((aisle) => aisle.id === selection.id) ?? null
+      ? (map.aisles ?? []).find((aisle) => aisle.id === selection.id) ?? null
       : null
   const selectedStage =
     selection?.kind === "stage" && map.stage ? map.stage : null
@@ -736,6 +786,19 @@ export function InteractiveVenueMapEditor({
     const ids = new Set(selectedElementIds)
     return (map.elements ?? []).filter((item) => ids.has(item.id))
   }, [map.elements, selectedElementIds])
+  useLayoutEffect(() => {
+    const next = pruneVenueMapSelection(selection, map)
+    if (venueMapSelectionsEqual(next, selection)) return
+    setSelection(next)
+    if (!next) {
+      setIsolationId(null)
+      setContextMenu(null)
+      setSeatEditMode(false)
+      setInspectorOpenedFor(null)
+      cancelLiveTransform()
+      elementDrag.current = null
+    }
+  }, [map, selection])
   const selectedGroupId = useMemo(() => {
     const fromOne = selectedElement?.groupId?.trim() ?? ""
     if (fromOne) return fromOne
@@ -768,7 +831,7 @@ export function InteractiveVenueMapEditor({
   const selectedSeatEntries = useMemo((): SelectedSeatEntry[] => {
     if (preview || tool !== "select" || handPan) return []
     if (selection?.kind === "sector") {
-      const sector = map.sectors.find((item) => item.id === selection.id)
+      const sector = (map.sectors ?? []).find((item) => item.id === selection.id)
       return (sector?.seats ?? []).map((seat) => ({
         key: seatKey(sector!.id, seat.id),
         x: seat.x,
@@ -781,8 +844,8 @@ export function InteractiveVenueMapEditor({
     if (selection?.kind !== "seats") return []
     return selection.ids.flatMap((key): SelectedSeatEntry[] => {
       const { ownerId, seatId } = parseSeatSelectionKey(key)
-      const sector = map.sectors.find((item) => item.id === ownerId)
-      const sectorSeat = sector?.seats.find((item) => item.id === seatId)
+      const sector = (map.sectors ?? []).find((item) => item.id === ownerId)
+      const sectorSeat = sector?.seats?.find((item) => item.id === seatId)
       if (sector && sectorSeat) {
         return [
           {
@@ -796,7 +859,7 @@ export function InteractiveVenueMapEditor({
         ]
       }
       const element = (map.elements ?? []).find((item) => item.id === ownerId)
-      const elementSeat = element?.seats.find((item) => item.id === seatId)
+      const elementSeat = element?.seats?.find((item) => item.id === seatId)
       if (element && elementSeat) {
         return [
           {
@@ -911,7 +974,7 @@ export function InteractiveVenueMapEditor({
     const fallback = selectionBounds(selectedElements)
     const node = selectedVisualRef.current
     let next = fallback
-    if (node) {
+    if (node && node.isConnected) {
       try {
         const box = node.getBBox()
         if (
@@ -1148,6 +1211,16 @@ export function InteractiveVenueMapEditor({
         extras.target !== "aisle" &&
         ids.length === 0 &&
         seatIds.length > 0)
+    if (
+      ids.length === 0 &&
+      !zoneId &&
+      !extras.zoneId &&
+      extras.target !== "stage" &&
+      extras.target !== "aisle" &&
+      !usingSeats
+    ) {
+      return
+    }
     if (!extras.zoneId && !usingSeats && extras.target !== "stage" && extras.target !== "aisle" && idsAreLocked(ids)) return
     const point = pointerToSvg(event)
     capturePointer(event)
@@ -1330,6 +1403,7 @@ export function InteractiveVenueMapEditor({
     _event: React.MouseEvent,
     element: VenueMapElement,
   ) {
+    if (!element?.id) return
     if (hoverClearTimer.current != null) {
       window.clearTimeout(hoverClearTimer.current)
       hoverClearTimer.current = null
@@ -1456,6 +1530,7 @@ export function InteractiveVenueMapEditor({
     event: React.PointerEvent,
     element: VenueMapElement,
   ) {
+    if (!element?.id) return
     blurCanvasTypingTarget()
     if (wantsCanvasPan(event)) return
     isolateCanvasPointer(event, { preventGhostClick: true })
@@ -1541,12 +1616,36 @@ export function InteractiveVenueMapEditor({
   }
 
   function commit(next: InteractiveVenueMap, options?: { skipHistory?: boolean }) {
+    const safe: InteractiveVenueMap = {
+      ...next,
+      elements: next.elements ?? [],
+      zones: next.zones ?? [],
+      sectors: next.sectors ?? [],
+      labels: next.labels ?? [],
+      aisles: next.aisles ?? [],
+    }
     if (!options?.skipHistory) pushHistory()
-    mapRef.current = next
-    setMap(next)
+    mapRef.current = safe
+    setMap(safe)
     setIsCanvasDirty(true)
     setExplicitSaveStatus(null)
-    onChange(next, venueMapToSeatingLayout(next))
+    try {
+      onChange(safe, venueMapToSeatingLayout(safe))
+    } catch {
+      /* Keep the canvas usable if a parent persist throws. */
+    }
+  }
+
+  function clearTransientSelection() {
+    selectionRef.current = null
+    selectedElementIdsRef.current = []
+    setSelection(null)
+    setIsolationId(null)
+    setContextMenu(null)
+    setSeatEditMode(false)
+    setInspectorOpenedFor(null)
+    cancelLiveTransform()
+    elementDrag.current = null
   }
 
   function blurCanvasTypingTarget() {
@@ -2502,16 +2601,15 @@ export function InteractiveVenueMapEditor({
   function deleteSelection() {
     const currentSelection = selectionRef.current
     const current = mapRef.current
+    const fallbackIds = selectedElementIdsRef.current
+    if (!currentSelection && fallbackIds.length === 0) return
+    clearTransientSelection()
     if (!currentSelection) {
-      const fallbackIds = selectedElementIdsRef.current
-      if (fallbackIds.length === 0) return
       const ids = new Set(fallbackIds)
       commit({
         ...current,
         elements: ensureElements(current).filter((item) => !ids.has(item.id)),
       })
-      setIsolationId(null)
-      setSelection(null)
       return
     }
     if (currentSelection.kind === "stage") {
@@ -2519,19 +2617,19 @@ export function InteractiveVenueMapEditor({
     } else if (currentSelection.kind === "sector") {
       commit({
         ...current,
-        sectors: current.sectors.filter(
+        sectors: (current.sectors ?? []).filter(
           (sector) => sector.id !== currentSelection.id,
         ),
       })
     } else if (currentSelection.kind === "label") {
       commit({
         ...current,
-        labels: current.labels.filter((label) => label.id !== currentSelection.id),
+        labels: (current.labels ?? []).filter((label) => label.id !== currentSelection.id),
       })
     } else if (currentSelection.kind === "aisle") {
       commit({
         ...current,
-        aisles: current.aisles.filter((aisle) => aisle.id !== currentSelection.id),
+        aisles: (current.aisles ?? []).filter((aisle) => aisle.id !== currentSelection.id),
       })
     } else if (currentSelection.kind === "element") {
       commit({
@@ -2548,9 +2646,6 @@ export function InteractiveVenueMapEditor({
       })
     } else if (currentSelection.kind === "seats") {
       removeSeatsByKeys(new Set(currentSelection.ids))
-      setIsolationId(null)
-      setSeatEditMode(false)
-      setSelection(null)
       return
     } else if (currentSelection.kind === "zone") {
       commit({
@@ -2560,11 +2655,11 @@ export function InteractiveVenueMapEditor({
         ),
       })
     }
-    setIsolationId(null)
-    setSelection(null)
   }
 
   function openObjectMenu(event: React.MouseEvent, target: ContextTarget) {
+    if (!target?.kind) return
+    if ("id" in target && !target.id) return
     event.preventDefault()
     event.stopPropagation()
     if (target.kind !== "element" || target.id !== isolationIdRef.current) {
@@ -2706,6 +2801,7 @@ export function InteractiveVenueMapEditor({
     event: React.MouseEvent,
     element: VenueMapElement,
   ) {
+    if (!element?.id) return
     if (workModeRef.current === "pricing") return
     isolateCanvasPointer(event)
     event.preventDefault()
@@ -2720,6 +2816,7 @@ export function InteractiveVenueMapEditor({
     element: VenueMapElement,
     seatId: string,
   ) {
+    if (!element?.id || !seatId) return
     isolateCanvasPointer(event)
     event.preventDefault()
     beginElementSeatEdit(element, seatId, event.shiftKey)
@@ -2762,6 +2859,7 @@ export function InteractiveVenueMapEditor({
     element: VenueMapElement,
     seatId: string,
   ) {
+    if (!element?.id || !seatId) return
     blurCanvasTypingTarget()
     if (wantsCanvasPan(event)) return
     isolateCanvasPointer(event, { preventGhostClick: true })
@@ -2863,8 +2961,9 @@ export function InteractiveVenueMapEditor({
     row?: string
     number?: string
   }) {
-    if (!selectedElement) return
-    const firstSeat = selectedElement.seats[0]
+    if (!selectedElement?.id) return
+    const seats = selectedElement.seats ?? []
+    const firstSeat = seats[0]
     const current = parseManualSeatFields({
       label: next.label ?? selectedElement.label,
       row: next.row ?? firstSeat?.row,
@@ -2875,7 +2974,7 @@ export function InteractiveVenueMapEditor({
       label: current.label,
       customLabel: current.label,
       labelLocked: true,
-      seats: selectedElement.seats.map((seat, index) =>
+      seats: seats.map((seat, index) =>
         index === 0
           ? {
               ...seat,
@@ -2938,6 +3037,7 @@ export function InteractiveVenueMapEditor({
   }
 
   function onZonePointerDown(event: React.PointerEvent, zone: VenueMapZone) {
+    if (!zone?.id) return
     blurCanvasTypingTarget()
     if (preview) return
     if (wantsCanvasPan(event)) return
@@ -2968,6 +3068,7 @@ export function InteractiveVenueMapEditor({
 
   function onPointerDown(event: React.PointerEvent<SVGSVGElement>) {
     if (preview) return
+    if (!svgRef.current) return
     blurCanvasTypingTarget()
     if (pinchRef.current || pointersRef.current.size > 1) return
     if (wantsCanvasPan(event)) {
@@ -3287,13 +3388,13 @@ export function InteractiveVenueMapEditor({
     selection?.kind === "seats" && selection.ids.length === 1
       ? (() => {
           const { ownerId, seatId } = parseSeatSelectionKey(selection.ids[0]!)
-          const sector = map.sectors.find((item) => item.id === ownerId)
-          const sectorSeat = sector?.seats.find((item) => item.id === seatId)
+          const sector = (map.sectors ?? []).find((item) => item.id === ownerId)
+          const sectorSeat = sector?.seats?.find((item) => item.id === seatId)
           if (sector && sectorSeat) {
             return { source: "sector" as const, sector, seat: sectorSeat }
           }
           const element = (map.elements ?? []).find((item) => item.id === ownerId)
-          const elementSeat = element?.seats.find((item) => item.id === seatId)
+          const elementSeat = element?.seats?.find((item) => item.id === seatId)
           if (element && elementSeat) {
             return { source: "element" as const, element, seat: elementSeat }
           }
@@ -3401,9 +3502,9 @@ export function InteractiveVenueMapEditor({
       ? ({ kind: "zone" } as const)
       : selectedSector
         ? ({ kind: "sector" } as const)
-        : selectedElement && selectedElementIds.length === 1
+        : selectedElement && selectedElements.length === 1
           ? ({ kind: "element" } as const)
-          : selectedElementIds.length > 1
+          : selectedElements.length > 1
             ? ({ kind: "elements" } as const)
             : selection?.kind === "seats"
               ? ({ kind: "seats" } as const)
@@ -3650,19 +3751,10 @@ export function InteractiveVenueMapEditor({
     el.addEventListener("wheel", onWheel, { passive: false })
     el.addEventListener("mousedown", preventMiddleScroll)
     el.addEventListener("auxclick", preventMiddleScroll)
-    function preventNativeTouch(event: Event) {
-      event.preventDefault()
-    }
-    el.addEventListener("touchmove", preventNativeTouch, { passive: false })
-    el.addEventListener("gesturestart", preventNativeTouch, { passive: false })
-    el.addEventListener("gesturechange", preventNativeTouch, { passive: false })
     return () => {
       el.removeEventListener("wheel", onWheel)
       el.removeEventListener("mousedown", preventMiddleScroll)
       el.removeEventListener("auxclick", preventMiddleScroll)
-      el.removeEventListener("touchmove", preventNativeTouch)
-      el.removeEventListener("gesturestart", preventNativeTouch)
-      el.removeEventListener("gesturechange", preventNativeTouch)
     }
   }, [])
 
@@ -3790,13 +3882,19 @@ export function InteractiveVenueMapEditor({
         : selection && "id" in selection && selection.id
           ? selection.id
           : "predio"
-  if (isStudio && !compactChrome && selection && selection !== inspectorOpenedFor) {
+  useEffect(() => {
+    if (!isStudio || compactChrome) return
+    if (!selection) {
+      setInspectorOpenedFor((current) => (current ? null : current))
+      return
+    }
+    if (selection === inspectorOpenedFor) return
     setInspectorOpenedFor(selection)
     setInspectorCollapsed(false)
-  }
+  }, [compactChrome, inspectorOpenedFor, isStudio, selection])
   const mobileSheetOpen = toolsOpen || propertiesOpen || modesOpen
   const showSelectionToolbar =
-    selectedElementIds.length >= 1 &&
+    selectedElements.length >= 1 &&
     !geometryLocked &&
     !transformingKind &&
     !preview &&
@@ -3965,6 +4063,7 @@ export function InteractiveVenueMapEditor({
             }
           }}
         >
+          <VenueCanvasErrorBoundary onReset={clearTransientSelection}>
           <svg
             ref={svgRef}
             viewBox={`${svgViewBox.x} ${svgViewBox.y} ${svgViewBox.width} ${svgViewBox.height}`}
@@ -4394,7 +4493,7 @@ export function InteractiveVenueMapEditor({
                 />
               ) : null}
               <g className={isolationId && !activeZoneId ? "opacity-50" : undefined}>
-              {map.labels.map((label) => (
+              {(map.labels ?? []).map((label) => (
                 <text
                   key={label.id}
                   x={label.x}
@@ -4434,6 +4533,7 @@ export function InteractiveVenueMapEditor({
               ) : null}
             </g>
           </svg>
+          </VenueCanvasErrorBoundary>
           {activeZoneId && !preview ? (
             <button
               type="button"
