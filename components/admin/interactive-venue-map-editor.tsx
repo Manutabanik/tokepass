@@ -18,7 +18,6 @@ import {
   Info,
   LayoutTemplate,
   Minus,
-  MousePointer2,
   PanelRightClose,
   PanelRightOpen,
   Plus,
@@ -62,6 +61,7 @@ import {
   VenueLayerTree,
   type LayerTreeSelection,
 } from "@/components/admin/venue-layer-tree"
+import { CanvasPropertiesInspector } from "@/components/admin/canvas-properties-inspector"
 import { VenueMapBackgroundPanel } from "@/components/admin/venue-map-background-panel"
 import { VenueParametricRulesPanel } from "@/components/admin/venue-parametric-rules-panel"
 import { VenueRowsConfigEditor } from "@/components/admin/venue-rows-config-editor"
@@ -237,6 +237,10 @@ import {
   translatePercentPolygon,
   VENUE_MAP_CANVAS,
 } from "@/lib/seating/venue-polygon"
+import {
+  applyVenueMapBackgroundPatch,
+  type VenueMapBackgroundPatch,
+} from "@/lib/seating/venue-map-background"
 import {
   rebuildSectorSeats,
   venueMapCapacity,
@@ -1634,6 +1638,14 @@ export function InteractiveVenueMapEditor({
     } catch {
       /* Keep the canvas usable if a parent persist throws. */
     }
+  }
+
+  function applyCanvasBackground(patch: VenueMapBackgroundPatch) {
+    const current = mapRef.current
+    if (!current) return
+    const next = applyVenueMapBackgroundPatch(current, patch)
+    if (!next) return
+    commit(next)
   }
 
   function clearTransientSelection() {
@@ -3492,8 +3504,8 @@ export function InteractiveVenueMapEditor({
       return { title: text || "Etiqueta", detail: "Texto de nivel" }
     }
     return {
-      title: "Inspector",
-      detail: "Seleccioná un sector, mesa o silla para editarla.",
+      title: "Propiedades del lienzo",
+      detail: "Foto de fondo, opacidad y encaje del recinto.",
     }
   })()
   const selectedNode = singleSeat
@@ -3873,7 +3885,10 @@ export function InteractiveVenueMapEditor({
             : "select"
 
   const hasPropertiesTarget =
-    Boolean(selection) || workMode === "pricing" || workMode === "indexing"
+    Boolean(selection) ||
+    workMode === "pricing" ||
+    workMode === "indexing" ||
+    workMode === "architecture"
   const propertiesTargetKey =
     selection?.kind === "seats"
       ? selection.ids[0] ?? "seats"
@@ -4712,17 +4727,21 @@ export function InteractiveVenueMapEditor({
               ? "Tarifas"
               : workMode === "indexing"
                 ? "Indexación"
-                : "Propiedades"
+                : selectedNode
+                  ? "Propiedades"
+                  : "Propiedades del lienzo"
           }
           description={
             workMode === "pricing"
               ? "Precio y color en el panel. El mapa sigue visible arriba."
               : workMode === "indexing"
                 ? "Numeración de filas y asientos del bloque seleccionado."
-                : "Editá el elemento. El plano queda visible arriba."
+                : selectedNode
+                  ? "Editá el elemento. El plano queda visible arriba."
+                  : "Foto de fondo, opacidad y encaje del recinto."
           }
         >
-          {isStudio && (workMode !== "architecture" || selectedNode) ? (
+          {isStudio ? (
             <div className="hidden shrink-0 border-b border-border px-4 py-3 md:block">
               <p className="text-sm font-semibold text-foreground">
                 {inspectorHeadline.title}
@@ -4731,7 +4750,7 @@ export function InteractiveVenueMapEditor({
                 {inspectorHeadline.detail}
               </p>
             </div>
-          ) : isStudio ? null : (
+          ) : (
             <div className="hidden md:block">
               <p className="text-[11px] font-bold tracking-[0.2em] text-zinc-500 uppercase">
                 Propiedades
@@ -5578,31 +5597,26 @@ export function InteractiveVenueMapEditor({
             </div>
           ) : (
             <div className="space-y-4">
-              {isStudio && tool !== "polygon" ? (
-                <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
-                  <MousePointer2
-                    className="size-8 text-muted-foreground/40"
-                    aria-hidden="true"
-                  />
-                  <p className="mt-3 text-sm font-medium text-foreground">
-                    Nada seleccionado
-                  </p>
-                  <p className="mt-1 max-w-[16rem] text-xs leading-relaxed text-muted-foreground">
-                    Elegí un sector, mesa o silla en el explorador o en el mapa
-                    para ver sus propiedades.
-                  </p>
-                </div>
-              ) : !isStudio ? (
+              {isStudio ? (
+                <CanvasPropertiesInspector
+                  map={map}
+                  onChange={applyCanvasBackground}
+                />
+              ) : (
                 <p className="text-sm leading-relaxed text-muted-foreground">
                   Arrastrá componentes al plano. Clic izquierdo abre la ficha.
                   Clic derecho duplica, gira o borra.
                 </p>
-              ) : null}
+              )}
               {!isStudio ? (
                 <>
                   <VenueMapBackgroundPanel
                     map={map}
-                    onChange={(patch) => commit({ ...mapRef.current, ...patch })}
+                    onChange={(patch) => {
+                      const current = mapRef.current
+                      if (!current) return
+                      commit({ ...current, ...patch })
+                    }}
                   />
                   <div className="space-y-3 rounded-xl border border-border bg-muted/40 p-3">
                     <p className="text-sm font-semibold text-foreground">
@@ -5620,12 +5634,14 @@ export function InteractiveVenueMapEditor({
                         min={20}
                         max={250}
                         value={Math.round((map.backgroundScale ?? 1) * 100)}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const current = mapRef.current
+                          if (!current) return
                           commit({
-                            ...mapRef.current,
+                            ...current,
                             backgroundScale: Number(event.target.value) / 100,
                           })
-                        }
+                        }}
                         className="w-full accent-emerald-500"
                       />
                     </Field>
@@ -5659,7 +5675,11 @@ export function InteractiveVenueMapEditor({
           {!isStudio ? (
             <VenueMapBackgroundPanel
               map={map}
-              onChange={(patch) => commit({ ...mapRef.current, ...patch })}
+              onChange={(patch) => {
+                const current = mapRef.current
+                if (!current) return
+                commit({ ...current, ...patch })
+              }}
             />
           ) : null}
             </>

@@ -20,6 +20,8 @@ export function VenueMapBackgroundPanel({
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  if (!map) return null
+
   return (
     <div className="space-y-3 rounded-xl border border-border bg-background p-3">
       <div className="flex items-center gap-2">

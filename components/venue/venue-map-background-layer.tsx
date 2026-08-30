@@ -6,7 +6,7 @@ export function VenueMapBackgroundLayer({
 }: {
   map: InteractiveVenueMap
 }) {
-  if (!map.backgroundImage) return null
+  if (!map?.backgroundImage) return null
   const scale = map.backgroundScale || 1
   const width = VENUE_MAP_CANVAS.width * scale
   const height = VENUE_MAP_CANVAS.height * scale
