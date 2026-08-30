@@ -27,7 +27,6 @@ import { Button } from "@/components/ui/button"
 import { resolveTicketHighlightBadge } from "@/lib/checkout/ticket-picker"
 import { resolveStockScarcity } from "@/lib/checkout/stock-scarcity"
 import { CustomerFacingTicketPrice } from "@/components/public/customer-facing-price"
-import { IncludesServiceFeeHint } from "@/components/public/includes-service-fee-hint"
 import { publicOfferPrice } from "@/lib/checkout/public-price"
 import { formatTicketPrice } from "@/lib/format"
 import { resolveSalePhases } from "@/lib/inventory/active-phase"
@@ -341,15 +340,12 @@ export function EventCheckoutSelector({
               ) : null}
             </p>
             {selectedSeat ? (
-              <div className="flex flex-col gap-0.5">
-                <p className="text-sm font-black text-foreground/90">
-                  <CustomerFacingTicketPrice price={selectedSeat.price} />
-                  <span className="ml-2 text-xs font-medium text-muted-foreground">
-                    Lugar reservado
-                  </span>
-                </p>
-                <IncludesServiceFeeHint price={selectedSeat.price} />
-              </div>
+              <p className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-black text-foreground/90">
+                <CustomerFacingTicketPrice price={selectedSeat.price} />
+                <span className="text-xs font-medium text-muted-foreground">
+                  Lugar reservado
+                </span>
+              </p>
             ) : (
               <p className="text-xs font-semibold text-muted-foreground">
                 Lugar reservado
@@ -1003,11 +999,10 @@ export function UnifiedTicketCard({
         >
           {tier.name}
         </h4>
-        <div className="mt-0.5 flex flex-col gap-0.5">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="mt-0.5 flex flex-wrap items-center gap-2">
           <span
             className={cn(
-              "shrink-0 whitespace-nowrap text-base font-black tabular-nums text-foreground",
+              "inline-flex shrink-0 items-center whitespace-nowrap text-base font-black tabular-nums text-foreground",
               isSoldOut && "text-muted-foreground line-through",
             )}
           >
@@ -1038,8 +1033,6 @@ export function UnifiedTicketCard({
             <SelectedPlacesSummary labels={selectedPlaces} />
           ) : null}
         </div>
-        <IncludesServiceFeeHint price={shownPrice} />
-      </div>
       </div>
       <div className="flex shrink-0 items-center justify-end pl-2">
         {inactive ? (
@@ -1229,7 +1222,6 @@ export function QuantityList({
                     />
                   )}
                 </div>
-                <IncludesServiceFeeHint price={unitPrice} />
               </div>
               <div className="flex shrink-0 items-center">
                 {soldOut ? (

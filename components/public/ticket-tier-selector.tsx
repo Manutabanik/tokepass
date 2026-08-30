@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { isFullPassDayId } from "@/lib/event-schedule"
 import { CustomerFacingTicketPrice } from "@/components/public/customer-facing-price"
-import { IncludesServiceFeeHint } from "@/components/public/includes-service-fee-hint"
 import { publicOfferPrice } from "@/lib/checkout/public-price"
 import { formatCurrency, formatEventDay } from "@/lib/format"
 import { generalTicketMaxQuantity } from "@/lib/checkout/general-ticket-quantity"
@@ -495,7 +494,6 @@ function TierList({
                   </span>
                 ) : null}
               </div>
-              <IncludesServiceFeeHint price={offerPrice} />
             </div>
 
             <div className="flex shrink-0 items-center">

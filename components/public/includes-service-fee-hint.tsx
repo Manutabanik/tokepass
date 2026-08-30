@@ -18,32 +18,37 @@ export function serviceFeeSplitLabel(ticketPrice: number, feeAmount: number) {
 export function IncludesServiceFeeHint({
   price,
   className,
+  iconSize = "sm",
 }: {
   price: number
   className?: string
+  iconSize?: "sm" | "lg"
 }) {
   const money = useCartLineUnitMoney(price)
   if (price <= 0 || money.absorbFees || money.feeAmount <= 0) return null
 
   return (
-    <p
+    <span
       className={cn(
-        "inline-flex items-center gap-1 text-xs text-muted-foreground italic",
+        "inline-flex shrink-0 items-center",
         className,
       )}
     >
       <Tooltip>
         <TooltipTrigger
           render={<button type="button" />}
-          className="text-muted-foreground"
+          className="inline-flex items-center text-muted-foreground hover:text-foreground"
           aria-label="Desglose del cargo por servicio"
         >
-          <Info className="size-3.5" aria-hidden="true" />
+          <Info
+            className={iconSize === "lg" ? "size-5" : "size-4"}
+            aria-hidden="true"
+          />
         </TooltipTrigger>
         <TooltipContent>
           {serviceFeeSplitLabel(money.ticketPrice, money.feeAmount)}
         </TooltipContent>
       </Tooltip>
-    </p>
+    </span>
   )
 }

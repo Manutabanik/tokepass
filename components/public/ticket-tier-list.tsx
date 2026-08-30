@@ -15,7 +15,6 @@ import {
   SOLD_OUT_TICKET_CARD_CLASS,
   isTicketCardBlocked,
 } from "@/lib/checkout/ticket-stock"
-import { IncludesServiceFeeHint } from "@/components/public/includes-service-fee-hint"
 import { publicOfferPrice } from "@/lib/checkout/public-price"
 import { CustomerFacingTicketPrice } from "@/components/public/customer-facing-price"
 import { resolveTicketSaleState } from "@/lib/inventory/ticket-sale-window"
@@ -204,29 +203,26 @@ export function TicketTierList({
                       </span>
                     ) : null}
                   </h4>
-                  <div className="mt-0.5 flex flex-col gap-0.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={cn(
-                          "shrink-0 whitespace-nowrap text-base font-black tabular-nums text-foreground",
-                          soldOut && "text-muted-foreground line-through",
-                        )}
-                      >
-                        {offerPrice === 0 ? (
-                          "Gratis"
-                        ) : (
-                          <CustomerFacingTicketPrice price={offerPrice} />
-                        )}
+                  <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 items-center whitespace-nowrap text-base font-black tabular-nums text-foreground",
+                        soldOut && "text-muted-foreground line-through",
+                      )}
+                    >
+                      {offerPrice === 0 ? (
+                        "Gratis"
+                      ) : (
+                        <CustomerFacingTicketPrice price={offerPrice} />
+                      )}
+                    </span>
+                    {soldOut ? (
+                      <span className={SOLD_OUT_BADGE_CLASS}>Agotado</span>
+                    ) : showStock && scarcity.kind === "low" ? (
+                      <span className="shrink-0 text-[10px] font-bold text-amber-400">
+                        Pocas disponibles
                       </span>
-                      {soldOut ? (
-                        <span className={SOLD_OUT_BADGE_CLASS}>Agotado</span>
-                      ) : showStock && scarcity.kind === "low" ? (
-                        <span className="shrink-0 text-[10px] font-bold text-amber-400">
-                          Pocas disponibles
-                        </span>
-                      ) : null}
-                    </div>
-                    <IncludesServiceFeeHint price={offerPrice} />
+                    ) : null}
                   </div>
                 </div>
 

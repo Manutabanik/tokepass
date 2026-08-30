@@ -17,7 +17,10 @@ import { PromoCodeInput } from "@/components/public/promo-code-input"
 import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-clickwrap"
 import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import type { CheckoutBuyerInfo } from "@/lib/checkout-buyer"
-import { CartTotalLabel } from "@/components/public/cart-total-transparency"
+import {
+  CartTotalAmount,
+  CartTotalLabel,
+} from "@/components/public/cart-total-transparency"
 import { formatCartTotal } from "@/lib/format"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 
@@ -278,9 +281,10 @@ function PaymentOrderSummary({
             <p className="text-xs text-muted-foreground">Entrada sin costo.</p>
           ) : null}
         </div>
-        <span className="shrink-0 text-xl font-black tabular-nums text-card-foreground">
-          {formatCartTotal(finalTotal)}
-        </span>
+        <CartTotalAmount
+          amount={finalTotal}
+          className="shrink-0 text-xl font-black text-card-foreground"
+        />
       </div>
       <TokepassGuaranteeBadge variant="full" isOnline={isOnline} />
 

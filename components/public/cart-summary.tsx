@@ -20,7 +20,10 @@ import {
   cartTicketLineId,
   parseCartTicketLineId,
 } from "@/lib/checkout/cart-lines"
-import { CartTotalLabel } from "@/components/public/cart-total-transparency"
+import {
+  CartTotalAmount,
+  CartTotalLabel,
+} from "@/components/public/cart-total-transparency"
 import { formatCartTotal } from "@/lib/format"
 import {
   useCartPriceBreakdown,
@@ -163,7 +166,7 @@ export function CartServiceFeeRows({
         )}
       >
         <CartTotalLabel />
-        <span className="tabular-nums">{formatCartTotal(grandTotal)}</span>
+        <CartTotalAmount amount={grandTotal} />
       </div>
     </div>
   )

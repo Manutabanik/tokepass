@@ -6,13 +6,15 @@ import { createPortal } from "react-dom"
 
 import { AdaptiveSeatingFlow } from "@/components/public/adaptive-seating-flow"
 import { CartSummary } from "@/components/public/cart-summary"
-import { CartTotalLabel } from "@/components/public/cart-total-transparency"
+import {
+  CartTotalAmount,
+  CartTotalLabel,
+} from "@/components/public/cart-total-transparency"
 import type { SeatSelectionContext } from "@/components/public/seat-selection-sheet"
 import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-clickwrap"
 import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import { Button } from "@/components/ui/button"
 import { cartLineAmount, cartLineQuantity } from "@/lib/checkout/cart-lines"
-import { formatCartTotal } from "@/lib/format"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import {
   storefrontSelectionCount,
@@ -186,7 +188,7 @@ export function CheckoutSelectionSidebar({
             ) : null}
           </div>
           <p className="text-2xl font-black tabular-nums text-foreground">
-            {formatCartTotal(total)}
+            <CartTotalAmount amount={total} className="text-2xl font-black" />
           </p>
         </div>
         <TokepassGuaranteeBadge variant="full" className="mt-3" />

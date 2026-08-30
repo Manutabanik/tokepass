@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { serviceFeeSplitLabel } from "@/components/public/includes-service-fee-hint"
+import { formatCartTotal } from "@/lib/format"
 import { useCartPriceBreakdown } from "@/lib/stores/checkout-store"
 import { cn } from "@/lib/utils"
 
@@ -24,10 +25,13 @@ export function CartTotalTransparencyTooltip({
     <Tooltip>
       <TooltipTrigger
         render={<button type="button" />}
-        className={className}
+        className={cn(
+          "inline-flex items-center text-muted-foreground hover:text-foreground",
+          className,
+        )}
         aria-label="Desglose del total"
       >
-        <Info className="size-3.5" aria-hidden="true" />
+        <Info className="size-4" aria-hidden="true" />
       </TooltipTrigger>
       <TooltipContent>
         {serviceFeeSplitLabel(ticketPrice, feeAmount)}
@@ -43,9 +47,24 @@ export function CartTotalLabel({
   children?: ReactNode
   className?: string
 }) {
+  return <span className={className}>{children}</span>
+}
+
+export function CartTotalAmount({
+  amount,
+  className,
+}: {
+  amount: number
+  className?: string
+}) {
   return (
-    <span className={cn("inline-flex items-center gap-1", className)}>
-      {children}
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 whitespace-nowrap tabular-nums",
+        className,
+      )}
+    >
+      {formatCartTotal(amount)}
       <CartTotalTransparencyTooltip />
     </span>
   )

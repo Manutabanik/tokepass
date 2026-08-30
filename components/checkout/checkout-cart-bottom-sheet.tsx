@@ -4,7 +4,10 @@ import { ArrowRight, LoaderCircle, Map, X } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { CartSummary } from "@/components/public/cart-summary"
-import { CartTotalLabel } from "@/components/public/cart-total-transparency"
+import {
+  CartTotalAmount,
+  CartTotalLabel,
+} from "@/components/public/cart-total-transparency"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -13,7 +16,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { formatCartTotal } from "@/lib/format"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 
@@ -113,9 +115,10 @@ export function CheckoutCartBottomSheet({
         <div className="flex-none space-y-3 border-t border-border px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
           <div className="flex items-center justify-between gap-3">
             <CartTotalLabel className="text-sm font-medium text-muted-foreground" />
-            <span className="text-xl font-black tabular-nums text-foreground">
-              {formatCartTotal(totalAmount)}
-            </span>
+            <CartTotalAmount
+              amount={totalAmount}
+              className="text-xl font-black text-foreground"
+            />
           </div>
           {onContinue || formId ? (
             <Button

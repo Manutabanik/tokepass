@@ -3,8 +3,8 @@
 import { useSyncExternalStore } from "react"
 import { createPortal } from "react-dom"
 
+import { CustomerFacingTicketPrice } from "@/components/public/customer-facing-price"
 import { Button } from "@/components/ui/button"
-import { formatTicketPrice } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 function subscribe() {
@@ -48,8 +48,12 @@ export function EventStorefrontPurchaseDock({
               <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                 Total desde
               </span>
-              <span className="block whitespace-nowrap text-xl font-black text-foreground tabular-nums md:text-2xl">
-                {price != null ? formatTicketPrice(price) : "—"}
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xl font-black text-foreground tabular-nums md:text-2xl">
+                {price != null ? (
+                  <CustomerFacingTicketPrice price={price} />
+                ) : (
+                  "—"
+                )}
               </span>
             </>
           ) : (
