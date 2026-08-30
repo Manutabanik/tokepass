@@ -51,6 +51,8 @@ import {
   type EventFeeConfig,
 } from "@/lib/pricing/event-fees"
 import {
+  DRAFT_CAPACITY_OVERFLOW_MESSAGE,
+  draftCapacityThermometer,
   eventPublishDisabledReason,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
@@ -138,6 +140,11 @@ export function EventEditorV2({
   const title = watched?.basicInfo?.name
   const labels = getArchetypeConfig(resolveDraftArchetype(watched?.archetype)).labels
   const launchReady = isDraftLaunchReady(getValues())
+  const overCapacity = draftCapacityThermometer({
+    tickets: watched?.tickets,
+    venueCapacity: watched?.venueCapacity,
+    schedule: watched?.schedule,
+  }).overCapacity
   const badge = draftSaveBadge(online, saveStatus)
   const working = busy !== "idle"
   const leaveBlocked = shouldBlockDraftLeave(saveStatus, {
@@ -364,12 +371,18 @@ export function EventEditorV2({
         step={step}
         busy={working}
         saving={saveStatus === "saving"}
+        overCapacity={overCapacity}
+        launchReady={launchReady}
         publishLabel={publishLabel}
         onBack={() => {
           const previous = prevEditorStep(step)
           if (previous) goToStep(previous)
         }}
         onSaveDraft={() => {
+          if (overCapacity) {
+            toast.error(DRAFT_CAPACITY_OVERFLOW_MESSAGE)
+            return
+          }
           void persistDraft(true).then((result) => {
             if (result.success) {
               toast.success("Borrador guardado")

@@ -10,6 +10,8 @@ export function EventEditorV2StickyFooter({
   step,
   busy = false,
   saving = false,
+  overCapacity = false,
+  launchReady = true,
   publishLabel = "Publicar",
   onBack,
   onSaveDraft,
@@ -19,6 +21,8 @@ export function EventEditorV2StickyFooter({
   step: EditorV2StepId
   busy?: boolean
   saving?: boolean
+  overCapacity?: boolean
+  launchReady?: boolean
   publishLabel?: string
   onBack: () => void
   onSaveDraft: () => void
@@ -44,7 +48,7 @@ export function EventEditorV2StickyFooter({
         <Button
           type="button"
           variant="outline"
-          disabled={busy || saving}
+          disabled={busy || saving || overCapacity}
           className="h-12 min-h-12 shrink-0"
           onClick={onSaveDraft}
         >
@@ -54,7 +58,7 @@ export function EventEditorV2StickyFooter({
         {lastStep ? (
           <Button
             type="button"
-            disabled={busy}
+            disabled={busy || !launchReady || overCapacity}
             className="h-12 min-h-12 min-w-40 bg-emerald-500 text-black hover:bg-emerald-400"
             onClick={onPublish}
           >

@@ -45,6 +45,8 @@ export {
 export const EVENT_DRAFT_NAME_MAX = 120
 export const EVENT_DRAFT_TEXT_MAX = 2000
 export const EVENT_DRAFT_TICKET_DESCRIPTION_MAX = 180
+export const DRAFT_CAPACITY_OVERFLOW_MESSAGE =
+  "El stock configurado supera la capacidad del recinto"
 
 function normalizeDraftPromoVideoUrl(value: unknown): string {
   if (typeof value !== "string") return ""
@@ -457,6 +459,23 @@ export const eventPublishSchema = z
         })
       }
       refineLineItemWindowAndLimits(extra, ctx, ["extras", index])
+    }
+
+    const isOnline =
+      data.isVirtual === true || data.settings?.deliveryMode === "ONLINE"
+    if (!isOnline) {
+      const meter = draftCapacityThermometer({
+        tickets: data.tickets,
+        venueCapacity: data.venueCapacity,
+        schedule: data.schedule,
+      })
+      if (meter.overCapacity) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["venueCapacity"],
+          message: DRAFT_CAPACITY_OVERFLOW_MESSAGE,
+        })
+      }
     }
 
     if (data.isVirtual === true || data.settings?.deliveryMode === "ONLINE") {
@@ -1055,23 +1074,42 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
   }
 }
 
-/** SSOT: only general ticket stock counts. Extras and map seats never occupy venue capacity. */
+function draftTicketOccupiesVenueCapacity(ticket: {
+  source?: unknown
+  sectorId?: unknown
+  ticketType?: unknown
+}) {
+  if (isMapDraftTicket(ticket)) return false
+  return asTicketCommerceType(ticket.ticketType) !== "extra"
+}
+
+function draftTicketAssignedStock(ticket: {
+  stock?: unknown
+  dayRates?: Array<{ stock?: unknown }>
+}) {
+  const rates = ticket.dayRates
+  if (Array.isArray(rates) && rates.length > 0) {
+    return rates.reduce((total, rate) => total + asFiniteNumber(rate.stock), 0)
+  }
+  return asFiniteNumber(ticket.stock)
+}
+
+/** SSOT: only `tickets[].stock` (or `dayRates[].stock`) counts. `extras[]` never enter this sum. */
 export function draftCapacityThermometer(input: {
-  tickets?: Array<{ stock?: unknown; source?: unknown; sectorId?: unknown }> | null
+  tickets?: Array<{
+    stock?: unknown
+    source?: unknown
+    sectorId?: unknown
+    ticketType?: unknown
+    dayRates?: Array<{ stock?: unknown }>
+  }> | null
   venueCapacity?: unknown
   schedule?: unknown
   slotCount?: number
 }) {
   const used = (input.tickets ?? []).reduce((sum, ticket) => {
-    if (isMapDraftTicket(ticket)) return sum
-    const rates = (ticket as { dayRates?: Array<{ stock?: unknown }> }).dayRates
-    if (Array.isArray(rates) && rates.length > 0) {
-      return (
-        sum +
-        rates.reduce((total, rate) => total + asFiniteNumber(rate.stock), 0)
-      )
-    }
-    return sum + asFiniteNumber(ticket.stock)
+    if (!draftTicketOccupiesVenueCapacity(ticket)) return sum
+    return sum + draftTicketAssignedStock(ticket)
   }, 0)
   const explicitSlots =
     input.slotCount != null

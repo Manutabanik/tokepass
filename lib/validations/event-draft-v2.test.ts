@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  DRAFT_CAPACITY_OVERFLOW_MESSAGE,
   draftCapacityThermometer,
   emptyEventDraftV2,
   eventDraftSchema,
@@ -267,6 +268,62 @@ describe("eventPublishSchema", () => {
       city: "",
     }
     draft.basicInfo.locationName = ""
+    assert.equal(eventPublishSchema.safeParse(draft).success, true)
+  })
+
+  it("rejects ticket stock above venueCapacity times schedule slots", () => {
+    const draft = publishableDraft()
+    draft.venueCapacity = 100
+    draft.tickets[0]!.stock = 101
+    const overflow = eventPublishSchema.safeParse(draft)
+    assert.equal(overflow.success, false)
+    if (!overflow.success) {
+      assert.ok(
+        overflow.error.issues.some(
+          (issue) =>
+            issue.path.join(".") === "venueCapacity" &&
+            issue.message === DRAFT_CAPACITY_OVERFLOW_MESSAGE,
+        ),
+      )
+    }
+
+    draft.tickets[0]!.stock = 100
+    assert.equal(eventPublishSchema.safeParse(draft).success, true)
+
+    draft.tickets[0]!.stock = 201
+    draft.schedule = [
+      {
+        id: "day-1",
+        name: "Día 1",
+        startDate: "2026-09-01T22:00",
+        endDate: "2026-09-02T04:00",
+        slots: [
+          { id: "s1", startTime: "22:00", endTime: "23:00" },
+          { id: "s2", startTime: "23:30", endTime: "00:30" },
+        ],
+      },
+    ]
+    assert.equal(eventPublishSchema.safeParse(draft).success, false)
+    draft.tickets[0]!.stock = 200
+    assert.equal(eventPublishSchema.safeParse(draft).success, true)
+  })
+
+  it("does not count extras toward the venue capacity ceiling", () => {
+    const draft = publishableDraft()
+    draft.venueCapacity = 80
+    draft.tickets[0]!.stock = 80
+    draft.extras = [
+      {
+        id: "e1",
+        name: "Estacionamiento",
+        description: "",
+        price: 2000,
+        stock: 400,
+        minOrder: 1,
+        maxOrder: 2,
+        ticketType: "extra",
+      },
+    ]
     assert.equal(eventPublishSchema.safeParse(draft).success, true)
   })
 })
@@ -661,6 +718,13 @@ describe("draftCapacityThermometer", () => {
     })
     assert.equal(snap.used, 50)
     assert.equal(snap.overCapacity, false)
+    assert.equal(
+      draftCapacityThermometer({
+        tickets: [{ stock: 101 }],
+        venueCapacity: 100,
+      }).overCapacity,
+      true,
+    )
   })
 
   it("never counts extras toward the thermometer", () => {
@@ -671,6 +735,18 @@ describe("draftCapacityThermometer", () => {
     })
     assert.equal(snap.used, 40)
     assert.notEqual(snap.used, 40 + extras[0].stock)
+  })
+
+  it("never counts extra-typed tickets toward venue capacity", () => {
+    const snap = draftCapacityThermometer({
+      tickets: [
+        { stock: 40, ticketType: "standard" },
+        { stock: 999, ticketType: "extra" },
+      ],
+      venueCapacity: 100,
+    })
+    assert.equal(snap.used, 40)
+    assert.equal(snap.overCapacity, false)
   })
 
   it("multiplies venue capacity by explicit time slots", () => {

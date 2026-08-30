@@ -38,6 +38,7 @@ import { formatCurrency, formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
   createDraftLineItem,
+  DRAFT_CAPACITY_OVERFLOW_MESSAGE,
   draftCapacityThermometer,
   draftNumberValue,
   isMapDraftTicket,
@@ -63,8 +64,15 @@ export function EventEditorV2InventoryStep({
   revealField?: string | null
   active?: boolean
 }) {
-  const { control, register, setValue, getValues } =
-    useFormContext<EventDraftV2>()
+  const {
+    control,
+    register,
+    setValue,
+    getValues,
+    setError,
+    clearErrors,
+    getFieldState,
+  } = useFormContext<EventDraftV2>()
   const { labels } = useDraftArchetype()
   const tickets = useWatch({ control, name: "tickets" }) ?? []
   const extras = useWatch({ control, name: "extras" }) ?? []
@@ -85,6 +93,18 @@ export function EventEditorV2InventoryStep({
     schedule,
     slotCount: hasMultipleDraftSlots(schedule) ? slotCount : 1,
   })
+  useEffect(() => {
+    if (meter.overCapacity) {
+      setError("venueCapacity", {
+        type: "capacity",
+        message: DRAFT_CAPACITY_OVERFLOW_MESSAGE,
+      })
+      return
+    }
+    if (getFieldState("venueCapacity").error?.type === "capacity") {
+      clearErrors("venueCapacity")
+    }
+  }, [clearErrors, getFieldState, meter.overCapacity, setError])
   const ticketsLabel = labels.tickets
   const ticketArray = useFieldArray({
     control,
@@ -245,20 +265,16 @@ export function EventEditorV2InventoryStep({
             min={0}
             step={1}
             inputMode="numeric"
-            className={cn(DRAFT_FIELD_CLASS, "h-11 min-h-11")}
+            aria-invalid={meter.overCapacity}
+            className={cn(
+              DRAFT_FIELD_CLASS,
+              "h-11 min-h-11",
+              meter.overCapacity && "border-red-500 focus-visible:ring-red-500",
+            )}
             {...register("venueCapacity", { setValueAs: draftNumberValue })}
           />
         </div>
 
-        {meter.overCapacity ? (
-          <p
-            role="status"
-            className="rounded-lg bg-orange-500/10 px-3 py-1.5 text-xs text-orange-400"
-          >
-            Atención: El stock de tus {ticketsLabel.toLowerCase()} supera{" "}
-            {labels.capacity.toLowerCase()}
-          </p>
-        ) : null}
         <CapacityBar
           meter={meter}
           capacityLabel={labels.capacity}
@@ -385,7 +401,11 @@ export function EventEditorV2InventoryStep({
               <Button type="button" variant="outline" onClick={discardEditor}>
                 Cancelar
               </Button>
-              <Button type="button" onClick={saveEditor}>
+              <Button
+                type="button"
+                onClick={saveEditor}
+                disabled={editor.name === "tickets" && meter.overCapacity}
+              >
                 Guardar
               </Button>
             </div>
@@ -562,7 +582,7 @@ function CapacityBar({
       <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
           <Users className="size-3.5" aria-hidden />
-          Ocupación de {capacityLabel.toLowerCase()}
+          Stock de entradas asignado
           {meter.slotCount > 1
             ? ` · ${meter.perSession || 0} × ${meter.slotCount} turnos`
             : ""}
@@ -583,7 +603,7 @@ function CapacityBar({
           className={cn(
             "h-full rounded-full transition-[width,background-color]",
             meter.overCapacity
-              ? "bg-amber-500"
+              ? "bg-red-500"
               : meter.remaining > 0
                 ? "bg-emerald-600 dark:bg-emerald-400"
                 : "bg-zinc-700 dark:bg-zinc-300",
@@ -592,19 +612,17 @@ function CapacityBar({
         />
       </div>
       {meter.overCapacity ? (
-        <p className="text-[11px] text-amber-700 dark:text-amber-300">
-          El stock de {ticketsLabel.toLowerCase()} supera{" "}
-          {capacityLabel.toLowerCase()} por {formatNumber(meter.overflow)}{" "}
-          lugares.
+        <p role="alert" className="text-[11px] text-red-500">
+          {DRAFT_CAPACITY_OVERFLOW_MESSAGE}
         </p>
       ) : meter.capacity > 0 ? (
         <p className="text-[11px] text-muted-foreground">
-          {capacityLabel} disponible: {formatNumber(meter.remaining)} lugares
+          Capacidad restante sin asignar: {formatNumber(meter.remaining)} lugares
         </p>
       ) : (
         <p className="text-[11px] text-muted-foreground">
-          Definí {capacityLabel.toLowerCase()} para ver la ocupación en tiempo
-          real.
+          Definí {capacityLabel.toLowerCase()} para ver el stock de entradas
+          asignado.
         </p>
       )}
     </section>
