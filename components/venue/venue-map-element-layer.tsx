@@ -3,6 +3,7 @@
 import { memo, useMemo } from "react"
 
 import { VenueElementSymbol } from "@/components/admin/venue-svg-symbols"
+import { isVenueMapElementSoldOut } from "@/lib/seating/map-inventory-hydration"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { compactVenueElementLabel } from "@/lib/seating/venue-element-geometry"
 import { isolateCanvasPointer } from "@/lib/seating/venue-touch"
@@ -30,6 +31,7 @@ const VenueElementShape = memo(function VenueElementShape({
   isolationDim = false,
   popSelected = true,
   buyerOccupancy = false,
+  soldOut = false,
 }: {
   element: VenueMapElement
   selected: boolean
@@ -74,6 +76,7 @@ const VenueElementShape = memo(function VenueElementShape({
   isolationDim?: boolean
   popSelected?: boolean
   buyerOccupancy?: boolean
+  soldOut?: boolean
 }) {
   const lit = selected || highlighted
   const transform =
@@ -98,18 +101,24 @@ const VenueElementShape = memo(function VenueElementShape({
       transform={transform}
       opacity={opacity}
       className={
-        interactive && !isolationDim
+        interactive && !isolationDim && !soldOut
           ? "cursor-pointer transition-all duration-200 ease-in-out"
           : "pointer-events-none transition-all duration-200 ease-in-out"
       }
-      style={isolationDim ? { filter: "grayscale(1)" } : undefined}
+      style={
+        isolationDim
+          ? { filter: "grayscale(1)" }
+          : soldOut
+            ? { cursor: "default", pointerEvents: "none" }
+            : undefined
+      }
       onPointerDown={
-        interactive
+        interactive && !soldOut
           ? (event) => onElementPointerDown?.(event, element)
           : undefined
       }
       onClick={
-        interactive
+        interactive && !soldOut
           ? (event) => {
               isolateCanvasPointer(event)
               event.preventDefault()
@@ -117,22 +126,22 @@ const VenueElementShape = memo(function VenueElementShape({
           : undefined
       }
       onMouseEnter={
-        interactive
+        interactive && !soldOut
           ? (event) => onElementPointerEnter?.(event, element)
           : undefined
       }
       onMouseLeave={
-        interactive
+        interactive && !soldOut
           ? (event) => onElementPointerLeave?.(event, element)
           : undefined
       }
       onContextMenu={
-        interactive
+        interactive && !soldOut
           ? (event) => onElementContextMenu?.(event, element)
           : undefined
       }
       onDoubleClick={
-        interactive
+        interactive && !soldOut
           ? (event) => {
               isolateCanvasPointer(event)
               event.preventDefault()
@@ -163,7 +172,7 @@ const VenueElementShape = memo(function VenueElementShape({
           zoom={zoom}
           label={element.type === "standing_zone" ? undefined : labelText}
           onSeatPointerDown={
-            onSeatPointerDown
+            onSeatPointerDown && !soldOut
               ? (event, seatId) => {
                   isolateCanvasPointer(event)
                   onSeatPointerDown(event, element, seatId)
@@ -325,12 +334,13 @@ export function VenueMapElementLayer({
           highlighted.has(element.id) ||
           element.seats.some((seat) => highlighted.has(seat.id))
         const isolationDim = Boolean(isolationDimIds?.has(element.id))
+        const soldOut = isVenueMapElementSoldOut(element, occupancyBySeatId)
         if (!visible) return null
         return (
           <g
             key={element.id}
             style={{
-              pointerEvents: interactive ? "auto" : "none",
+              pointerEvents: interactive && !soldOut ? "auto" : "none",
             }}
           >
             <VenueElementShape
@@ -338,6 +348,7 @@ export function VenueMapElementLayer({
               selected={isSelected}
               occupancyBySeatId={occupancyBySeatId}
               selectedSeatIds={selectedSeats}
+              soldOut={soldOut}
               onElementPointerDown={
                 visible && interactive ? onElementPointerDown : undefined
               }
@@ -361,7 +372,9 @@ export function VenueMapElementLayer({
               }
               showLabels={renderLabels || isSelected || isHighlighted}
               showChairs={renderChairs || isSelected}
-              interactive={visible && interactive && !isolationDim}
+              interactive={
+                visible && interactive && !isolationDim && !soldOut
+              }
               zoom={zoom}
               dimmed={
                 isolationDim || (hasSelection && !isSelected && !isHighlighted)

@@ -113,4 +113,37 @@ describe("storefront-sector-catalog", () => {
     assert.equal(sector?.price, 0)
     assert.equal(sector?.options[0]?.price, 0)
   })
+
+  it("marca una mesa agotada cuando el inventario la ocupa", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "sector-naranja",
+        name: "Sector Naranja",
+        color: "#f97316",
+        price: 0,
+        seatingType: "RESERVED",
+        layoutType: "table_combo",
+        polygon: [
+          { x: 10, y: 10 },
+          { x: 40, y: 10 },
+          { x: 40, y: 40 },
+          { x: 10, y: 40 },
+        ],
+      },
+    ]
+    const mesa = createVenueElement("round_table", 0, { x: 200, y: 140 })
+    mesa.id = "mesa-1"
+    mesa.zoneId = "sector-naranja"
+    mesa.sellMode = "group"
+    mesa.priceMode = "closed_unit"
+    map.elements = [mesa]
+
+    const catalog = listStorefrontSectorCatalog({
+      map,
+      occupancyBySeatId: { "mesa-1": "occupied" },
+      priceBySectorId: { "sector-naranja": 45000 },
+    })
+    assert.equal(catalog[0]?.options[0]?.available, false)
+  })
 })

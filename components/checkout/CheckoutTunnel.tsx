@@ -229,6 +229,12 @@ import {
 } from "@/types/venue-map"
 import { mergeInventoryOccupancy } from "@/lib/seating/inventory-seat-state"
 import {
+  collectVenueMapInventoryIds,
+  occupancyFromSoldOutTicketTypes,
+  rollupOccupancyToParents,
+  soldOutTicketTypeIds,
+} from "@/lib/seating/map-inventory-hydration"
+import {
   expandOccupancyToVenueMap,
   occupancyFromSeatingUnits,
   resolveLiveVenueSeatStatus,
@@ -530,6 +536,7 @@ export function CheckoutTunnel({
   >({})
   const loadedUnitsRef = useRef(loadedUnitsBySector)
   loadedUnitsRef.current = loadedUnitsBySector
+  const [seatingInventoryFetched, setSeatingInventoryFetched] = useState(false)
   const [liveOccupancy, setLiveOccupancy] = useState<Record<string, SeatStatus>>(
     {},
   )
@@ -1210,6 +1217,13 @@ export function CheckoutTunnel({
   useLockBodyScroll(showSeatFlow)
 
   const hasSeatingFlow = hasInteractiveMap
+  const inventoryScopeKey = `${eventId}::${selectedDateId ?? ""}::${hasInteractiveMap}::${scheduleDayCount}`
+  const [inventoryScope, setInventoryScope] = useState(inventoryScopeKey)
+  if (inventoryScopeKey !== inventoryScope) {
+    setInventoryScope(inventoryScopeKey)
+    setSeatingInventoryFetched(!hasInteractiveMap)
+  }
+  const seatingInventoryReady = !hasInteractiveMap || seatingInventoryFetched
 
   const availableExtras = extraTickets.filter((tier) => tier.available > 0)
 
@@ -1313,17 +1327,29 @@ export function CheckoutTunnel({
             dayTierIds,
             scheduleDayCount,
           })
+    const knownIds =
+      seatingInventoryReady && units.length > 0
+        ? collectVenueMapInventoryIds(liveMap)
+        : []
     return expandOccupancyToVenueMap(
-      mergeInventoryOccupancy(
-        occupancyFromSeatingUnits(
-          units.map((unit) => ({
-            id: unit.id,
-            layoutItemId: unit.layoutItemId,
-            status: unit.status,
-            reservedUntil: unit.reservedUntil,
-          })),
+      rollupOccupancyToParents(
+        mergeInventoryOccupancy(
+          occupancyFromSeatingUnits(
+            units.map((unit) => ({
+              id: unit.id,
+              layoutItemId: unit.layoutItemId,
+              status: unit.status,
+              reservedUntil: unit.reservedUntil,
+            })),
+            knownIds,
+          ),
+          occupancyFromSoldOutTicketTypes(
+            liveMap,
+            soldOutTicketTypeIds(dayTiers),
+          ),
+          liveOccupancy,
         ),
-        liveOccupancy,
+        liveMap,
       ),
       liveMap,
     )
@@ -1334,6 +1360,7 @@ export function CheckoutTunnel({
     liveOccupancy,
     mergedSeatingUnits,
     scheduleDayCount,
+    seatingInventoryReady,
     selectedDateId,
   ])
 
@@ -1401,7 +1428,7 @@ export function CheckoutTunnel({
           seats,
           occupancyBySeatId,
           summaryAvailable: stock.available,
-          mapReady: Boolean(liveMap),
+          mapReady: Boolean(liveMap) && seatingInventoryReady,
         })
       })
       .map((zone) => zone.id)
@@ -1410,6 +1437,7 @@ export function CheckoutTunnel({
     liveMap,
     occupancyBySeatId,
     scheduleDayCount,
+    seatingInventoryReady,
     seatingSectorSummaries,
     selectedDateId,
   ])
@@ -3323,9 +3351,15 @@ export function CheckoutTunnel({
 
   useEffect(() => {
     if (!hasInteractiveMap) return
+    let cancelled = false
     // Occupancy is server state. setState runs after the fetch resolves.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set
-    void loadAllUnits()
+    void loadAllUnits().finally(() => {
+      if (!cancelled) setSeatingInventoryFetched(true)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [hasInteractiveMap, loadAllUnits])
 
   const seatFlowOverlay =
@@ -3333,7 +3367,7 @@ export function CheckoutTunnel({
       <AppTakeover className="z-[100] overscroll-none">
         <AdaptiveSeatingFlow
           takeover
-          pending={isPending || controlsLocked}
+          pending={isPending || controlsLocked || !seatingInventoryReady}
           maxSelectable={mapSelectionCap}
           eventId={eventId}
           eventTitle={eventTitle}
@@ -3404,6 +3438,7 @@ export function CheckoutTunnel({
         eventId,
         heldSeatIds,
         occupancyBySeatId,
+        inventoryPending: !seatingInventoryReady,
         priceBySectorId,
         selectedZoneId: visibleZoneId,
         unavailableZoneIds: soldOutZoneIds,

@@ -2,6 +2,7 @@
 
 import { useId, useRef } from "react"
 
+import { BUYER_SEAT_FILL } from "@/lib/seating/buyer-seat-fill"
 import {
   isCloseToFirstVertex,
   polygonSvgPoints,
@@ -213,7 +214,7 @@ export function VenueMapZoneLayer({
               fill={
                 soldOut
                   ? buyerOccupancy
-                    ? "#333333"
+                    ? BUYER_SEAT_FILL.sold
                     : "#9ca3af"
                   : zone.color || "#22d3ee"
               }
@@ -233,7 +234,7 @@ export function VenueMapZoneLayer({
               stroke={
                 soldOut
                   ? buyerOccupancy
-                    ? "#333333"
+                    ? BUYER_SEAT_FILL.sold
                     : "#9ca3af"
                   : lodSolid
                     ? zone.color || "#67e8f9"

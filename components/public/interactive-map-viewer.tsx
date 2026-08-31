@@ -1,5 +1,7 @@
 "use client"
 
+import { LoaderCircle } from "lucide-react"
+
 import {
   InteractiveSeatingCanvas,
   type InteractiveSelectedSeat,
@@ -62,6 +64,11 @@ export function InteractiveMapViewer({
         hideToolbar
         buyerChrome
       />
+      {pending ? (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/55">
+          <LoaderCircle className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : null}
     </div>
   )
 }

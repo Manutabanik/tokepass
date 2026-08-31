@@ -65,6 +65,7 @@ export type SeatSelectionContext = {
   eventId?: string | null
   heldSeatIds?: string[]
   occupancyBySeatId: Record<string, SeatStatus>
+  inventoryPending?: boolean
   priceBySectorId: Record<string, number>
   selectedZoneId: string | null
   unavailableZoneIds: string[]
@@ -414,7 +415,10 @@ function SeatSelectionModalInner({
     return isolateSectorMap(context.map, focusedSectorId)
   }, [context.map, focusedSectorId, sectorId])
 
-  const isLoadingPlaces = loading || (open && !context.map)
+  const isLoadingPlaces =
+    loading ||
+    (open && !context.map) ||
+    Boolean(open && context.inventoryPending)
   const assignZoneQuantity = context.onAssignZoneQuantity
   const assignZoneQuantityRef = useRef(assignZoneQuantity)
   const seededSectorRef = useRef<string | null>(null)

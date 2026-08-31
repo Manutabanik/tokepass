@@ -289,7 +289,10 @@ export function EventCheckoutSelector({
         summaryAvailable: stock.available,
         summaryTotal: stock.total,
         mapSectorIds: seatSelection?.map?.zones?.map((zone) => zone.id) ?? [],
-        mapReady: Boolean(seatSelection?.map) && !mapLoading,
+        mapReady:
+          Boolean(seatSelection?.map) &&
+          !mapLoading &&
+          !seatSelection?.inventoryPending,
       })
       if (
         availability.isSoldOut ||

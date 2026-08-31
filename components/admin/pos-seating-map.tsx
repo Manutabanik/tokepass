@@ -15,7 +15,13 @@ import { posSeatPickMatchesDay, type PosSeatPick } from "@/lib/pos-cart"
 import { buildTierUnitPriceIndex } from "@/lib/checkout/tier-price-index"
 import { resolveLiveVenueMapForDay } from "@/lib/seating/live-venue-map-for-day"
 import { resolveTierIdForUniversalSector } from "@/lib/seating/venue-adapter"
-import { flattenVenueMapSeats } from "@/lib/seating/venue-map-geometry"
+import {
+  collectVenueMapInventoryIds,
+  occupancyFromSoldOutTicketTypes,
+  rollupOccupancyToParents,
+  soldOutTicketTypeIds,
+} from "@/lib/seating/map-inventory-hydration"
+import { mergeInventoryOccupancy } from "@/lib/seating/inventory-seat-state"
 import {
   expandOccupancyToVenueMap,
   occupancyFromSeatingUnits,
@@ -126,9 +132,18 @@ export function PosSeatingMap({
         dateId: selectedDateId,
         occupancy: liveMap
           ? expandOccupancyToVenueMap(
-              occupancyFromSeatingUnits(
-                scoped,
-                flattenVenueMapSeats(liveMap).map((seat) => seat.id),
+              rollupOccupancyToParents(
+                mergeInventoryOccupancy(
+                  occupancyFromSeatingUnits(
+                    scoped,
+                    collectVenueMapInventoryIds(liveMap),
+                  ),
+                  occupancyFromSoldOutTicketTypes(
+                    liveMap,
+                    soldOutTicketTypeIds(event.tiers),
+                  ),
+                ),
+                liveMap,
               ),
               liveMap,
             )
@@ -138,7 +153,7 @@ export function PosSeatingMap({
     return () => {
       cancelled = true
     }
-  }, [catalog, event.id, liveMap, scheduleDayCount, selectedDateId])
+  }, [catalog, event.id, event.tiers, liveMap, scheduleDayCount, selectedDateId])
 
   const occupancy =
     snapshot?.eventId === event.id && snapshot.dateId === selectedDateId

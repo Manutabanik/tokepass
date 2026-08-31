@@ -7,7 +7,10 @@ import {
   venueElementSelectionName,
 } from "@/lib/seating/storefront-selection"
 import { elementBelongsToZone } from "@/lib/seating/venue-map-lod"
-import { resolveLiveVenueSeatStatus } from "@/lib/seating/venue-map-occupancy"
+import {
+  lookupOccupancyStatus,
+  resolveLiveVenueSeatStatus,
+} from "@/lib/seating/venue-map-occupancy"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import type { StorefrontSelectedItem } from "@/lib/stores/storefront-seat-store"
 import {
@@ -70,7 +73,11 @@ function optionFromElement(input: {
   if (element.type === "standing_zone") return null
   const selected = isSelected(input.selectedIds, element.id)
   const status = optionStatus({
-    occupancy: input.occupancyBySeatId[element.id],
+    occupancy: lookupOccupancyStatus(
+      input.occupancyBySeatId,
+      element.id,
+      ...element.seats.map((seat) => seat.id),
+    ),
     selected,
   })
   const tableSku = isTablePurchaseSku(element)
@@ -109,7 +116,11 @@ function chairOptionsFromElement(input: {
       const selected = isSelected(input.selectedIds, seat.id)
       const status = optionStatus({
         mapStatus: seat.status,
-        occupancy: input.occupancyBySeatId[seat.id],
+        occupancy: lookupOccupancyStatus(
+          input.occupancyBySeatId,
+          seat.id,
+          element.id,
+        ),
         selected,
       })
       return {

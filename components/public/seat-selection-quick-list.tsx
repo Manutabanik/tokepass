@@ -123,9 +123,12 @@ function GaSectorPicker({
 }) {
   if (disabled && max <= 0) {
     return (
-      <p className="px-1 py-4 text-center text-sm text-muted-foreground">
-        No hay lugares disponibles
-      </p>
+      <div className="pointer-events-none flex items-center justify-between gap-3 px-1 py-3 opacity-50">
+        <p className="text-sm text-muted-foreground">Acceso general</p>
+        <span className="rounded-md bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+          Agotado
+        </span>
+      </div>
     )
   }
   const nextMax = Math.max(1, max)
@@ -171,12 +174,12 @@ function PlaceOptionButton({
         option.selected
           ? "border-emerald-500 bg-emerald-600 text-white"
           : "border-border bg-card text-foreground hover:border-emerald-500/60",
-        (pending || taken) && "pointer-events-none opacity-60",
+        (pending || taken) && "pointer-events-none opacity-50",
       )}
     >
       <span className="truncate">{option.label}</span>
       <span className="shrink-0 tabular-nums">
-        {taken ? "Ocupado" : formatTicketPrice(option.price)}
+        {taken ? "Agotado" : formatTicketPrice(option.price)}
       </span>
     </button>
   )
