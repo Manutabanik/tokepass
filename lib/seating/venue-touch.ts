@@ -12,7 +12,7 @@ export type PinchOrigin = {
 const MIN_PINCH_DISTANCE = 8
 
 /** Screen-px slop: above this, the gesture is a pan/pinch, not a seat tap. */
-export const BUYER_TAP_SLOP_PX = 5
+export const BUYER_TAP_SLOP_PX = 10
 /** Extra invisible padding around tables/chairs for fat-finger hits. */
 export const BUYER_HIT_PADDING_PX = 10
 

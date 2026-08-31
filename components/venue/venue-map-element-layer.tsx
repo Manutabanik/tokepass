@@ -112,7 +112,7 @@ const VenueElementShape = memo(function VenueElementShape({
     element.type !== "vip_chair" &&
     element.type !== "infrastructure"
   const shape = resolveVenueShapeType(element)
-  const liveHit = interactive && !soldOut && hitPadding > 0
+  const liveHit = interactive && hitPadding > 0
   const padW = Math.max(8, element.width || 12)
   const padH = Math.max(8, element.height || 12)
   const padR = Math.max(8, Math.min(padW, padH) / 2)
@@ -125,15 +125,17 @@ const VenueElementShape = memo(function VenueElementShape({
       transform={transform}
       opacity={opacity}
       className={
-        interactive && !isolationDim && !soldOut
-          ? "cursor-pointer transition-all duration-200 ease-in-out"
+        interactive && !isolationDim
+          ? soldOut
+            ? "cursor-not-allowed transition-all duration-200 ease-in-out"
+            : "cursor-pointer transition-all duration-200 ease-in-out"
           : "pointer-events-none transition-all duration-200 ease-in-out"
       }
       style={
         isolationDim
           ? { filter: "grayscale(1)" }
           : soldOut
-            ? { cursor: "default", pointerEvents: "none" }
+            ? { cursor: "not-allowed" }
             : undefined
       }
       onPointerDown={
@@ -142,7 +144,7 @@ const VenueElementShape = memo(function VenueElementShape({
           : undefined
       }
       onPointerUp={
-        interactive && !soldOut && selectOnPointerUp
+        interactive && selectOnPointerUp
           ? (event) => {
               isolateCanvasPointer(event)
               onElementPointerUp?.(event, element)
@@ -234,7 +236,7 @@ const VenueElementShape = memo(function VenueElementShape({
               : undefined
           }
           onSeatPointerUp={
-            onSeatPointerUp && !soldOut
+            onSeatPointerUp && (!soldOut || selectOnPointerUp)
               ? (event, seatId) => {
                   isolateCanvasPointer(event)
                   onSeatPointerUp(event, element, seatId)
@@ -422,7 +424,10 @@ export function VenueMapElementLayer({
           <g
             key={element.id}
             style={{
-              pointerEvents: interactive && !soldOut ? "auto" : "none",
+              pointerEvents:
+                interactive && (!soldOut || selectOnPointerUp)
+                  ? "auto"
+                  : "none",
             }}
           >
             <VenueElementShape
@@ -463,7 +468,10 @@ export function VenueMapElementLayer({
               showLabels={renderLabels || isSelected || isHighlighted}
               showChairs={renderChairs || isSelected}
               interactive={
-                visible && interactive && !isolationDim && !soldOut
+                visible &&
+                interactive &&
+                !isolationDim &&
+                (!soldOut || selectOnPointerUp)
               }
               zoom={zoom}
               dimmed={

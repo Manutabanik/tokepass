@@ -103,7 +103,8 @@ export function VenueMapZoneLayer({
           zone.id === selectedId || Boolean(selectedIds?.includes(zone.id))
         const highlighted = highlightedIds.includes(zone.id)
         const soldOut = unavailableIds.includes(zone.id)
-        const interactive = Boolean(onSelect) && !soldOut
+        const interactive =
+          Boolean(onSelect) && (!soldOut || selectOnPointerUp)
         const hasSelection =
           spotlight ||
           Boolean(selectedId) ||
@@ -170,8 +171,8 @@ export function VenueMapZoneLayer({
                 : undefined
             }
             className={cn(
-              zoneInteractive ? "cursor-pointer" : undefined,
-              soldOut && "pointer-events-none",
+              zoneInteractive && !soldOut ? "cursor-pointer" : undefined,
+              zoneInteractive && soldOut ? "cursor-not-allowed" : undefined,
               pop && "animate-pulse-subtle",
             )}
             style={{
@@ -283,7 +284,11 @@ export function VenueMapZoneLayer({
               }
               strokeWidth={lodSolid ? 2 : selected ? 3 : 2}
               strokeLinejoin="round"
-              pointerEvents={soldOut || revealFocused ? "none" : "auto"}
+              pointerEvents={
+                revealFocused || (soldOut && !selectOnPointerUp)
+                  ? "none"
+                  : "auto"
+              }
               filter={
                 soldOut || revealFocused || lodSolid
                   ? undefined

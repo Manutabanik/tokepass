@@ -42,6 +42,7 @@ import { storefrontLimitMessage } from "@/lib/checkout-limits"
 import {
   mergeInventoryOccupancy,
   SEAT_HELD_BY_OTHER_MESSAGE,
+  SEAT_OCCUPIED_MESSAGE,
 } from "@/lib/seating/inventory-seat-state"
 import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
 import { cartPlaceLabel } from "@/lib/checkout/cart-lines"
@@ -59,6 +60,7 @@ import {
   hexToRgba,
   lookupOccupancyStatus,
   resolveLiveVenueSeatStatus,
+  type LiveVenueSeatStatus,
 } from "@/lib/seating/venue-map-occupancy"
 import { shouldPaintBuyerMapInventory } from "@/lib/seating/map-inventory-hydration"
 import {
@@ -1004,9 +1006,25 @@ export function InteractiveSeatingCanvas({
 
   function handleZoneClick(zoneId: string, event?: React.SyntheticEvent) {
     event?.stopPropagation()
+    if (unavailableZoneIds.includes(zoneId)) {
+      toast.info(SEAT_OCCUPIED_MESSAGE)
+      return
+    }
     const zone = lodZones.find((item) => item.id === zoneId)
     if (!zone) return
     handleMapTargetClick(mapClickTargetFromZone(zone, map))
+  }
+
+  function abortUnavailablePlace(live: LiveVenueSeatStatus) {
+    if (live === "blocked" || live === "occupied") {
+      toast.info(SEAT_OCCUPIED_MESSAGE)
+      return true
+    }
+    if (live === "held") {
+      toast.info(SEAT_HELD_BY_OTHER_MESSAGE)
+      return true
+    }
+    return false
   }
 
   function toggleSeat(seat: FlattenedVenueSeat) {
@@ -1018,11 +1036,7 @@ export function InteractiveSeatingCanvas({
       selected: selectionIdsRef.current.has(seat.id),
       held: heldSet.has(seat.id),
     })
-    if (live === "blocked" || live === "occupied") return
-    if (live === "held") {
-      toast.info(SEAT_HELD_BY_OTHER_MESSAGE)
-      return
-    }
+    if (abortUnavailablePlace(live)) return
 
     const tableElement = (map.elements ?? []).find(
       (element) =>
@@ -1113,7 +1127,6 @@ export function InteractiveSeatingCanvas({
       const pickIds = seatId
         ? [seatId]
         : [live.id, ...live.seats.map((seat) => seat.id).filter(Boolean)]
-      let heldByOther = false
       for (const id of pickIds) {
         const pickLive = resolveLiveVenueSeatStatus({
           mapStatus: "available",
@@ -1121,12 +1134,7 @@ export function InteractiveSeatingCanvas({
           selected: selectionIdsRef.current.has(id),
           held: heldSet.has(id),
         })
-        if (pickLive === "blocked" || pickLive === "occupied") return
-        if (pickLive === "held") heldByOther = true
-      }
-      if (heldByOther) {
-        toast.info(SEAT_HELD_BY_OTHER_MESSAGE)
-        return
+        if (abortUnavailablePlace(pickLive)) return
       }
       markActivity()
       hapticSelectFeedback()
@@ -1142,11 +1150,7 @@ export function InteractiveSeatingCanvas({
         selected: selectionIdsRef.current.has(seatId),
         held: heldSet.has(seatId),
       })
-      if (seatLive === "blocked" || seatLive === "occupied") return
-      if (seatLive === "held") {
-        toast.info(SEAT_HELD_BY_OTHER_MESSAGE)
-        return
-      }
+      if (abortUnavailablePlace(seatLive)) return
       const seat = live.seats.find((entry) => entry.id === seatId)
       const item = seat
         ? storefrontItemFromElementSeat(live, seat, priceBySectorId, map)
@@ -1204,11 +1208,7 @@ export function InteractiveSeatingCanvas({
       selected: selectionIdsRef.current.has(live.id),
       held: heldSet.has(live.id),
     })
-    if (elementLive === "blocked" || elementLive === "occupied") return
-    if (elementLive === "held") {
-      toast.info(SEAT_HELD_BY_OTHER_MESSAGE)
-      return
-    }
+    if (abortUnavailablePlace(elementLive)) return
     const item = storefrontItemFromElement(live, priceBySectorId, map)
     if (!item) return
     markActivity()
@@ -1502,11 +1502,10 @@ export function InteractiveSeatingCanvas({
                   className={cn(
                     !readOnly && !taken && !heldByOther && "cursor-pointer",
                     (taken || heldByOther) && "cursor-not-allowed",
-                    taken && "pointer-events-none",
                   )}
                   style={{
                     opacity: taken && !buyerOccupancy ? 0.3 : heldByOther ? 0.5 : 1,
-                    pointerEvents: readOnly || taken ? "none" : "auto",
+                    pointerEvents: readOnly ? "none" : "auto",
                   }}
                 >
                   <circle

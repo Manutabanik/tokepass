@@ -119,21 +119,25 @@ describe("venue-touch", () => {
     assert.equal(event.nativeEvent.cancelBubble, true)
   })
 
-  it("treats a lift within 5px as a clean tap and aborts past that slop", () => {
+  it("treats a lift within 10px as a clean tap and aborts past that slop", () => {
     const start = beginBuyerTap(100, 40, 1)
-    assert.equal(BUYER_TAP_SLOP_PX, 5)
+    assert.equal(BUYER_TAP_SLOP_PX, 10)
     assert.equal(
-      isBuyerCleanTap(start, { x: 103, y: 44, pointerId: 1 }),
+      isBuyerCleanTap(start, { x: 106, y: 48, pointerId: 1 }),
       true,
     )
     assert.equal(
-      isBuyerCleanTap(start, { x: 106, y: 40, pointerId: 1 }),
+      isBuyerCleanTap(start, { x: 110, y: 40, pointerId: 1 }),
+      true,
+    )
+    assert.equal(
+      isBuyerCleanTap(start, { x: 111, y: 40, pointerId: 1 }),
       false,
     )
-    const dragged = noteBuyerTapMove(start, 108, 40)
+    const dragged = noteBuyerTapMove(start, 111, 40)
     assert.equal(dragged.dragged, true)
     assert.equal(
-      isBuyerCleanTap(dragged, { x: 108, y: 40, pointerId: 1 }),
+      isBuyerCleanTap(dragged, { x: 111, y: 40, pointerId: 1 }),
       false,
     )
   })

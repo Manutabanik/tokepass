@@ -9,6 +9,8 @@ export type InventorySeatState = "AVAILABLE" | "HELD" | "SOLD"
 export const SEAT_HELD_BY_OTHER_MESSAGE =
   "Asiento en proceso de compra. Alguien lo tiene en su carrito y podría liberarse en unos minutos. ¡Mantené la vista aquí!"
 
+export const SEAT_OCCUPIED_MESSAGE = "Lugar ocupado"
+
 export function resolveInventorySeatState(input: {
   unitStatus?: string | null
   reservedUntil?: string | null

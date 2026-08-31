@@ -7,6 +7,7 @@ import {
   occupancyFromSeatHolds,
   resolveInventorySeatState,
   SEAT_HELD_BY_OTHER_MESSAGE,
+  SEAT_OCCUPIED_MESSAGE,
   seatHoldRealtimePatch,
   seatStatusToInventoryState,
 } from "./inventory-seat-state"
@@ -17,6 +18,7 @@ describe("inventory-seat-state", () => {
       SEAT_HELD_BY_OTHER_MESSAGE,
       "Asiento en proceso de compra. Alguien lo tiene en su carrito y podría liberarse en unos minutos. ¡Mantené la vista aquí!",
     )
+    assert.equal(SEAT_OCCUPIED_MESSAGE, "Lugar ocupado")
   })
 
   it("resolves AVAILABLE, HELD and SOLD from tickets plus seat_holds", () => {
