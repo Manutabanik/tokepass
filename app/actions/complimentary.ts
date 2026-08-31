@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache"
 
-import { ticketDisplayCode } from "@/lib/admin/issued-tickets"
 import { resolveTicketCommerceType } from "@/lib/events/ticket-commerce-type"
 import {
   notifyLivingTicketEmail,
@@ -506,15 +505,13 @@ async function dispatchComplimentaryNotifications(input: {
       errors.push("Marcaste email pero el destinatario no tiene un mail válido.")
     } else {
       try {
-        for (const ticketId of input.ticketIds) {
-          await notifyLivingTicketEmail({
-            toEmail: email,
-            holderName,
-            eventTitle: input.eventTitle,
-            ticketId,
-            ticketCode: ticketDisplayCode(ticketId),
-          })
-        }
+        await notifyLivingTicketEmail({
+          toEmail: email,
+          holderName,
+          eventTitle: input.eventTitle,
+          ticketCount: input.ticketIds.length,
+          ticketId: input.ticketIds[0],
+        })
         sentEmail = true
       } catch (error) {
         errors.push(

@@ -6,9 +6,7 @@ import {
   formatOrderNumber,
   missingGroupSlots,
   planGroupTicketExpansion,
-  ticketCodeText,
   ticketPassLabel,
-  ticketQrImageUrl,
   ticketValidationUrl,
 } from "./order-ticket-payload"
 
@@ -31,7 +29,7 @@ describe("planGroupTicketExpansion", () => {
   })
 })
 
-describe("ticket labels and QR urls", () => {
+describe("ticket labels for receipts", () => {
   it("labels grouped passes as Pase N de M", () => {
     assert.equal(
       ticketPassLabel({
@@ -43,7 +41,7 @@ describe("ticket labels and QR urls", () => {
     )
   })
 
-  it("builds a valida URL and qrserver image", () => {
+  it("keeps valida URLs out of the receipt payload", () => {
     const payload = ticketValidationUrl(
       "https://www.tokepass.com.ar",
       "11111111-1111-4111-8111-111111111111",
@@ -52,28 +50,20 @@ describe("ticket labels and QR urls", () => {
       payload,
       "https://www.tokepass.com.ar/valida/11111111-1111-4111-8111-111111111111",
     )
-    assert.match(ticketQrImageUrl(payload), /api\.qrserver\.com/)
-    assert.match(ticketQrImageUrl(payload), /data=/)
   })
 
-  it("formats a compact order number and code", () => {
+  it("formats a compact order number", () => {
     assert.equal(
       formatOrderNumber("a1b2c3d4-e5f6-7890-abcd-ef1234567890"),
       "TP-A1B2C3D4",
     )
-    assert.equal(
-      ticketCodeText("abcd-ef12-3456", "ignored"),
-      "ABCDEF12",
-    )
   })
 
-  it("maps tickets into email rows with group labels", () => {
+  it("maps tickets into receipt lines without QR payloads", () => {
     const rows = buildOrderEmailTickets({
-      appUrl: "https://www.tokepass.com.ar",
       tickets: [
         {
           id: "11111111-1111-4111-8111-111111111111",
-          qr_code: "aaaa-bbbb-cccc",
           group_id: "g1",
           group_slot: 1,
           ticket_tiers: { name: "Mesas" },
@@ -81,7 +71,6 @@ describe("ticket labels and QR urls", () => {
         },
         {
           id: "22222222-2222-4222-8222-222222222222",
-          qr_code: "dddd-eeee-ffff",
           group_id: "g1",
           group_slot: 2,
           ticket_tiers: { name: "Mesas" },
@@ -91,6 +80,7 @@ describe("ticket labels and QR urls", () => {
     })
     assert.equal(rows[0]?.label, "Mesa 12 - Pase 1 de 2")
     assert.equal(rows[1]?.label, "Mesa 12 - Pase 2 de 2")
-    assert.equal(rows[0]?.codeText, "AAAABBBB")
+    assert.equal("qrCodeUrl" in (rows[0] ?? {}), false)
+    assert.equal("codeText" in (rows[0] ?? {}), false)
   })
 })

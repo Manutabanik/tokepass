@@ -223,7 +223,6 @@ export async function resendPlatformOrderTickets(
         holderName: ticket.holder_name?.trim() || "Titular",
         eventTitle,
         ticketId: ticket.id,
-        ticketCode: ticketDisplayCode(ticket.id),
       })
       sent += 1
     }

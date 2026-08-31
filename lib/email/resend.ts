@@ -16,6 +16,11 @@ import {
   httpImageUrl,
   type OrderEmailData,
 } from "@/lib/email/order-ticket-payload"
+import {
+  EMAIL_WALLET_CTA,
+  LIVING_QR_EMAIL_DISCLAIMER,
+  walletReceiptUrl,
+} from "@/lib/email/receipt-copy"
 import { escapeHtml, sanitizeEmailSubject, sanitizeEmailText } from "@/lib/email/sanitize"
 import { ticketConfirmationEmailSubject } from "@/lib/email/ticket-email-subject"
 import { formatCurrency, formatEventDate } from "@/lib/format"
@@ -83,7 +88,7 @@ export async function sendOrderTicketsEmail(
   }
 
   const accountUrl =
-    payload.accountUrl?.trim() || `${getEmailAppUrl()}/cuenta/entradas`
+    payload.accountUrl?.trim() || walletReceiptUrl(getEmailAppUrl())
   const emailProps: OrderEmailProps = {
     customerName: payload.customerName,
     orderNumber: payload.orderNumber,
@@ -105,14 +110,15 @@ export async function sendOrderTicketsEmail(
     payload.customerName.trim()
       ? `¡Hola, ${payload.customerName.trim()}!`
       : "¡Hola!",
-    "¡Todo listo! Tu compra quedó confirmada. Podés ver tus códigos de acceso directamente desde el botón de abajo o ingresando a la app.",
+    "Este mail es solo el comprobante. El acceso a la puerta está en tu billetera.",
     `Orden: ${payload.orderNumber}`,
     `Evento: ${payload.eventName}`,
     `Fecha: ${payload.eventDate}`,
     `Lugar: ${payload.eventVenue}`,
     `Total: ${emailProps.totalAmount}`,
-    ...payload.tickets.map((ticket) => `${ticket.label}: ${ticket.codeText}`),
-    `Ver mis entradas en TokePass: ${accountUrl}`,
+    ...payload.tickets.map((ticket) => ticket.label),
+    LIVING_QR_EMAIL_DISCLAIMER,
+    `${EMAIL_WALLET_CTA}: ${accountUrl}`,
     "¿Tuviste algún problema con tu compra? Respondé a este mail o escribinos por WhatsApp.",
   ].join("\n")
 
@@ -156,6 +162,9 @@ export async function sendTicketConfirmationEmail({
   walletUrl,
   otpCode,
   isTest,
+  orderNumber,
+  tickets,
+  eventBannerUrl,
 }: {
   to: string
   orderDetails: TicketOrderDetails
@@ -164,6 +173,9 @@ export async function sendTicketConfirmationEmail({
   walletUrl?: string
   otpCode?: string
   isTest?: boolean
+  orderNumber?: string
+  tickets?: Array<{ id: string; label: string }>
+  eventBannerUrl?: string
 }): Promise<void> {
   const email = to.trim().toLowerCase()
   if (!email || !email.includes("@")) {
@@ -186,7 +198,7 @@ export async function sendTicketConfirmationEmail({
   }
 
   const appUrl = getEmailAppUrl()
-  const accessUrl = walletUrl || `${appUrl}/cuenta/entradas`
+  const accessUrl = walletUrl || walletReceiptUrl(appUrl)
   const logoUrl = `${appUrl}/brand/tokepass-mark.png`
   const ticketCount = Math.max(1, orderDetails.ticketCount)
   const eventDateLabel = formatEventDate(eventDetails.date)
@@ -199,10 +211,13 @@ export async function sendTicketConfirmationEmail({
       eventTitle: eventDetails.title,
       eventDateLabel,
       eventLocation: eventDetails.location ?? "Online",
+      orderNumber,
       ticketCount,
+      tickets,
       totalPaidLabel,
       walletUrl: accessUrl,
       logoUrl,
+      eventBannerUrl,
       otpCode,
     }),
   )
@@ -210,15 +225,15 @@ export async function sendTicketConfirmationEmail({
   const text = [
     `¡Acá están tus entradas para ${eventDetails.title}!`,
     buyerName?.trim() ? `¡Hola, ${buyerName.trim()}!` : "¡Hola!",
-    "¡Todo listo! Tu compra quedó confirmada. Podés ver tus códigos de acceso directamente desde el botón de abajo o ingresando a la app.",
+    "Este mail es solo el comprobante. El acceso a la puerta está en tu billetera.",
     `Evento: ${eventDetails.title}`,
     `Fecha: ${eventDateLabel}`,
     `Lugar: ${eventDetails.location?.trim() || "Online"}`,
     `Entradas: ${ticketCount}`,
     `Total pagado: ${totalPaidLabel}`,
-    `Ver mis entradas en TokePass: ${accessUrl}`,
-    otpCode ? `Codigo de acceso: ${otpCode}` : "",
-    "Por motivos de seguridad y para evitar fraudes, tus códigos QR son dinámicos y solo pueden visualizarse desde la plataforma. No se adjuntan PDFs.",
+    LIVING_QR_EMAIL_DISCLAIMER,
+    `${EMAIL_WALLET_CTA}: ${accessUrl}`,
+    otpCode ? `Codigo de verificación de invitado: ${otpCode}` : "",
     "¿Tuviste algún problema con tu compra? Respondé a este mail o escribinos por WhatsApp.",
   ]
     .filter(Boolean)
@@ -298,7 +313,7 @@ export async function sendPaidOrderReceiptEmail(
     admin
       .from("tickets")
       .select(
-        "id, event_id, qr_code, holder_email, holder_name, group_id, group_slot, ticket_tiers!tickets_tier_id_fkey(name), event_seating_units(label, sector_name)",
+        "id, event_id, holder_email, holder_name, group_id, group_slot, ticket_tiers!tickets_tier_id_fkey(name), event_seating_units(label, sector_name)",
       )
       .eq("order_id", orderId)
       .order("group_slot", { ascending: true, nullsFirst: true }),
@@ -347,17 +362,6 @@ export async function sendPaidOrderReceiptEmail(
     profile?.full_name?.trim() ||
     ""
 
-  let walletUrl: string | undefined = access?.magicUrl
-  let otpCode: string | undefined = access?.otp?.trim() || undefined
-  if (to && !walletUrl) {
-    const { issueGuestReceiptAccess } = await import(
-      "@/app/actions/guest-ticket-access"
-    )
-    const issued = await issueGuestReceiptAccess(order.id)
-    walletUrl = issued?.magicUrl
-    otpCode = issued?.otp?.trim() || undefined
-  }
-
   const eventName = event?.title?.trim() || "Evento TokePass"
   const eventDate = event?.date
     ? formatEventDate(event.date)
@@ -366,9 +370,10 @@ export async function sendPaidOrderReceiptEmail(
     httpImageUrl(event?.flyer_url) || httpImageUrl(event?.image_url)
   const appUrl = getEmailAppUrl()
   const emailTickets = buildOrderEmailTickets({
-    appUrl,
     tickets: ticketRows,
   })
+  const walletUrl = walletReceiptUrl(appUrl)
+  const otpCode = access?.otp?.trim() || undefined
 
   if (!to) {
     logger.warn({
@@ -390,7 +395,7 @@ export async function sendPaidOrderReceiptEmail(
       eventBannerUrl: bannerUrl,
       totalAmount: Number(order.total_amount) || 0,
       tickets: emailTickets,
-      accountUrl: walletUrl || `${appUrl}/cuenta/entradas`,
+      accountUrl: walletUrl,
       isTest,
     })
   } catch (error) {
@@ -406,6 +411,9 @@ export async function sendPaidOrderReceiptEmail(
         buyerName,
         walletUrl,
         otpCode,
+        orderNumber: formatOrderNumber(order.id),
+        tickets: emailTickets,
+        eventBannerUrl: bannerUrl,
         orderDetails: {
           orderId: order.id,
           ticketCount: ticketRows.length || 1,

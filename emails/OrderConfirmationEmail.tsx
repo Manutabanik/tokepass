@@ -11,11 +11,14 @@ import {
   Text,
 } from "@react-email/components"
 
+import {
+  EMAIL_WALLET_CTA,
+  LIVING_QR_EMAIL_DISCLAIMER,
+} from "@/lib/email/receipt-copy"
+
 export type OrderEmailTicket = {
   id: string
   label: string
-  qrCodeUrl: string
-  codeText: string
 }
 
 export type OrderEmailProps = {
@@ -34,7 +37,7 @@ const DEFAULT_ACCOUNT_URL = "https://www.tokepass.com.ar/cuenta/entradas"
 
 export const PreviewProps: OrderEmailProps = {
   customerName: "Ana Perez",
-  orderNumber: "TP-10482",
+  orderNumber: "TP-D5FF3977",
   eventName: "Noche en Club TokePass",
   eventDate: "Sabado 22 nov 2026 · 23:30",
   eventVenue: "CABA · Salón Central",
@@ -42,20 +45,8 @@ export const PreviewProps: OrderEmailProps = {
   totalAmount: "$ 48.000",
   accountUrl: DEFAULT_ACCOUNT_URL,
   tickets: [
-    {
-      id: "tkt-demo-1",
-      label: "Mesa 12 - Pase 1 de 4",
-      qrCodeUrl:
-        "https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=TOKEPASS-DEMO-1",
-      codeText: "TKP-12A1",
-    },
-    {
-      id: "tkt-demo-2",
-      label: "Mesa 12 - Pase 2 de 4",
-      qrCodeUrl:
-        "https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=TOKEPASS-DEMO-2",
-      codeText: "TKP-12A2",
-    },
+    { id: "tkt-demo-1", label: "Mesa 12 · Living" },
+    { id: "tkt-demo-2", label: "General · Viernes" },
   ],
 }
 
@@ -73,7 +64,7 @@ export function OrderConfirmationEmail({
   const greeting = customerName.trim()
     ? `¡Hola, ${customerName.trim()}!`
     : "¡Hola!"
-  const preview = `¡Acá están tus entradas para ${eventName}!`
+  const preview = `Recibo de tu compra para ${eventName}`
 
   return (
     <Html lang="es">
@@ -82,14 +73,13 @@ export function OrderConfirmationEmail({
       <Body style={styles.body}>
         <Container style={styles.container}>
           <Text style={styles.brand}>TokePass</Text>
-          <Text style={styles.kicker}>Pago confirmado</Text>
-          <Text style={styles.title}>
-            ¡Acá están tus entradas para {eventName}!
-          </Text>
+          <Text style={styles.kicker}>Recibo de compra</Text>
+          <Text style={styles.title}>Tu compra de {eventName} está confirmada</Text>
           <Text style={styles.lead}>{greeting}</Text>
           <Text style={styles.lead}>
-            ¡Todo listo! Tu compra quedó confirmada. Podés ver tus códigos de
-            acceso directamente desde el botón de abajo o ingresando a la app.
+            Este mail es solo el comprobante. El acceso a la puerta está en tu
+            billetera, con un código dinámico que no se puede reenviar ni
+            imprimir.
           </Text>
 
           {eventBannerUrl ? (
@@ -118,33 +108,24 @@ export function OrderConfirmationEmail({
             <Text style={styles.total}>{totalAmount}</Text>
           </Section>
 
-          <Text style={styles.sectionTitle}>Tus pases</Text>
+          <Text style={styles.sectionTitle}>Detalle de entradas</Text>
           {tickets.map((ticket) => (
             <Section key={ticket.id} style={styles.ticketCard}>
               <Text style={styles.ticketLabel}>{ticket.label}</Text>
-              <Section style={styles.qrWrap}>
-                <Img
-                  src={ticket.qrCodeUrl}
-                  alt={`QR ${ticket.label}`}
-                  width="180"
-                  height="180"
-                  style={styles.qrImage}
-                />
-              </Section>
-              <Text style={styles.codeText}>{ticket.codeText}</Text>
             </Section>
           ))}
 
+          <Section style={styles.alert}>
+            <Text style={styles.alertTitle}>Alerta de seguridad</Text>
+            <Text style={styles.alertBody}>{LIVING_QR_EMAIL_DISCLAIMER}</Text>
+          </Section>
+
           <Section style={styles.ctaWrap}>
             <Button href={accountUrl} style={styles.button}>
-              Ver mis entradas en TokePass
+              {EMAIL_WALLET_CTA}
             </Button>
           </Section>
 
-          <Text style={styles.note}>
-            El código de acceso en tu cuenta se actualiza solo. Llevalo en la
-            app o en la web de TokePass al ingresar.
-          </Text>
           <Hr style={styles.footerRule} />
           <Text style={styles.footer}>
             ¿Tuviste algún problema con tu compra? Respondé a este mail o
@@ -254,38 +235,35 @@ const styles = {
     backgroundColor: "#1F2937",
     border: "1px solid #374151",
     borderRadius: "16px",
-    marginBottom: "12px",
-    padding: "18px 16px 16px",
-    textAlign: "center" as const,
+    marginBottom: "10px",
+    padding: "14px 16px",
   },
   ticketLabel: {
     color: "#E5E7EB",
     fontSize: "14px",
     fontWeight: 700,
-    margin: "0 0 14px",
+    margin: "0",
   },
-  qrWrap: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: "12px",
-    display: "inline-block",
-    margin: "0 auto",
-    padding: "12px",
+  alert: {
+    backgroundColor: "#3F1D1D",
+    border: "1px solid #7F1D1D",
+    borderRadius: "16px",
+    margin: "24px 0 8px",
+    padding: "16px 18px",
   },
-  qrImage: {
-    display: "block",
-    height: "180px",
-    margin: "0 auto",
-    width: "180px",
-  },
-  codeText: {
-    color: "#D1D5DB",
-    fontFamily:
-      'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-    fontSize: "13px",
-    fontWeight: 700,
+  alertTitle: {
+    color: "#FECACA",
+    fontSize: "11px",
+    fontWeight: 800,
     letterSpacing: "0.16em",
-    margin: "14px 0 0",
+    margin: "0 0 8px",
     textTransform: "uppercase" as const,
+  },
+  alertBody: {
+    color: "#F3F4F6",
+    fontSize: "13px",
+    lineHeight: "1.55",
+    margin: "0",
   },
   ctaWrap: {
     margin: "28px 0 16px",
@@ -296,16 +274,10 @@ const styles = {
     borderRadius: "12px",
     color: "#FFFFFF",
     display: "inline-block",
-    fontSize: "15px",
-    fontWeight: 700,
-    padding: "14px 28px",
+    fontSize: "16px",
+    fontWeight: 800,
+    padding: "16px 32px",
     textDecoration: "none",
-  },
-  note: {
-    color: "#9CA3AF",
-    fontSize: "12px",
-    lineHeight: "1.55",
-    margin: "0",
   },
   footerRule: {
     borderColor: "#374151",

@@ -2,6 +2,12 @@
  * Notificaciones outbound (email / WhatsApp webhook).
  */
 
+import {
+  EMAIL_WALLET_CTA,
+  LIVING_QR_EMAIL_DISCLAIMER,
+  walletReceiptUrl,
+} from "@/lib/email/receipt-copy"
+import { escapeHtml } from "@/lib/email/sanitize"
 import { circuitFetch } from "@/lib/resilience/circuit-breaker"
 
 export type TicketTransferNotifyPayload = {
@@ -98,8 +104,8 @@ export type LivingTicketEmailPayload = {
   toEmail: string
   holderName: string
   eventTitle: string
-  ticketId: string
-  ticketCode: string
+  ticketId?: string
+  ticketCount?: number
 }
 
 export async function notifyLivingTicketEmail(
@@ -107,16 +113,25 @@ export async function notifyLivingTicketEmail(
 ): Promise<void> {
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
-    "https://tokepass.app"
-  const ticketUrl = `${siteUrl}/tickets/${payload.ticketId}`
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
+    "https://tokepass.com.ar"
+  const walletUrl = walletReceiptUrl(siteUrl)
   const message = [
     payload.holderName.trim()
       ? `¡Hola, ${payload.holderName.trim()}!`
       : "¡Hola!",
-    "¡Todo listo! Tu compra quedó confirmada. Podés ver tus códigos de acceso directamente desde el botón de abajo o ingresando a la app.",
-    `Código: #${payload.ticketCode}`,
-    `Ver mis entradas en TokePass: ${ticketUrl}`,
+    `Tu entrada para ${payload.eventTitle} ya está en tu billetera TokePass.`,
+    LIVING_QR_EMAIL_DISCLAIMER,
+    `${EMAIL_WALLET_CTA}: ${walletUrl}`,
   ].join("\n")
+  const safeName = escapeHtml(payload.holderName.trim())
+  const safeTitle = escapeHtml(payload.eventTitle)
+  const html = [
+    `<p>${safeName ? `¡Hola, ${safeName}!` : "¡Hola!"}</p>`,
+    `<p>Tu entrada para <strong>${safeTitle}</strong> ya está en tu billetera TokePass.</p>`,
+    `<p style="background:#3F1D1D;color:#F3F4F6;padding:12px 14px;border-radius:12px;">${escapeHtml(LIVING_QR_EMAIL_DISCLAIMER)}</p>`,
+    `<p><a href="${escapeHtml(walletUrl)}" style="display:inline-block;background:#10B981;color:#fff;padding:14px 28px;border-radius:12px;font-weight:700;text-decoration:none;">${escapeHtml(EMAIL_WALLET_CTA)}</a></p>`,
+  ].join("")
 
   try {
     if (
@@ -125,7 +140,7 @@ export async function notifyLivingTicketEmail(
         message,
         eventTitle: payload.eventTitle,
         ticketId: payload.ticketId,
-        ticketUrl,
+        walletUrl,
       })
     ) {
       return
@@ -148,8 +163,9 @@ export async function notifyLivingTicketEmail(
       body: JSON.stringify({
         from: fromEmail,
         to: [payload.toEmail],
-        subject: `¡Acá están tus entradas para ${payload.eventTitle}!`,
+        subject: `Recibo TokePass — ${payload.eventTitle}`,
         text: message,
+        html,
       }),
       signal: AbortSignal.timeout(8000),
     })
@@ -164,7 +180,7 @@ export async function notifyLivingTicketEmail(
   console.info("[notifyLivingTicketEmail]", {
     to: payload.toEmail,
     ticketId: payload.ticketId,
-    message,
+    walletUrl,
   })
 }
 
@@ -173,11 +189,14 @@ export async function notifyPosTicketIssued(
 ): Promise<void> {
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
-    "https://tokepass.app"
-  const links = payload.ticketIds
-    .map((id) => `${siteUrl}/tickets/${id}/print`)
-    .join("\n")
-  const message = `Tu entrada TokePass para ${payload.eventTitle} (${payload.quantity}). Abrí el QR:\n${links}`
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
+    "https://tokepass.com.ar"
+  const walletUrl = walletReceiptUrl(siteUrl)
+  const message = [
+    `Tu entrada TokePass para ${payload.eventTitle} (${payload.quantity}) ya está en tu billetera.`,
+    LIVING_QR_EMAIL_DISCLAIMER,
+    `${EMAIL_WALLET_CTA}: ${walletUrl}`,
+  ].join("\n")
 
   try {
     if (

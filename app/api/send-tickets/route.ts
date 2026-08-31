@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import { isStrictEmail, normalizeEmail } from "@/lib/checkout/guest-input"
 import { getEmailAppUrl, sendOrderTicketsEmail } from "@/lib/email/resend"
+import { walletReceiptUrl } from "@/lib/email/receipt-copy"
 import { logger } from "@/lib/logger"
 
 export const runtime = "nodejs"
@@ -10,8 +11,6 @@ export const runtime = "nodejs"
 const ticketSchema = z.object({
   id: z.string().trim().min(1),
   label: z.string().trim().min(1),
-  qrCodeUrl: z.string().trim().url(),
-  codeText: z.string().trim().min(1),
 })
 
 const bodySchema = z.object({
@@ -80,7 +79,7 @@ export async function POST(request: NextRequest) {
       eventBannerUrl: order.eventBannerUrl,
       totalAmount: order.totalAmount,
       tickets: order.tickets,
-      accountUrl: order.accountUrl || `${getEmailAppUrl()}/cuenta/entradas`,
+      accountUrl: order.accountUrl || walletReceiptUrl(getEmailAppUrl()),
     })
     return NextResponse.json({ success: true, messageId })
   } catch (error) {

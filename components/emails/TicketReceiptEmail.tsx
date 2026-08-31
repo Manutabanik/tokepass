@@ -11,15 +11,28 @@ import {
   Text,
 } from "@react-email/components"
 
+import {
+  EMAIL_WALLET_CTA,
+  LIVING_QR_EMAIL_DISCLAIMER,
+} from "@/lib/email/receipt-copy"
+
+export type TicketReceiptLine = {
+  id: string
+  label: string
+}
+
 export type TicketReceiptEmailProps = {
   buyerName?: string
   eventTitle: string
   eventDateLabel: string
   eventLocation: string
+  orderNumber?: string
   ticketCount: number
+  tickets?: TicketReceiptLine[]
   totalPaidLabel: string
   walletUrl: string
   logoUrl: string
+  eventBannerUrl?: string
   otpCode?: string
 }
 
@@ -28,10 +41,13 @@ export function TicketReceiptEmail({
   eventTitle,
   eventDateLabel,
   eventLocation,
+  orderNumber,
   ticketCount,
+  tickets = [],
   totalPaidLabel,
   walletUrl,
   logoUrl,
+  eventBannerUrl,
   otpCode,
 }: TicketReceiptEmailProps) {
   const greeting = buyerName?.trim()
@@ -39,7 +55,7 @@ export function TicketReceiptEmail({
     : "¡Hola!"
   const ticketLabel =
     ticketCount === 1 ? "1 entrada" : `${ticketCount} entradas`
-  const preview = `¡Acá están tus entradas para ${eventTitle}!`
+  const preview = `Recibo de tu compra para ${eventTitle}`
 
   return (
     <Html lang="es">
@@ -58,15 +74,24 @@ export function TicketReceiptEmail({
             <Text style={styles.brand}>TokePass</Text>
           </Section>
 
-          <Text style={styles.kicker}>Pago confirmado</Text>
+          <Text style={styles.kicker}>Recibo de compra</Text>
           <Text style={styles.title}>
-            ¡Acá están tus entradas para {eventTitle}!
+            Tu compra de {eventTitle} está confirmada
           </Text>
           <Text style={styles.lead}>{greeting}</Text>
           <Text style={styles.lead}>
-            ¡Todo listo! Tu compra quedó confirmada. Podés ver tus códigos de
-            acceso directamente desde el botón de abajo o ingresando a la app.
+            Este mail es solo el comprobante. El acceso a la puerta está en tu
+            billetera.
           </Text>
+
+          {eventBannerUrl ? (
+            <Img
+              src={eventBannerUrl}
+              alt={eventTitle}
+              width="504"
+              style={styles.banner}
+            />
+          ) : null}
 
           <Section style={styles.card}>
             <Text style={styles.cardLabel}>Evento</Text>
@@ -77,6 +102,13 @@ export function TicketReceiptEmail({
             <Hr style={styles.divider} />
             <Text style={styles.cardLabel}>Lugar</Text>
             <Text style={styles.cardValue}>{eventLocation}</Text>
+            {orderNumber ? (
+              <>
+                <Hr style={styles.divider} />
+                <Text style={styles.cardLabel}>Orden</Text>
+                <Text style={styles.cardValue}>{orderNumber}</Text>
+              </>
+            ) : null}
             <Hr style={styles.divider} />
             <Text style={styles.cardLabel}>Entradas</Text>
             <Text style={styles.cardValue}>{ticketLabel}</Text>
@@ -85,24 +117,33 @@ export function TicketReceiptEmail({
             <Text style={styles.total}>{totalPaidLabel}</Text>
           </Section>
 
+          {tickets.length > 0 ? (
+            <>
+              <Text style={styles.sectionTitle}>Detalle de entradas</Text>
+              {tickets.map((ticket) => (
+                <Section key={ticket.id} style={styles.ticketCard}>
+                  <Text style={styles.ticketLabel}>{ticket.label}</Text>
+                </Section>
+              ))}
+            </>
+          ) : null}
+
+          <Section style={styles.alert}>
+            <Text style={styles.alertTitle}>Alerta de seguridad</Text>
+            <Text style={styles.alertBody}>{LIVING_QR_EMAIL_DISCLAIMER}</Text>
+          </Section>
+
           <Section style={styles.ctaWrap}>
             <Button href={walletUrl} style={styles.button}>
-              Ver mis entradas en TokePass
+              {EMAIL_WALLET_CTA}
             </Button>
           </Section>
 
           {otpCode ? (
             <Text style={styles.security}>
-              Tu codigo de acceso es {otpCode}. Lo vas a necesitar para ver el QR
-              en un dispositivo nuevo.
+              Si compraste como invitado, tu código de verificación es {otpCode}.
             </Text>
           ) : null}
-
-          <Text style={styles.security}>
-            Por motivos de seguridad y para evitar fraudes, tus códigos QR son
-            dinámicos y solo pueden visualizarse desde la plataforma. No se
-            adjuntan PDFs.
-          </Text>
 
           <Hr style={styles.footerRule} />
           <Text style={styles.footer}>
@@ -168,6 +209,15 @@ const styles = {
     lineHeight: "1.55",
     margin: "0 0 24px",
   },
+  banner: {
+    borderRadius: "16px",
+    display: "block",
+    height: "auto",
+    margin: "0 0 20px",
+    maxWidth: "100%",
+    objectFit: "cover" as const,
+    width: "100%",
+  },
   card: {
     backgroundColor: "#18181b",
     border: "1px solid #27272a",
@@ -201,18 +251,58 @@ const styles = {
     borderTop: "1px solid #27272a",
     margin: "12px 0 0",
   },
+  sectionTitle: {
+    color: "#fafafa",
+    fontSize: "15px",
+    fontWeight: 800,
+    margin: "24px 0 10px",
+  },
+  ticketCard: {
+    backgroundColor: "#18181b",
+    border: "1px solid #27272a",
+    borderRadius: "14px",
+    marginBottom: "8px",
+    padding: "12px 14px",
+  },
+  ticketLabel: {
+    color: "#e4e4e7",
+    fontSize: "14px",
+    fontWeight: 700,
+    margin: "0",
+  },
+  alert: {
+    backgroundColor: "#3f1d1d",
+    border: "1px solid #7f1d1d",
+    borderRadius: "16px",
+    margin: "24px 0 8px",
+    padding: "16px 18px",
+  },
+  alertTitle: {
+    color: "#fecaca",
+    fontSize: "11px",
+    fontWeight: 800,
+    letterSpacing: "0.16em",
+    margin: "0 0 8px",
+    textTransform: "uppercase" as const,
+  },
+  alertBody: {
+    color: "#f4f4f5",
+    fontSize: "13px",
+    lineHeight: "1.55",
+    margin: "0",
+  },
   ctaWrap: {
     margin: "28px 0 20px",
     textAlign: "center" as const,
   },
   button: {
     backgroundColor: "#059669",
-    borderRadius: "999px",
+    borderRadius: "12px",
     color: "#ffffff",
     display: "inline-block",
-    fontSize: "15px",
-    fontWeight: 700,
-    padding: "14px 28px",
+    fontSize: "16px",
+    fontWeight: 800,
+    padding: "16px 32px",
     textDecoration: "none",
   },
   security: {

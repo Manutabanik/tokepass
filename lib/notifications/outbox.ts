@@ -2,7 +2,12 @@ import "server-only"
 
 import { after } from "next/server"
 
-import { sendPaidOrderReceiptEmail } from "@/lib/email/resend"
+import {
+  EMAIL_WALLET_CTA,
+  LIVING_QR_EMAIL_DISCLAIMER,
+  walletReceiptUrl,
+} from "@/lib/email/receipt-copy"
+import { getEmailAppUrl, sendPaidOrderReceiptEmail } from "@/lib/email/resend"
 import { ticketConfirmationEmailSubject } from "@/lib/email/ticket-email-subject"
 import { isSandboxIssuedOrder } from "@/lib/finance/order-test-flags"
 import {
@@ -162,15 +167,21 @@ async function deliverTransferEmail(payload: Record<string, unknown>): Promise<v
 
   const eventTitle = asString(payload.event_title) || "Evento TokePass"
   const claimUrl = asString(payload.claim_url).trim()
-  const text = claimUrl
-    ? `Te enviaron una entrada para ${eventTitle}. Reclamala en TokePass: ${claimUrl}`
-    : `Te enviaron una entrada para ${eventTitle}. Reclamala en TokePass, Mis entradas.`
+  const walletUrl = walletReceiptUrl(getEmailAppUrl())
+  const actionUrl = claimUrl || walletUrl
+  const text = [
+    `Te enviaron una entrada para ${eventTitle}.`,
+    LIVING_QR_EMAIL_DISCLAIMER,
+    claimUrl
+      ? `Reclamala en TokePass: ${claimUrl}`
+      : `${EMAIL_WALLET_CTA}: ${walletUrl}`,
+  ].join("\n")
 
   await sendEmailWithFailover({
     to: receiverEmail,
     subject: sanitizeEmailSubject(`Te enviaron una entrada — ${eventTitle}`),
     text,
-    html: `<p>${escapeHtml(text)}</p>`,
+    html: `<p>Te enviaron una entrada para ${escapeHtml(eventTitle)}.</p><p>${escapeHtml(LIVING_QR_EMAIL_DISCLAIMER)}</p><p><a href="${escapeHtml(actionUrl)}">${escapeHtml(EMAIL_WALLET_CTA)}</a></p>`,
   })
 }
 
@@ -222,7 +233,7 @@ async function deliverOrderEmail(
     subject: sanitizeEmailSubject(
       ticketConfirmationEmailSubject(eventTitle, { isTest }),
     ),
-    text: `¡Hola! ¡Todo listo! Tu compra quedó confirmada. Podés ver tus códigos de acceso en Mis entradas en TokePass. ¿Tuviste algún problema con tu compra? Respondé a este mail o escribinos por WhatsApp.`,
+    text: `¡Hola! Tu compra quedó confirmada. ${LIVING_QR_EMAIL_DISCLAIMER} ${EMAIL_WALLET_CTA}: ${walletReceiptUrl(getEmailAppUrl())}`,
   }
 
   if (orderId) {

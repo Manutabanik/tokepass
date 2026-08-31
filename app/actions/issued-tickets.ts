@@ -653,7 +653,6 @@ export async function resendTicketEmailAdmin(
       holderName: ticket.holder_name?.trim() || "Titular",
       eventTitle,
       ticketId,
-      ticketCode: ticketDisplayCode(ticketId),
     })
 
     return { success: true, data: { email } }
@@ -927,7 +926,6 @@ export async function reassignTicketAdmin(
       holderName: name,
       eventTitle,
       ticketId: created.id,
-      ticketCode: ticketDisplayCode(created.id),
     }).catch((notifyError: unknown) => {
       logger.error({
         context: "issued-tickets",

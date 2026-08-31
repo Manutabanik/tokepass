@@ -90,16 +90,6 @@ export function ticketValidationUrl(appUrl: string, ticketId: string): string {
   return `${appUrl.replace(/\/$/, "")}/valida/${ticketId}`
 }
 
-export function ticketQrImageUrl(payload: string): string {
-  return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(payload)}`
-}
-
-export function ticketCodeText(qrCode: string, ticketId: string): string {
-  const fromQr = qrCode.replace(/-/g, "").slice(0, 8).toUpperCase()
-  if (fromQr) return fromQr
-  return ticketId.replace(/-/g, "").slice(0, 8).toUpperCase()
-}
-
 export function ticketPassLabel(input: {
   seatingLabel?: string | null
   sectorName?: string | null
@@ -266,10 +256,8 @@ export function formatOrderNumber(orderId: string): string {
 }
 
 export function buildOrderEmailTickets(input: {
-  appUrl: string
   tickets: Array<{
     id: string
-    qr_code: string
     group_id: string | null
     group_slot: number | null
     ticket_tiers?: { name?: string | null } | { name?: string | null }[] | null
@@ -295,7 +283,6 @@ export function buildOrderEmailTickets(input: {
       : ticket.event_seating_units
     const groupId = ticket.group_id?.trim() ?? ""
     const groupSize = groupId ? (groupSizes.get(groupId) ?? 1) : 1
-    const validationUrl = ticketValidationUrl(input.appUrl, ticket.id)
     return {
       id: ticket.id,
       label: ticketPassLabel({
@@ -305,8 +292,6 @@ export function buildOrderEmailTickets(input: {
         groupSlot: ticket.group_slot,
         groupSize,
       }),
-      qrCodeUrl: ticketQrImageUrl(validationUrl),
-      codeText: ticketCodeText(ticket.qr_code, ticket.id),
     }
   })
 }
