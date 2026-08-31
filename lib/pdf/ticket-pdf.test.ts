@@ -8,6 +8,7 @@ import {
   parseTicketPdfSize,
   THERMAL_58_WIDTH_PT,
   THERMAL_80_WIDTH_PT,
+  ticketPdfAdmissionTitle,
   ticketPdfFilename,
   ticketPdfPath,
   ticketPdfSectorName,
@@ -72,7 +73,8 @@ describe("ticket pdf model", () => {
       { qrDataUri: "data:image/png;base64,xx", eventFlyerSrc: null },
     )
     assert.equal(model.ticketCode, "#67F354EE")
-    assert.equal(model.sectorName, "Campo")
+    assert.equal(model.ticketTierName, "Entrada General - Campo")
+    assert.equal(model.sectorName, null)
     assert.equal(model.paymentMethod, "EFECTIVO")
     assert.equal(model.orderIdShort, "ABCD1234")
     assert.equal(model.qrPayload, sample.qrPayload)
@@ -88,6 +90,25 @@ describe("ticket pdf model", () => {
         seatingLabel: null,
       }),
       null,
+    )
+  })
+
+  it("puts the exact table in TIPO DE ENTRADA", () => {
+    const mapped = {
+      ...sample,
+      tierName: "GRADA NARANJA",
+      sectorLabel: "GRADA NARANJA",
+      seatingLabel: "Mesa 05",
+    }
+    assert.equal(ticketPdfAdmissionTitle(mapped), "GRADA NARANJA - Mesa 05")
+    assert.equal(ticketPdfSectorName(mapped), null)
+    assert.equal(
+      mapPrintableTicketToPdfModel(
+        mapped,
+        { orderId: null, paymentMethod: null, issuedAt: null },
+        { qrDataUri: "data:image/png;base64,xx", eventFlyerSrc: null },
+      ).ticketTierName,
+      "GRADA NARANJA - Mesa 05",
     )
   })
 

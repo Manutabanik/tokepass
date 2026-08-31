@@ -9,21 +9,15 @@ import { TestTicketWatermark } from "@/components/public/test-ticket-watermark"
 import { formatCurrency, formatEventDay, formatEventTime } from "@/lib/format"
 import { ticketPrintCode } from "@/lib/ticket-print"
 import { ticketSectorLabel } from "@/lib/ticket-stub"
+import { ticketAdmissionTitle, ticketExactSeatLabel } from "@/lib/ticket-wallet"
 
 function ThermalTicket({ ticket }: { ticket: PrintableTicket }) {
   const priceLabel =
     ticket.tierPrice != null ? formatCurrency(ticket.tierPrice) : null
-  const sector = ticketSectorLabel({
-    seatingSectorName: ticket.sectorLabel,
+  const seatLabel = ticketExactSeatLabel({
     seatingLabel: ticket.seatingLabel,
     tierName: ticket.tierName,
   })
-  const seatLabel =
-    ticket.seatingLabel && ticket.seatingLabel !== ticket.tierName
-      ? ticket.seatingLabel
-      : sector !== ticket.tierName.toUpperCase()
-        ? sector
-        : null
 
   return (
     <div id="printable-ticket">
@@ -31,12 +25,15 @@ function ThermalTicket({ ticket }: { ticket: PrintableTicket }) {
         eventTitle={ticket.eventTitle}
         eventDate={ticket.eventDate}
         eventLocation={ticket.eventLocation}
-        tierName={ticket.tierName}
+        tierName={ticketAdmissionTitle({
+          tierName: ticket.tierName,
+          seatingLabel: ticket.seatingLabel,
+        })}
         qrPayload={ticket.qrPayload}
         ticketCode={ticket.id}
         holderName={ticket.holderName}
         holderDni={ticket.holderDni}
-        seatLabel={seatLabel}
+        seatLabel={seatLabel ? null : ticket.sectorLabel}
         priceLabel={priceLabel}
         isTest={ticket.isTest}
         flyerUrl={ticket.flyerUrl}
@@ -46,6 +43,14 @@ function ThermalTicket({ ticket }: { ticket: PrintableTicket }) {
 }
 
 function PremiumPassTicket({ ticket }: { ticket: PrintableTicket }) {
+  const admissionTitle = ticketAdmissionTitle({
+    tierName: ticket.tierName,
+    seatingLabel: ticket.seatingLabel,
+  })
+  const seatLabel = ticketExactSeatLabel({
+    seatingLabel: ticket.seatingLabel,
+    tierName: ticket.tierName,
+  })
   const sector = ticketSectorLabel({
     seatingSectorName: ticket.sectorLabel,
     seatingLabel: ticket.seatingLabel,
@@ -83,15 +88,11 @@ function PremiumPassTicket({ ticket }: { ticket: PrintableTicket }) {
             Tipo de entrada
           </p>
           <p className="mt-1 text-xl font-black uppercase tracking-wide">
-            {ticket.tierName}
+            {admissionTitle}
           </p>
-          {sector && sector !== ticket.tierName.toUpperCase() ? (
+          {!seatLabel && sector && sector !== ticket.tierName.toUpperCase() ? (
             <p className="mt-2 inline-block rounded bg-white px-2 py-0.5 text-xs font-bold uppercase text-black">
-              Sector: {ticket.seatingLabel || sector}
-            </p>
-          ) : ticket.seatingLabel ? (
-            <p className="mt-2 inline-block rounded bg-white px-2 py-0.5 text-xs font-bold uppercase text-black">
-              Sector: {ticket.seatingLabel}
+              Sector: {sector}
             </p>
           ) : null}
         </div>

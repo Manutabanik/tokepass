@@ -27,6 +27,7 @@ import {
 } from "@/lib/pos-checkout"
 import { posEventHasInteractiveMap } from "@/lib/pos-map"
 import { ticketPaymentPrintLabel } from "@/lib/ticket-print"
+import { ticketExactSeatLabel } from "@/lib/ticket-wallet"
 import { signedDoorQrOrFallback } from "@/lib/totp-offline"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -1358,7 +1359,7 @@ export async function listShiftReprintReceipts(
   const { data: tickets } = await supabase
     .from("tickets")
     .select(
-      "id, order_id, totp_secret, holder_name, holder_dni, ticket_tiers!tickets_tier_id_fkey(name, price), events(title, date, location)",
+      "id, order_id, totp_secret, holder_name, holder_dni, event_seating_units(label, sector_name, row_label, layout_type), ticket_tiers!tickets_tier_id_fkey(name, price), events(title, date, location)",
     )
     .in("id", ticketIds)
 
@@ -1372,6 +1373,12 @@ export async function listShiftReprintReceipts(
     const tier = row.ticket_tiers as unknown as {
       name?: string
       price?: number | null
+    } | null
+    const seating = row.event_seating_units as unknown as {
+      label?: string | null
+      sector_name?: string | null
+      row_label?: string | null
+      layout_type?: "table_combo" | "numbered_seat" | null
     } | null
     const orderId = row.order_id as string
     const parent = orders.find((item) => item.orderId === orderId)
@@ -1388,7 +1395,16 @@ export async function listShiftReprintReceipts(
       total: Number(tier?.price ?? 0),
       holderName: (row.holder_name as string | null) ?? "Consumidor Final",
       holderDni: (row.holder_dni as string | null) ?? null,
-      seatLabel: null,
+      seatLabel: ticketExactSeatLabel({
+        seatingLabel: seating?.label ?? null,
+        seatingRowLabel: seating?.row_label ?? null,
+        seatingLayoutType:
+          seating?.layout_type === "table_combo" ||
+          seating?.layout_type === "numbered_seat"
+            ? seating.layout_type
+            : null,
+        tierName: tier?.name ?? "Entrada",
+      }),
       orderId,
       issuedAt: parent?.createdAt ?? null,
       paymentLabel: ticketPaymentPrintLabel(parent?.paymentMethod),
@@ -1591,13 +1607,17 @@ export async function getPrintableTicket(
     scheduleDays,
     row.ticket_tiers?.day_id ?? undefined,
   )
-  const seatingParts = [
-    row.event_seating_units?.sector_name?.trim(),
-    row.event_seating_units?.label?.trim(),
-    row.event_seating_units?.row_label
-      ? `Fila ${row.event_seating_units.row_label.trim()}`
-      : null,
-  ].filter((part): part is string => Boolean(part))
+  const unitLayout =
+    row.event_seating_units?.layout_type === "table_combo" ||
+    row.event_seating_units?.layout_type === "numbered_seat"
+      ? row.event_seating_units.layout_type
+      : null
+  const seatingLabel = ticketExactSeatLabel({
+    seatingLabel: row.event_seating_units?.label ?? null,
+    seatingRowLabel: row.event_seating_units?.row_label ?? null,
+    seatingLayoutType: unitLayout,
+    tierName: row.ticket_tiers?.name ?? "Entrada",
+  })
 
   const venueRaw = row.events.venues
   const venueName = (Array.isArray(venueRaw) ? venueRaw[0] : venueRaw)?.name?.trim()
@@ -1622,8 +1642,8 @@ export async function getPrintableTicket(
     scannedAt: row.scanned_at,
     flyerUrl: row.events.flyer_url?.trim() || row.events.image_url?.trim() || null,
     doorsOpenAt: dayBound?.start_time || row.events.date,
-    sectorLabel: seatingParts[0] ?? null,
-    seatingLabel: seatingParts.length > 0 ? seatingParts.join(" · ") : null,
+    sectorLabel: row.event_seating_units?.sector_name?.trim() || null,
+    seatingLabel,
     isTest: Boolean(row.is_test),
   }
 }

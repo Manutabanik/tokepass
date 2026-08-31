@@ -44,6 +44,7 @@ import {
 import { formatEventDay, formatEventTime } from "@/lib/format"
 import { storyCategoryLabel } from "@/lib/story-canvas"
 import { ticketSectorLabel, ticketVenueLine } from "@/lib/ticket-stub"
+import { ticketAdmissionTitle, ticketExactSeatLabel } from "@/lib/ticket-wallet"
 import { cn } from "@/lib/utils"
 import { eventAccessTimeLabel, isOnlineDelivery } from "@/lib/events/delivery-mode"
 import { OnlineAccessButton } from "@/components/account/online-access-button"
@@ -199,7 +200,12 @@ export function LivingTicketCard({
 
   const totpSecret = ticket.totpSecret ?? ""
   const doorsAt = ticket.doorsOpenAt || ticket.eventDate
-  const sector = sequenceLabel?.toUpperCase() || ticketSectorLabel(ticket)
+  const seatLabel = ticketExactSeatLabel(ticket)
+  const sector = (
+    seatLabel
+      ? ticketAdmissionTitle(ticket)
+      : sequenceLabel || ticketSectorLabel(ticket)
+  ).toUpperCase()
   const venue = ticketVenueLine(ticket)
 
   return (

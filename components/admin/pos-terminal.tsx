@@ -592,7 +592,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
             total: pick?.price ?? line?.price ?? 0,
             holderName: buyer.name,
             holderDni: buyer.dni,
-            seatLabel: pick ? `${pick.sectorName} · ${pick.label}` : null,
+            seatLabel: pick?.label?.trim() || null,
             paymentLabel,
             orderId: lastOrderId,
             issuedAt,

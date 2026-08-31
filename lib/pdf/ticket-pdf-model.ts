@@ -5,6 +5,7 @@ import {
   ticketPrintCode,
 } from "@/lib/ticket-print"
 import { ticketSectorLabel } from "@/lib/ticket-stub"
+import { ticketAdmissionTitle, ticketExactSeatLabel } from "@/lib/ticket-wallet"
 
 export const TICKET_PDF_SIZES = ["80mm", "58mm", "a4"] as const
 export type TicketPdfSize = (typeof TICKET_PDF_SIZES)[number]
@@ -99,15 +100,22 @@ export function ticketPdfPath(
   return `/api/tickets/${encodeURIComponent(ticketId)}/pdf${query ? `?${query}` : ""}`
 }
 
+export function ticketPdfAdmissionTitle(ticket: TicketPdfSource): string {
+  return ticketAdmissionTitle({
+    tierName: ticket.tierName,
+    seatingLabel: ticket.seatingLabel,
+  })
+}
+
 export function ticketPdfSectorName(ticket: TicketPdfSource): string | null {
+  if (ticketExactSeatLabel({ seatingLabel: ticket.seatingLabel, tierName: ticket.tierName })) {
+    return null
+  }
   const sector = ticketSectorLabel({
     seatingSectorName: ticket.sectorLabel,
     seatingLabel: ticket.seatingLabel,
     tierName: ticket.tierName,
   })
-  if (ticket.seatingLabel && ticket.seatingLabel !== ticket.tierName) {
-    return ticket.seatingLabel
-  }
   if (sector !== ticket.tierName.trim().toUpperCase()) return sector
   return null
 }
@@ -125,7 +133,7 @@ export function mapPrintableTicketToPdfModel(
     ticketId: ticket.id,
     eventName: ticket.eventTitle,
     eventFlyerSrc: assets.eventFlyerSrc,
-    ticketTierName: ticket.tierName,
+    ticketTierName: ticketPdfAdmissionTitle(ticket),
     sectorName: ticketPdfSectorName(ticket),
     eventDateFormatted,
     eventLocationName: (ticket.eventLocation ?? "").trim() || "Online",

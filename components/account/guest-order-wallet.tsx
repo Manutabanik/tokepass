@@ -14,7 +14,8 @@ import {
 import { BrandMark } from "@/components/shared/brand-logo"
 import { formatEventDay, formatEventTime } from "@/lib/format"
 import { ticketBackupCode } from "@/lib/ticket-print"
-import { ticketSectorLabel, ticketVenueLine } from "@/lib/ticket-stub"
+import { ticketVenueLine } from "@/lib/ticket-stub"
+import { ticketAdmissionTitle } from "@/lib/ticket-wallet"
 import { eventAccessTimeLabel, isOnlineDelivery } from "@/lib/events/delivery-mode"
 import { OnlineAccessButton } from "@/components/account/online-access-button"
 
@@ -26,7 +27,7 @@ function GuestTicketCard({ ticket }: { ticket: MyTicket }) {
   const isStatic = ticket.qrType === "static"
   const totpSecret = ticket.totpSecret ?? ""
   const doorsAt = ticket.doorsOpenAt || ticket.eventDate
-  const sector = ticketSectorLabel(ticket)
+  const sector = ticketAdmissionTitle(ticket).toUpperCase()
   const venue = ticketVenueLine(ticket)
 
   return (

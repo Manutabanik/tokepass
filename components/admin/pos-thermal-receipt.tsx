@@ -3,6 +3,7 @@
 import type { PosThermalReceipt } from "@/app/actions/pos"
 import { ThermalAdmissionTicket } from "@/components/print/thermal-admission-ticket"
 import { formatCurrency } from "@/lib/format"
+import { ticketAdmissionTitle, ticketExactSeatLabel } from "@/lib/ticket-wallet"
 
 export function PosThermalReceiptStack({
   receipts,
@@ -23,12 +24,22 @@ export function PosThermalReceiptStack({
           eventTitle={receipt.eventTitle}
           eventDate={receipt.eventDate}
           eventLocation={receipt.eventLocation}
-          tierName={receipt.tierName}
+          tierName={ticketAdmissionTitle({
+            tierName: receipt.tierName,
+            seatingLabel: receipt.seatLabel,
+          })}
           qrPayload={receipt.qrPayload}
           ticketCode={receipt.ticketId}
           holderName={receipt.holderName}
           holderDni={receipt.holderDni}
-          seatLabel={receipt.seatLabel}
+          seatLabel={
+            ticketExactSeatLabel({
+              seatingLabel: receipt.seatLabel,
+              tierName: receipt.tierName,
+            })
+              ? null
+              : receipt.seatLabel
+          }
           priceLabel={formatCurrency(receipt.total)}
           flyerUrl={receipt.flyerUrl}
           paymentLabel={receipt.paymentLabel}

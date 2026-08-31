@@ -39,7 +39,8 @@ import { formatEventDay, formatEventTime } from "@/lib/format"
 import { storyCategoryLabel } from "@/lib/story-canvas"
 import { getTicketsOffline } from "@/lib/offline-store"
 import type { PublicSponsor } from "@/lib/sponsors"
-import { ticketSectorLabel, ticketVenueLine } from "@/lib/ticket-stub"
+import { ticketVenueLine } from "@/lib/ticket-stub"
+import { ticketAdmissionTitle } from "@/lib/ticket-wallet"
 import { ticketBackupCode } from "@/lib/ticket-print"
 import { eventAccessTimeLabel, isOnlineDelivery } from "@/lib/events/delivery-mode"
 import { OnlineAccessButton } from "@/components/account/online-access-button"
@@ -110,15 +111,9 @@ export function TicketDetailView({
     mapsQuery,
   )}`
 
-  const seatingLabel = [
-    ticket.seatingLabel,
-    ticket.seatingRowLabel ? `Fila ${ticket.seatingRowLabel}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ")
   const totpSecret = ticket.totpSecret ?? ""
   const doorsAt = ticket.doorsOpenAt || ticket.eventDate
-  const sector = ticketSectorLabel(ticket)
+  const sector = ticketAdmissionTitle(ticket).toUpperCase()
   const venue = ticketVenueLine(ticket)
 
   return (
@@ -182,11 +177,6 @@ export function TicketDetailView({
         </div>
         <div className="mt-4 bg-zinc-950 px-5 py-2.5 text-center text-sm font-black uppercase tracking-[0.16em] text-white dark:bg-white dark:text-zinc-950">
           {sector}
-          {seatingLabel ? (
-            <span className="mt-1 block text-[10px] font-semibold tracking-normal text-white/70 dark:text-zinc-600">
-              {seatingLabel}
-            </span>
-          ) : null}
         </div>
       </article>
 
