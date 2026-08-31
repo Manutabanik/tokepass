@@ -25,7 +25,12 @@ import {
 } from "@/components/ui/accordion"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatEventDay, formatEventTime } from "@/lib/format"
-import { ticketOrdinalInGroup } from "@/lib/ticket-wallet"
+import {
+  groupWalletTicketsByEventOrders,
+  ticketOrdinalInGroup,
+  walletPurchaseHeading,
+  type WalletOrderBucket,
+} from "@/lib/ticket-wallet"
 
 export type StoreOfferBlock = {
   eventId: string
@@ -97,38 +102,83 @@ function EmptyState({
   )
 }
 
-type TicketEventGroup = {
-  eventId: string
-  eventTitle: string
-  eventDate: string
-  eventLocation: string
-  flyerUrl: string | null
+function OrderTicketList({
+  tickets,
+  userId,
+  offline,
+  appleWalletEnabled,
+  googleWalletEnabled,
+  showQr,
+}: {
   tickets: MyTicket[]
+  userId: string
+  offline: boolean
+  appleWalletEnabled: boolean
+  googleWalletEnabled: boolean
+  showQr: boolean
+}) {
+  return (
+    <ul className="space-y-2">
+      {tickets.map((ticket) => (
+        <li key={ticket.id}>
+          <LivingTicketCard
+            ticket={ticket}
+            userId={userId}
+            showQr={showQr && !ticket.pendingTransfer}
+            offline={offline}
+            appleWalletEnabled={appleWalletEnabled}
+            googleWalletEnabled={googleWalletEnabled}
+            variant="compact"
+            sequenceLabel={ticketOrdinalInGroup(tickets, ticket).label}
+          />
+        </li>
+      ))}
+    </ul>
+  )
 }
 
-function groupTicketsByEvent(tickets: MyTicket[]): TicketEventGroup[] {
-  const map = new Map<string, TicketEventGroup>()
-  for (const ticket of tickets) {
-    const existing = map.get(ticket.eventId)
-    if (existing) {
-      existing.tickets.push(ticket)
-      if (!existing.flyerUrl && ticket.flyerUrl) {
-        existing.flyerUrl = ticket.flyerUrl
-      }
-      continue
-    }
-    map.set(ticket.eventId, {
-      eventId: ticket.eventId,
-      eventTitle: ticket.eventTitle,
-      eventDate: ticket.eventDate,
-      eventLocation: ticket.venueName ?? ticket.eventLocation ?? "Online",
-      flyerUrl: ticket.flyerUrl,
-      tickets: [ticket],
-    })
-  }
-  return [...map.values()].sort(
-    (a, b) =>
-      new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime(),
+function EventOrderBuckets({
+  orders,
+  userId,
+  offline,
+  appleWalletEnabled,
+  googleWalletEnabled,
+  showQr,
+}: {
+  orders: WalletOrderBucket<MyTicket>[]
+  userId: string
+  offline: boolean
+  appleWalletEnabled: boolean
+  googleWalletEnabled: boolean
+  showQr: boolean
+}) {
+  return (
+    <div className="space-y-3">
+      {orders.map((order) => (
+        <section
+          key={order.orderKey}
+          className="rounded-2xl border border-border/70 bg-muted/25 p-3 sm:p-4"
+        >
+          <h4 className="text-xs font-semibold tracking-wide text-muted-foreground">
+            {walletPurchaseHeading({
+              purchasedAtLabel: formatEventDay(order.purchasedAt) || "tu compra",
+              orderId: order.orderId,
+              ticketCount: order.tickets.length,
+            })}
+          </h4>
+          <div className="mt-3">
+            <OrderTicketList
+              tickets={order.tickets}
+              userId={userId}
+              offline={offline}
+              appleWalletEnabled={appleWalletEnabled}
+              googleWalletEnabled={googleWalletEnabled}
+              showQr={showQr}
+            />
+          </div>
+        </section>
+      ))}
+    </div>
   )
 }
 
@@ -302,10 +352,13 @@ export function TicketWallet({
         : "past")
 
   const upcomingGroups = useMemo(
-    () => groupTicketsByEvent(upcoming),
+    () => groupWalletTicketsByEventOrders(upcoming),
     [upcoming],
   )
-  const pastGroups = useMemo(() => groupTicketsByEvent(past), [past])
+  const pastGroups = useMemo(
+    () => groupWalletTicketsByEventOrders(past),
+    [past],
+  )
   const extraGroups = useMemo(
     () => groupExtrasByEvent(barRedemptions),
     [barRedemptions],
@@ -393,22 +446,14 @@ export function TicketWallet({
                       <ArrowUpRight className="size-3.5" aria-hidden="true" />
                     </Link>
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2 md:items-start xl:grid-cols-3">
-                    {group.tickets.map((ticket) => (
-                      <LivingTicketCard
-                        key={ticket.id}
-                        ticket={ticket}
-                        userId={userId}
-                        showQr={!ticket.pendingTransfer}
-                        offline={offline}
-                        appleWalletEnabled={appleWalletEnabled}
-                        googleWalletEnabled={googleWalletEnabled}
-                        sequenceLabel={
-                          ticketOrdinalInGroup(group.tickets, ticket).label
-                        }
-                      />
-                    ))}
-                  </div>
+                  <EventOrderBuckets
+                    orders={group.orders}
+                    userId={userId}
+                    offline={offline}
+                    appleWalletEnabled={appleWalletEnabled}
+                    googleWalletEnabled={googleWalletEnabled}
+                    showQr
+                  />
                 </AccordionContent>
               </AccordionItem>
             ))}
@@ -544,20 +589,14 @@ export function TicketWallet({
                       : `${group.tickets.length} entradas`
                   }
                 />
-                <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:mx-0 lg:grid lg:grid-cols-2 lg:overflow-visible lg:px-0 xl:grid-cols-3">
-                  {group.tickets.map((ticket) => (
-                    <div
-                      key={ticket.id}
-                      className="w-[min(85vw,22rem)] shrink-0 snap-center lg:w-auto"
-                    >
-                      <LivingTicketCard
-                        ticket={ticket}
-                        userId={userId}
-                        showQr={false}
-                      />
-                    </div>
-                  ))}
-                </div>
+                <EventOrderBuckets
+                  orders={group.orders}
+                  userId={userId}
+                  offline={offline}
+                  appleWalletEnabled={appleWalletEnabled}
+                  googleWalletEnabled={googleWalletEnabled}
+                  showQr={false}
+                />
               </section>
             ))}
           </div>

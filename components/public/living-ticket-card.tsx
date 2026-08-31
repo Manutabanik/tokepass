@@ -10,6 +10,7 @@ import {
   LoaderCircle,
   MapPin,
   MoreHorizontal,
+  QrCode,
   Send,
   ShoppingBag,
   Store,
@@ -20,6 +21,7 @@ import {
   XCircle,
 } from "lucide-react"
 import Image from "next/image"
+import Link from "next/link"
 import { useState } from "react"
 
 import type { MyTicket } from "@/app/actions/tickets"
@@ -152,6 +154,7 @@ export function LivingTicketCard({
   showQr = true,
   offline = false,
   sequenceLabel,
+  variant = "full",
 }: {
   ticket: MyTicket
   userId: string
@@ -160,6 +163,7 @@ export function LivingTicketCard({
   appleWalletEnabled?: boolean
   googleWalletEnabled?: boolean
   sequenceLabel?: string
+  variant?: "full" | "compact"
 }) {
   const [scanOpen, setScanOpen] = useState(false)
   const [resaleConfirmOpen, setResaleConfirmOpen] = useState(false)
@@ -207,6 +211,152 @@ export function LivingTicketCard({
       : sequenceLabel || ticketSectorLabel(ticket)
   ).toUpperCase()
   const venue = ticketVenueLine(ticket)
+  const detailHref = `/cuenta/entradas/${ticket.id}`
+
+  const ticketDialogs = (
+    <>
+      {canShowLiveQr ? (
+        <QrScanLightbox
+          open={scanOpen}
+          onOpenChange={setScanOpen}
+          isStatic={isStatic}
+          ticketId={ticket.id}
+          totpSecret={totpSecret}
+          holderName={ticket.holderName}
+          holderDni={ticket.holderDni}
+        />
+      ) : null}
+      <TransferShareConfirmDialog
+        open={transferConfirmOpen}
+        onOpenChange={setTransferConfirmOpen}
+        eventTitle={ticket.eventTitle}
+        pending={transfer.pending}
+        onConfirm={() => {
+          setTransferConfirmOpen(false)
+          transfer.sendToFriend(ticket.id, ticket.eventTitle)
+        }}
+      />
+      <ResaleConfirmDialog
+        open={resaleConfirmOpen}
+        onOpenChange={setResaleConfirmOpen}
+        eventTitle={ticket.eventTitle}
+        nominalValue={ticket.tierPrice}
+        pending={resale.pending}
+        onConfirm={() => {
+          setResaleConfirmOpen(false)
+          resale.publish(ticket.id)
+        }}
+      />
+    </>
+  )
+
+  if (variant === "compact") {
+    const rowCopy = canShowLiveQr
+      ? "Tocar para ver el QR"
+      : onlineEvent && ticket.status === "valid" && visualStatus === "active"
+        ? "Abrir acceso online"
+        : transferPending
+          ? "Envío pendiente"
+          : resalePending
+            ? "En venta"
+            : "Ver detalle"
+
+    const rowInner = (
+      <>
+        <span
+          className={cn(
+            "grid size-11 shrink-0 place-items-center rounded-xl",
+            vip
+              ? "bg-amber-500 text-amber-950"
+              : "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950",
+          )}
+        >
+          <QrCode className="size-5" aria-hidden="true" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-black uppercase tracking-[0.08em] text-foreground">
+            {sector}
+          </span>
+          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+            {rowCopy}
+          </span>
+        </span>
+      </>
+    )
+
+    return (
+      <article
+        className={cn(
+          "overflow-hidden rounded-2xl border bg-card text-card-foreground",
+          vip ? "border-amber-400/50" : "border-border/80",
+          ticket.isTest && "border-amber-400/60",
+          (transferPending || resalePending) && "opacity-90",
+        )}
+      >
+        <div className="flex items-stretch">
+          {canShowLiveQr ? (
+            <button
+              type="button"
+              onClick={() => setScanOpen(true)}
+              className="flex min-h-16 flex-1 items-center gap-3 px-3 py-2.5 text-left transition hover:bg-muted/60"
+            >
+              {rowInner}
+            </button>
+          ) : (
+            <Link
+              href={detailHref}
+              className="flex min-h-16 flex-1 items-center gap-3 px-3 py-2.5 transition hover:bg-muted/60"
+            >
+              {rowInner}
+            </Link>
+          )}
+          <Link
+            href={detailHref}
+            className="inline-flex items-center px-3 text-xs font-semibold text-emerald-700 hover:text-emerald-600 dark:text-emerald-400"
+          >
+            Ver
+          </Link>
+        </div>
+        {transferPending ? (
+          <div className="border-t border-border px-3 py-2">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={transfer.pending || !transfer.transferId}
+              onClick={transfer.cancelSend}
+              className="h-9 w-full rounded-xl text-red-600 hover:bg-red-50 hover:text-red-700"
+            >
+              {transfer.pending ? (
+                <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <XCircle className="size-4" aria-hidden="true" />
+              )}
+              Cancelar envío
+            </Button>
+          </div>
+        ) : null}
+        {resalePending ? (
+          <div className="border-t border-border px-3 py-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={resale.pending || !resale.listingId}
+              onClick={resale.withdraw}
+              className="h-9 w-full rounded-xl"
+            >
+              {resale.pending ? (
+                <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Undo2 className="size-4" aria-hidden="true" />
+              )}
+              Sacar de la venta
+            </Button>
+          </div>
+        ) : null}
+        {ticketDialogs}
+      </article>
+    )
+  }
 
   return (
     <article
@@ -368,15 +518,6 @@ export function LivingTicketCard({
                 evitar reventas truchas (no le saques captura de pantalla).
               </p>
             )}
-            <QrScanLightbox
-              open={scanOpen}
-              onOpenChange={setScanOpen}
-              isStatic={isStatic}
-              ticketId={ticket.id}
-              totpSecret={totpSecret}
-              holderName={ticket.holderName}
-              holderDni={ticket.holderDni}
-            />
           </div>
         ) : transferPending ? (
           <div className="w-full space-y-3">
@@ -446,27 +587,7 @@ export function LivingTicketCard({
         ) : null}
       </div>
 
-      <TransferShareConfirmDialog
-        open={transferConfirmOpen}
-        onOpenChange={setTransferConfirmOpen}
-        eventTitle={ticket.eventTitle}
-        pending={transfer.pending}
-        onConfirm={() => {
-          setTransferConfirmOpen(false)
-          transfer.sendToFriend(ticket.id, ticket.eventTitle)
-        }}
-      />
-      <ResaleConfirmDialog
-        open={resaleConfirmOpen}
-        onOpenChange={setResaleConfirmOpen}
-        eventTitle={ticket.eventTitle}
-        nominalValue={ticket.tierPrice}
-        pending={resale.pending}
-        onConfirm={() => {
-          setResaleConfirmOpen(false)
-          resale.publish(ticket.id)
-        }}
-      />
+      {ticketDialogs}
     </article>
   )
 }

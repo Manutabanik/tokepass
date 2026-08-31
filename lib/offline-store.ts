@@ -50,6 +50,8 @@ export type OfflineEventData = {
     receiverEmail: string
   } | null
   activeResaleListingId?: string | null
+  orderId?: string | null
+  orderCreatedAt?: string | null
 }
 
 export type OfflineTicketRecord = {
@@ -323,6 +325,8 @@ export function ticketToOfflineRecord(
       isSponsoredByTokePass: ticket.isSponsoredByTokePass,
       pendingTransfer: ticket.pendingTransfer,
       activeResaleListingId: ticket.activeResaleListingId,
+      orderId: ticket.orderId,
+      orderCreatedAt: ticket.orderCreatedAt,
     },
     status: ticket.status,
     qr_code: ticket.qrCode,
@@ -373,6 +377,8 @@ export function offlineRecordToTicket(record: OfflineTicketRecord): MyTicket {
     qrType: record.event_data.qrType ?? "dynamic",
     holderName: record.event_data.holderName ?? "Titular",
     holderDni: record.event_data.holderDni ?? null,
+    orderId: record.event_data.orderId ?? null,
+    orderCreatedAt: record.event_data.orderCreatedAt ?? null,
     isTest: Boolean(record.is_test ?? record.event_data.isTest),
     tierPrice: Number(record.event_data.tierPrice ?? 0),
     isSponsoredByTokePass: Boolean(

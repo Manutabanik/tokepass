@@ -62,6 +62,8 @@ export type MyTicket = {
   holderName: string
   holderDni: string | null
   orderId?: string | null
+  /** Fecha de la transacción (`orders.created_at`). */
+  orderCreatedAt?: string | null
   isTest: boolean
   /** Precio público All-In del tier (0 = gratuita). */
   tierPrice: number
@@ -193,9 +195,9 @@ async function loadMyTickets(options?: {
 
   const tierEmbed = ticketsTierSelect("name, bonus_reward, day_id, price")
   const ticketSelectWithDelivery =
-    `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, delivery_mode, access_link, venues(name)), orders(status)`
+    `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, delivery_mode, access_link, venues(name)), orders(status, created_at)`
   const ticketSelectLegacy =
-    `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, venues(name)), orders(status)`
+    `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, venues(name)), orders(status, created_at)`
 
   let query = supabase
     .from("tickets")
@@ -247,7 +249,10 @@ async function loadMyTickets(options?: {
 
   type WalletRow = TicketRow & {
     order_id: string | null
-    orders: { status: string } | null
+    orders:
+      | { status: string; created_at?: string | null }
+      | { status: string; created_at?: string | null }[]
+      | null
   }
 
   const walletRows = (rows ?? []) as unknown as WalletRow[]
@@ -271,7 +276,10 @@ async function loadMyTickets(options?: {
       !shouldKeepOwnedWalletTicket({
         status: ticket.status,
         orderId: ticket.order_id,
-        orderStatus: ticket.orders?.status ?? null,
+        orderStatus: (Array.isArray(ticket.orders)
+          ? ticket.orders[0]
+          : ticket.orders
+        )?.status ?? null,
       })
     ) {
       continue
@@ -354,6 +362,10 @@ async function loadMyTickets(options?: {
       holderName,
       holderDni,
       orderId: ticket.order_id,
+      orderCreatedAt: (Array.isArray(ticket.orders)
+        ? ticket.orders[0]
+        : ticket.orders
+      )?.created_at ?? null,
       isTest: Boolean(ticket.is_test),
       tierPrice: Number(ticket.ticket_tiers?.price ?? 0),
       isSponsoredByTokePass: Boolean(event.is_sponsored_by_tokepass),

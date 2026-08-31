@@ -286,6 +286,7 @@ function mapGuestTicketRow(row: GuestTicketDetailRow, revealQr: boolean): MyTick
     holderName: row.holder_name ?? "Invitado",
     holderDni: row.holder_dni ?? null,
     orderId: row.order_id,
+    orderCreatedAt: null,
     isTest: Boolean(row.is_test),
     tierPrice: Number(tier?.price ?? 0),
     isSponsoredByTokePass: false,

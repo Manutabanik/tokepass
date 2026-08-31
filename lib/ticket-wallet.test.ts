@@ -2,10 +2,13 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  groupWalletTicketsByEventOrders,
   ticketAdmissionTitle,
   ticketExactSeatLabel,
   ticketOrdinalInGroup,
   ticketOrdinalLabel,
+  walletOrderKey,
+  walletPurchaseHeading,
 } from "@/lib/ticket-wallet"
 
 describe("ticket wallet ordinals", () => {
@@ -102,6 +105,72 @@ describe("ticket exact seat label", () => {
         seatingLayoutType: "table_combo",
       }),
       "GRADA NARANJA - Mesa 05",
+    )
+  })
+})
+
+describe("wallet order grouping", () => {
+  const base = {
+    eventId: "evt-1",
+    eventTitle: "Fiesta Nacional",
+    eventDate: "2026-09-12T22:00:00.000-03:00",
+    eventLocation: "Predio",
+    flyerUrl: null,
+  }
+
+  it("keeps two purchases of the same event in separate order buckets", () => {
+    const groups = groupWalletTicketsByEventOrders([
+      {
+        ...base,
+        id: "t1",
+        orderId: "11111111-1111-4111-8111-111111111111",
+        orderCreatedAt: "2026-08-01T10:00:00.000Z",
+        createdAt: "2026-08-01T10:00:01.000Z",
+      },
+      {
+        ...base,
+        id: "t2",
+        orderId: "11111111-1111-4111-8111-111111111111",
+        orderCreatedAt: "2026-08-01T10:00:00.000Z",
+        createdAt: "2026-08-01T10:00:02.000Z",
+      },
+      {
+        ...base,
+        id: "t3",
+        orderId: "22222222-2222-4222-8222-222222222222",
+        orderCreatedAt: "2026-08-20T18:00:00.000Z",
+        createdAt: "2026-08-20T18:00:01.000Z",
+      },
+    ])
+
+    assert.equal(groups.length, 1)
+    assert.equal(groups[0]?.tickets.length, 3)
+    assert.equal(groups[0]?.orders.length, 2)
+    assert.equal(groups[0]?.orders[0]?.tickets.length, 1)
+    assert.equal(groups[0]?.orders[1]?.tickets.length, 2)
+    assert.equal(
+      groups[0]?.orders[0]?.orderId,
+      "22222222-2222-4222-8222-222222222222",
+    )
+  })
+
+  it("does not merge tickets that have no order id", () => {
+    assert.equal(walletOrderKey({ id: "a", orderId: null }), "ticket:a")
+    const groups = groupWalletTicketsByEventOrders([
+      { ...base, id: "a", orderId: null, createdAt: "2026-08-01T10:00:00.000Z" },
+      { ...base, id: "b", orderId: null, createdAt: "2026-08-02T10:00:00.000Z" },
+    ])
+    assert.equal(groups[0]?.orders.length, 2)
+  })
+
+  it("builds the purchase heading with date, order code and count", () => {
+    assert.equal(
+      walletPurchaseHeading({
+        purchasedAtLabel: "1 de agosto",
+        orderId: "abcd1234-ffff-4000-8000-000000000001",
+        ticketCount: 4,
+      }),
+      "Compra del 1 de agosto · TP-ABCD1234 · 4 entradas",
     )
   })
 })
