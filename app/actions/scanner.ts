@@ -31,6 +31,7 @@ import {
   ticketMatchesScannerGate,
   type ScannerGate,
 } from "@/lib/scanner/gate"
+import { ScannerSetupError } from "@/lib/scanner/scanner-setup-error"
 import type { QrType, TicketStatus } from "@/types/database"
 
 const TICKET_SCAN_SELECT =
@@ -176,27 +177,23 @@ export async function getScannerEvents(): Promise<ScannerEventOption[]> {
   } = await supabase.auth.getUser()
 
   if (user) {
-    try {
-      const rows = await listOperableEvents({ roles: ["door_staff"] })
-      return rows.map((event) => ({
-        id: event.id,
-        title: event.title,
-        date: event.date,
-        status: event.status,
-        qrType: event.qr_type === "static" ? "static" : "dynamic",
-      }))
-    } catch (error) {
-      logger.error({
-        context: "getScannerEvents",
-        message: "list_operable_events_failed",
-        error,
-      })
-      return []
-    }
+    const rows = await listOperableEvents({ roles: ["door_staff"] })
+    return rows.map((event) => ({
+      id: event.id,
+      title: event.title,
+      date: event.date,
+      status: event.status,
+      qrType: event.qr_type === "static" ? "static" : "dynamic",
+    }))
   }
 
   const guest = await readValidDoorGuestSession()
-  if (!guest) return []
+  if (!guest) {
+    throw new ScannerSetupError(
+      "auth_required",
+      "Sesión expirada. Volvé a iniciar sesión.",
+    )
+  }
   return [
     {
       id: guest.eventId,
@@ -271,7 +268,18 @@ export async function getScannerGates(
   if (!eventId) return defaults
 
   const access = await resolveScannerActor(eventId)
-  if (!access.ok) return defaults
+  if (!access.ok) {
+    if (access.reason === "auth_required") {
+      throw new ScannerSetupError(
+        "auth_required",
+        "Sesión expirada. Volvé a iniciar sesión.",
+      )
+    }
+    throw new ScannerSetupError(
+      "forbidden",
+      "No tenés acceso a las gateras de este evento.",
+    )
+  }
 
   const supabase = access.db
   const gates = new Map<string, ScannerGate>()

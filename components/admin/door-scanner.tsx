@@ -24,13 +24,11 @@ import { TotemRestOverlay } from "@/components/admin/totem-validator-view"
 import {
   fetchEventAdmissionSnapshot,
   fetchEventTicketManifest,
-  getScannerEvents,
-  getScannerGates,
-  getScannerOperatorLabel,
   syncOfflineScansBatch,
   type ScannerEventOption,
   type ScanTicketResult,
 } from "@/app/actions/scanner"
+import { toast } from "sonner"
 import { overlayKindFromDeniedScanStatus } from "@/lib/scanner/offline-sync-conflicts"
 import { parseScannerBlacklistPayload } from "@/lib/scanner/ticket-blacklist"
 import {
@@ -60,7 +58,11 @@ import { useOnlineStatus } from "@/components/pwa/use-online-status"
 import { useHardwareSignal } from "@/hooks/use-hardware-signal"
 import { useScreenWakeLock } from "@/hooks/use-wake-lock"
 import { requestDoorAssetCache } from "@/lib/pwa/door-cache"
-import { prefetchDoorManifest } from "@/lib/scanner/prefetch-manifest"
+import {
+  fetchScannerGatesCatalog,
+  fetchScannerSetupCatalog,
+} from "@/lib/scanner/fetch-scanner-setup"
+import { classifyScannerSetupError } from "@/lib/scanner/scanner-setup-error"
 import {
   applyAdmissionSnapshot,
   applyTicketBlacklist,
@@ -73,9 +75,13 @@ import {
   getSyncQueue,
   getSyncQueueCount,
   getTicketById,
+  getScannerEventsCache,
+  getScannerGatesCache,
   getTicketBySecret,
   markTicketUsedLocally,
   putAdmissionLease,
+  saveScannerEventsCache,
+  saveScannerGatesCache,
   saveScannerVault,
   type ScannerManifestMeta,
   type ScannerManifestTicket,
@@ -211,6 +217,9 @@ export function DoorScanner({
   const [sessionPin, setSessionPin] = useState("")
   const [vaultExists, setVaultExists] = useState(false)
   const [gatesEventId, setGatesEventId] = useState("")
+  const [eventsLoading, setEventsLoading] = useState(!guestEvent)
+  const [gatesLoading, setGatesLoading] = useState(false)
+  const [catalogStale, setCatalogStale] = useState(false)
   const cooldownRef = useRef(false)
   const resetTimerRef = useRef<number | null>(null)
   const isTotemModeRef = useRef(isTotemMode)
@@ -327,42 +336,72 @@ export function DoorScanner({
     }
   }, [eventId, isSyncing, refreshQueueCount])
 
-  useEffect(() => {
-    let cancelled = false
+  const loadEvents = useCallback(async () => {
     if (guestEvent) {
-      return () => {
-        if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current)
-      }
+      setEvents([guestEvent])
+      setEventId(guestEvent.id)
+      setEventsLoading(false)
+      setCatalogStale(false)
+      setLoadError(null)
+      return
     }
-    void getScannerEvents()
-      .then((data) => {
-        if (cancelled) return
-        setEvents(data)
-        if (data[0]) setEventId(data[0].id)
-        void getScannerOperatorLabel().then((name) => {
-          if (!cancelled) setOperatorName(name)
+
+    setEventsLoading(true)
+    setLoadError(null)
+    try {
+      const cached = await getScannerEventsCache()
+      if (cached) {
+        setEvents(cached.events)
+        setOperatorName(cached.operatorName)
+        setEventId((current) => {
+          if (current && cached.events.some((event) => event.id === current)) {
+            return current
+          }
+          const stored =
+            typeof window !== "undefined"
+              ? window.sessionStorage.getItem("tokepass.scanner.event")
+              : null
+          if (stored && cached.events.some((event) => event.id === stored)) {
+            return stored
+          }
+          return cached.events[0]?.id ?? ""
         })
+        setCatalogStale(true)
+      }
+
+      const data = await fetchScannerSetupCatalog()
+      setEvents(data.events)
+      setOperatorName(data.operatorName)
+      setCatalogStale(false)
+      setEventId((current) => {
+        if (current && data.events.some((event) => event.id === current)) {
+          return current
+        }
+        const stored =
+          typeof window !== "undefined"
+            ? window.sessionStorage.getItem("tokepass.scanner.event")
+            : null
+        if (stored && data.events.some((event) => event.id === stored)) {
+          return stored
+        }
+        return data.events[0]?.id ?? ""
       })
-      .catch((error: unknown) => {
-        if (cancelled) return
-        setLoadError(
-          error instanceof Error
-            ? error.message
-            : "No se pudieron cargar los eventos",
-        )
-      })
-    return () => {
-      cancelled = true
-      if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current)
+      await saveScannerEventsCache(data.events, data.operatorName)
+    } catch (error) {
+      const classified = classifyScannerSetupError(error)
+      setLoadError(classified.message)
+      toast.error(classified.message)
+    } finally {
+      setEventsLoading(false)
     }
   }, [guestEvent])
 
   useEffect(() => {
-    requestDoorAssetCache()
-    if (!eventId || sessionActive) return
-    if (typeof navigator !== "undefined" && !navigator.onLine) return
-    void prefetchDoorManifest(eventId, fetchEventTicketManifest).catch(() => {})
-  }, [eventId, sessionActive])
+    void loadEvents()
+    return () => {
+      if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current)
+    }
+  }, [loadEvents])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -378,39 +417,55 @@ export function DoorScanner({
     setGateId("")
   }
 
-  useEffect(() => {
-    if (!eventId) return
-    let cancelled = false
+  const loadGates = useCallback(async (id: string) => {
+    if (!id) return
+    setGatesLoading(true)
     const stored =
       typeof window !== "undefined"
-        ? window.sessionStorage.getItem(`tokepass.scanner.gate.${eventId}`)
+        ? window.sessionStorage.getItem(`tokepass.scanner.gate.${id}`)
         : null
-    void getScannerGates(eventId)
-      .then((data) => {
-        if (cancelled) return
-        const nextGates = data.length > 0 ? data : FALLBACK_GATES
-        setGates(nextGates)
-        const validStored = nextGates.some((gate) => gate.id === stored)
-        setGateId(
-          validStored
-            ? stored!
-            : (nextGates.find((gate) => gate.id === ALL_SCANNER_GATE_ID)?.id ??
-                nextGates[0]!.id),
-        )
-      })
-      .catch(() => {
-        if (cancelled) return
-        setGates(FALLBACK_GATES)
-        setGateId(ALL_SCANNER_GATE_ID)
-      })
-    return () => {
-      cancelled = true
+
+    function applyGates(nextGates: ScannerGate[]) {
+      const list = nextGates.length > 0 ? nextGates : FALLBACK_GATES
+      setGates(list)
+      const validStored = list.some((gate) => gate.id === stored)
+      setGateId(
+        validStored
+          ? stored!
+          : (list.find((gate) => gate.id === ALL_SCANNER_GATE_ID)?.id ??
+              list[0]!.id),
+      )
     }
-  }, [eventId])
+
+    try {
+      const cached = await getScannerGatesCache(id)
+      if (cached) applyGates(cached.gates)
+      const data = await fetchScannerGatesCatalog(id)
+      applyGates(data)
+      await saveScannerGatesCache(id, data)
+    } catch (error) {
+      const cached = await getScannerGatesCache(id)
+      if (cached) {
+        applyGates(cached.gates)
+      } else {
+        applyGates(FALLBACK_GATES)
+      }
+      const classified = classifyScannerSetupError(error)
+      toast.error(classified.message)
+    } finally {
+      setGatesLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!eventId) return
+    void loadGates(eventId)
+  }, [eventId, loadGates])
 
   useEffect(() => {
     if (!eventId || !gateId) return
     try {
+      window.sessionStorage.setItem("tokepass.scanner.event", eventId)
       window.sessionStorage.setItem(
         `tokepass.scanner.gate.${eventId}`,
         gateId,
@@ -842,6 +897,7 @@ export function DoorScanner({
     if (!eventId || !gateId || isStarting) return
     setIsStarting(true)
     setLoadError(null)
+    requestDoorAssetCache()
     try {
       const existingVault = await getScannerVault()
       const unlocked = await unlockOrCreateScannerVault(sessionPin, existingVault)
@@ -1026,6 +1082,13 @@ export function DoorScanner({
           })
         }}
         onStart={() => void startControl()}
+        eventsLoading={eventsLoading}
+        gatesLoading={gatesLoading}
+        catalogStale={catalogStale && !loadError}
+        onRetry={() => {
+          void loadEvents()
+          if (eventId) void loadGates(eventId)
+        }}
       />
     )
   }

@@ -106,12 +106,38 @@ export type SyncQueueItem = {
 export type { AdmissionLeaseRecord }
 
 const DB_NAME = "tokepass-scanner-offline"
-const DB_VERSION = 2
+const DB_VERSION = 3
 const MANIFESTS = "manifests"
 const TICKETS = "tickets"
 const SYNC_QUEUE = "sync_queue"
 const LEASES = "leases"
 const CRYPTO = "crypto"
+const CATALOG = "catalog"
+
+export type ScannerEventsCatalogCache = {
+  id: "events"
+  events: Array<{
+    id: string
+    title: string
+    date: string
+    status: string
+    qrType: "dynamic" | "static"
+  }>
+  operatorName: string
+  savedAt: number
+}
+
+export type ScannerGatesCatalogCache = {
+  id: `gates:${string}`
+  eventId: string
+  gates: Array<{
+    id: string
+    label: string
+    color: string
+    kind: "general" | "sector" | "parking"
+  }>
+  savedAt: number
+}
 
 function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof indexedDB !== "undefined"
@@ -184,6 +210,10 @@ function openDb(): Promise<IDBDatabase> {
 
       if (!db.objectStoreNames.contains(CRYPTO)) {
         db.createObjectStore(CRYPTO, { keyPath: "id" })
+      }
+
+      if (!db.objectStoreNames.contains(CATALOG)) {
+        db.createObjectStore(CATALOG, { keyPath: "id" })
       }
     }
   })
@@ -272,6 +302,78 @@ export async function hashManifest(
     hash = Math.imul(hash, 0x01000193)
   }
   return (hash >>> 0).toString(16)
+}
+
+export async function getScannerEventsCache(): Promise<ScannerEventsCatalogCache | null> {
+  if (!isBrowser()) return null
+  try {
+    const db = await openDb()
+    const tx = db.transaction(CATALOG, "readonly")
+    const row = (await requestToPromise(
+      tx.objectStore(CATALOG).get("events"),
+    )) as ScannerEventsCatalogCache | undefined
+    await txDone(tx)
+    db.close()
+    return row?.events?.length ? row : null
+  } catch {
+    return null
+  }
+}
+
+export async function saveScannerEventsCache(
+  events: ScannerEventsCatalogCache["events"],
+  operatorName: string,
+): Promise<void> {
+  if (!isBrowser() || events.length === 0) return
+  const db = await openDb()
+  const tx = db.transaction(CATALOG, "readwrite")
+  const row: ScannerEventsCatalogCache = {
+    id: "events",
+    events,
+    operatorName: operatorName.trim() || "Operador",
+    savedAt: Date.now(),
+  }
+  tx.objectStore(CATALOG).put(row)
+  await txDone(tx)
+  db.close()
+}
+
+export async function getScannerGatesCache(
+  eventId: string,
+): Promise<ScannerGatesCatalogCache | null> {
+  const id = eventId.trim()
+  if (!isBrowser() || !id) return null
+  try {
+    const db = await openDb()
+    const tx = db.transaction(CATALOG, "readonly")
+    const row = (await requestToPromise(
+      tx.objectStore(CATALOG).get(`gates:${id}`),
+    )) as ScannerGatesCatalogCache | undefined
+    await txDone(tx)
+    db.close()
+    return row?.gates?.length ? row : null
+  } catch {
+    return null
+  }
+}
+
+export async function saveScannerGatesCache(
+  eventId: string,
+  gates: ScannerGatesCatalogCache["gates"],
+): Promise<void> {
+  const id = eventId.trim()
+  if (!isBrowser() || !id || gates.length === 0) return
+  const db = await openDb()
+  const tx = db.transaction(CATALOG, "readwrite")
+  const row: ScannerGatesCatalogCache = {
+    id: `gates:${id}`,
+    eventId: id,
+    gates,
+    savedAt: Date.now(),
+  }
+  tx.objectStore(CATALOG).put(row)
+  await txDone(tx)
+  db.close()
 }
 
 export async function getScannerVault(): Promise<ScannerVaultRecord | null> {
