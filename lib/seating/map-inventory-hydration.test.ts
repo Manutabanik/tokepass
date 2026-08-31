@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import { emptyVenueMap } from "@/types/venue-map"
 
 import {
+  checkInventory,
   collectVenueMapInventoryIds,
   hydrateVenueMap,
   isVenueMapElementSoldOut,
@@ -175,6 +176,30 @@ describe("map-inventory-hydration", () => {
     assert.equal(hydrated.occupancy["mesa-9"], "occupied")
     assert.equal(hydrated.map.elements[0]!.color, SOLD_MAP_FILL)
     assert.equal(hydrated.map.elements[0]!.seats[0]!.status, "blocked")
+  })
+
+  it("does not paint Friday sales onto Saturday", () => {
+    const friday = "550e8400-e29b-41d4-a716-446655440001"
+    const saturday = "550e8400-e29b-41d4-a716-446655440002"
+    const fridaySold = hydrateVenueMap(tableMap(), {
+      soldTickets: [
+        { layout_item_id: "mesa-9", event_date_id: friday, status: "valid" },
+      ],
+      eventDateId: friday,
+      scheduleDayCount: 2,
+      lockUnknownLayoutIds: false,
+    })
+    const saturdayView = hydrateVenueMap(tableMap(), {
+      soldTickets: [
+        { layout_item_id: "mesa-9", event_date_id: friday, status: "valid" },
+      ],
+      eventDateId: saturday,
+      scheduleDayCount: 2,
+      lockUnknownLayoutIds: false,
+    })
+    assert.equal(checkInventory(fridaySold.occupancy, "mesa-9"), true)
+    assert.equal(checkInventory(saturdayView.occupancy, "mesa-9"), false)
+    assert.equal(saturdayView.occupancy["mesa-9"], undefined)
   })
 
   it("maps a ticket seating_unit_id onto the layout id via the unit roster", () => {

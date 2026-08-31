@@ -143,8 +143,11 @@ export function PosSeatingMap({
             layoutItemId: unit.layoutItemId,
             status: unit.status,
             reservedUntil: unit.reservedUntil,
+            eventDateId: unit.eventDateId,
           })),
           soldOutTicketTypeIds: soldOutTicketTypeIds(event.tiers ?? []),
+          eventDateId: selectedDateId,
+          scheduleDayCount,
         }),
       })
     })

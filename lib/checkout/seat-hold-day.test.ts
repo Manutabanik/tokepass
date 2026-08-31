@@ -10,6 +10,7 @@ import {
   filterSeatingUnitsForRequestedDay,
   pickExclusiveHoldRowForRequestedDay,
   pickSeatingUnitRowForRequestedDay,
+  inventoryRowMatchesActiveDay,
   storefrontItemMatchesSchedule,
   storefrontSelectionKey,
 } from "./seat-hold-day"
@@ -82,6 +83,27 @@ describe("storefrontSelectionKey", () => {
     assert.equal(
       storefrontSelectionKey({ id: "seat-1", scheduleId: dayA }),
       `seat-1::${dayA}`,
+    )
+  })
+})
+
+describe("inventoryRowMatchesActiveDay", () => {
+  it("keeps Friday stock off Saturday on multi-day events", () => {
+    assert.equal(
+      inventoryRowMatchesActiveDay(dayA, dayB, 2),
+      false,
+    )
+    assert.equal(
+      inventoryRowMatchesActiveDay(dayB, dayB, 2),
+      true,
+    )
+    assert.equal(
+      inventoryRowMatchesActiveDay(null, dayB, 2),
+      false,
+    )
+    assert.equal(
+      inventoryRowMatchesActiveDay(dayA, dayA, 1),
+      true,
     )
   })
 })

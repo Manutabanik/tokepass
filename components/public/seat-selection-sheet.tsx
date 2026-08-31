@@ -93,6 +93,8 @@ export type SeatSelectionContext = {
     tierId?: string | null
     eventDateId?: string | null
   }>
+  eventDateId?: string | null
+  scheduleDayCount?: number
 }
 
 export function selectedPlacesForCategory(
@@ -575,6 +577,8 @@ function SeatSelectionModalInner({
               immersive
               map={focusedMap}
               eventId={context.eventId}
+              eventDateId={context.eventDateId}
+              scheduleDayCount={context.scheduleDayCount ?? 0}
               occupancyBySeatId={context.occupancyBySeatId}
               priceBySectorId={context.priceBySectorId}
               pending={pending}

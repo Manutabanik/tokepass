@@ -1,3 +1,4 @@
+import { inventoryRowMatchesActiveDay } from "@/lib/checkout/seat-hold-day"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 
 export type OccupancyRealtimeRow = {
@@ -35,15 +36,11 @@ export function occupancyRowMatchesDay(
   row: OccupancyRealtimeRow | null | undefined,
   scope?: OccupancyDayScope,
 ): boolean {
-  const selected = scope?.eventDateId?.trim() || ""
-  const rowDate = row?.event_date_id?.trim() || ""
-  const multi = (scope?.scheduleDayCount ?? 0) >= 2
-  if (multi) {
-    if (!selected) return false
-    return rowDate === selected
-  }
-  if (selected && rowDate && rowDate !== selected) return false
-  return true
+  return inventoryRowMatchesActiveDay(
+    row?.event_date_id,
+    scope?.eventDateId,
+    scope?.scheduleDayCount ?? 0,
+  )
 }
 
 export function occupancyPatchFromSeatingRow(

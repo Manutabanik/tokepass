@@ -145,20 +145,27 @@ export function paintBuyerMapSold(
       node.getAttribute("data-zone-id")
     if (!id) continue
     const isSold = sold.has(id)
-    if (!markToggle(node, LOCKED_ATTR, isSold) && !isSold) continue
+    markToggle(node, LOCKED_ATTR, isSold)
     const host = node as SVGElement
+    const shapes = node.querySelectorAll<SVGElement>(
+      "path, circle, rect, ellipse, polygon, polyline",
+    )
     if (isSold) {
       host.style.pointerEvents = "none"
       host.style.cursor = "not-allowed"
-      const shapes = node.querySelectorAll<SVGElement>(
-        "path, circle, rect, ellipse, polygon, polyline",
-      )
       for (const shape of shapes) {
         if (shape.getAttribute("fill") === "transparent") continue
         rememberPaint(shape)
         shape.setAttribute("fill", BUYER_SEAT_FILL.sold)
         shape.setAttribute("stroke", "#374151")
       }
+      continue
+    }
+    host.style.pointerEvents = ""
+    host.style.cursor = ""
+    for (const shape of shapes) {
+      if (shape.getAttribute("fill") === "transparent") continue
+      restorePaint(shape)
     }
   }
 }

@@ -25,6 +25,8 @@ export function InteractiveMapViewer({
   onContinue,
   immersive = false,
   inventoryPending = false,
+  eventDateId = null,
+  scheduleDayCount = 0,
   buyerFitInset,
   hideZoomDock = false,
   zoomDockClassName,
@@ -44,6 +46,8 @@ export function InteractiveMapViewer({
   onContinue?: (seats: InteractiveSelectedSeat[]) => void
   immersive?: boolean
   inventoryPending?: boolean
+  eventDateId?: string | null
+  scheduleDayCount?: number
   buyerFitInset?: BuyerMapFitInset
   hideZoomDock?: boolean
   zoomDockClassName?: string
@@ -75,6 +79,8 @@ export function InteractiveMapViewer({
           priceBySectorId={priceBySectorId}
           pending={pending}
           inventoryPending={inventoryPending}
+          eventDateId={eventDateId}
+          scheduleDayCount={scheduleDayCount}
           selectedZoneId={selectedZoneId}
           unavailableZoneIds={unavailableZoneIds}
           heldSeatIds={heldSeatIds}

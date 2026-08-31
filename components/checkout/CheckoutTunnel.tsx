@@ -1349,10 +1349,13 @@ export function CheckoutTunnel({
         layoutItemId: unit.layoutItemId,
         status: unit.status,
         reservedUntil: unit.reservedUntil,
+        eventDateId: unit.eventDateId,
       })),
       soldTickets: soldTicketOccupancy,
       soldOutTicketTypeIds: soldOutTicketTypeIds(dayTiers),
       liveOccupancy,
+      eventDateId: selectedDateId,
+      scheduleDayCount,
       lockUnknownLayoutIds: seatingInventoryReady && units.length > 0,
     })
   }, [
@@ -3462,6 +3465,8 @@ export function CheckoutTunnel({
         eventId,
         heldSeatIds,
         occupancyBySeatId,
+        eventDateId: selectedDateId,
+        scheduleDayCount,
         inventoryPending: !seatingInventoryReady,
         priceBySectorId,
         selectedZoneId: visibleZoneId,

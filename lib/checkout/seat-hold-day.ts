@@ -16,6 +16,14 @@ export function asHoldEventDateId(value: unknown): string | null {
   return UUID_RE.test(id) ? id : null
 }
 
+/** Día de stock/ocupación: acepta UUID o id de jornada, nunca tabs sintéticos. */
+export function asInventoryDayId(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const id = value.trim()
+  if (!id || id === "full_pass" || id === "combo_packs" || id === "all") return null
+  return id
+}
+
 export function storefrontSelectionKey(item: {
   id?: string | null
   eventDateId?: string | null
@@ -32,6 +40,23 @@ export function storefrontSelectionKey(item: {
     asHoldEventDateId(item.dateId) ??
     ""
   return date ? `${id}::${date}` : id
+}
+
+/** Inventario/hold multidía: sin fecha de fila no pinta en otra jornada. */
+export function inventoryRowMatchesActiveDay(
+  rowDateId: string | null | undefined,
+  activeDay: string | null | undefined,
+  scheduleDayCount = 0,
+): boolean {
+  const selected = asInventoryDayId(activeDay)
+  const rowDate = asInventoryDayId(rowDateId)
+  const multi = scheduleDayCount >= 2
+  if (multi) {
+    if (!selected || !rowDate) return false
+    return rowDate === selected
+  }
+  if (selected && rowDate && rowDate !== selected) return false
+  return true
 }
 
 export function storefrontItemMatchesSchedule(

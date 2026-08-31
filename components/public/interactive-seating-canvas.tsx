@@ -48,6 +48,7 @@ import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
 import { cartPlaceLabel } from "@/lib/checkout/cart-lines"
 import {
   asHoldEventDateId,
+  MISSING_EVENT_DATE_ID_MESSAGE,
   storefrontItemMatchesSchedule,
   storefrontSelectionKey,
   withCheckoutEventDateId,
@@ -304,6 +305,8 @@ export function InteractiveSeatingCanvas({
     setOccupancyScope(occupancyScopeKey)
     setLiveOccupancy({})
     setSnapshotReady(!buyerChrome || !eventId?.trim())
+    setPreviewSeat(null)
+    setHoveredItem(null)
   }
   const applyOccupancyPatch = useCallback((patch: Record<string, SeatStatus>) => {
     setLiveOccupancy((current) => mergeInventoryOccupancy(current, patch))
@@ -339,10 +342,6 @@ export function InteractiveSeatingCanvas({
     snapshotReady: snapshotReady || readOnly,
     hasEventId: Boolean(eventId?.trim()) && !readOnly,
   })
-  useEffect(() => {
-    if (!canPaintInventory) return
-    paintBuyerMapSold(svgRef.current, soldIdsFromOccupancy(occupancy))
-  }, [canPaintInventory, occupancy])
   const inventoryRev = useMemo(() => {
     let sold = 0
     let held = 0
@@ -551,6 +550,12 @@ export function InteractiveSeatingCanvas({
       useStorefrontSeatStore.getState().focusedMapIds,
     )
   }, [readSelectionIds])
+
+  useEffect(() => {
+    if (!canPaintInventory) return
+    paintBuyerMapSold(svgRef.current, soldIdsFromOccupancy(occupancy))
+    syncSelectionPaint()
+  }, [canPaintInventory, occupancy, mapScheduleId, syncSelectionPaint])
 
   const armSelectionQuiet = useCallback(() => {
     selectionQuietRef.current = true
@@ -910,13 +915,17 @@ export function InteractiveSeatingCanvas({
     const seatLabel = canvasSeatLabel(item)
     return withCheckoutEventDateId(
       item,
-      useCheckoutStore.getState().selectedScheduleId,
+      mapScheduleId ?? useCheckoutStore.getState().selectedScheduleId,
       { seatLabel },
     )
   }
 
   function applyToggle(item: StorefrontSelectedItem) {
     const stamped = stampCanvasSelection(item)
+    if (scheduleDayCount >= 2 && !asHoldEventDateId(stamped.eventDateId)) {
+      toast.error(MISSING_EVENT_DATE_ID_MESSAGE)
+      return { ok: false as const, added: false }
+    }
     armSelectionQuiet()
     const result = toggleSelectedItem(stamped, maxSelectable)
     if (!result.ok) {
@@ -1235,9 +1244,11 @@ export function InteractiveSeatingCanvas({
         color: seat.color,
         label: seatLabel,
         eventDateId:
+          mapScheduleId ??
           asHoldEventDateId(
             useCheckoutStore.getState().selectedScheduleId,
-          ) ?? undefined,
+          ) ??
+          undefined,
     }
     if (confirmBuyerPick) {
       openPlacePreview({

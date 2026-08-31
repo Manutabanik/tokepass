@@ -1,3 +1,4 @@
+import { inventoryRowMatchesActiveDay } from "@/lib/checkout/seat-hold-day"
 import { selectableTicketStock } from "@/lib/checkout/ticket-stock"
 import { BUYER_SEAT_FILL } from "@/lib/seating/buyer-seat-fill"
 import { mergeInventoryOccupancy, isSoldInventoryStatus } from "@/lib/seating/inventory-seat-state"
@@ -186,6 +187,7 @@ export type SoldTicketRef = {
   seat_id?: string | null
   seating_unit_id?: string | null
   layout_item_id?: string | null
+  event_date_id?: string | null
   status?: string | null
 }
 
@@ -197,6 +199,7 @@ export type VenueMapSeatingUnitRef = {
   holdExpiresAt?: string | null
   sold?: boolean
   soldOrderId?: string | null
+  eventDateId?: string | null
 }
 
 export type VenueMapLiveInventory = {
@@ -204,6 +207,8 @@ export type VenueMapLiveInventory = {
   soldTickets?: readonly SoldTicketRef[] | Record<string, SeatStatus>
   soldOutTicketTypeIds?: Iterable<string>
   liveOccupancy?: Record<string, SeatStatus>
+  eventDateId?: string | null
+  scheduleDayCount?: number
   /** Con roster de unidades, los ids del JSON que no aparecen quedan ocupados. */
   lockUnknownLayoutIds?: boolean
 }
@@ -211,11 +216,23 @@ export type VenueMapLiveInventory = {
 /** Tickets emitidos → IDs de asiento/unidad para pintar SOLD antes del primer frame. */
 export function occupancyFromSoldTicketRefs(
   tickets: ReadonlyArray<SoldTicketRef>,
+  scope?: { eventDateId?: string | null; scheduleDayCount?: number },
 ): Record<string, SeatStatus> {
   const occupancy: Record<string, SeatStatus> = {}
+  const dayCount = scope?.scheduleDayCount ?? 0
+  const activeDay = scope?.eventDateId
   for (const ticket of tickets) {
     const status = (ticket.status ?? "").trim().toLowerCase()
     if (VOID_TICKET_STATUS.has(status)) continue
+    if (
+      !inventoryRowMatchesActiveDay(
+        ticket.event_date_id,
+        activeDay,
+        dayCount,
+      )
+    ) {
+      continue
+    }
     markOccupied(occupancy, ticket.seat_id)
     markOccupied(occupancy, ticket.seating_unit_id)
     markOccupied(occupancy, ticket.layout_item_id)
@@ -226,15 +243,25 @@ export function occupancyFromSoldTicketRefs(
 function occupancyFromSoldTicketsResolved(
   tickets: readonly SoldTicketRef[] | Record<string, SeatStatus>,
   units: readonly VenueMapSeatingUnitRef[],
+  scope?: { eventDateId?: string | null; scheduleDayCount?: number },
 ): Record<string, SeatStatus> {
   const occupancy: Record<string, SeatStatus> = {}
   if (Array.isArray(tickets)) {
-    Object.assign(occupancy, occupancyFromSoldTicketRefs(tickets))
+    Object.assign(occupancy, occupancyFromSoldTicketRefs(tickets, scope))
   } else {
     Object.assign(occupancy, tickets as Record<string, SeatStatus>)
   }
   const layoutByUnitId = new Map<string, string>()
   for (const unit of units) {
+    if (
+      !inventoryRowMatchesActiveDay(
+        unit.eventDateId,
+        scope?.eventDateId,
+        scope?.scheduleDayCount ?? 0,
+      )
+    ) {
+      continue
+    }
     const unitId = unit.id?.trim()
     const layout = unit.layoutItemId?.trim()
     if (unitId && layout) layoutByUnitId.set(unitId, layout)
@@ -246,6 +273,13 @@ function occupancyFromSoldTicketsResolved(
   return occupancy
 }
 
+export function checkInventory(
+  occupancy: Record<string, SeatStatus>,
+  seatId: string,
+): boolean {
+  return isSoldInventoryStatus(lookupOccupancyStatus(occupancy, seatId))
+}
+
 /**
  * Cruza el JSON estático del recinto con inventario vivo ANTES del primer paint.
  * No muta `staticMap`. El occupancy resultante es lo que el canvas pinta.
@@ -254,7 +288,17 @@ export function hydrateVenueMapOccupancy(
   staticMap: InteractiveVenueMap | null | undefined,
   inventory: VenueMapLiveInventory,
 ): Record<string, SeatStatus> {
-  const units = inventory.seatingUnits ?? []
+  const dayScope = {
+    eventDateId: inventory.eventDateId,
+    scheduleDayCount: inventory.scheduleDayCount ?? 0,
+  }
+  const units = (inventory.seatingUnits ?? []).filter((unit) =>
+    inventoryRowMatchesActiveDay(
+      unit.eventDateId,
+      dayScope.eventDateId,
+      dayScope.scheduleDayCount,
+    ),
+  )
   const lockUnknown = inventory.lockUnknownLayoutIds ?? units.length > 0
   const knownIds =
     lockUnknown && staticMap ? collectVenueMapInventoryIds(staticMap) : []
@@ -266,7 +310,11 @@ export function hydrateVenueMapOccupancy(
           staticMap,
           inventory.soldOutTicketTypeIds ?? [],
         ),
-        occupancyFromSoldTicketsResolved(inventory.soldTickets ?? [], units),
+        occupancyFromSoldTicketsResolved(
+          inventory.soldTickets ?? [],
+          units,
+          dayScope,
+        ),
         inventory.liveOccupancy,
       ),
       staticMap,
