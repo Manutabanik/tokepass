@@ -16,10 +16,12 @@ import {
 } from "@/lib/ticket-visual-status"
 import type { EventDeliveryMode, QrType, TicketStatus } from "@/types/database"
 import { parseDeliveryMode } from "@/lib/events/delivery-mode"
+import { tryCreateAdminClient } from "@/lib/supabase/admin"
 import {
   isMissingTicketWalletColumnError,
   ticketsTierSelect,
 } from "@/lib/tickets/wallet-query"
+import { shouldKeepOwnedWalletTicket } from "@/lib/tickets/wallet-visibility"
 
 export type MyTicket = {
   id: string
@@ -76,6 +78,7 @@ export type MyTicket = {
 type TicketRow = {
   id: string
   status: TicketStatus
+  event_id?: string | null
   qr_code: string | null
   totp_secret: string | null
   transfer_count: number
@@ -117,8 +120,39 @@ type TicketRow = {
   } | null
 }
 
+const WALLET_EVENT_SELECT =
+  "id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, delivery_mode, access_link, venues(name)"
+
+async function hydrateOwnedTicketEvents(
+  rows: Array<{ event_id?: string | null; events: TicketRow["events"] }>,
+): Promise<Map<string, TicketRow["events"]>> {
+  const hydrated = new Map<string, TicketRow["events"]>()
+  const missing = new Set<string>()
+  for (const row of rows) {
+    const id = row.event_id?.trim()
+    if (!id) continue
+    if (row.events) {
+      hydrated.set(id, row.events)
+      continue
+    }
+    if (!hydrated.has(id)) missing.add(id)
+  }
+  if (missing.size === 0) return hydrated
+  const admin = tryCreateAdminClient()
+  if (!admin) return hydrated
+  const { data } = await admin
+    .from("events")
+    .select(WALLET_EVENT_SELECT)
+    .in("id", [...missing])
+  for (const event of (data ?? []) as TicketRow["events"][]) {
+    if (event?.id) hydrated.set(event.id, event)
+  }
+  return hydrated
+}
+
 export async function getMyTickets(options?: {
   orderId?: string
+  ticketId?: string
 }): Promise<MyTicket[]> {
   try {
     return await loadMyTickets(options)
@@ -130,6 +164,7 @@ export async function getMyTickets(options?: {
 
 async function loadMyTickets(options?: {
   orderId?: string
+  ticketId?: string
 }): Promise<MyTicket[]> {
   const supabase = await createClient()
   const {
@@ -154,20 +189,25 @@ async function loadMyTickets(options?: {
   const holderName = profile?.full_name?.trim() || "Titular"
   const holderDni = profile?.dni ?? null
   const orderId = options?.orderId?.trim() || ""
+  const ticketId = options?.ticketId?.trim() || ""
 
   const tierEmbed = ticketsTierSelect("name, bonus_reward, day_id, price")
   const ticketSelectWithDelivery =
-    `id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, delivery_mode, access_link, venues(name)), orders(status)`
+    `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, delivery_mode, access_link, venues(name)), orders(status)`
   const ticketSelectLegacy =
-    `id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, venues(name)), orders(status)`
+    `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, venues(name)), orders(status)`
 
   let query = supabase
     .from("tickets")
     .select(ticketSelectWithDelivery)
     .eq("owner_id", user.id)
-    .in("status", ["valid", "used", "scanned", "transferred"])
     .order("created_at", { ascending: false })
 
+  if (ticketId) {
+    query = query.eq("id", ticketId)
+  } else {
+    query = query.in("status", ["valid", "used", "scanned", "transferred"])
+  }
   if (orderId) {
     query = query.eq("order_id", orderId)
   }
@@ -181,8 +221,17 @@ async function loadMyTickets(options?: {
       .from("tickets")
       .select(ticketSelectLegacy)
       .eq("owner_id", user.id)
-      .in("status", ["valid", "used", "scanned", "transferred"])
       .order("created_at", { ascending: false })
+    if (ticketId) {
+      fallback = fallback.eq("id", ticketId)
+    } else {
+      fallback = fallback.in("status", [
+        "valid",
+        "used",
+        "scanned",
+        "transferred",
+      ])
+    }
     if (orderId) {
       fallback = fallback.eq("order_id", orderId)
     }
@@ -202,98 +251,117 @@ async function loadMyTickets(options?: {
   }
 
   const walletRows = (rows ?? []) as unknown as WalletRow[]
+  const eventsById = await hydrateOwnedTicketEvents(walletRows)
+
   const organizers = await fetchPublicOrganizerCards(
     supabase,
     walletRows
-      .map((ticket) => ticket.events?.organizer_id)
+      .map((ticket) => {
+        const event =
+          ticket.events ??
+          (ticket.event_id ? eventsById.get(ticket.event_id) : null)
+        return event?.organizer_id
+      })
       .filter((id): id is string => Boolean(id)),
   )
 
-  const tickets = walletRows
-    .flatMap((ticket) => {
-      if (!ticket.events) return []
-
-      // Never surface unpaid / pending_payment tickets as Living QR-ready.
-      if (ticket.status === "pending_payment") return []
-      if (
-        ticket.status === "valid" &&
-        ticket.order_id &&
-        ticket.orders?.status !== "paid"
-      ) {
-        return []
-      }
-
-      const qrType: QrType =
-        ticket.events.qr_type === "static" || ticket.is_dynamic_qr === false
-          ? "static"
-          : "dynamic"
-
-      const scheduleDays = parseScheduleDays(ticket.events.schedule_days)
-      const dayId = ticket.ticket_tiers?.day_id ?? null
-
-      const organizer = ticket.events.organizer_id
-        ? organizers.get(ticket.events.organizer_id)
-        : undefined
-
-      const mapped: MyTicket = {
-        id: ticket.id,
+  const tickets: MyTicket[] = []
+  for (const ticket of walletRows) {
+    if (
+      !shouldKeepOwnedWalletTicket({
         status: ticket.status,
-        qrCode: ticket.qr_code,
-        totpSecret: ticket.totp_secret,
-        deliveryMode: parseDeliveryMode(ticket.events.delivery_mode),
-        accessLink: ticket.events.access_link?.trim() || null,
-        transferCount: ticket.transfer_count ?? 0,
-        maxTransfersAllowed: ticket.max_transfers_allowed ?? 1,
-        createdAt: ticket.created_at,
-        tierName: ticket.ticket_tiers?.name ?? "Entrada",
-        bonusReward: ticket.ticket_tiers?.bonus_reward ?? null,
-        dayId,
-        dayValidityLabel: formatDayValidityLabel({
-          scheduleDays,
-          dayId,
-          eventTitle: ticket.events.title,
-        }),
-        seatingLabel: ticket.event_seating_units?.label ?? null,
-        seatingSectorName:
-          ticket.event_seating_units?.sector_name ?? null,
-        seatingRowLabel: ticket.event_seating_units?.row_label ?? null,
-        seatingLayoutType:
-          ticket.event_seating_units?.layout_type ?? null,
-        maxAdmissions: Number(ticket.max_admissions ?? 1),
-        admissionsUsed: Number(ticket.admissions_used ?? 0),
-        eventId: ticket.events.id,
-        eventTitle: ticket.events.title,
-        eventDate: ticket.events.date,
-        endsAt: resolveEventEndsAt(
-          scheduleDays,
-          ticket.events.ends_at,
-          ticket.events.date,
-        ),
-        doorsOpenAt:
-          findScheduleDay(scheduleDays, dayId ?? undefined)?.start_time ??
-          resolveEventAnchorDate(scheduleDays, ticket.events.date),
-        eventLocation: ticket.events.location,
-        flyerUrl: ticket.events.flyer_url ?? ticket.events.image_url,
-        socialShareImageUrl:
-          ticket.events.social_share_image_url?.trim() || null,
-        organizerName: organizer?.name ?? null,
-        organizerAvatarUrl: organizer?.avatarUrl ?? null,
-        venueName: ticket.events.venues?.name ?? null,
-        qrType,
-        holderName,
-        holderDni,
         orderId: ticket.order_id,
-        isTest: Boolean(ticket.is_test),
-        tierPrice: Number(ticket.ticket_tiers?.price ?? 0),
-        isSponsoredByTokePass: Boolean(
-          ticket.events.is_sponsored_by_tokepass,
-        ),
-        activeResaleListingId: null,
-        pendingTransfer: null,
-        visualStatus: "active",
-      }
-      return [mapped]
+        orderStatus: ticket.orders?.status ?? null,
+      })
+    ) {
+      continue
+    }
+
+    const event =
+      ticket.events ??
+      (ticket.event_id ? eventsById.get(ticket.event_id) ?? null : null) ??
+      (ticket.event_id
+        ? {
+            id: ticket.event_id,
+            title: "Evento",
+            date: ticket.created_at,
+            location: null,
+            flyer_url: null,
+            image_url: null,
+            qr_type: null,
+            schedule_days: null,
+            venues: null,
+          }
+        : null)
+    if (!event) continue
+
+    const qrType: QrType =
+      event.qr_type === "static" || ticket.is_dynamic_qr === false
+        ? "static"
+        : "dynamic"
+
+    const scheduleDays = parseScheduleDays(event.schedule_days)
+    const dayId = ticket.ticket_tiers?.day_id ?? null
+
+    let organizer = event.organizer_id
+      ? organizers.get(event.organizer_id)
+      : undefined
+    if (!organizer && event.organizer_id) {
+      const extra = await fetchPublicOrganizerCards(supabase, [
+        event.organizer_id,
+      ])
+      organizer = extra.get(event.organizer_id)
+    }
+
+    tickets.push({
+      id: ticket.id,
+      status: ticket.status,
+      qrCode: ticket.qr_code,
+      totpSecret: ticket.totp_secret,
+      deliveryMode: parseDeliveryMode(event.delivery_mode),
+      accessLink: event.access_link?.trim() || null,
+      transferCount: ticket.transfer_count ?? 0,
+      maxTransfersAllowed: ticket.max_transfers_allowed ?? 1,
+      createdAt: ticket.created_at,
+      tierName: ticket.ticket_tiers?.name ?? "Entrada",
+      bonusReward: ticket.ticket_tiers?.bonus_reward ?? null,
+      dayId,
+      dayValidityLabel: formatDayValidityLabel({
+        scheduleDays,
+        dayId,
+        eventTitle: event.title,
+      }),
+      seatingLabel: ticket.event_seating_units?.label ?? null,
+      seatingSectorName: ticket.event_seating_units?.sector_name ?? null,
+      seatingRowLabel: ticket.event_seating_units?.row_label ?? null,
+      seatingLayoutType: ticket.event_seating_units?.layout_type ?? null,
+      maxAdmissions: Number(ticket.max_admissions ?? 1),
+      admissionsUsed: Number(ticket.admissions_used ?? 0),
+      eventId: event.id,
+      eventTitle: event.title,
+      eventDate: event.date,
+      endsAt: resolveEventEndsAt(scheduleDays, event.ends_at, event.date),
+      doorsOpenAt:
+        findScheduleDay(scheduleDays, dayId ?? undefined)?.start_time ??
+        resolveEventAnchorDate(scheduleDays, event.date),
+      eventLocation: event.location,
+      flyerUrl: event.flyer_url ?? event.image_url,
+      socialShareImageUrl: event.social_share_image_url?.trim() || null,
+      organizerName: organizer?.name ?? null,
+      organizerAvatarUrl: organizer?.avatarUrl ?? null,
+      venueName: event.venues?.name ?? null,
+      qrType,
+      holderName,
+      holderDni,
+      orderId: ticket.order_id,
+      isTest: Boolean(ticket.is_test),
+      tierPrice: Number(ticket.ticket_tiers?.price ?? 0),
+      isSponsoredByTokePass: Boolean(event.is_sponsored_by_tokepass),
+      activeResaleListingId: null,
+      pendingTransfer: null,
+      visualStatus: "active",
     })
+  }
 
   const ticketIds = tickets.map((t) => t.id)
   if (ticketIds.length > 0) {

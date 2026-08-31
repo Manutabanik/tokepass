@@ -145,14 +145,15 @@ export async function listGuestOrderTickets(): Promise<GuestTicketPreview[]> {
 }
 
 const GUEST_TICKET_DETAIL_SELECT =
-  "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, holder_name, holder_dni, ticket_tiers!tickets_tier_id_fkey(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, delivery_mode, access_link, venues(name))"
+  "id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, holder_name, holder_dni, ticket_tiers!tickets_tier_id_fkey(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, delivery_mode, access_link, venues(name))"
 const GUEST_TICKET_DETAIL_SELECT_LEGACY =
-  "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, holder_name, holder_dni, ticket_tiers!tickets_tier_id_fkey(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, venues(name))"
+  "id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, holder_name, holder_dni, ticket_tiers!tickets_tier_id_fkey(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, venues(name))"
 
 type GuestTicketDetailRow = {
   id: string
   status: TicketStatus
   order_id: string
+  event_id?: string | null
   qr_code: string | null
   totp_secret: string | null
   transfer_count: number
@@ -204,7 +205,21 @@ type GuestTicketDetailRow = {
 
 function mapGuestTicketRow(row: GuestTicketDetailRow, revealQr: boolean): MyTicket | null {
   const eventsRaw = row.events
-  const events = Array.isArray(eventsRaw) ? eventsRaw[0] : eventsRaw
+  const events =
+    (Array.isArray(eventsRaw) ? eventsRaw[0] : eventsRaw) ??
+    (row.event_id
+      ? {
+          id: row.event_id,
+          title: "Evento",
+          date: row.created_at,
+          location: null,
+          flyer_url: null,
+          image_url: null,
+          qr_type: null,
+          schedule_days: null,
+          venues: null,
+        }
+      : null)
   if (!events) return null
   const venueRaw = events.venues
   const venue = Array.isArray(venueRaw) ? venueRaw[0] : venueRaw

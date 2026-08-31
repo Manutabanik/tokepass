@@ -18,7 +18,7 @@ import {
   requeuePosIssueNotifications,
   scheduleNotificationOutboxDrain,
 } from "@/lib/notifications/outbox"
-import { createAdminClient } from "@/lib/supabase/admin"
+import { createAdminClient, tryCreateAdminClient } from "@/lib/supabase/admin"
 import {
   POS_STAFF_ROLES,
   isPosStaffRole,
@@ -1459,7 +1459,7 @@ export async function getPrintableTicket(
   const rich = await supabase
     .from("tickets")
     .select(
-      "id, status, totp_secret, scanned_at, is_dynamic_qr, is_test, owner_id, holder_name, holder_dni, event_seating_units(label, sector_name, row_label, layout_type), ticket_tiers!tickets_tier_id_fkey(name, price, day_id), events(id, title, date, location, qr_type, organizer_id, flyer_url, image_url, schedule_days, venues(name))",
+      "id, status, event_id, totp_secret, scanned_at, is_dynamic_qr, is_test, owner_id, holder_name, holder_dni, event_seating_units(label, sector_name, row_label, layout_type), ticket_tiers!tickets_tier_id_fkey(name, price, day_id), events(id, title, date, location, qr_type, organizer_id, flyer_url, image_url, schedule_days, venues(name))",
     )
     .eq("id", ticketId)
     .maybeSingle()
@@ -1472,7 +1472,7 @@ export async function getPrintableTicket(
       ? await supabase
           .from("tickets")
           .select(
-            "id, status, totp_secret, scanned_at, is_dynamic_qr, is_test, owner_id, holder_name, holder_dni, ticket_tiers!tickets_tier_id_fkey(name, price), events(id, title, date, location, qr_type, organizer_id)",
+            "id, status, event_id, totp_secret, scanned_at, is_dynamic_qr, is_test, owner_id, holder_name, holder_dni, ticket_tiers!tickets_tier_id_fkey(name, price), events(id, title, date, location, qr_type, organizer_id)",
           )
           .eq("id", ticketId)
           .maybeSingle()
@@ -1485,6 +1485,7 @@ export async function getPrintableTicket(
   type Row = {
     id: string
     status: string
+    event_id?: string | null
     totp_secret: string
     scanned_at: string | null
     is_dynamic_qr: boolean
@@ -1514,6 +1515,29 @@ export async function getPrintableTicket(
   }
 
   const row = data as unknown as Row
+  if (!row.events && row.event_id && row.owner_id === user.id) {
+    const admin = tryCreateAdminClient()
+    if (admin) {
+      const { data: draftEvent } = await admin
+        .from("events")
+        .select(
+          "id, title, date, location, qr_type, organizer_id, flyer_url, image_url, schedule_days, venues(name)",
+        )
+        .eq("id", row.event_id)
+        .maybeSingle()
+      row.events = (draftEvent as Row["events"]) ?? null
+    }
+    if (!row.events) {
+      row.events = {
+        id: row.event_id,
+        title: "Evento",
+        date: new Date().toISOString(),
+        location: "",
+        qr_type: null,
+        organizer_id: "",
+      }
+    }
+  }
   if (!row.events) return null
 
   const { data: profile } = await supabase

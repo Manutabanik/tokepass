@@ -1,15 +1,16 @@
 "use server"
 
+import { getMyTickets, type MyTicket } from "@/app/actions/tickets"
+import { tryCreateAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { OrderStatus, PaymentMethod } from "@/types/database"
-import { getMyTickets, type MyTicket } from "@/app/actions/tickets"
 
 export async function getMyTicketById(
   ticketId: string,
 ): Promise<MyTicket | null> {
   if (!ticketId) return null
-  const tickets = await getMyTickets()
-  return tickets.find((ticket) => ticket.id === ticketId) ?? null
+  const tickets = await getMyTickets({ ticketId })
+  return tickets[0] ?? null
 }
 
 export type BuyerOrderRow = {
@@ -76,8 +77,34 @@ export async function getMyOrders(): Promise<BuyerOrderRow[]> {
     seating_unit: { reserved_until: string | null } | null
   }
 
+  const ticketRows = (tickets ?? []) as unknown as TicketJoin[]
+  const missingEventIds = [
+    ...new Set(
+      ticketRows
+        .filter((row) => !row.events && row.event_id)
+        .map((row) => row.event_id),
+    ),
+  ]
+  if (missingEventIds.length > 0) {
+    const admin = tryCreateAdminClient()
+    if (admin) {
+      const { data: draftEvents } = await admin
+        .from("events")
+        .select("id, title, date")
+        .in("id", missingEventIds)
+      const byId = new Map(
+        (draftEvents ?? []).map((event) => [event.id, event]),
+      )
+      for (const row of ticketRows) {
+        if (!row.events && row.event_id) {
+          row.events = byId.get(row.event_id) ?? null
+        }
+      }
+    }
+  }
+
   const ticketsByOrder = new Map<string, TicketJoin[]>()
-  for (const row of (tickets ?? []) as unknown as TicketJoin[]) {
+  for (const row of ticketRows) {
     if (!row.order_id) continue
     const list = ticketsByOrder.get(row.order_id) ?? []
     list.push(row)
