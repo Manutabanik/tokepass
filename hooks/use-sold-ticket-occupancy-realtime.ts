@@ -30,6 +30,7 @@ export function useSoldTicketOccupancyRealtime(
   useEffect(() => {
     const cleanEventId = eventId?.trim()
     if (!cleanEventId) return
+    const resolvedEventId: string = cleanEventId
     const dateId = eventDateId?.trim() || null
     let cancelled = false
     let poll: { stop: () => void } | null = null
@@ -41,7 +42,7 @@ export function useSoldTicketOccupancyRealtime(
     }
 
     function pull() {
-      void getEventSoldTicketOccupancy(cleanEventId, dateId)
+      void getEventSoldTicketOccupancy(resolvedEventId, dateId)
         .then(applySnapshot)
         .catch(() => {
           if (!cancelled) onReadyRef.current?.()
@@ -51,7 +52,7 @@ export function useSoldTicketOccupancyRealtime(
     pull()
 
     const supabase = createClient()
-    const topic = `public:tickets:${cleanEventId}:${dateId ?? ""}:${++soldTicketChannelSeq}`
+    const topic = `public:tickets:${resolvedEventId}:${dateId ?? ""}:${++soldTicketChannelSeq}`
     const channel = supabase
       .channel(topic)
       .on(
@@ -60,7 +61,7 @@ export function useSoldTicketOccupancyRealtime(
           event: "*",
           schema: "public",
           table: "tickets",
-          filter: `event_id=eq.${cleanEventId}`,
+          filter: `event_id=eq.${resolvedEventId}`,
         },
         () => {
           if (!cancelled) pull()

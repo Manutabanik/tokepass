@@ -227,9 +227,12 @@ function occupancyFromSoldTicketsResolved(
   tickets: readonly SoldTicketRef[] | Record<string, SeatStatus>,
   units: readonly VenueMapSeatingUnitRef[],
 ): Record<string, SeatStatus> {
-  const occupancy = Array.isArray(tickets)
-    ? occupancyFromSoldTicketRefs(tickets)
-    : { ...tickets }
+  const occupancy: Record<string, SeatStatus> = {}
+  if (Array.isArray(tickets)) {
+    Object.assign(occupancy, occupancyFromSoldTicketRefs(tickets))
+  } else {
+    Object.assign(occupancy, tickets as Record<string, SeatStatus>)
+  }
   const layoutByUnitId = new Map<string, string>()
   for (const unit of units) {
     const unitId = unit.id?.trim()
@@ -238,7 +241,7 @@ function occupancyFromSoldTicketsResolved(
   }
   for (const [id, status] of Object.entries(occupancy)) {
     const layout = layoutByUnitId.get(id)
-    if (layout && !occupancy[layout]) occupancy[layout] = status
+    if (layout && occupancy[layout] == null) occupancy[layout] = status
   }
   return occupancy
 }
