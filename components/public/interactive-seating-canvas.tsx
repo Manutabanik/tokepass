@@ -122,6 +122,15 @@ import {
   mapClickTargetFromZone,
 } from "@/lib/seating/map-click-target"
 import { resolveEffectiveSeatingType } from "@/lib/seating/seating-type"
+import {
+  beginBuyerTap,
+  buyerHitPaddingWorld,
+  hapticSelectFeedback,
+  isBuyerCleanTap,
+  noteBuyerTapMove,
+  noteBuyerTapPointer,
+  type BuyerTapSession,
+} from "@/lib/seating/venue-touch"
 import type { MapClickTarget } from "@/types/event-map"
 import { isInfrastructureElement } from "@/types/venue-map"
 import type {
@@ -156,13 +165,7 @@ function stampActivity(ref: { current: number }) {
 }
 
 function vibrateTap() {
-  try {
-    if (typeof navigator !== "undefined" && navigator.vibrate) {
-      navigator.vibrate(50)
-    }
-  } catch {
-    /* algunos navegadores bloquean vibrate fuera de un gesto */
-  }
+  hapticSelectFeedback()
 }
 
 function buyerMapSurfaceClass(hideChrome: boolean, buyerChrome: boolean) {
@@ -255,6 +258,7 @@ export function InteractiveSeatingCanvas({
   const selectionQuietRef = useRef(false)
   const selectionQuietTimer = useRef<number | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+  const tapSessionRef = useRef<BuyerTapSession | null>(null)
   const toggleSelectedItem = useStorefrontSeatStore(
     (state) => state.toggleSelectedItem,
   )
@@ -361,7 +365,9 @@ export function InteractiveSeatingCanvas({
   )
   const stageLabel = map.stage?.label?.trim() || "ESCENARIO"
   const pxPerUnit = (wrapWidth / VIEW.width) * zoom
-  const hitRadius = Math.max(8, MIN_HIT_PX / 2 / Math.max(pxPerUnit, 0.05))
+  const hitPaddingWorld = buyerHitPaddingWorld(pxPerUnit)
+  const hitRadius =
+    Math.max(8, MIN_HIT_PX / 2 / Math.max(pxPerUnit, 0.05)) + hitPaddingWorld
 
   useEffect(() => {
     return () => {
@@ -479,6 +485,39 @@ export function InteractiveSeatingCanvas({
       selectionQuietRef.current = false
       selectionQuietTimer.current = null
     }, 160)
+  }
+
+  function rememberBuyerTap(event: React.PointerEvent) {
+    const session = tapSessionRef.current
+    if (!session || event.isPrimary) {
+      tapSessionRef.current = beginBuyerTap(
+        event.clientX,
+        event.clientY,
+        event.pointerId,
+      )
+      return
+    }
+    tapSessionRef.current = noteBuyerTapPointer(session, event.pointerId)
+  }
+
+  function rememberBuyerTapMove(event: React.PointerEvent) {
+    const session = tapSessionRef.current
+    if (!session) return
+    tapSessionRef.current = noteBuyerTapMove(
+      session,
+      event.clientX,
+      event.clientY,
+    )
+  }
+
+  function consumeCleanTap(event: React.PointerEvent) {
+    const ok = isBuyerCleanTap(tapSessionRef.current, {
+      x: event.clientX,
+      y: event.clientY,
+      pointerId: event.pointerId,
+    })
+    tapSessionRef.current = null
+    return ok
   }
 
   useLayoutEffect(() => {
@@ -809,6 +848,7 @@ export function InteractiveSeatingCanvas({
       return { ok: false as const, added: false }
     }
     syncSelectionPaint()
+    hapticSelectFeedback()
     return { ok: true as const, added: result.added }
   }
 
@@ -828,12 +868,12 @@ export function InteractiveSeatingCanvas({
       return
     }
     syncSelectionPaint()
+    hapticSelectFeedback()
   }
 
   function handleMapTargetClick(target: MapClickTarget) {
     if (readOnly || pending) return
     if (target.type === "SECTOR_GENERAL") {
-      vibrateTap()
       markActivity()
       selectGeneralZone(target.zone)
       return
@@ -843,7 +883,6 @@ export function InteractiveSeatingCanvas({
         enterLodZone(target.zone)
         return
       }
-      vibrateTap()
       markActivity()
       onSelectZone?.(target.zone)
       return
@@ -886,12 +925,10 @@ export function InteractiveSeatingCanvas({
 
   function enterLodZone(zone: VenueMapZone) {
     if (resolveEffectiveSeatingType(zone, map) === "GENERAL") {
-      vibrateTap()
       markActivity()
       selectGeneralZone(zone)
       return
     }
-    vibrateTap()
     markActivity()
     if (focusedZoneId !== zone.id) setRevealedZoneId(null)
     zoomToZone(zone)
@@ -947,7 +984,6 @@ export function InteractiveSeatingCanvas({
     if (tableElement && !onPickSeat) {
       const item = storefrontItemFromElement(tableElement, priceBySectorId, map)
       if (item) {
-        vibrateTap()
         markActivity()
         applyToggle(item)
         return
@@ -963,9 +999,9 @@ export function InteractiveSeatingCanvas({
       ? storefrontHoldSectorId(parentElement, map)
       : seat.sectorId
 
-    vibrateTap()
     markActivity()
     if (onPickSeat) {
+      hapticSelectFeedback()
       onPickSeat({
         id: seat.id,
         row: seat.row,
@@ -1017,6 +1053,7 @@ export function InteractiveSeatingCanvas({
       return
     }
     syncSelectionPaint()
+    hapticSelectFeedback()
   }
 
   function toggleFreePlace(element: VenueMapElement, seatId?: string) {
@@ -1041,8 +1078,8 @@ export function InteractiveSeatingCanvas({
         toast.info(SEAT_HELD_BY_OTHER_MESSAGE)
         return
       }
-      vibrateTap()
       markActivity()
+      hapticSelectFeedback()
       onPickElement(live)
       return
     }
@@ -1081,7 +1118,6 @@ export function InteractiveSeatingCanvas({
             isMappedSelection: true,
           }
       if (item) {
-        vibrateTap()
         markActivity()
         applyToggle(item)
         return
@@ -1125,7 +1161,6 @@ export function InteractiveSeatingCanvas({
     }
     const item = storefrontItemFromElement(live, priceBySectorId, map)
     if (!item) return
-    vibrateTap()
     markActivity()
     if (live.type === "standing_zone") {
       armSelectionQuiet()
@@ -1137,6 +1172,7 @@ export function InteractiveSeatingCanvas({
         return
       }
       syncSelectionPaint()
+      hapticSelectFeedback()
       return
     }
     applyToggle(item)
@@ -1232,6 +1268,11 @@ export function InteractiveSeatingCanvas({
             "h-full w-full select-none",
             buyerMapSurfaceClass(hideChrome, buyerChrome),
           )}
+          onPointerDownCapture={rememberBuyerTap}
+          onPointerMoveCapture={rememberBuyerTapMove}
+          onPointerCancelCapture={() => {
+            tapSessionRef.current = null
+          }}
           onPointerMove={(event) => {
             if (event.pointerType === "touch") return
             updateHoverFromEvent(event)
@@ -1335,6 +1376,7 @@ export function InteractiveSeatingCanvas({
               spotlight={false}
               unavailableIds={unavailableZoneIds}
               selectOnPointerUp={!readOnly}
+              shouldCommitTap={readOnly ? undefined : consumeCleanTap}
               lodMode={lodEnabled ? viewMode : null}
               focusedZoneId={focusedZoneId}
               buyerOccupancy={buyerOccupancy}
@@ -1361,7 +1403,10 @@ export function InteractiveSeatingCanvas({
               zoom={zoom}
               interactive={!readOnly}
               buyerOccupancy={buyerOccupancy}
-              onSeatPointerDown={(_event, element, seatId) => {
+              selectOnPointerUp
+              hitPadding={hitPaddingWorld}
+              onSeatPointerUp={(event, element, seatId) => {
+                if (!consumeCleanTap(event)) return
                 if (element.sellMode === "group") {
                   toggleElement(element)
                   return
@@ -1378,7 +1423,8 @@ export function InteractiveSeatingCanvas({
                 }
                 toggleFreePlace(element, seatId)
               }}
-              onElementPointerDown={(_event, element) => {
+              onElementPointerUp={(event, element) => {
+                if (!consumeCleanTap(event)) return
                 toggleElement(element)
               }}
             />
@@ -1423,8 +1469,9 @@ export function InteractiveSeatingCanvas({
                     }
                     aria-label={label}
                     tabIndex={-1}
-                    onClick={(event) => {
+                    onPointerUp={(event) => {
                       event.stopPropagation()
+                      if (!consumeCleanTap(event)) return
                       toggleSeat(seat)
                     }}
                   >

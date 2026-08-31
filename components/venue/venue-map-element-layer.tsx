@@ -5,7 +5,10 @@ import { memo, useMemo } from "react"
 import { VenueElementSymbol } from "@/components/admin/venue-svg-symbols"
 import { isVenueMapElementSoldOut } from "@/lib/seating/map-inventory-hydration"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
-import { compactVenueElementLabel } from "@/lib/seating/venue-element-geometry"
+import {
+  compactVenueElementLabel,
+  resolveVenueShapeType,
+} from "@/lib/seating/venue-element-geometry"
 import { isolateCanvasPointer } from "@/lib/seating/venue-touch"
 import { cn } from "@/lib/utils"
 import type { InteractiveVenueMap, VenueMapElement } from "@/types/venue-map"
@@ -16,12 +19,16 @@ const VenueElementShape = memo(function VenueElementShape({
   occupancyBySeatId,
   selectedSeatIds,
   onElementPointerDown,
+  onElementPointerUp,
   onElementPointerEnter,
   onElementPointerLeave,
   onElementContextMenu,
   onSeatPointerDown,
+  onSeatPointerUp,
   onElementDoubleClick,
   onSeatDoubleClick,
+  selectOnPointerUp = false,
+  hitPadding = 0,
   showLabels,
   showChairs,
   interactive,
@@ -38,6 +45,10 @@ const VenueElementShape = memo(function VenueElementShape({
   occupancyBySeatId: Record<string, SeatStatus>
   selectedSeatIds: Set<string>
   onElementPointerDown?: (
+    event: React.PointerEvent,
+    element: VenueMapElement,
+  ) => void
+  onElementPointerUp?: (
     event: React.PointerEvent,
     element: VenueMapElement,
   ) => void
@@ -58,6 +69,11 @@ const VenueElementShape = memo(function VenueElementShape({
     element: VenueMapElement,
     seatId: string,
   ) => void
+  onSeatPointerUp?: (
+    event: React.PointerEvent,
+    element: VenueMapElement,
+    seatId: string,
+  ) => void
   onElementDoubleClick?: (
     event: React.MouseEvent,
     element: VenueMapElement,
@@ -67,6 +83,8 @@ const VenueElementShape = memo(function VenueElementShape({
     element: VenueMapElement,
     seatId: string,
   ) => void
+  selectOnPointerUp?: boolean
+  hitPadding?: number
   showLabels: boolean
   showChairs: boolean
   interactive: boolean
@@ -93,6 +111,11 @@ const VenueElementShape = memo(function VenueElementShape({
     element.type !== "standing_zone" &&
     element.type !== "vip_chair" &&
     element.type !== "infrastructure"
+  const shape = resolveVenueShapeType(element)
+  const liveHit = interactive && !soldOut && hitPadding > 0
+  const padW = Math.max(8, element.width || 12)
+  const padH = Math.max(8, element.height || 12)
+  const padR = Math.max(8, Math.min(padW, padH) / 2)
 
   return (
     <g
@@ -113,8 +136,16 @@ const VenueElementShape = memo(function VenueElementShape({
             : undefined
       }
       onPointerDown={
-        interactive && !soldOut
+        interactive && !soldOut && !selectOnPointerUp
           ? (event) => onElementPointerDown?.(event, element)
+          : undefined
+      }
+      onPointerUp={
+        interactive && !soldOut && selectOnPointerUp
+          ? (event) => {
+              isolateCanvasPointer(event)
+              onElementPointerUp?.(event, element)
+            }
           : undefined
       }
       onClick={
@@ -150,6 +181,28 @@ const VenueElementShape = memo(function VenueElementShape({
           : undefined
       }
     >
+      {liveHit ? (
+        shape === "round_table" ? (
+          <circle
+            cx={element.x}
+            cy={element.y}
+            r={padR + hitPadding}
+            fill="transparent"
+            stroke="none"
+            pointerEvents="all"
+          />
+        ) : (
+          <rect
+            x={element.x - padW / 2 - hitPadding}
+            y={element.y - padH / 2 - hitPadding}
+            width={padW + hitPadding * 2}
+            height={padH + hitPadding * 2}
+            fill="transparent"
+            stroke="none"
+            pointerEvents="all"
+          />
+        )
+      ) : null}
       <g
         className={cn(lit && "animate-pulse-subtle")}
         style={
@@ -172,13 +225,22 @@ const VenueElementShape = memo(function VenueElementShape({
           zoom={zoom}
           label={element.type === "standing_zone" ? undefined : labelText}
           onSeatPointerDown={
-            onSeatPointerDown && !soldOut
+            onSeatPointerDown && !soldOut && !selectOnPointerUp
               ? (event, seatId) => {
                   isolateCanvasPointer(event)
                   onSeatPointerDown(event, element, seatId)
                 }
               : undefined
           }
+          onSeatPointerUp={
+            onSeatPointerUp && !soldOut
+              ? (event, seatId) => {
+                  isolateCanvasPointer(event)
+                  onSeatPointerUp(event, element, seatId)
+                }
+              : undefined
+          }
+          hitPadding={hitPadding}
           onSeatDoubleClick={
             onSeatDoubleClick
               ? (event, seatId) => {
@@ -239,12 +301,16 @@ export function VenueMapElementLayer({
   selectedSeatIds,
   occupancyBySeatId = {},
   onElementPointerDown,
+  onElementPointerUp,
   onElementPointerEnter,
   onElementPointerLeave,
   onElementContextMenu,
   onSeatPointerDown,
+  onSeatPointerUp,
   onElementDoubleClick,
   onSeatDoubleClick,
+  selectOnPointerUp = false,
+  hitPadding = 0,
   showSeats = true,
   zoom = 1,
   interactive = true,
@@ -265,6 +331,10 @@ export function VenueMapElementLayer({
     event: React.PointerEvent,
     element: VenueMapElement,
   ) => void
+  onElementPointerUp?: (
+    event: React.PointerEvent,
+    element: VenueMapElement,
+  ) => void
   onElementPointerEnter?: (
     event: React.MouseEvent,
     element: VenueMapElement,
@@ -282,6 +352,11 @@ export function VenueMapElementLayer({
     element: VenueMapElement,
     seatId: string,
   ) => void
+  onSeatPointerUp?: (
+    event: React.PointerEvent,
+    element: VenueMapElement,
+    seatId: string,
+  ) => void
   onElementDoubleClick?: (
     event: React.MouseEvent,
     element: VenueMapElement,
@@ -291,6 +366,8 @@ export function VenueMapElementLayer({
     element: VenueMapElement,
     seatId: string,
   ) => void
+  selectOnPointerUp?: boolean
+  hitPadding?: number
   showSeats?: boolean
   zoom?: number
   interactive?: boolean
@@ -356,6 +433,11 @@ export function VenueMapElementLayer({
               onElementPointerDown={
                 visible && interactive ? onElementPointerDown : undefined
               }
+              onElementPointerUp={
+                visible && interactive ? onElementPointerUp : undefined
+              }
+              selectOnPointerUp={selectOnPointerUp}
+              hitPadding={hitPadding}
               onElementPointerEnter={
                 visible && interactive ? onElementPointerEnter : undefined
               }
@@ -367,6 +449,9 @@ export function VenueMapElementLayer({
               }
               onSeatPointerDown={
                 visible && interactive ? onSeatPointerDown : undefined
+              }
+              onSeatPointerUp={
+                visible && interactive ? onSeatPointerUp : undefined
               }
               onElementDoubleClick={
                 visible && interactive ? onElementDoubleClick : undefined

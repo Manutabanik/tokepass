@@ -11,8 +11,77 @@ export type PinchOrigin = {
 
 const MIN_PINCH_DISTANCE = 8
 
+/** Screen-px slop: above this, the gesture is a pan/pinch, not a seat tap. */
+export const BUYER_TAP_SLOP_PX = 5
+/** Extra invisible padding around tables/chairs for fat-finger hits. */
+export const BUYER_HIT_PADDING_PX = 10
+
 export function touchDistance(a: TouchPoint, b: TouchPoint) {
   return Math.hypot(a.x - b.x, a.y - b.y)
+}
+
+export type BuyerTapSession = {
+  x: number
+  y: number
+  pointerId: number
+  fingers: number
+  dragged: boolean
+}
+
+export function beginBuyerTap(
+  x: number,
+  y: number,
+  pointerId: number,
+): BuyerTapSession {
+  return { x, y, pointerId, fingers: 1, dragged: false }
+}
+
+export function noteBuyerTapPointer(
+  session: BuyerTapSession,
+  pointerId: number,
+): BuyerTapSession {
+  if (pointerId === session.pointerId) return session
+  return { ...session, fingers: session.fingers + 1, dragged: true }
+}
+
+export function noteBuyerTapMove(
+  session: BuyerTapSession,
+  x: number,
+  y: number,
+  slop = BUYER_TAP_SLOP_PX,
+): BuyerTapSession {
+  if (touchDistance(session, { x, y }) > slop) {
+    return { ...session, dragged: true }
+  }
+  return session
+}
+
+export function isBuyerCleanTap(
+  session: BuyerTapSession | null,
+  end: { x: number; y: number; pointerId: number },
+  slop = BUYER_TAP_SLOP_PX,
+): boolean {
+  if (!session) return false
+  if (session.pointerId !== end.pointerId) return false
+  if (session.dragged || session.fingers > 1) return false
+  return touchDistance(session, end) <= slop
+}
+
+export function buyerHitPaddingWorld(
+  pxPerUnit: number,
+  paddingPx = BUYER_HIT_PADDING_PX,
+) {
+  return paddingPx / Math.max(pxPerUnit, 0.05)
+}
+
+export function hapticSelectFeedback() {
+  try {
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate(50)
+    }
+  } catch {
+    /* algunos navegadores bloquean vibrate fuera de un gesto */
+  }
 }
 
 export function touchMidpoint(a: TouchPoint, b: TouchPoint): TouchPoint {

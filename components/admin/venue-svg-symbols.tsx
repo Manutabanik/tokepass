@@ -34,6 +34,7 @@ function seatInteractionProps(
   onSeatPointerDown?: (event: React.PointerEvent, seatId: string) => void,
   onSeatDoubleClick?: (event: React.MouseEvent, seatId: string) => void,
   locked = false,
+  onSeatPointerUp?: (event: React.PointerEvent, seatId: string) => void,
 ) {
   if (!seatId) return undefined
   return {
@@ -44,6 +45,10 @@ function seatInteractionProps(
       !locked && onSeatPointerDown
         ? (event: React.PointerEvent) => onSeatPointerDown(event, seatId)
         : undefined,
+    onPointerUp:
+      !locked && onSeatPointerUp
+        ? (event: React.PointerEvent) => onSeatPointerUp(event, seatId)
+        : undefined,
     onDoubleClick:
       !locked && onSeatDoubleClick
         ? (event: React.MouseEvent) => {
@@ -53,6 +58,44 @@ function seatInteractionProps(
           }
         : undefined,
   }
+}
+
+function expandedChairHit(
+  x: number,
+  y: number,
+  seatId: string | undefined,
+  hitPadding: number,
+  onSeatPointerDown?: (event: React.PointerEvent, seatId: string) => void,
+  onSeatDoubleClick?: (event: React.MouseEvent, seatId: string) => void,
+  onSeatPointerUp?: (event: React.PointerEvent, seatId: string) => void,
+  locked = false,
+) {
+  if (!seatId || locked) return null
+  if (
+    !onSeatPointerDown &&
+    !onSeatDoubleClick &&
+    !onSeatPointerUp &&
+    hitPadding <= 0
+  ) {
+    return null
+  }
+  return (
+    <circle
+      cx={x}
+      cy={y}
+      r={Math.max(CHAIR_DOT_RADIUS, 11) + hitPadding}
+      fill="transparent"
+      stroke="transparent"
+      strokeWidth={14}
+      {...seatInteractionProps(
+        seatId,
+        onSeatPointerDown,
+        onSeatDoubleClick,
+        false,
+        onSeatPointerUp,
+      )}
+    />
+  )
 }
 
 type OccupancyMap = Record<string, Occupancy | SeatStatus | "available" | "occupied" | "blocked">
@@ -274,7 +317,9 @@ export function RoundTableSymbol({
   parentIds = [],
   onSeatPointerDown,
   onSeatDoubleClick,
+  onSeatPointerUp,
   buyerOccupancy = false,
+  hitPadding = 0,
 }: {
   cx: number
   cy: number
@@ -287,7 +332,9 @@ export function RoundTableSymbol({
   selectedSeatIds: Set<string>
   onSeatPointerDown?: (event: React.PointerEvent, seatId: string) => void
   onSeatDoubleClick?: (event: React.MouseEvent, seatId: string) => void
+  onSeatPointerUp?: (event: React.PointerEvent, seatId: string) => void
   buyerOccupancy?: boolean
+  hitPadding?: number
 }) {
   const r = Math.max(8, radius)
   const orbit = r + CHAIR_DOT_RADIUS + 2
@@ -307,17 +354,16 @@ export function RoundTableSymbol({
         const locked = state === "occupied" || state === "blocked"
         return (
           <g key={seat?.id ?? `chair-${index}`}>
-            {seat && (onSeatPointerDown || onSeatDoubleClick) && !locked ? (
-              <circle
-                cx={x}
-                cy={y}
-                r={Math.max(CHAIR_DOT_RADIUS, 11)}
-                fill="transparent"
-                stroke="transparent"
-                strokeWidth={14}
-                {...seatInteractionProps(seat.id, onSeatPointerDown, onSeatDoubleClick)}
-              />
-            ) : null}
+            {expandedChairHit(
+              x,
+              y,
+              seat?.id,
+              hitPadding,
+              onSeatPointerDown,
+              onSeatDoubleClick,
+              onSeatPointerUp,
+              locked,
+            )}
             <circle
               cx={x}
               cy={y}
@@ -331,6 +377,7 @@ export function RoundTableSymbol({
                 onSeatPointerDown,
                 onSeatDoubleClick,
                 locked,
+                onSeatPointerUp,
               )}
             />
           </g>
@@ -362,7 +409,9 @@ export function LongTableSymbol({
   parentIds = [],
   onSeatPointerDown,
   onSeatDoubleClick,
+  onSeatPointerUp,
   buyerOccupancy = false,
+  hitPadding = 0,
 }: {
   cx: number
   cy: number
@@ -379,7 +428,9 @@ export function LongTableSymbol({
   selectedSeatIds: Set<string>
   onSeatPointerDown?: (event: React.PointerEvent, seatId: string) => void
   onSeatDoubleClick?: (event: React.MouseEvent, seatId: string) => void
+  onSeatPointerUp?: (event: React.PointerEvent, seatId: string) => void
   buyerOccupancy?: boolean
+  hitPadding?: number
 }) {
   const w = Math.max(8, width)
   const h = Math.max(8, height)
@@ -399,22 +450,34 @@ export function LongTableSymbol({
         : tableState
       const locked = state === "occupied" || state === "blocked"
       return (
-        <circle
-          key={seat?.id ?? `side-${y}-${index}`}
-          cx={x}
-          cy={y}
-          r={CHAIR_DOT_RADIUS}
-          fill={fillFor(color, state, buyerOccupancy)}
-          fillOpacity={occupancyOpacity(state, buyerOccupancy, 0.4)}
-          stroke={strokeFor(color, selected, state, buyerOccupancy)}
-          strokeWidth={state === "selected" || selected ? 1.1 : 0.7}
-          {...seatInteractionProps(
+        <g key={seat?.id ?? `side-${y}-${index}`}>
+          {expandedChairHit(
+            x,
+            y,
             seat?.id,
+            hitPadding,
             onSeatPointerDown,
             onSeatDoubleClick,
+            onSeatPointerUp,
             locked,
           )}
-        />
+          <circle
+            cx={x}
+            cy={y}
+            r={CHAIR_DOT_RADIUS}
+            fill={fillFor(color, state, buyerOccupancy)}
+            fillOpacity={occupancyOpacity(state, buyerOccupancy, 0.4)}
+            stroke={strokeFor(color, selected, state, buyerOccupancy)}
+            strokeWidth={state === "selected" || selected ? 1.1 : 0.7}
+            {...seatInteractionProps(
+              seat?.id,
+              onSeatPointerDown,
+              onSeatDoubleClick,
+              locked,
+              onSeatPointerUp,
+            )}
+          />
+        </g>
       )
     })
   }
@@ -449,7 +512,9 @@ export function VipBoxSymbol({
   parentIds = [],
   onSeatPointerDown,
   onSeatDoubleClick,
+  onSeatPointerUp,
   buyerOccupancy = false,
+  hitPadding = 0,
 }: {
   cx: number
   cy: number
@@ -464,7 +529,9 @@ export function VipBoxSymbol({
   selectedSeatIds?: Set<string>
   onSeatPointerDown?: (event: React.PointerEvent, seatId: string) => void
   onSeatDoubleClick?: (event: React.MouseEvent, seatId: string) => void
+  onSeatPointerUp?: (event: React.PointerEvent, seatId: string) => void
   buyerOccupancy?: boolean
+  hitPadding?: number
 }) {
   const w = Math.max(24, width)
   const h = Math.max(18, height)
@@ -552,22 +619,34 @@ export function VipBoxSymbol({
         const state = seatState(seat, occupancyBySeatId, selectedSet, parentIds)
         const locked = state === "occupied" || state === "blocked"
         return (
-          <circle
-            key={seat.id}
-            cx={x}
-            cy={y}
-            r={2.2}
-            fill={fillFor(color, state, buyerOccupancy)}
-            fillOpacity={occupancyOpacity(state, buyerOccupancy, 0.4)}
-            stroke={strokeFor(color, selected, state, buyerOccupancy)}
-            strokeWidth={state === "selected" ? 1.2 : 0.6}
-            {...seatInteractionProps(
+          <g key={seat.id}>
+            {expandedChairHit(
+              x,
+              y,
               seat.id,
+              hitPadding,
               onSeatPointerDown,
               onSeatDoubleClick,
+              onSeatPointerUp,
               locked,
             )}
-          />
+            <circle
+              cx={x}
+              cy={y}
+              r={2.2}
+              fill={fillFor(color, state, buyerOccupancy)}
+              fillOpacity={occupancyOpacity(state, buyerOccupancy, 0.4)}
+              stroke={strokeFor(color, selected, state, buyerOccupancy)}
+              strokeWidth={state === "selected" ? 1.2 : 0.6}
+              {...seatInteractionProps(
+                seat.id,
+                onSeatPointerDown,
+                onSeatDoubleClick,
+                locked,
+                onSeatPointerUp,
+              )}
+            />
+          </g>
         )
       })}
     </g>
@@ -724,7 +803,9 @@ export function VenueElementSymbol({
   label,
   onSeatPointerDown,
   onSeatDoubleClick,
+  onSeatPointerUp,
   buyerOccupancy = false,
+  hitPadding = 0,
 }: {
   element: VenueMapElement
   selected?: boolean
@@ -736,7 +817,9 @@ export function VenueElementSymbol({
   label?: string
   onSeatPointerDown?: (event: React.PointerEvent, seatId: string) => void
   onSeatDoubleClick?: (event: React.MouseEvent, seatId: string) => void
+  onSeatPointerUp?: (event: React.PointerEvent, seatId: string) => void
   buyerOccupancy?: boolean
+  hitPadding?: number
 }) {
   const shape = resolveVenueShapeType(element)
   const color = element.color
@@ -783,7 +866,9 @@ export function VenueElementSymbol({
         selectedSeatIds={selectedSeatIds}
         onSeatPointerDown={onSeatPointerDown}
         onSeatDoubleClick={onSeatDoubleClick}
+        onSeatPointerUp={onSeatPointerUp}
         buyerOccupancy={buyerOccupancy}
+        hitPadding={hitPadding}
       />
     )
   }
@@ -805,7 +890,9 @@ export function VenueElementSymbol({
         selectedSeatIds={selectedSeatIds}
         onSeatPointerDown={onSeatPointerDown}
         onSeatDoubleClick={onSeatDoubleClick}
+        onSeatPointerUp={onSeatPointerUp}
         buyerOccupancy={buyerOccupancy}
+        hitPadding={hitPadding}
       />
     )
   }
@@ -825,7 +912,9 @@ export function VenueElementSymbol({
         selectedSeatIds={selectedSeatIds}
         onSeatPointerDown={onSeatPointerDown}
         onSeatDoubleClick={onSeatDoubleClick}
+        onSeatPointerUp={onSeatPointerUp}
         buyerOccupancy={buyerOccupancy}
+        hitPadding={hitPadding}
       />
     )
   }

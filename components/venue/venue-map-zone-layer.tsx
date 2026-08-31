@@ -4,6 +4,13 @@ import { useId, useRef } from "react"
 
 import { BUYER_SEAT_FILL } from "@/lib/seating/buyer-seat-fill"
 import {
+  beginBuyerTap,
+  isBuyerCleanTap,
+  noteBuyerTapMove,
+  noteBuyerTapPointer,
+  type BuyerTapSession,
+} from "@/lib/seating/venue-touch"
+import {
   isCloseToFirstVertex,
   polygonSvgPoints,
   polygonToCanvas,
@@ -28,6 +35,7 @@ export function VenueMapZoneLayer({
   onPointerDown,
   onDoubleClick,
   selectOnPointerUp = false,
+  shouldCommitTap,
   unavailableIds = [],
   lodMode = null,
   focusedZoneId = null,
@@ -46,6 +54,7 @@ export function VenueMapZoneLayer({
   onPointerDown?: (event: React.PointerEvent, zone: VenueMapZone) => void
   onDoubleClick?: (event: React.MouseEvent, zone: VenueMapZone) => void
   selectOnPointerUp?: boolean
+  shouldCommitTap?: (event: React.PointerEvent) => boolean
   unavailableIds?: string[]
   lodMode?: "macro" | "micro" | null
   focusedZoneId?: string | null
@@ -54,7 +63,7 @@ export function VenueMapZoneLayer({
   buyerOccupancy?: boolean
 }) {
   const glowId = useId().replace(/:/g, "")
-  const press = useRef<{ x: number; y: number } | null>(null)
+  const press = useRef<BuyerTapSession | null>(null)
   const closing = Boolean(cursor && isCloseToFirstVertex(draft, cursor))
   const previewPoints =
     draft.length > 0 && cursor && !closing ? [...draft, cursor] : draft
@@ -121,10 +130,17 @@ export function VenueMapZoneLayer({
           if (requireTap) {
             const start = press.current
             const point = eventClientPoint(event)
+            if (!point) return
+            const pointerId =
+              "pointerId" in event && typeof event.pointerId === "number"
+                ? event.pointerId
+                : (start?.pointerId ?? 0)
             if (
-              start &&
-              point &&
-              Math.hypot(point.x - start.x, point.y - start.y) > 10
+              !isBuyerCleanTap(start, {
+                x: point.x,
+                y: point.y,
+                pointerId,
+              })
             ) {
               return
             }
@@ -183,7 +199,9 @@ export function VenueMapZoneLayer({
             }}
             onPointerDown={(event) => {
               if (!zoneInteractive) return
-              press.current = { x: event.clientX, y: event.clientY }
+              press.current = press.current
+                ? noteBuyerTapPointer(press.current, event.pointerId)
+                : beginBuyerTap(event.clientX, event.clientY, event.pointerId)
               if (selectOnPointerUp) return
               if (onPointerDown) {
                 onPointerDown(event, zone)
@@ -192,18 +210,37 @@ export function VenueMapZoneLayer({
               if (event.button !== 0) return
               handleZoneClick(event)
             }}
+            onPointerMove={(event) => {
+              if (!press.current) return
+              press.current = noteBuyerTapMove(
+                press.current,
+                event.clientX,
+                event.clientY,
+              )
+            }}
             onPointerUp={(event) => {
               if (!zoneInteractive || !selectOnPointerUp) return
               if (event.button !== 0) return
-              handleZoneClick(event, true)
+              const allowed = shouldCommitTap
+                ? shouldCommitTap(event)
+                : isBuyerCleanTap(press.current, {
+                    x: event.clientX,
+                    y: event.clientY,
+                    pointerId: event.pointerId,
+                  })
+              press.current = null
+              if (!allowed) return
+              handleZoneClick(event)
+            }}
+            onPointerCancel={() => {
               press.current = null
             }}
             onClick={(event) => {
-              if (!zoneInteractive) return
-              handleZoneClick(event, selectOnPointerUp)
+              if (!zoneInteractive || selectOnPointerUp) return
+              handleZoneClick(event)
             }}
             onTouchEnd={(event) => {
-              if (!zoneInteractive) return
+              if (!zoneInteractive || selectOnPointerUp) return
               handleZoneClick(event, true)
               press.current = null
             }}

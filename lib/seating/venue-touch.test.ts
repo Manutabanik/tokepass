@@ -3,9 +3,16 @@ import { describe, it } from "node:test"
 
 import {
   applyTwoFingerViewport,
+  beginBuyerTap,
+  BUYER_HIT_PADDING_PX,
+  BUYER_TAP_SLOP_PX,
+  buyerHitPaddingWorld,
   emptyCanvasDragAction,
   isolateCanvasPointer,
+  isBuyerCleanTap,
   isIntentionalSheetClose,
+  noteBuyerTapMove,
+  noteBuyerTapPointer,
   SHEET_DISMISS_GUARD_MS,
   shouldIgnoreSheetDismiss,
   touchDistance,
@@ -110,6 +117,46 @@ describe("venue-touch", () => {
     assert.equal(stopped, true)
     assert.equal(immediate, true)
     assert.equal(event.nativeEvent.cancelBubble, true)
+  })
+
+  it("treats a lift within 5px as a clean tap and aborts past that slop", () => {
+    const start = beginBuyerTap(100, 40, 1)
+    assert.equal(BUYER_TAP_SLOP_PX, 5)
+    assert.equal(
+      isBuyerCleanTap(start, { x: 103, y: 44, pointerId: 1 }),
+      true,
+    )
+    assert.equal(
+      isBuyerCleanTap(start, { x: 106, y: 40, pointerId: 1 }),
+      false,
+    )
+    const dragged = noteBuyerTapMove(start, 108, 40)
+    assert.equal(dragged.dragged, true)
+    assert.equal(
+      isBuyerCleanTap(dragged, { x: 108, y: 40, pointerId: 1 }),
+      false,
+    )
+  })
+
+  it("aborts the tap when a second finger joins (pinch)", () => {
+    const start = beginBuyerTap(10, 10, 1)
+    const pinched = noteBuyerTapPointer(start, 2)
+    assert.equal(pinched.fingers > 1, true)
+    assert.equal(
+      isBuyerCleanTap(pinched, { x: 10, y: 10, pointerId: 1 }),
+      false,
+    )
+    assert.equal(isBuyerCleanTap(null, { x: 10, y: 10, pointerId: 1 }), false)
+    assert.equal(
+      isBuyerCleanTap(start, { x: 10, y: 10, pointerId: 99 }),
+      false,
+    )
+  })
+
+  it("converts 10px of hit padding into world units", () => {
+    assert.equal(BUYER_HIT_PADDING_PX, 10)
+    assert.equal(buyerHitPaddingWorld(1), 10)
+    assert.equal(buyerHitPaddingWorld(2), 5)
   })
 
   it("ignores ghost outside-press during the 150ms guard", () => {
