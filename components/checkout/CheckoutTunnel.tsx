@@ -212,7 +212,6 @@ import {
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
 import { resolveLiveVenueMapForDay } from "@/lib/seating/live-venue-map-for-day"
-import { classifyZoneClick } from "@/lib/seating/map-click-target"
 import {
   eventNeedsInteractiveCanvas,
   ticketRequiresInteractiveMap,
@@ -2624,16 +2623,6 @@ export function CheckoutTunnel({
     if (purchaseLocked || soldOutZoneIds.includes(zone.id)) return
     focusSelectedZone(zone)
     useCheckoutStore.getState().setSeatSheetOpen(true)
-    if (classifyZoneClick(zone, liveMap) === "SECTOR_NUMERADO") return
-    const previous = selectedItems.find(
-      (item) =>
-        item.id === zone.id &&
-        itemMatchesActiveDay(item),
-    )
-    const previousQty = previous ? Math.max(0, previous.capacity || 0) : 0
-    if (previousQty <= 0) {
-      applyZoneQuantity(zone.id, 1)
-    }
   }
 
   function applyZoneQuantity(sectorId: string, quantity: number) {

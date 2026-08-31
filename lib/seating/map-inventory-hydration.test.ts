@@ -126,6 +126,18 @@ describe("map-inventory-hydration", () => {
     )
   })
 
+  it("locks a group table when any chair is occupied", () => {
+    const map = tableMap()
+    const element = map.elements[0]!
+    assert.equal(
+      isVenueMapElementSoldOut(element, {
+        "mesa-9-S1": "occupied",
+      }),
+      true,
+    )
+    assert.equal(isVenueMapElementSoldOut(element, {}), false)
+  })
+
   it("maps issued tickets to occupied layout ids", () => {
     const occupancy = occupancyFromSoldTicketRefs([
       { seat_id: "mesa-9", seating_unit_id: "unit-9", status: "valid" },

@@ -208,7 +208,13 @@ export function isVenueMapElementSoldOut(
 ): boolean {
   const parent = lookupOccupancyStatus(occupancy, element.id)
   if (isSoldInventoryStatus(parent)) return true
-  if (element.sellMode === "group") return false
+  if (element.sellMode === "group") {
+    const chairs = (element.seats ?? []).filter((seat) => seat.status !== "blocked")
+    if (chairs.length === 0) return false
+    return chairs.some((seat) =>
+      isSoldInventoryStatus(lookupOccupancyStatus(occupancy, seat.id, element.id)),
+    )
+  }
   const seats = (element.seats ?? []).filter((seat) => seat.status !== "blocked")
   if (seats.length === 0) return false
   return seats.every((seat) =>

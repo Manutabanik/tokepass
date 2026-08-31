@@ -325,12 +325,12 @@ describe("buildPublishEventV2Payload", () => {
         id: fridayTicketId,
         name: "General",
         price: 20000,
-        stock: 15000,
+        stock: 130,
         validDayIds: [],
         slotId: "",
         dayRates: [
-          { dayId: fridayId, price: 20000, stock: 10000, ticketId: fridayTicketId },
-          { dayId: saturdayId, price: 30000, stock: 5000, ticketId: saturdayTicketId },
+          { dayId: fridayId, price: 20000, stock: 80, ticketId: fridayTicketId },
+          { dayId: saturdayId, price: 30000, stock: 50, ticketId: saturdayTicketId },
         ],
       },
     ]
@@ -342,11 +342,11 @@ describe("buildPublishEventV2Payload", () => {
     assert.equal(generals[0]?.id, fridayTicketId)
     assert.equal(generals[0]?.day_id, fridayId)
     assert.equal(generals[0]?.price, 20000)
-    assert.equal(generals[0]?.capacity, 10000)
+    assert.equal(generals[0]?.capacity, 80)
     assert.equal(generals[1]?.id, saturdayTicketId)
     assert.equal(generals[1]?.day_id, saturdayId)
     assert.equal(generals[1]?.price, 30000)
-    assert.equal(generals[1]?.capacity, 5000)
+    assert.equal(generals[1]?.capacity, 50)
   })
 
   it("keeps general tickets off the seating map and skips nameless extras", () => {

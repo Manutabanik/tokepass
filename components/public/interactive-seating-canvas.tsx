@@ -416,13 +416,14 @@ export function InteractiveSeatingCanvas({
   useEffect(() => {
     if (!previewSeat) return
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.stopPropagation()
-        setPreviewSeat(null)
-      }
+      if (event.key !== "Escape") return
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      setPreviewSeat(null)
     }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
+    window.addEventListener("keydown", onKeyDown, true)
+    return () => window.removeEventListener("keydown", onKeyDown, true)
   }, [previewSeat])
 
   useEffect(() => {
@@ -993,6 +994,11 @@ export function InteractiveSeatingCanvas({
       return
     }
     if (previewSeat.increment) {
+      if (previewSeat.selected) {
+        const result = applyToggle(previewSeat.item)
+        if (result.ok) setPreviewSeat(null)
+        return
+      }
       armSelectionQuiet()
       const result = useStorefrontSeatStore
         .getState()
@@ -1014,13 +1020,9 @@ export function InteractiveSeatingCanvas({
   }
 
   function selectGeneralZone(zone: VenueMapZone) {
-    if (onSelectZone) {
-      onSelectZone(zone)
-      return
-    }
     const item = storefrontItemFromZone(zone, priceBySectorId)
-    if (!item) return
     if (
+      item &&
       requestPlacePreview(item, {
         increment: true,
         focusId: zone.id,
@@ -1028,6 +1030,11 @@ export function InteractiveSeatingCanvas({
     ) {
       return
     }
+    if (onSelectZone) {
+      onSelectZone(zone)
+      return
+    }
+    if (!item) return
     armSelectionQuiet()
     const result = useStorefrontSeatStore
       .getState()
@@ -1387,6 +1394,26 @@ export function InteractiveSeatingCanvas({
     toggleFreePlace(live)
   }
 
+  function commitCanvasElement(element: VenueMapElement, seatId?: string) {
+    if (element.sellMode === "group") {
+      toggleElement(element)
+      return
+    }
+    const target = mapClickTargetFromElement(element, map, seatId)
+    if (target) {
+      handleMapTargetClick(target)
+      return
+    }
+    if (seatId) {
+      const match = plotSeats.find((seat) => seat.id === seatId)
+      if (match) {
+        toggleSeat(match)
+        return
+      }
+    }
+    toggleFreePlace(element, seatId)
+  }
+
   const showModalActionFooter = Boolean(onCloseMap) && hideChrome
 
   const mapArea = (
@@ -1604,26 +1631,26 @@ export function InteractiveSeatingCanvas({
               zoom={zoom}
               interactive={!readOnly}
               buyerOccupancy={buyerOccupancy}
-              selectOnPointerUp
+              selectOnPointerUp={confirmBuyerPick}
               hitPadding={hitPaddingWorld}
+              onSeatPointerDown={
+                confirmBuyerPick
+                  ? undefined
+                  : (_event, element, seatId) => {
+                      commitCanvasElement(element, seatId)
+                    }
+              }
               onSeatPointerUp={(event, element, seatId) => {
                 if (!consumeCleanTap(event)) return
-                if (element.sellMode === "group") {
-                  toggleElement(element)
-                  return
-                }
-                const target = mapClickTargetFromElement(element, map, seatId)
-                if (target) {
-                  handleMapTargetClick(target)
-                  return
-                }
-                const match = plotSeats.find((seat) => seat.id === seatId)
-                if (match) {
-                  toggleSeat(match)
-                  return
-                }
-                toggleFreePlace(element, seatId)
+                commitCanvasElement(element, seatId)
               }}
+              onElementPointerDown={
+                confirmBuyerPick
+                  ? undefined
+                  : (_event, element) => {
+                      toggleElement(element)
+                    }
+              }
               onElementPointerUp={(event, element) => {
                 if (!consumeCleanTap(event)) return
                 toggleElement(element)
