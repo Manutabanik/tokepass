@@ -255,6 +255,7 @@ export function VenueMapElementLayer({
   highlightedIds = [],
   isolationDimIds = null,
   buyerOccupancy = false,
+  preserveOrder = false,
 }: {
   elements: VenueMapElement[]
   selectedIds?: string[]
@@ -300,6 +301,7 @@ export function VenueMapElementLayer({
   highlightedIds?: string[]
   isolationDimIds?: Set<string> | null
   buyerOccupancy?: boolean
+  preserveOrder?: boolean
 }) {
   const selected = new Set(selectedIds)
   const highlighted = new Set(highlightedIds)
@@ -316,11 +318,13 @@ export function VenueMapElementLayer({
   const veryDense = elements.length >= 800
   const renderLabels = !veryDense && zoom >= 0.8
   const renderChairs = showSeats && (!dense || zoom >= 1.15)
-  const ordered = [...elements].sort((left, right) => {
-    const leftSelected = selected.has(left.id) ? 1 : 0
-    const rightSelected = selected.has(right.id) ? 1 : 0
-    return leftSelected - rightSelected
-  })
+  const ordered = preserveOrder
+    ? elements
+    : [...elements].sort((left, right) => {
+        const leftSelected = selected.has(left.id) ? 1 : 0
+        const rightSelected = selected.has(right.id) ? 1 : 0
+        return leftSelected - rightSelected
+      })
 
   return (
     <>
