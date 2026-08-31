@@ -22,6 +22,7 @@ export function InteractiveMapViewer({
   maxSelectable,
   onSelectZone,
   onContinue,
+  immersive = false,
   className,
 }: {
   map: InteractiveVenueMap
@@ -35,13 +36,15 @@ export function InteractiveMapViewer({
   maxSelectable?: number
   onSelectZone?: (zone: VenueMapZone) => void
   onContinue?: (seats: InteractiveSelectedSeat[]) => void
+  immersive?: boolean
   className?: string
 }) {
   return (
     <div
       className={cn(
-        "relative h-[320px] w-full max-w-[100vw] overflow-hidden rounded-xl border border-border/70 bg-background/50",
-        "touch-none md:h-[450px] md:touch-auto",
+        immersive
+          ? "fixed inset-0 z-0 h-full w-full max-w-none overflow-hidden rounded-none border-0 bg-black/90 lg:absolute"
+          : "relative h-[320px] w-full max-w-[100vw] overflow-hidden rounded-xl border border-border/70 bg-background/50 touch-none md:h-[450px] md:touch-auto",
         className,
       )}
     >
@@ -63,6 +66,16 @@ export function InteractiveMapViewer({
         hideChrome
         hideToolbar
         buyerChrome
+        zoomDockClassName={
+          immersive
+            ? "bottom-[calc(var(--seat-map-footer-h,8.5rem)+0.75rem)]"
+            : undefined
+        }
+        lodBackClassName={
+          immersive
+            ? "top-[calc(var(--seat-map-header-h,7rem)+0.75rem)]"
+            : undefined
+        }
       />
       {pending ? (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/55">

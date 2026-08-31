@@ -196,6 +196,8 @@ export function InteractiveSeatingCanvas({
   silentHover = false,
   scheduleDayCount = 0,
   eventDateId: eventDateIdProp = null,
+  zoomDockClassName,
+  lodBackClassName,
 }: {
   map: InteractiveVenueMap
   eventId?: string | null
@@ -224,6 +226,8 @@ export function InteractiveSeatingCanvas({
   buyerChrome?: boolean
   scheduleDayCount?: number
   eventDateId?: string | null
+  zoomDockClassName?: string
+  lodBackClassName?: string
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const tooltipHostRef = useRef<HTMLDivElement>(null)
@@ -1590,13 +1594,17 @@ export function InteractiveSeatingCanvas({
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onReset={handleResetView}
+          className={zoomDockClassName}
         />
       ) : null}
       {lodEnabled && viewMode === "micro" && !readOnly ? (
         <button
           type="button"
           onClick={exitLodView}
-          className="absolute top-4 left-4 z-40 rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-zinc-800"
+          className={cn(
+            "absolute top-4 left-4 z-40 rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-zinc-800",
+            lodBackClassName,
+          )}
         >
           Volver al mapa general
         </button>

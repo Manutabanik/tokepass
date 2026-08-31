@@ -1,6 +1,14 @@
 "use client"
 
-import { Component, type ErrorInfo, type ReactNode, useEffect, useMemo, useRef } from "react"
+import {
+  Component,
+  type ErrorInfo,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react"
 import { toast } from "sonner"
 
 import { MapPin } from "lucide-react"
@@ -161,6 +169,62 @@ export function SeatSelectionSheet({
   context: SeatSelectionContext
   selectionMode?: "auto" | "map" | "counter"
 }) {
+  useLockBodyScroll(open)
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="bottom"
+        showCloseButton
+        overlayClassName="z-[100]"
+        className={cn(
+          "relative z-[100] flex h-[100dvh] max-h-[100dvh] flex-col gap-0 overflow-hidden rounded-none border-none bg-background p-0 [&_[data-slot=sheet-close]]:z-30",
+          "max-md:m-0 max-md:h-[100dvh] max-md:max-w-none max-md:w-screen max-md:rounded-none max-md:border-none",
+          "lg:inset-x-auto lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:h-[min(88dvh,840px)] lg:max-h-[88dvh] lg:w-[min(56rem,94vw)] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl lg:border lg:border-border",
+        )}
+      >
+        <SeatModalErrorBoundary>
+          <SeatSelectionModalInner
+            open={open}
+            onOpenChange={onOpenChange}
+            title={title}
+            sectorId={sectorId}
+            pending={pending}
+            loading={loading}
+            maxTicketsPerUser={maxTicketsPerUser}
+            context={context}
+            selectionMode={selectionMode}
+          />
+        </SeatModalErrorBoundary>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function SeatSelectionModalInner({
+  open,
+  onOpenChange,
+  title,
+  sectorId,
+  pending,
+  loading,
+  maxTicketsPerUser,
+  context,
+  selectionMode,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  title: string
+  sectorId?: string | null
+  pending: boolean
+  loading: boolean
+  maxTicketsPerUser: number | null
+  context: SeatSelectionContext
+  selectionMode: "auto" | "map" | "counter"
+}) {
+  const chromeRef = useRef<HTMLDivElement>(null)
+  const headerRef = useRef<HTMLDivElement>(null)
+  const footerRef = useRef<HTMLDivElement>(null)
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const placeCount = storefrontSelectionCount(selectedItems)
   const placeTotal = storefrontSelectionTotal(selectedItems)
@@ -180,7 +244,22 @@ export function SeatSelectionSheet({
   const selectedQuantity = Math.max(placeCount, zoneCount, numberedPlaces.length)
   const isValidSelection = selectedQuantity > 0
 
-  useLockBodyScroll(open)
+  useLayoutEffect(() => {
+    const root = chromeRef.current
+    const header = headerRef.current
+    const footer = footerRef.current
+    if (!root || !header || !footer) return
+
+    const apply = () => {
+      root.style.setProperty("--seat-map-header-h", `${header.offsetHeight}px`)
+      root.style.setProperty("--seat-map-footer-h", `${footer.offsetHeight}px`)
+    }
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(header)
+    observer.observe(footer)
+    return () => observer.disconnect()
+  }, [open, title])
 
   function handleConfirm() {
     if (pending) return
@@ -195,100 +274,6 @@ export function SeatSelectionSheet({
     context.onConfirmed()
     onOpenChange(false)
   }
-
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="bottom"
-        showCloseButton
-        overlayClassName="z-[100]"
-        className={cn(
-          "z-[100] flex h-[100dvh] max-h-[100dvh] flex-col gap-0 overflow-hidden rounded-none border-none bg-background p-0",
-          "max-md:m-0 max-md:h-[100dvh] max-md:max-w-none max-md:w-screen max-md:rounded-none max-md:border-none",
-          "lg:inset-x-auto lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:h-[min(88dvh,840px)] lg:max-h-[88dvh] lg:w-[min(56rem,94vw)] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl lg:border lg:border-border",
-        )}
-      >
-        <SheetHeader className="shrink-0 border-b border-border px-4 py-3 pr-14 text-left">
-          <SheetTitle className="text-lg font-bold tracking-tight">
-            {title}
-          </SheetTitle>
-          <SheetDescription className="mt-0.5 text-sm text-muted-foreground">
-            Elegí un lugar de la lista o miralo en el mapa. Podés cerrar en
-            cualquier momento.
-          </SheetDescription>
-        </SheetHeader>
-
-        <SeatModalErrorBoundary>
-          <SeatSelectionModalInner
-            open={open}
-            title={title}
-            sectorId={sectorId}
-            pending={pending}
-            loading={loading}
-            maxTicketsPerUser={maxTicketsPerUser}
-            context={context}
-            selectionMode={selectionMode}
-          />
-        </SeatModalErrorBoundary>
-
-        <div className="sticky bottom-0 z-10 mt-auto shrink-0 border-t border-border bg-background px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <p
-              className={cn(
-                "flex min-w-0 items-center gap-1.5 truncate text-sm font-semibold",
-                isValidSelection ? "text-foreground" : "text-muted-foreground",
-              )}
-            >
-              <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
-              <span className="truncate">
-                {formatSeatSelectionFooterLabel(selectedItems)}
-              </span>
-            </p>
-            {isValidSelection ? (
-              <p className="shrink-0 text-sm font-bold tabular-nums text-foreground">
-                {formatTicketPrice(placeTotal)}
-              </p>
-            ) : null}
-          </div>
-          <Button
-            type="button"
-            disabled={!isValidSelection || pending}
-            onClick={handleConfirm}
-            className={cn(
-              tapFeedbackClass,
-              "h-auto w-full rounded-2xl bg-emerald-600 py-3.5 text-base font-bold text-white hover:bg-emerald-700",
-            )}
-          >
-            {isValidSelection
-              ? `Confirmar ${selectedQuantity} ${selectedQuantity === 1 ? "lugar" : "lugares"}`
-              : "Seleccioná un lugar para continuar"}
-          </Button>
-        </div>
-      </SheetContent>
-    </Sheet>
-  )
-}
-
-function SeatSelectionModalInner({
-  open,
-  title,
-  sectorId,
-  pending,
-  loading,
-  maxTicketsPerUser,
-  context,
-  selectionMode,
-}: {
-  open: boolean
-  title: string
-  sectorId?: string | null
-  pending: boolean
-  loading: boolean
-  maxTicketsPerUser: number | null
-  context: SeatSelectionContext
-  selectionMode: "auto" | "map" | "counter"
-}) {
-  const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const selectedUnitIds = useMemo(
     () => selectedItems.map((item) => item.id),
     [selectedItems],
@@ -557,74 +542,121 @@ function SeatSelectionModalInner({
   }
 
   return (
-    <Tabs
-      key={`${open}-${focusedSectorId ?? "sector"}`}
-      defaultValue={selectionMode === "map" ? "mapa" : "lista"}
-      className="flex min-h-0 flex-1 flex-col gap-0"
+    <div
+      ref={chromeRef}
+      className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
     >
-      <div className="shrink-0 px-4 pt-3 pb-2">
-        <TabsList className="flex h-11 w-full items-center rounded-lg bg-secondary/50 p-1 text-muted-foreground">
-          <TabsTrigger
-            value="lista"
-            className={segmentedTabClass}
-          >
-            Selección rápida
-          </TabsTrigger>
-          <TabsTrigger
-            value="mapa"
-            className={segmentedTabClass}
-          >
-            Ver en el mapa
-          </TabsTrigger>
-        </TabsList>
-      </div>
-
-      <TabsContent
-        value="lista"
-        className="no-scrollbar mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain p-4"
+      <Tabs
+        key={`${open}-${focusedSectorId ?? "sector"}`}
+        defaultValue={selectionMode === "map" ? "mapa" : "lista"}
+        className="relative flex min-h-0 flex-1 flex-col gap-0"
       >
-        {isLoadingPlaces ? (
-          <QuickPlaceSkeleton />
-        ) : (
-          <SeatSelectionQuickList
-            sectors={catalog}
-            focusedSectorId={focusedSectorId}
-            pending={pending}
-            gaQuantityBySector={gaQuantityBySector}
-            gaMaxBySector={gaMaxBySector}
-            onTogglePlace={handleTogglePlace}
-            onAssignZoneQuantity={context.onAssignZoneQuantity}
-          />
-        )}
-      </TabsContent>
+        <SheetHeader
+          ref={headerRef}
+          className="fixed top-0 right-0 left-0 z-10 gap-3 border-b border-border/50 bg-background/80 p-4 pr-14 pt-[max(1rem,env(safe-area-inset-top))] text-left backdrop-blur-md lg:absolute"
+        >
+          <SheetTitle className="text-lg font-bold tracking-tight">
+            {title}
+          </SheetTitle>
+          <SheetDescription className="mt-0.5 text-sm text-muted-foreground">
+            Elegí un lugar de la lista o miralo en el mapa. Podés cerrar en
+            cualquier momento.
+          </SheetDescription>
+          <TabsList className="flex h-11 w-full items-center rounded-lg bg-secondary/50 p-1 text-muted-foreground">
+            <TabsTrigger value="lista" className={segmentedTabClass}>
+              Selección rápida
+            </TabsTrigger>
+            <TabsTrigger value="mapa" className={segmentedTabClass}>
+              Ver en el mapa
+            </TabsTrigger>
+          </TabsList>
+        </SheetHeader>
 
-      <TabsContent
-        value="mapa"
-        className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden p-3"
+        <TabsContent
+          value="lista"
+          className="no-scrollbar relative z-[1] mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background px-4 pt-[calc(var(--seat-map-header-h,11rem)+0.75rem)] pb-[calc(var(--seat-map-footer-h,8.5rem)+0.75rem)]"
+        >
+          {isLoadingPlaces ? (
+            <QuickPlaceSkeleton />
+          ) : (
+            <SeatSelectionQuickList
+              sectors={catalog}
+              focusedSectorId={focusedSectorId}
+              pending={pending}
+              gaQuantityBySector={gaQuantityBySector}
+              gaMaxBySector={gaMaxBySector}
+              onTogglePlace={handleTogglePlace}
+              onAssignZoneQuantity={context.onAssignZoneQuantity}
+            />
+          )}
+        </TabsContent>
+
+        <TabsContent
+          value="mapa"
+          className="fixed inset-0 z-0 m-0 h-full w-full bg-black/90 p-0 lg:absolute"
+        >
+          {isLoadingPlaces ? (
+            <Skeleton className="h-full min-h-0 w-full rounded-none" />
+          ) : focusedMap ? (
+            <InteractiveMapViewer
+              immersive
+              map={focusedMap}
+              eventId={context.eventId}
+              occupancyBySeatId={context.occupancyBySeatId}
+              priceBySectorId={context.priceBySectorId}
+              pending={pending}
+              selectedZoneId={focusedSectorId}
+              unavailableZoneIds={context.unavailableZoneIds}
+              heldSeatIds={context.heldSeatIds}
+              maxSelectable={placeSelectionCap}
+              onSelectZone={context.onSelectZone}
+              className="h-full min-h-0 w-full"
+            />
+          ) : (
+            <p className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
+              El plano no está disponible.
+            </p>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      <div
+        ref={footerRef}
+        className="fixed right-0 bottom-0 left-0 z-10 border-t border-border/50 bg-background/80 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md lg:absolute"
       >
-        {isLoadingPlaces ? (
-          <Skeleton className="h-full min-h-[16rem] w-full rounded-xl" />
-        ) : focusedMap ? (
-          <InteractiveMapViewer
-            map={focusedMap}
-            eventId={context.eventId}
-            occupancyBySeatId={context.occupancyBySeatId}
-            priceBySectorId={context.priceBySectorId}
-            pending={pending}
-            selectedZoneId={focusedSectorId}
-            unavailableZoneIds={context.unavailableZoneIds}
-            heldSeatIds={context.heldSeatIds}
-            maxSelectable={placeSelectionCap}
-            onSelectZone={context.onSelectZone}
-            className="h-full min-h-[16rem] md:h-full"
-          />
-        ) : (
-          <p className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
-            El plano no está disponible.
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p
+            className={cn(
+              "flex min-w-0 items-center gap-1.5 truncate text-sm font-semibold",
+              isValidSelection ? "text-foreground" : "text-muted-foreground",
+            )}
+          >
+            <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
+            <span className="truncate">
+              {formatSeatSelectionFooterLabel(selectedItems)}
+            </span>
           </p>
-        )}
-      </TabsContent>
-    </Tabs>
+          {isValidSelection ? (
+            <p className="shrink-0 text-sm font-bold tabular-nums text-foreground">
+              {formatTicketPrice(placeTotal)}
+            </p>
+          ) : null}
+        </div>
+        <Button
+          type="button"
+          disabled={!isValidSelection || pending}
+          onClick={handleConfirm}
+          className={cn(
+            tapFeedbackClass,
+            "h-auto w-full rounded-2xl bg-emerald-600 py-3.5 text-base font-bold text-white hover:bg-emerald-700",
+          )}
+        >
+          {isValidSelection
+            ? `Confirmar ${selectedQuantity} ${selectedQuantity === 1 ? "lugar" : "lugares"}`
+            : "Seleccioná un lugar para continuar"}
+        </Button>
+      </div>
+    </div>
   )
 }
 
