@@ -35,6 +35,7 @@ import { isPastEvent, isSoldOut } from "@/lib/event-status"
 import { eventAcceptsMercadoPago } from "@/lib/events/checkout-policy"
 import { isSandboxEventStatus } from "@/lib/events/review-status"
 import { fulfillSandboxPaidOrder } from "@/lib/checkout/sandbox-fulfillment"
+import { shouldFallbackSandboxFinalize } from "@/lib/checkout/sandbox-finalize"
 import { orderTestFlags } from "@/lib/finance/order-test-flags"
 import { logger } from "@/lib/logger"
 import { DEFAULT_PLATFORM_FEE_PERCENTAGE } from "@/lib/pricing/event-fees"
@@ -4033,6 +4034,18 @@ export async function startCheckoutWithPayment(
       return { success: false, error: CHECKOUT_IN_PROGRESS_ERROR }
     }
     if (claim.kind === "reused" && claim.status === "paid") {
+      if (useSandbox) {
+        await fulfillSandboxPaidOrder(claim.orderId)
+        const successUrl = `/checkout/success?order_id=${claim.orderId}&sandbox=1`
+        return {
+          success: true,
+          tickets: [],
+          orderId: claim.orderId,
+          initPoint: successUrl,
+          paymentUrl: successUrl,
+          expiresAt: new Date().toISOString(),
+        }
+      }
       const successUrl = `/checkout/success?order_id=${claim.orderId}`
       return {
         success: true,
@@ -4454,17 +4467,15 @@ export async function startCheckoutWithPayment(
       const sandboxRpc = await admin.rpc("finalize_sandbox_paid_order", {
         p_order_id: orderId,
       })
-      const missingSandboxRpc = Boolean(
-        sandboxRpc.error &&
-          /could not find|schema cache|does not exist/i.test(
-            sandboxRpc.error.message,
-          ),
-      )
-
       let finalizeError = sandboxRpc.error
       let result = (sandboxRpc.data ?? {}) as { ok?: boolean; code?: string }
 
-      if (missingSandboxRpc) {
+      if (
+        shouldFallbackSandboxFinalize({
+          errorMessage: finalizeError?.message,
+          code: result.code,
+        })
+      ) {
         await admin
           .from("orders")
           .update({
@@ -4496,15 +4507,28 @@ export async function startCheckoutWithPayment(
       }
 
       if (finalizeError || !result.ok) {
-        await cleanupPendingOrder(orderId)
-        const finalizeMessage =
-          finalizeError?.message ?? result.code ?? "unknown"
         logger.error({
           context: "checkout/sandbox",
           message: "sandbox_finalize_failed",
           orderId,
           userId: user.id,
-          error: finalizeMessage,
+          error: finalizeError?.message ?? result.code ?? "unknown",
+        })
+      }
+
+      try {
+        await fulfillSandboxPaidOrder(orderId)
+      } catch (error) {
+        await cleanupPendingOrder(orderId)
+        const finalizeMessage =
+          error instanceof Error
+            ? error.message
+            : finalizeError?.message ?? result.code ?? "unknown"
+        logger.error({
+          context: "checkout/sandbox",
+          message: "sandbox_fulfillment_follow_through_failed",
+          orderId,
+          error,
         })
         const mapped = mapReserveRpcError(finalizeMessage)
         return {
@@ -4517,17 +4541,6 @@ export async function startCheckoutWithPayment(
               "No se pudo completar la compra de prueba.",
             ),
         }
-      }
-
-      try {
-        await fulfillSandboxPaidOrder(orderId)
-      } catch (error) {
-        logger.error({
-          context: "checkout/sandbox",
-          message: "sandbox_fulfillment_follow_through_failed",
-          orderId,
-          error,
-        })
       }
 
       initPoint = `/checkout/success?order_id=${orderId}&sandbox=1`

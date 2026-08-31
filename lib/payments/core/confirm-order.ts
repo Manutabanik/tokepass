@@ -125,8 +125,10 @@ export async function fulfillPaidOrderAfterFinalize(
   orderId: string,
   provider: PaymentProvider,
   transactionId: string,
+  options?: { drain?: boolean },
 ): Promise<void> {
   await applyPaidOrderFollowThrough(admin, orderId, provider, transactionId)
+  if (options?.drain === false) return
   scheduleNotificationOutboxDrain()
 }
 

@@ -55,6 +55,13 @@ export function scheduleNotificationOutboxDrain(limit = 10): void {
       message: "drain_after_unavailable",
       error,
     })
+    void drainNotificationOutbox(limit).catch((drainError: unknown) => {
+      logger.error({
+        context: "notifications/outbox",
+        message: "drain_sync_fallback_failed",
+        error: drainError,
+      })
+    })
   }
 }
 
