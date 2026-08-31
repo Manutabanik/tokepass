@@ -116,7 +116,7 @@ export function SeatSelectionSplitMap({
       {portalReady && expanded && map
         ? createPortal(
             <div
-              className="fixed inset-0 z-[100] flex items-center justify-center bg-background"
+              className="fixed inset-0 z-[100] flex h-[100dvh] items-center justify-center overflow-hidden bg-background"
               role="dialog"
               aria-modal="true"
               aria-label="Mapa del recinto"

@@ -102,10 +102,11 @@ import {
   CONTEXT_FOCUS_MIN_SCALE,
   CONTEXT_FOCUS_PADDING,
   CLIENT_FIT_MAX_SCALE,
+  CLIENT_FIT_MIN_SCALE,
+  allMapContentAabb,
   buyerViewportFitSessionKey,
-  drawableContentAabb,
   expandSelectionForContext,
-  fitDrawableContentCamera,
+  fitBuyerMapCamera,
   lodCameraTransform,
   publicRevealElements,
   publicRevealSeats,
@@ -355,13 +356,15 @@ export function InteractiveSeatingCanvas({
   const buyerFitBox = useMemo(
     () =>
       buyerChrome
-        ? drawableContentAabb({
-            elements: revealElements,
-            seats: revealSeats,
+        ? allMapContentAabb({
+            elements: map.elements,
+            seats: hoverSeats,
             zones: map.zones,
+            stage: map.stage,
+            aisles: map.aisles,
           })
         : null,
-    [buyerChrome, map.zones, revealElements, revealSeats],
+    [buyerChrome, hoverSeats, map.aisles, map.elements, map.stage, map.zones],
   )
   const stageLabel = map.stage?.label?.trim() || "ESCENARIO"
   const pxPerUnit = (wrapWidth / VIEW.width) * zoom
@@ -389,17 +392,26 @@ export function InteractiveSeatingCanvas({
     sync()
     const observer = new ResizeObserver(sync)
     observer.observe(node)
-    return () => observer.disconnect()
+    window.addEventListener("resize", sync)
+    const visualViewport = window.visualViewport
+    visualViewport?.addEventListener("resize", sync)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener("resize", sync)
+      visualViewport?.removeEventListener("resize", sync)
+    }
   }, [])
 
   const viewportSessionKey = buyerViewportFitSessionKey(eventId, mapScheduleId)
   const fittedSessionRef = useRef<string | null>(null)
+  const fittedSizeRef = useRef({ width: 0, height: 0 })
   const savedViewportRef = useRef<BuyerMapViewport | null>(null)
   if (
     fittedSessionRef.current &&
     fittedSessionRef.current !== viewportSessionKey
   ) {
     fittedSessionRef.current = null
+    fittedSizeRef.current = { width: 0, height: 0 }
     savedViewportRef.current = null
   }
 
@@ -409,7 +421,7 @@ export function InteractiveSeatingCanvas({
       if (wrapWidth < 80 || wrapHeight < 80 || !buyerFitBox) return false
       const controls = transformRef.current
       if (!controls) return false
-      const camera = fitDrawableContentCamera(buyerFitBox, wrapWidth, wrapHeight)
+      const camera = fitBuyerMapCamera(buyerFitBox, wrapWidth, wrapHeight)
       controls.setTransform(
         camera.positionX,
         camera.positionY,
@@ -422,6 +434,7 @@ export function InteractiveSeatingCanvas({
         positionX: camera.positionX,
         positionY: camera.positionY,
       }
+      fittedSizeRef.current = { width: wrapWidth, height: wrapHeight }
       return true
     },
     [buyerChrome, buyerFitBox, viewMode, wrapHeight, wrapWidth],
@@ -436,6 +449,8 @@ export function InteractiveSeatingCanvas({
         viewMode,
         wrapWidth,
         wrapHeight,
+        fittedWidth: fittedSizeRef.current.width || undefined,
+        fittedHeight: fittedSizeRef.current.height || undefined,
       })
     ) {
       return
@@ -1216,7 +1231,7 @@ export function InteractiveSeatingCanvas({
       <TransformWrapper
         key={buyerChrome ? viewportSessionKey : "studio"}
         ref={transformRef}
-        minScale={MIN_ZOOM}
+        minScale={buyerChrome ? CLIENT_FIT_MIN_SCALE : MIN_ZOOM}
         maxScale={buyerChrome ? CLIENT_FIT_MAX_SCALE : MAX_ZOOM}
         initialScale={savedViewportRef.current?.scale ?? 1}
         initialPositionX={savedViewportRef.current?.positionX ?? 0}
@@ -1264,6 +1279,7 @@ export function InteractiveSeatingCanvas({
         <svg
           ref={svgRef}
           viewBox={`0 ${-VIEW_TOP_PAD} ${VIEW.width} ${VIEW.height + VIEW_TOP_PAD}`}
+          preserveAspectRatio="xMidYMid meet"
           className={cn(
             "h-full w-full select-none",
             buyerMapSurfaceClass(hideChrome, buyerChrome),

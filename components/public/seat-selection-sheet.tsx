@@ -5,7 +5,6 @@ import {
   type ErrorInfo,
   type ReactNode,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
 } from "react"
@@ -178,9 +177,9 @@ export function SeatSelectionSheet({
         showCloseButton
         overlayClassName="z-[100]"
         className={cn(
-          "relative z-[100] flex h-[100dvh] max-h-[100dvh] flex-col gap-0 overflow-hidden rounded-none border-none bg-background p-0 [&_[data-slot=sheet-close]]:z-30",
+          "fixed inset-0 z-[100] flex h-[100dvh] max-h-[100dvh] w-full flex-col gap-0 overflow-hidden rounded-none border-none bg-background p-0 [&_[data-slot=sheet-close]]:z-30",
           "max-md:m-0 max-md:h-[100dvh] max-md:max-w-none max-md:w-screen max-md:rounded-none max-md:border-none",
-          "lg:inset-x-auto lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:h-[min(88dvh,840px)] lg:max-h-[88dvh] lg:w-[min(56rem,94vw)] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl lg:border lg:border-border",
+          "lg:inset-x-auto lg:right-auto lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:h-[min(88dvh,840px)] lg:max-h-[88dvh] lg:w-[min(56rem,94vw)] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl lg:border lg:border-border",
         )}
       >
         <SeatModalErrorBoundary>
@@ -222,9 +221,6 @@ function SeatSelectionModalInner({
   context: SeatSelectionContext
   selectionMode: "auto" | "map" | "counter"
 }) {
-  const chromeRef = useRef<HTMLDivElement>(null)
-  const headerRef = useRef<HTMLDivElement>(null)
-  const footerRef = useRef<HTMLDivElement>(null)
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const placeCount = storefrontSelectionCount(selectedItems)
   const placeTotal = storefrontSelectionTotal(selectedItems)
@@ -243,23 +239,6 @@ function SeatSelectionModalInner({
   )
   const selectedQuantity = Math.max(placeCount, zoneCount, numberedPlaces.length)
   const isValidSelection = selectedQuantity > 0
-
-  useLayoutEffect(() => {
-    const root = chromeRef.current
-    const header = headerRef.current
-    const footer = footerRef.current
-    if (!root || !header || !footer) return
-
-    const apply = () => {
-      root.style.setProperty("--seat-map-header-h", `${header.offsetHeight}px`)
-      root.style.setProperty("--seat-map-footer-h", `${footer.offsetHeight}px`)
-    }
-    apply()
-    const observer = new ResizeObserver(apply)
-    observer.observe(header)
-    observer.observe(footer)
-    return () => observer.disconnect()
-  }, [open, title])
 
   function handleConfirm() {
     if (pending) return
@@ -542,19 +521,13 @@ function SeatSelectionModalInner({
   }
 
   return (
-    <div
-      ref={chromeRef}
-      className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
-    >
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <Tabs
         key={`${open}-${focusedSectorId ?? "sector"}`}
         defaultValue={selectionMode === "map" ? "mapa" : "lista"}
         className="relative flex min-h-0 flex-1 flex-col gap-0"
       >
-        <SheetHeader
-          ref={headerRef}
-          className="fixed top-0 right-0 left-0 z-10 gap-3 border-b border-border/50 bg-background/80 p-4 pr-14 pt-[max(1rem,env(safe-area-inset-top))] text-left backdrop-blur-md lg:absolute"
-        >
+        <SheetHeader className="relative z-10 shrink-0 gap-3 border-b border-border/50 bg-background/80 p-4 pr-14 pt-[max(1rem,env(safe-area-inset-top))] text-left backdrop-blur-md">
           <SheetTitle className="text-lg font-bold tracking-tight">
             {title}
           </SheetTitle>
@@ -574,7 +547,7 @@ function SeatSelectionModalInner({
 
         <TabsContent
           value="lista"
-          className="no-scrollbar relative z-[1] mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background px-4 pt-[calc(var(--seat-map-header-h,11rem)+0.75rem)] pb-[calc(var(--seat-map-footer-h,8.5rem)+0.75rem)]"
+          className="no-scrollbar relative z-[1] mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background px-4 py-3"
         >
           {isLoadingPlaces ? (
             <QuickPlaceSkeleton />
@@ -593,7 +566,7 @@ function SeatSelectionModalInner({
 
         <TabsContent
           value="mapa"
-          className="fixed inset-0 z-0 m-0 h-full w-full bg-black/90 p-0 lg:absolute"
+          className="relative z-0 m-0 flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-black/90 p-0"
         >
           {isLoadingPlaces ? (
             <Skeleton className="h-full min-h-0 w-full rounded-none" />
@@ -610,7 +583,7 @@ function SeatSelectionModalInner({
               heldSeatIds={context.heldSeatIds}
               maxSelectable={placeSelectionCap}
               onSelectZone={context.onSelectZone}
-              className="h-full min-h-0 w-full"
+              className="h-full min-h-0 w-full flex-1"
             />
           ) : (
             <p className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
@@ -621,8 +594,7 @@ function SeatSelectionModalInner({
       </Tabs>
 
       <div
-        ref={footerRef}
-        className="fixed right-0 bottom-0 left-0 z-10 border-t border-border/50 bg-background/80 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md lg:absolute"
+        className="relative z-10 shrink-0 border-t border-border/50 bg-background/80 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md"
       >
         <div className="mb-3 flex items-center justify-between gap-3">
           <p

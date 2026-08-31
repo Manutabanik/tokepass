@@ -43,7 +43,7 @@ export function InteractiveMapViewer({
     <div
       className={cn(
         immersive
-          ? "fixed inset-0 z-0 h-full w-full max-w-none overflow-hidden rounded-none border-0 bg-black/90 lg:absolute"
+          ? "relative flex h-full min-h-0 w-full max-w-none flex-col overflow-hidden rounded-none border-0 bg-black/90"
           : "relative h-[320px] w-full max-w-[100vw] overflow-hidden rounded-xl border border-border/70 bg-background/50 touch-none md:h-[450px] md:touch-auto",
         className,
       )}
@@ -66,16 +66,8 @@ export function InteractiveMapViewer({
         hideChrome
         hideToolbar
         buyerChrome
-        zoomDockClassName={
-          immersive
-            ? "bottom-[calc(var(--seat-map-footer-h,8.5rem)+0.75rem)]"
-            : undefined
-        }
-        lodBackClassName={
-          immersive
-            ? "top-[calc(var(--seat-map-header-h,7rem)+0.75rem)]"
-            : undefined
-        }
+        zoomDockClassName={immersive ? "bottom-3" : undefined}
+        lodBackClassName={immersive ? "top-3" : undefined}
       />
       {pending ? (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/55">

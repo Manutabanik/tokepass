@@ -258,7 +258,7 @@ export function CheckoutSelectionSidebar({
       {portalReady && isMapZoomed && seatSelection?.map
         ? createPortal(
             <div
-              className="fixed inset-0 z-[100] flex h-[100dvh] w-full flex-col bg-muted"
+              className="fixed inset-0 z-[100] flex h-[100dvh] w-full flex-col overflow-hidden bg-muted"
               role="dialog"
               aria-modal="true"
               aria-label="Mapa del recinto"

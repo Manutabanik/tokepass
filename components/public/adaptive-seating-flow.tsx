@@ -120,7 +120,9 @@ export function AdaptiveSeatingFlow({
           fillParent
           disableIdlePrompt
           hideChrome
+          buyerChrome
           hideToolbar={compact}
+          zoomDockClassName={compact ? "hidden" : undefined}
           toolbarTitle={toolbarTitle}
           onCloseMap={onCloseMap}
           readOnly={readOnly}

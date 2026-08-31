@@ -8,7 +8,12 @@ import {
   CONTEXT_FOCUS_PADDING,
   CONTEXT_FOCUS_STAGE_TOP,
   CLIENT_CONTENT_FILL,
+  CLIENT_FIT_MIN_SCALE,
+  BUYER_FIT_EDGE_PADDING,
+  BUYER_MAP_VIEWBOX,
+  allMapContentAabb,
   drawableContentAabb,
+  fitBuyerMapCamera,
   elementBelongsToZone,
   fitDrawableContentCamera,
   buyerViewportFitSessionKey,
@@ -177,8 +182,9 @@ describe("venue-map-lod", () => {
       ((box.maxY - box.minY) * camera.scale) / VENUE_MAP_CANVAS.height
     const fill = Math.max(visibleX, visibleY)
     assert.ok(fill >= 0.8 && fill <= 0.9)
-    assert.equal(camera.scale >= 1, true)
+    assert.equal(camera.scale >= CLIENT_FIT_MIN_SCALE, true)
     assert.equal(CLIENT_CONTENT_FILL, 0.85)
+    assert.equal(BUYER_FIT_EDGE_PADDING, 0.1)
   })
 
   it("calcula la camara para encuadrar el AABB con padding", () => {
@@ -285,6 +291,30 @@ describe("buyer auto-fit isolation", () => {
       }),
       true,
     )
+    assert.equal(
+      shouldRunBuyerAutoFit({
+        sessionKey,
+        fittedSessionKey: sessionKey,
+        viewMode: "macro",
+        wrapWidth: 390,
+        wrapHeight: 720,
+        fittedWidth: 390,
+        fittedHeight: 480,
+      }),
+      true,
+    )
+    assert.equal(
+      shouldRunBuyerAutoFit({
+        sessionKey,
+        fittedSessionKey: sessionKey,
+        viewMode: "macro",
+        wrapWidth: 390,
+        wrapHeight: 480,
+        fittedWidth: 390,
+        fittedHeight: 480,
+      }),
+      false,
+    )
   })
 
   it("detects a library reset back to identity so zoom/pan can be restored", () => {
@@ -296,5 +326,61 @@ describe("buyer auto-fit isolation", () => {
       buyerViewportLooksReset({ scale: 2.4, positionX: -80, positionY: 40 }),
       false,
     )
+  })
+})
+
+describe("buyer map camera", () => {
+  function project(
+    camera: { scale: number; positionX: number; positionY: number },
+    x: number,
+    y: number,
+    wrapW: number,
+    wrapH: number,
+  ) {
+    const meet = Math.min(
+      wrapW / BUYER_MAP_VIEWBOX.width,
+      wrapH / BUYER_MAP_VIEWBOX.height,
+    )
+    const offsetX = (wrapW - BUYER_MAP_VIEWBOX.width * meet) / 2
+    const offsetY = (wrapH - BUYER_MAP_VIEWBOX.height * meet) / 2
+    return {
+      x: camera.positionX + (offsetX + (x - BUYER_MAP_VIEWBOX.x) * meet) * camera.scale,
+      y: camera.positionY + (offsetY + (y - BUYER_MAP_VIEWBOX.y) * meet) * camera.scale,
+    }
+  }
+
+  it("incluye el escenario decorativo en el AABB del checkout", () => {
+    const box = allMapContentAabb({
+      elements: [],
+      seats: [{ x: 200, y: 180 }],
+      zones: [],
+    })
+    assert.ok(box.minY <= -36)
+    assert.ok(box.maxY >= 180)
+  })
+
+  it("centra el AABB y deja ~10% de aire dentro del wrap", () => {
+    const box = { minX: 0, minY: -40, maxX: 800, maxY: 560 }
+    const wrapW = 390
+    const wrapH = 520
+    const camera = fitBuyerMapCamera(box, wrapW, wrapH)
+    const mid = project(
+      camera,
+      (box.minX + box.maxX) / 2,
+      (box.minY + box.maxY) / 2,
+      wrapW,
+      wrapH,
+    )
+    assert.ok(Math.abs(mid.x - wrapW / 2) < 1)
+    assert.ok(Math.abs(mid.y - wrapH / 2) < 1)
+
+    const topLeft = project(camera, box.minX, box.minY, wrapW, wrapH)
+    const bottomRight = project(camera, box.maxX, box.maxY, wrapW, wrapH)
+    assert.ok(topLeft.x >= wrapW * 0.08)
+    assert.ok(topLeft.y >= wrapH * 0.08)
+    assert.ok(bottomRight.x <= wrapW * 0.92)
+    assert.ok(bottomRight.y <= wrapH * 0.92)
+    assert.ok(camera.scale >= CLIENT_FIT_MIN_SCALE)
+    assert.ok(camera.scale < 1)
   })
 })
