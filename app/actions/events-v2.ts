@@ -8,6 +8,7 @@ import {
   seatingPersistUserMessage,
 } from "@/lib/events/sanitize-ticket-tiers"
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
+import { logger } from "@/lib/logger"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
 import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
 import { assertDraftMapLayoutImmutable } from "@/lib/events/assert-draft-map-immutability"
@@ -23,6 +24,7 @@ import {
   type LiveEventTicketSnapshotV2,
 } from "@/lib/events/rehydrate-event-draft-v2"
 import { preparePublishDraftV2 } from "@/lib/events/prepare-publish-draft-v2"
+import { purgeSandboxInventoryForEvent } from "@/lib/events/purge-sandbox-inventory-admin"
 import {
   nextMirroredAccessLink,
   nextMirroredCatalogVisibility,
@@ -1892,6 +1894,16 @@ export async function publishEventV2(
         success: false,
         error: publishActionError(error),
       }
+    }
+    try {
+      await purgeSandboxInventoryForEvent(id)
+    } catch (error) {
+      logger.error({
+        context: "events/publish",
+        message: "sandbox_inventory_purge_failed",
+        eventId: id,
+        error,
+      })
     }
   }
 

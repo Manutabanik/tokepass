@@ -32,6 +32,7 @@ import { draftLayoutSourceFromSavedVenueMap } from "@/lib/events/draft-map-immut
 import { hardReplacePublishedSeatingMaps } from "@/lib/events/hard-replace-seating-maps-v2"
 import { seatingMapsFromSavedVenueMap } from "@/lib/events/publish-seating-inventory"
 import { seatingPersistUserMessage } from "@/lib/events/sanitize-ticket-tiers"
+import { purgeSandboxInventoryForEvent } from "@/lib/events/purge-sandbox-inventory-admin"
 import {
   venueMapHasInventory,
   venueMapToSeatingLayout,
@@ -521,14 +522,14 @@ export async function publishEvent(
 
   let purgedTestTickets = 0
   if (options.purgeTestTickets !== false) {
-    const { data: purged, error: purgeError } = await mutationClient.rpc(
-      "purge_event_test_tickets",
-      { p_event_id: eventId },
-    )
-    if (purgeError) {
-      return persistFailure(purgeError)
+    try {
+      const purged = await purgeSandboxInventoryForEvent(eventId)
+      purgedTestTickets = purged.ticketsPurged
+    } catch (error) {
+      return persistFailure(
+        error instanceof Error ? error : { message: "purge_failed" },
+      )
     }
-    purgedTestTickets = Number(purged ?? 0)
   }
 
   const { data: updated, error: updateError } = await mutationClient
