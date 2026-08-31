@@ -1,12 +1,20 @@
 import { selectableTicketStock } from "@/lib/checkout/ticket-stock"
-import { isSoldInventoryStatus } from "@/lib/seating/inventory-seat-state"
+import { BUYER_SEAT_FILL } from "@/lib/seating/buyer-seat-fill"
+import { mergeInventoryOccupancy, isSoldInventoryStatus } from "@/lib/seating/inventory-seat-state"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
-import { lookupOccupancyStatus } from "@/lib/seating/venue-map-occupancy"
+import {
+  expandOccupancyToVenueMap,
+  lookupOccupancyStatus,
+  occupancyFromSeatingUnits,
+} from "@/lib/seating/venue-map-occupancy"
 import {
   isSellableElement,
   type InteractiveVenueMap,
   type VenueMapElement,
 } from "@/types/venue-map"
+
+export const SOLD_MAP_FILL = BUYER_SEAT_FILL.sold
+export const SOLD_MAP_STROKE = "#374151"
 
 export type SoldOutTicketRef = {
   id?: string | null
@@ -174,13 +182,35 @@ const VOID_TICKET_STATUS = new Set([
   "revoked",
 ])
 
+export type SoldTicketRef = {
+  seat_id?: string | null
+  seating_unit_id?: string | null
+  layout_item_id?: string | null
+  status?: string | null
+}
+
+export type VenueMapSeatingUnitRef = {
+  id?: string | null
+  layoutItemId: string
+  status: string
+  reservedUntil?: string | null
+  holdExpiresAt?: string | null
+  sold?: boolean
+  soldOrderId?: string | null
+}
+
+export type VenueMapLiveInventory = {
+  seatingUnits?: readonly VenueMapSeatingUnitRef[]
+  soldTickets?: readonly SoldTicketRef[] | Record<string, SeatStatus>
+  soldOutTicketTypeIds?: Iterable<string>
+  liveOccupancy?: Record<string, SeatStatus>
+  /** Con roster de unidades, los ids del JSON que no aparecen quedan ocupados. */
+  lockUnknownLayoutIds?: boolean
+}
+
 /** Tickets emitidos → IDs de asiento/unidad para pintar SOLD antes del primer frame. */
 export function occupancyFromSoldTicketRefs(
-  tickets: ReadonlyArray<{
-    seat_id?: string | null
-    seating_unit_id?: string | null
-    status?: string | null
-  }>,
+  tickets: ReadonlyArray<SoldTicketRef>,
 ): Record<string, SeatStatus> {
   const occupancy: Record<string, SeatStatus> = {}
   for (const ticket of tickets) {
@@ -188,8 +218,100 @@ export function occupancyFromSoldTicketRefs(
     if (VOID_TICKET_STATUS.has(status)) continue
     markOccupied(occupancy, ticket.seat_id)
     markOccupied(occupancy, ticket.seating_unit_id)
+    markOccupied(occupancy, ticket.layout_item_id)
   }
   return occupancy
+}
+
+function occupancyFromSoldTicketsResolved(
+  tickets: readonly SoldTicketRef[] | Record<string, SeatStatus>,
+  units: readonly VenueMapSeatingUnitRef[],
+): Record<string, SeatStatus> {
+  const occupancy = Array.isArray(tickets)
+    ? occupancyFromSoldTicketRefs(tickets)
+    : { ...tickets }
+  const layoutByUnitId = new Map<string, string>()
+  for (const unit of units) {
+    const unitId = unit.id?.trim()
+    const layout = unit.layoutItemId?.trim()
+    if (unitId && layout) layoutByUnitId.set(unitId, layout)
+  }
+  for (const [id, status] of Object.entries(occupancy)) {
+    const layout = layoutByUnitId.get(id)
+    if (layout && !occupancy[layout]) occupancy[layout] = status
+  }
+  return occupancy
+}
+
+/**
+ * Cruza el JSON estático del recinto con inventario vivo ANTES del primer paint.
+ * No muta `staticMap`. El occupancy resultante es lo que el canvas pinta.
+ */
+export function hydrateVenueMapOccupancy(
+  staticMap: InteractiveVenueMap | null | undefined,
+  inventory: VenueMapLiveInventory,
+): Record<string, SeatStatus> {
+  const units = inventory.seatingUnits ?? []
+  const lockUnknown = inventory.lockUnknownLayoutIds ?? units.length > 0
+  const knownIds =
+    lockUnknown && staticMap ? collectVenueMapInventoryIds(staticMap) : []
+  return expandOccupancyToVenueMap(
+    rollupOccupancyToParents(
+      mergeInventoryOccupancy(
+        occupancyFromSeatingUnits([...units], knownIds),
+        occupancyFromSoldOutTicketTypes(
+          staticMap,
+          inventory.soldOutTicketTypeIds ?? [],
+        ),
+        occupancyFromSoldTicketsResolved(inventory.soldTickets ?? [], units),
+        inventory.liveOccupancy,
+      ),
+      staticMap,
+    ),
+    staticMap,
+  )
+}
+
+/** Estampa status=blocked / color sold en una copia. No muta el plano original. */
+export function stampVenueMapInventory(
+  staticMap: InteractiveVenueMap,
+  occupancy: Record<string, SeatStatus>,
+): InteractiveVenueMap {
+  return {
+    ...staticMap,
+    elements: (staticMap.elements ?? []).map((element) => {
+      const sold = isVenueMapElementSoldOut(element, occupancy)
+      return {
+        ...element,
+        color: sold ? SOLD_MAP_FILL : element.color,
+        seats: (element.seats ?? []).map((seat) => ({
+          ...seat,
+          status: isSoldInventoryStatus(
+            lookupOccupancyStatus(occupancy, seat.id, element.id),
+          )
+            ? "blocked"
+            : seat.status,
+        })),
+      }
+    }),
+    sectors: (staticMap.sectors ?? []).map((sector) => ({
+      ...sector,
+      seats: (sector.seats ?? []).map((seat) => ({
+        ...seat,
+        status: isSoldInventoryStatus(lookupOccupancyStatus(occupancy, seat.id))
+          ? "blocked"
+          : seat.status,
+      })),
+    })),
+  }
+}
+
+export function hydrateVenueMap(
+  staticMap: InteractiveVenueMap,
+  inventory: VenueMapLiveInventory,
+): { map: InteractiveVenueMap; occupancy: Record<string, SeatStatus> } {
+  const occupancy = hydrateVenueMapOccupancy(staticMap, inventory)
+  return { map: stampVenueMapInventory(staticMap, occupancy), occupancy }
 }
 
 export function shouldPaintBuyerMapInventory(input: {

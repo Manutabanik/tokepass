@@ -2,6 +2,9 @@ import {
   cartMapUnitIdsForSchedule,
   type CartIdentityLine,
 } from "@/lib/checkout/cart-item-identity"
+import { BUYER_SEAT_FILL } from "@/lib/seating/buyer-seat-fill"
+import { isSoldInventoryStatus } from "@/lib/seating/inventory-seat-state"
+import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { storefrontItemMatchesSchedule } from "@/lib/checkout/seat-hold-day"
 import type {
   StorefrontLayoutSeat,
@@ -123,6 +126,51 @@ function paintNode(node: Element, on: boolean) {
     host.style.filter = prev ?? ""
   }
   paintShapes(node, on)
+}
+
+/** Pinta SOLD en el SVG sin remount (equivalente a fabric.renderAll). */
+export function paintBuyerMapSold(
+  root: Element | null,
+  soldIds: Iterable<string>,
+) {
+  if (!root) return
+  const sold = soldIds instanceof Set ? soldIds : new Set(soldIds)
+  const nodes = root.querySelectorAll<Element>(
+    "[data-seat-id], [data-element-id], [data-zone-id]",
+  )
+  for (const node of nodes) {
+    const id =
+      node.getAttribute("data-seat-id") ||
+      node.getAttribute("data-element-id") ||
+      node.getAttribute("data-zone-id")
+    if (!id) continue
+    const isSold = sold.has(id)
+    if (!markToggle(node, LOCKED_ATTR, isSold) && !isSold) continue
+    const host = node as SVGElement
+    if (isSold) {
+      host.style.pointerEvents = "none"
+      host.style.cursor = "not-allowed"
+      const shapes = node.querySelectorAll<SVGElement>(
+        "path, circle, rect, ellipse, polygon, polyline",
+      )
+      for (const shape of shapes) {
+        if (shape.getAttribute("fill") === "transparent") continue
+        rememberPaint(shape)
+        shape.setAttribute("fill", BUYER_SEAT_FILL.sold)
+        shape.setAttribute("stroke", "#374151")
+      }
+    }
+  }
+}
+
+export function soldIdsFromOccupancy(
+  occupancy: Record<string, SeatStatus>,
+): string[] {
+  const ids: string[] = []
+  for (const [id, status] of Object.entries(occupancy)) {
+    if (isSoldInventoryStatus(status)) ids.push(id)
+  }
+  return ids
 }
 
 export function paintBuyerMapSelection(

@@ -5,12 +5,14 @@ import { emptyVenueMap } from "@/types/venue-map"
 
 import {
   collectVenueMapInventoryIds,
+  hydrateVenueMap,
   isVenueMapElementSoldOut,
   occupancyFromSoldOutTicketTypes,
   occupancyFromSoldTicketRefs,
   rollupOccupancyToParents,
   shouldPaintBuyerMapInventory,
   soldOutTicketTypeIds,
+  SOLD_MAP_FILL,
 } from "./map-inventory-hydration"
 
 function tableMap() {
@@ -146,6 +148,48 @@ describe("map-inventory-hydration", () => {
     assert.equal(occupancy["mesa-9"], "occupied")
     assert.equal(occupancy["unit-9"], "occupied")
     assert.equal(occupancy["mesa-10"], undefined)
+  })
+
+  it("hydrates the static map from units, tickets and sold-out SKUs without mutating input", () => {
+    const map = tableMap()
+    const originalColor = map.elements[0]!.color
+    const originalStatus = map.elements[0]!.seats[0]!.status
+    const hydrated = hydrateVenueMap(map, {
+      seatingUnits: [
+        {
+          id: "unit-s1",
+          layoutItemId: "mesa-9-S1",
+          status: "sold",
+        },
+      ],
+      soldTickets: [
+        { seating_unit_id: "unit-s2", layout_item_id: "mesa-9-S2", status: "valid" },
+      ],
+      lockUnknownLayoutIds: false,
+    })
+    assert.equal(map.elements[0]!.color, originalColor)
+    assert.equal(map.elements[0]!.seats[0]!.status, originalStatus)
+    assert.equal(hydrated.occupancy["mesa-9-S1"], "occupied")
+    assert.equal(hydrated.occupancy["mesa-9-S2"], "occupied")
+    assert.equal(hydrated.occupancy["unit-s2"], "occupied")
+    assert.equal(hydrated.occupancy["mesa-9"], "occupied")
+    assert.equal(hydrated.map.elements[0]!.color, SOLD_MAP_FILL)
+    assert.equal(hydrated.map.elements[0]!.seats[0]!.status, "blocked")
+  })
+
+  it("maps a ticket seating_unit_id onto the layout id via the unit roster", () => {
+    const map = tableMap()
+    const hydrated = hydrateVenueMap(map, {
+      seatingUnits: [
+        { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", layoutItemId: "mesa-9", status: "available" },
+      ],
+      soldTickets: [
+        { seating_unit_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", status: "valid" },
+      ],
+      lockUnknownLayoutIds: false,
+    })
+    assert.equal(hydrated.occupancy["mesa-9"], "occupied")
+    assert.equal(hydrated.occupancy["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"], "occupied")
   })
 
   it("does not paint the buyer map until inventory is ready", () => {

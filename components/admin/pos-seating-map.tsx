@@ -16,17 +16,10 @@ import { buildTierUnitPriceIndex } from "@/lib/checkout/tier-price-index"
 import { resolveLiveVenueMapForDay } from "@/lib/seating/live-venue-map-for-day"
 import { resolveTierIdForUniversalSector } from "@/lib/seating/venue-adapter"
 import {
-  collectVenueMapInventoryIds,
-  occupancyFromSoldOutTicketTypes,
-  rollupOccupancyToParents,
+  hydrateVenueMapOccupancy,
   soldOutTicketTypeIds,
 } from "@/lib/seating/map-inventory-hydration"
-import { mergeInventoryOccupancy } from "@/lib/seating/inventory-seat-state"
-import {
-  expandOccupancyToVenueMap,
-  occupancyFromSeatingUnits,
-  seatingUnitsForOccupancyDay,
-} from "@/lib/seating/venue-map-occupancy"
+import { seatingUnitsForOccupancyDay } from "@/lib/seating/venue-map-occupancy"
 import { classifyZoneClick } from "@/lib/seating/map-click-target"
 import {
   storefrontItemFromElement,
@@ -144,24 +137,15 @@ export function PosSeatingMap({
       setSnapshot({
         eventId: event.id,
         dateId: selectedDateId,
-        occupancy: liveMap
-          ? expandOccupancyToVenueMap(
-              rollupOccupancyToParents(
-                mergeInventoryOccupancy(
-                  occupancyFromSeatingUnits(
-                    scoped,
-                    collectVenueMapInventoryIds(liveMap),
-                  ),
-                  occupancyFromSoldOutTicketTypes(
-                    liveMap,
-                    soldOutTicketTypeIds(event.tiers ?? []),
-                  ),
-                ),
-                liveMap,
-              ),
-              liveMap,
-            )
-          : {},
+        occupancy: hydrateVenueMapOccupancy(liveMap, {
+          seatingUnits: scoped.map((unit) => ({
+            id: unit.id,
+            layoutItemId: unit.layoutItemId,
+            status: unit.status,
+            reservedUntil: unit.reservedUntil,
+          })),
+          soldOutTicketTypeIds: soldOutTicketTypeIds(event.tiers ?? []),
+        }),
       })
     })
       .catch(() => {

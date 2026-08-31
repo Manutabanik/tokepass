@@ -103,8 +103,7 @@ export function VenueMapZoneLayer({
           zone.id === selectedId || Boolean(selectedIds?.includes(zone.id))
         const highlighted = highlightedIds.includes(zone.id)
         const soldOut = unavailableIds.includes(zone.id)
-        const interactive =
-          Boolean(onSelect) && (!soldOut || selectOnPointerUp)
+        const interactive = Boolean(onSelect) && !soldOut
         const hasSelection =
           spotlight ||
           Boolean(selectedId) ||
@@ -285,9 +284,7 @@ export function VenueMapZoneLayer({
               strokeWidth={lodSolid ? 2 : selected ? 3 : 2}
               strokeLinejoin="round"
               pointerEvents={
-                revealFocused || (soldOut && !selectOnPointerUp)
-                  ? "none"
-                  : "auto"
+                revealFocused || soldOut ? "none" : "auto"
               }
               filter={
                 soldOut || revealFocused || lodSolid

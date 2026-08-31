@@ -101,7 +101,9 @@ import { cn } from "@/lib/utils"
 import {
   buyerSelectionUnitIds,
   paintBuyerMapSelection,
+  paintBuyerMapSold,
   shouldRestoreBuyerViewport,
+  soldIdsFromOccupancy,
 } from "@/lib/seating/buyer-map-selection-paint"
 import { elementAabb, unionAabb, type Aabb } from "@/lib/seating/venue-transform"
 import {
@@ -337,6 +339,10 @@ export function InteractiveSeatingCanvas({
     snapshotReady: snapshotReady || readOnly,
     hasEventId: Boolean(eventId?.trim()) && !readOnly,
   })
+  useEffect(() => {
+    if (!canPaintInventory) return
+    paintBuyerMapSold(svgRef.current, soldIdsFromOccupancy(occupancy))
+  }, [canPaintInventory, occupancy])
   const inventoryRev = useMemo(() => {
     let sold = 0
     let held = 0
@@ -1437,6 +1443,7 @@ export function InteractiveSeatingCanvas({
             : "pb-[11.5rem] md:pb-14",
         )}
       >
+      {canPaintInventory ? (
       <TransformWrapper
         key={buyerChrome ? viewportSessionKey : "studio"}
         ref={transformRef}
@@ -1679,7 +1686,7 @@ export function InteractiveSeatingCanvas({
                   )}
                   style={{
                     opacity: taken && !buyerOccupancy ? 0.3 : heldByOther ? 0.5 : 1,
-                    pointerEvents: readOnly ? "none" : "auto",
+                    pointerEvents: readOnly || taken ? "none" : "auto",
                   }}
                 >
                   <circle
@@ -1732,6 +1739,7 @@ export function InteractiveSeatingCanvas({
         </TransformComponent>
       </div>
       </TransformWrapper>
+      ) : null}
       {!canPaintInventory ? (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/55">
           <LoaderCircle

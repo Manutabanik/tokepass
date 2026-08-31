@@ -1960,11 +1960,25 @@ export async function getEventSoldTicketOccupancy(
     const { data, error } = await query
     if (error || !data) return {}
     const occupancy: Record<string, "occupied"> = {}
+    const unitIds = new Set<string>()
     for (const row of data) {
       if (dateId && row.event_date_id && row.event_date_id !== dateId) continue
       for (const raw of [row.seat_id, row.seating_unit_id]) {
         const id = raw?.trim()
-        if (id) occupancy[id] = "occupied"
+        if (!id) continue
+        occupancy[id] = "occupied"
+        unitIds.add(id)
+      }
+    }
+    if (unitIds.size > 0) {
+      const units = await admin
+        .from("event_seating_units")
+        .select("id, layout_item_id")
+        .eq("event_id", cleanEvent)
+        .in("id", [...unitIds])
+      for (const unit of units.data ?? []) {
+        const layout = unit.layout_item_id?.trim()
+        if (layout) occupancy[layout] = "occupied"
       }
     }
     return occupancy

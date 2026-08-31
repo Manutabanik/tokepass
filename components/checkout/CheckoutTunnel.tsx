@@ -229,14 +229,10 @@ import {
 } from "@/types/venue-map"
 import { mergeInventoryOccupancy } from "@/lib/seating/inventory-seat-state"
 import {
-  collectVenueMapInventoryIds,
-  occupancyFromSoldOutTicketTypes,
-  rollupOccupancyToParents,
+  hydrateVenueMapOccupancy,
   soldOutTicketTypeIds,
 } from "@/lib/seating/map-inventory-hydration"
 import {
-  expandOccupancyToVenueMap,
-  occupancyFromSeatingUnits,
   resolveLiveVenueSeatStatus,
   seatingUnitsForComboDays,
   seatingUnitsForOccupancyDay,
@@ -244,6 +240,7 @@ import {
 import { useOptimisticSeatHolds } from "@/hooks/use-optimistic-seat-holds"
 import { useSeatHoldsRealtime } from "@/hooks/use-seat-holds-realtime"
 import { useSeatingOccupancyRealtime } from "@/hooks/use-seating-occupancy-realtime"
+import { useSoldTicketOccupancyRealtime } from "@/hooks/use-sold-ticket-occupancy-realtime"
 import { useEventCatalogRealtime } from "@/hooks/use-event-catalog-realtime"
 import { ticketSelectorPatchFromRow } from "@/lib/storefront/event-catalog-realtime"
 import {
@@ -768,6 +765,11 @@ export function CheckoutTunnel({
     "tunnel",
     selectedDateId,
     scheduleDayCount,
+  )
+  useSoldTicketOccupancyRealtime(
+    eventId,
+    setSoldTicketOccupancy,
+    selectedDateId,
   )
   const dayTiers = useMemo(() => {
     if (!selectedDateId) return admissionTiers
@@ -1341,33 +1343,18 @@ export function CheckoutTunnel({
             dayTierIds,
             scheduleDayCount,
           })
-    const knownIds =
-      seatingInventoryReady && units.length > 0
-        ? collectVenueMapInventoryIds(liveMap)
-        : []
-    return expandOccupancyToVenueMap(
-      rollupOccupancyToParents(
-        mergeInventoryOccupancy(
-          occupancyFromSeatingUnits(
-            units.map((unit) => ({
-              id: unit.id,
-              layoutItemId: unit.layoutItemId,
-              status: unit.status,
-              reservedUntil: unit.reservedUntil,
-            })),
-            knownIds,
-          ),
-          occupancyFromSoldOutTicketTypes(
-            liveMap,
-            soldOutTicketTypeIds(dayTiers),
-          ),
-          soldTicketOccupancy,
-          liveOccupancy,
-        ),
-        liveMap,
-      ),
-      liveMap,
-    )
+    return hydrateVenueMapOccupancy(liveMap, {
+      seatingUnits: units.map((unit) => ({
+        id: unit.id,
+        layoutItemId: unit.layoutItemId,
+        status: unit.status,
+        reservedUntil: unit.reservedUntil,
+      })),
+      soldTickets: soldTicketOccupancy,
+      soldOutTicketTypeIds: soldOutTicketTypeIds(dayTiers),
+      liveOccupancy,
+      lockUnknownLayoutIds: seatingInventoryReady && units.length > 0,
+    })
   }, [
     dayTiers,
     focusedComboDays,

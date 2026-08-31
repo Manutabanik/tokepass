@@ -424,10 +424,7 @@ export function VenueMapElementLayer({
           <g
             key={element.id}
             style={{
-              pointerEvents:
-                interactive && (!soldOut || selectOnPointerUp)
-                  ? "auto"
-                  : "none",
+              pointerEvents: interactive && !soldOut ? "auto" : "none",
             }}
           >
             <VenueElementShape
@@ -468,10 +465,7 @@ export function VenueMapElementLayer({
               showLabels={renderLabels || isSelected || isHighlighted}
               showChairs={renderChairs || isSelected}
               interactive={
-                visible &&
-                interactive &&
-                !isolationDim &&
-                (!soldOut || selectOnPointerUp)
+                visible && interactive && !isolationDim && !soldOut
               }
               zoom={zoom}
               dimmed={
