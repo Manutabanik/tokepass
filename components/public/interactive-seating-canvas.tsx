@@ -116,6 +116,7 @@ import {
   shouldEnableMapLod,
   shouldRunBuyerAutoFit,
   zoneCanvasAabb,
+  type BuyerMapFitInset,
   type BuyerMapViewport,
   type MapLodMode,
 } from "@/lib/seating/venue-map-lod"
@@ -208,6 +209,8 @@ export function InteractiveSeatingCanvas({
   zoomDockClassName,
   lodBackClassName,
   inventoryPending = false,
+  buyerFitInset,
+  hideZoomDock = false,
 }: {
   map: InteractiveVenueMap
   eventId?: string | null
@@ -239,6 +242,8 @@ export function InteractiveSeatingCanvas({
   zoomDockClassName?: string
   lodBackClassName?: string
   inventoryPending?: boolean
+  buyerFitInset?: BuyerMapFitInset
+  hideZoomDock?: boolean
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const tooltipHostRef = useRef<HTMLDivElement>(null)
@@ -438,7 +443,9 @@ export function InteractiveSeatingCanvas({
       if (wrapWidth < 80 || wrapHeight < 80 || !buyerFitBox) return false
       const controls = transformRef.current
       if (!controls) return false
-      const camera = fitBuyerMapCamera(buyerFitBox, wrapWidth, wrapHeight)
+      const camera = fitBuyerMapCamera(buyerFitBox, wrapWidth, wrapHeight, {
+        inset: buyerFitInset,
+      })
       controls.setTransform(
         camera.positionX,
         camera.positionY,
@@ -454,7 +461,14 @@ export function InteractiveSeatingCanvas({
       fittedSizeRef.current = { width: wrapWidth, height: wrapHeight }
       return true
     },
-    [buyerChrome, buyerFitBox, viewMode, wrapHeight, wrapWidth],
+    [
+      buyerChrome,
+      buyerFitBox,
+      buyerFitInset,
+      viewMode,
+      wrapHeight,
+      wrapWidth,
+    ],
   )
 
   useEffect(() => {
@@ -1552,7 +1566,7 @@ export function InteractiveSeatingCanvas({
       {!silentHover && hoveredItem ? (
         <SeatTooltip item={hoveredItem} x={hoverPos.x} y={hoverPos.y} />
       ) : null}
-      {buyerChrome && !readOnly && canPaintInventory ? (
+      {buyerChrome && !readOnly && canPaintInventory && !hideZoomDock ? (
         <BuyerMapZoomDock
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}

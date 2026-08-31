@@ -7,23 +7,25 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from "react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { toast } from "sonner"
 
-import { MapPin } from "lucide-react"
+import { MapPin, X } from "lucide-react"
 
 import { InteractiveMapViewer } from "@/components/public/interactive-map-viewer"
 import { SeatSelectionQuickList } from "@/components/public/seat-selection-quick-list"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
-  SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll"
 import {
   mapPlaceSelectionCap,
@@ -47,7 +49,10 @@ import type {
   SeatStatus,
 } from "@/lib/seating/universal-seat-types"
 import { sectorUsesNumberedMap } from "@/lib/seating/venue-map-pricing"
-import { elementBelongsToZone } from "@/lib/seating/venue-map-lod"
+import {
+  BUYER_FLOATING_CHROME_INSET,
+  elementBelongsToZone,
+} from "@/lib/seating/venue-map-lod"
 import {
   elementInventorySectorId,
   flattenSeatsForAvailability,
@@ -174,16 +179,13 @@ export function SeatSelectionSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        showCloseButton
+        showCloseButton={false}
         overlayClassName="z-[100]"
-        className={cn(
-          "fixed inset-0 z-[100] flex h-[100dvh] max-h-[100dvh] w-full flex-col gap-0 overflow-hidden rounded-none border-none bg-background p-0 [&_[data-slot=sheet-close]]:z-30",
-          "max-md:m-0 max-md:h-[100dvh] max-md:max-w-none max-md:w-screen max-md:rounded-none max-md:border-none",
-          "lg:inset-x-auto lg:right-auto lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:h-[min(88dvh,840px)] lg:max-h-[88dvh] lg:w-[min(56rem,94vw)] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl lg:border lg:border-border",
-        )}
+        className="fixed inset-0 z-[100] flex h-[100dvh] max-h-[100dvh] w-full flex-col gap-0 overflow-hidden rounded-none border-none bg-black/95 p-0"
       >
         <SeatModalErrorBoundary>
           <SeatSelectionModalInner
+            key={`${open}-${selectionMode}`}
             open={open}
             onOpenChange={onOpenChange}
             title={title}
@@ -221,6 +223,10 @@ function SeatSelectionModalInner({
   context: SeatSelectionContext
   selectionMode: "auto" | "map" | "counter"
 }) {
+  const reduceMotion = useReducedMotion()
+  const [view, setView] = useState<"lista" | "mapa">(() =>
+    selectionMode === "map" ? "mapa" : "lista",
+  )
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const placeCount = storefrontSelectionCount(selectedItems)
   const placeTotal = storefrontSelectionTotal(selectedItems)
@@ -521,124 +527,153 @@ function SeatSelectionModalInner({
   }
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <Tabs
-        key={`${open}-${focusedSectorId ?? "sector"}`}
-        defaultValue={selectionMode === "map" ? "mapa" : "lista"}
-        className="relative flex min-h-0 flex-1 flex-col gap-0"
-      >
-        <SheetHeader className="relative z-10 shrink-0 gap-3 border-b border-border/50 bg-background/80 p-4 pr-14 pt-[max(1rem,env(safe-area-inset-top))] text-left backdrop-blur-md">
-          <SheetTitle className="text-lg font-bold tracking-tight">
-            {title}
-          </SheetTitle>
-          <SheetDescription className="mt-0.5 text-sm text-muted-foreground">
-            Elegí un lugar de la lista o miralo en el mapa. Podés cerrar en
-            cualquier momento.
-          </SheetDescription>
-          <TabsList className="flex h-11 w-full items-center rounded-lg bg-secondary/50 p-1 text-muted-foreground">
-            <TabsTrigger value="lista" className={segmentedTabClass}>
-              Selección rápida
-            </TabsTrigger>
-            <TabsTrigger value="mapa" className={segmentedTabClass}>
-              Ver en el mapa
-            </TabsTrigger>
-          </TabsList>
-        </SheetHeader>
-
-        <TabsContent
-          value="lista"
-          className="no-scrollbar relative z-[1] mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background px-4 py-3"
-        >
-          {isLoadingPlaces ? (
-            <QuickPlaceSkeleton />
-          ) : (
-            <SeatSelectionQuickList
-              sectors={catalog}
-              focusedSectorId={focusedSectorId}
-              pending={pending}
-              gaQuantityBySector={gaQuantityBySector}
-              gaMaxBySector={gaMaxBySector}
-              onTogglePlace={handleTogglePlace}
-              onAssignZoneQuantity={context.onAssignZoneQuantity}
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent
-          value="mapa"
-          className="relative z-0 m-0 flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-black/90 p-0"
-        >
-          {isLoadingPlaces ? (
-            <Skeleton className="h-full min-h-0 w-full rounded-none" />
-          ) : focusedMap ? (
-            <InteractiveMapViewer
-              immersive
-              map={focusedMap}
-              eventId={context.eventId}
-              occupancyBySeatId={context.occupancyBySeatId}
-              priceBySectorId={context.priceBySectorId}
-              pending={pending}
-              inventoryPending={Boolean(context.inventoryPending)}
-              selectedZoneId={focusedSectorId}
-              unavailableZoneIds={context.unavailableZoneIds}
-              heldSeatIds={context.heldSeatIds}
-              maxSelectable={placeSelectionCap}
-              onSelectZone={context.onSelectZone}
-              className="h-full min-h-0 w-full flex-1"
-            />
-          ) : (
-            <p className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
-              El plano no está disponible.
-            </p>
-          )}
-        </TabsContent>
-      </Tabs>
+    <div className="dark relative flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-black/95 text-foreground">
+      <SheetTitle className="sr-only">{title}</SheetTitle>
+      <SheetDescription className="sr-only">
+        Elegí un lugar de la lista o miralo en el mapa. Podés cerrar en
+        cualquier momento.
+      </SheetDescription>
 
       <div
-        className="relative z-10 shrink-0 border-t border-border/50 bg-background/80 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md"
+        className={cn(
+          "absolute inset-0 z-10 h-full w-full",
+          view === "lista" && "pointer-events-none",
+        )}
+        aria-hidden={view === "lista"}
       >
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <p
+        {isLoadingPlaces ? (
+          view === "mapa" ? (
+            <Skeleton className="h-full min-h-0 w-full rounded-none bg-white/5" />
+          ) : null
+        ) : focusedMap ? (
+          <InteractiveMapViewer
+            immersive
+            map={focusedMap}
+            eventId={context.eventId}
+            occupancyBySeatId={context.occupancyBySeatId}
+            priceBySectorId={context.priceBySectorId}
+            pending={pending}
+            inventoryPending={Boolean(context.inventoryPending)}
+            selectedZoneId={focusedSectorId}
+            unavailableZoneIds={context.unavailableZoneIds}
+            heldSeatIds={context.heldSeatIds}
+            maxSelectable={placeSelectionCap}
+            onSelectZone={context.onSelectZone}
+            hideZoomDock={view === "lista"}
+            buyerFitInset={BUYER_FLOATING_CHROME_INSET}
+            className="absolute inset-0 z-10 h-full w-full"
+          />
+        ) : view === "mapa" ? (
+          <p className="flex h-full items-center justify-center px-4 text-center text-sm text-white/60">
+            El plano no está disponible.
+          </p>
+        ) : null}
+      </div>
+
+      <AnimatePresence initial={false}>
+        {view === "lista" ? (
+          <motion.div
+            key="lista"
+            initial={reduceMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={reduceMotion ? undefined : { opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.22, ease: "easeOut" }}
+            className="absolute inset-0 z-20 h-full overflow-y-auto overscroll-contain bg-black/95 px-4 pt-20 pb-32"
+          >
+            {isLoadingPlaces ? (
+              <QuickPlaceSkeleton />
+            ) : (
+              <SeatSelectionQuickList
+                sectors={catalog}
+                focusedSectorId={focusedSectorId}
+                pending={pending}
+                gaQuantityBySector={gaQuantityBySector}
+                gaMaxBySector={gaMaxBySector}
+                onTogglePlace={handleTogglePlace}
+                onAssignZoneQuantity={context.onAssignZoneQuantity}
+              />
+            )}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <div className="pointer-events-none absolute top-0 z-[60] flex w-full items-center justify-between bg-gradient-to-b from-black/80 to-transparent p-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-sm">
+        <div className="size-10 shrink-0" aria-hidden="true" />
+        <Tabs
+          value={view}
+          onValueChange={(value) => {
+            if (value === "lista" || value === "mapa") setView(value)
+          }}
+          className="pointer-events-auto gap-0"
+        >
+          <TabsList className="flex h-10 items-center rounded-full bg-white/10 p-1 text-white/70">
+            <TabsTrigger value="lista" className={floatingTabClass}>
+              Selección rápida
+            </TabsTrigger>
+            <TabsTrigger value="mapa" className={floatingTabClass}>
+              Mapa
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <SheetClose
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="pointer-events-auto size-10 shrink-0 rounded-full bg-white/10 text-white hover:bg-white/20 hover:text-white"
+            />
+          }
+        >
+          <X className="size-5" aria-hidden="true" />
+          <span className="sr-only">Cerrar</span>
+        </SheetClose>
+      </div>
+
+      <div className="pointer-events-none absolute bottom-0 z-[60] w-full border-t border-white/10 bg-background/90 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md">
+        <div className="pointer-events-auto">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p
+              className={cn(
+                "flex min-w-0 items-center gap-1.5 truncate text-sm font-semibold",
+                isValidSelection ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
+              <span className="truncate">
+                {formatSeatSelectionFooterLabel(selectedItems)}
+              </span>
+            </p>
+            {isValidSelection ? (
+              <p className="shrink-0 text-sm font-bold tabular-nums text-foreground">
+                {formatTicketPrice(placeTotal)}
+              </p>
+            ) : null}
+          </div>
+          <Button
+            type="button"
+            disabled={!isValidSelection || pending}
+            onClick={handleConfirm}
             className={cn(
-              "flex min-w-0 items-center gap-1.5 truncate text-sm font-semibold",
-              isValidSelection ? "text-foreground" : "text-muted-foreground",
+              tapFeedbackClass,
+              "h-auto w-full rounded-2xl bg-emerald-600 py-3.5 text-base font-bold text-white hover:bg-emerald-700",
             )}
           >
-            <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
-            <span className="truncate">
-              {formatSeatSelectionFooterLabel(selectedItems)}
-            </span>
-          </p>
-          {isValidSelection ? (
-            <p className="shrink-0 text-sm font-bold tabular-nums text-foreground">
-              {formatTicketPrice(placeTotal)}
-            </p>
-          ) : null}
+            {isValidSelection
+              ? `Confirmar ${selectedQuantity} ${selectedQuantity === 1 ? "lugar" : "lugares"}`
+              : "Seleccioná un lugar para continuar"}
+          </Button>
         </div>
-        <Button
-          type="button"
-          disabled={!isValidSelection || pending}
-          onClick={handleConfirm}
-          className={cn(
-            tapFeedbackClass,
-            "h-auto w-full rounded-2xl bg-emerald-600 py-3.5 text-base font-bold text-white hover:bg-emerald-700",
-          )}
-        >
-          {isValidSelection
-            ? `Confirmar ${selectedQuantity} ${selectedQuantity === 1 ? "lugar" : "lugares"}`
-            : "Seleccioná un lugar para continuar"}
-        </Button>
       </div>
     </div>
   )
 }
 
-const segmentedTabClass = cn(
-  "inline-flex h-full flex-1 items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium shadow-none after:hidden",
-  "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-  "data-active:border-transparent data-active:bg-background data-active:text-foreground data-active:shadow-sm",
-  "data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm",
-  "dark:data-active:border-transparent dark:data-active:bg-background dark:data-active:text-foreground",
+const floatingTabClass = cn(
+  "inline-flex h-full items-center justify-center whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium shadow-none after:hidden sm:text-sm",
+  "text-white/70 hover:bg-white/10 hover:text-white",
+  "data-active:border-transparent data-active:bg-white data-active:text-black data-active:shadow-none",
+  "data-[state=active]:bg-white data-[state=active]:text-black",
 )
 
 function isolateSectorMap(

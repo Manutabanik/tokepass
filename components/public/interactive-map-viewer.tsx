@@ -6,9 +6,17 @@ import {
   InteractiveSeatingCanvas,
   type InteractiveSelectedSeat,
 } from "@/components/public/interactive-seating-canvas"
+import {
+  BUYER_FLOATING_CHROME_INSET,
+  type BuyerMapFitInset,
+} from "@/lib/seating/venue-map-lod"
 import { cn } from "@/lib/utils"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import type { InteractiveVenueMap, VenueMapZone } from "@/types/venue-map"
+
+const IMMERSIVE_ZOOM_DOCK_CLASS =
+  "bottom-32 right-4 left-auto z-[55] translate-x-0 flex-col gap-2"
+const IMMERSIVE_LOD_BACK_CLASS = "top-24 left-4 z-[55]"
 
 export function InteractiveMapViewer({
   map,
@@ -24,6 +32,10 @@ export function InteractiveMapViewer({
   onContinue,
   immersive = false,
   inventoryPending = false,
+  buyerFitInset,
+  hideZoomDock = false,
+  zoomDockClassName,
+  lodBackClassName,
   className,
 }: {
   map: InteractiveVenueMap
@@ -39,13 +51,17 @@ export function InteractiveMapViewer({
   onContinue?: (seats: InteractiveSelectedSeat[]) => void
   immersive?: boolean
   inventoryPending?: boolean
+  buyerFitInset?: BuyerMapFitInset
+  hideZoomDock?: boolean
+  zoomDockClassName?: string
+  lodBackClassName?: string
   className?: string
 }) {
   return (
     <div
       className={cn(
         immersive
-          ? "relative flex h-full min-h-0 w-full max-w-none flex-col overflow-hidden rounded-none border-0 bg-black/90"
+          ? "absolute inset-0 z-10 flex h-full w-full max-w-none flex-col overflow-hidden rounded-none border-0 bg-transparent"
           : "relative h-[320px] w-full max-w-[100vw] overflow-hidden rounded-xl border border-border/70 bg-background/50 touch-none md:h-[450px] md:touch-auto",
         className,
       )}
@@ -77,8 +93,19 @@ export function InteractiveMapViewer({
           hideChrome
           hideToolbar
           buyerChrome
-          zoomDockClassName={immersive ? "bottom-3" : undefined}
-          lodBackClassName={immersive ? "top-3" : undefined}
+          buyerFitInset={
+            buyerFitInset ?? (immersive ? BUYER_FLOATING_CHROME_INSET : undefined)
+          }
+          hideZoomDock={hideZoomDock}
+          zoomDockClassName={
+            hideZoomDock
+              ? undefined
+              : (zoomDockClassName ??
+                (immersive ? IMMERSIVE_ZOOM_DOCK_CLASS : undefined))
+          }
+          lodBackClassName={
+            lodBackClassName ?? (immersive ? IMMERSIVE_LOD_BACK_CLASS : undefined)
+          }
         />
       )}
       {pending && !inventoryPending ? (

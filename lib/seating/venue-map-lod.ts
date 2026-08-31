@@ -29,6 +29,32 @@ export const BUYER_FIT_EDGE_PADDING = 0.1
 export const CLIENT_FIT_MAX_SCALE = 8
 export const CLIENT_FIT_MIN_SCALE = 0.5
 
+export type BuyerMapFitInset = {
+  top?: number
+  right?: number
+  bottom?: number
+  left?: number
+}
+
+/** Hueco seguro entre la top bar y la barra de pago flotantes. */
+export const BUYER_FLOATING_CHROME_INSET: Required<BuyerMapFitInset> = {
+  top: 104,
+  right: 0,
+  bottom: 176,
+  left: 0,
+}
+
+function resolveBuyerFitInset(
+  inset?: BuyerMapFitInset,
+): Required<BuyerMapFitInset> {
+  return {
+    top: Math.max(0, inset?.top ?? 0),
+    right: Math.max(0, inset?.right ?? 0),
+    bottom: Math.max(0, inset?.bottom ?? 0),
+    left: Math.max(0, inset?.left ?? 0),
+  }
+}
+
 const SYNTH_PAD = 18
 
 export function zoneCanvasAabb(zone: Pick<VenueMapZone, "polygon">): Aabb | null {
@@ -332,13 +358,21 @@ export function fitBuyerMapCamera(
   box: Aabb,
   wrapWidth: number,
   wrapHeight: number,
-  options?: { padding?: number; minScale?: number; maxScale?: number },
+  options?: {
+    padding?: number
+    minScale?: number
+    maxScale?: number
+    inset?: BuyerMapFitInset
+  },
 ): { scale: number; positionX: number; positionY: number } {
   const padding = options?.padding ?? BUYER_FIT_EDGE_PADDING
   const minScale = options?.minScale ?? CLIENT_FIT_MIN_SCALE
   const maxScale = options?.maxScale ?? CLIENT_FIT_MAX_SCALE
+  const inset = resolveBuyerFitInset(options?.inset)
   const viewW = Math.max(1, wrapWidth)
   const viewH = Math.max(1, wrapHeight)
+  const holeW = Math.max(1, viewW - inset.left - inset.right)
+  const holeH = Math.max(1, viewH - inset.top - inset.bottom)
   const { meetScale, offsetX, offsetY } = buyerMeetScale(viewW, viewH)
   const width = Math.max(8, box.maxX - box.minX)
   const height = Math.max(8, box.maxY - box.minY)
@@ -349,7 +383,7 @@ export function fitBuyerMapCamera(
     maxScale,
     Math.max(
       minScale,
-      Math.min(viewW / (paddedW * safeMeet), viewH / (paddedH * safeMeet)),
+      Math.min(holeW / (paddedW * safeMeet), holeH / (paddedH * safeMeet)),
     ),
   )
   const cx = (box.minX + box.maxX) / 2
@@ -360,8 +394,8 @@ export function fitBuyerMapCamera(
     offsetY + (cy - BUYER_MAP_VIEWBOX.y) * meetScale
   return {
     scale,
-    positionX: viewW / 2 - screenX * scale,
-    positionY: viewH / 2 - screenY * scale,
+    positionX: inset.left + holeW / 2 - screenX * scale,
+    positionY: inset.top + holeH / 2 - screenY * scale,
   }
 }
 

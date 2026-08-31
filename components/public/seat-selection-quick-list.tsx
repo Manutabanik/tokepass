@@ -12,11 +12,10 @@ import type {
   StorefrontSectorCatalog,
   StorefrontSectorOption,
 } from "@/lib/seating/storefront-sector-catalog"
-import { cn, tapFeedbackClass } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 
 export function SeatSelectionQuickList({
   sectors,
-  focusedSectorId,
   pending = false,
   gaQuantityBySector,
   gaMaxBySector,
@@ -34,48 +33,45 @@ export function SeatSelectionQuickList({
   const catalog = sectors ?? []
   if (catalog.length === 0) {
     return (
-      <p className="px-1 py-10 text-center text-sm text-muted-foreground">
+      <p className="px-1 py-10 text-center text-sm text-white/60">
         No hay lugares configurados en el mapa.
       </p>
     )
   }
 
-  const openId =
-    (focusedSectorId && catalog.some((sector) => sector.id === focusedSectorId)
-      ? focusedSectorId
-      : catalog[0]?.id) ?? ""
-
   return (
     <Accordion
-      key={openId}
-      multiple
-      defaultValue={openId ? [openId] : []}
-      className="flex flex-col gap-2"
+      type="single"
+      collapsible
+      defaultValue={[]}
+      className="flex flex-col gap-3"
     >
       {catalog.map((sector) => {
         const gaQty = gaQuantityBySector[sector.id] ?? 0
         const gaMax = Math.max(0, gaMaxBySector[sector.id] ?? 0)
+        const available = sectorAvailableCount(sector, gaMaxBySector)
         return (
           <AccordionItem
             key={sector.id}
             value={sector.id}
-            className="overflow-hidden rounded-2xl border border-border bg-card px-2"
+            className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 px-1 shadow-[0_8px_30px_rgba(0,0,0,0.25)] not-last:border-b-white/10"
           >
-            <AccordionTrigger className="min-h-12 px-3 py-3 hover:no-underline">
+            <AccordionTrigger className="min-h-14 px-3 py-3 hover:no-underline **:data-[slot=accordion-trigger-icon]:text-white/50">
               <span className="flex min-w-0 items-center gap-3">
                 <span
-                  className="size-3.5 shrink-0 rounded-full ring-1 ring-border"
+                  className="size-3.5 shrink-0 rounded-full shadow-[0_0_0_3px_rgba(255,255,255,0.08)]"
                   style={{ backgroundColor: sector.color }}
                   aria-hidden="true"
                 />
                 <span className="min-w-0 text-left">
-                  <span className="block truncate font-semibold text-foreground">
+                  <span className="block truncate text-base font-semibold text-white">
                     {sector.name}
                   </span>
-                  <span className="block text-xs text-muted-foreground">
-                    {sector.kind === "ga"
-                      ? `Acceso general · ${formatTicketPrice(sector.price)}`
-                      : `${(sector.options ?? []).length} ${(sector.options ?? []).length === 1 ? "opción" : "opciones"} · ${formatTicketPrice(sector.price)}`}
+                  <span className="mt-0.5 block text-xs text-white/60">
+                    Precio: {formatTicketPrice(sector.price)} • {available}{" "}
+                    {available === 1
+                      ? "lugar disponible"
+                      : "lugares disponibles"}
                   </span>
                 </span>
               </span>
@@ -90,9 +86,9 @@ export function SeatSelectionQuickList({
                   onChange={(next) => onAssignZoneQuantity(sector.id, next)}
                 />
               ) : (
-                <div className="grid grid-cols-1 gap-2">
+                <div className="flex flex-col divide-y divide-white/10">
                   {(sector.options ?? []).map((option) => (
-                    <PlaceOptionButton
+                    <PlaceOptionRow
                       key={option.id}
                       option={option}
                       pending={pending}
@@ -107,6 +103,18 @@ export function SeatSelectionQuickList({
       })}
     </Accordion>
   )
+}
+
+function sectorAvailableCount(
+  sector: StorefrontSectorCatalog,
+  gaMaxBySector: Record<string, number>,
+) {
+  if (sector.kind === "ga") {
+    return Math.max(0, gaMaxBySector[sector.id] ?? 0)
+  }
+  return (sector.options ?? []).filter(
+    (option) => option.available || option.selected,
+  ).length
 }
 
 function GaSectorPicker({
@@ -124,9 +132,9 @@ function GaSectorPicker({
 }) {
   if (disabled && max <= 0) {
     return (
-      <div className="pointer-events-none flex items-center justify-between gap-3 px-1 py-3 opacity-50">
-        <p className="text-sm text-muted-foreground">Acceso general</p>
-        <span className="rounded-md bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+      <div className="pointer-events-none flex items-center justify-between gap-3 px-1 py-2 opacity-50">
+        <p className="text-sm text-white/70">Acceso general</p>
+        <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/50">
           Agotado
         </span>
       </div>
@@ -134,11 +142,10 @@ function GaSectorPicker({
   }
   const nextMax = Math.max(1, max)
   return (
-    <div className="flex flex-col items-center gap-2 py-2">
-      <p className="text-sm text-muted-foreground">
-        Acceso general. Indicá cuántas entradas querés.
-      </p>
+    <div className="flex items-center justify-between gap-3 py-1">
+      <p className="text-sm text-white/70">Acceso general</p>
       <QuantityCounter
+        compact
         quantity={quantity}
         min={0}
         max={nextMax}
@@ -146,14 +153,11 @@ function GaSectorPicker({
         onDecrease={() => onChange(Math.max(0, quantity - 1))}
         onIncrease={() => onChange(Math.min(nextMax, quantity + 1))}
       />
-      <p className="text-sm font-semibold text-muted-foreground">
-        {quantity === 1 ? "1 entrada" : `${quantity} entradas`}
-      </p>
     </div>
   )
 }
 
-function PlaceOptionButton({
+function PlaceOptionRow({
   option,
   pending,
   onToggle,
@@ -164,24 +168,34 @@ function PlaceOptionButton({
 }) {
   const taken = !option.available && !option.selected
   return (
-    <button
-      type="button"
-      disabled={pending || taken}
-      aria-pressed={option.selected}
-      onClick={onToggle}
+    <div
       className={cn(
-        tapFeedbackClass,
-        "flex min-h-12 items-center justify-between gap-3 rounded-xl border-2 px-4 py-3 text-left font-semibold transition-all",
-        option.selected
-          ? "border-emerald-500 bg-emerald-600 text-white"
-          : "border-border bg-card text-foreground hover:border-emerald-500/60",
-        (pending || taken) && "pointer-events-none opacity-50",
+        "flex items-center justify-between gap-3 py-2.5",
+        (pending || taken) && "opacity-50",
       )}
     >
-      <span className="truncate">{option.label}</span>
-      <span className="shrink-0 tabular-nums">
-        {taken ? "Agotado" : formatTicketPrice(option.price)}
+      <span className="min-w-0 truncate text-sm font-medium text-white">
+        {option.label}
       </span>
-    </button>
+      {taken ? (
+        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-white/50">
+          Agotado
+        </span>
+      ) : (
+        <QuantityCounter
+          compact
+          quantity={option.selected ? 1 : 0}
+          min={0}
+          max={1}
+          disabled={pending}
+          onDecrease={() => {
+            if (option.selected) onToggle()
+          }}
+          onIncrease={() => {
+            if (!option.selected) onToggle()
+          }}
+        />
+      )}
+    </div>
   )
 }

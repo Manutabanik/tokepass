@@ -383,4 +383,29 @@ describe("buyer map camera", () => {
     assert.ok(camera.scale >= CLIENT_FIT_MIN_SCALE)
     assert.ok(camera.scale < 1)
   })
+
+  it("centra el AABB en el hueco entre chrome flotante", () => {
+    const box = { minX: 0, minY: -40, maxX: 800, maxY: 560 }
+    const wrapW = 390
+    const wrapH = 800
+    const inset = { top: 104, bottom: 176 }
+    const camera = fitBuyerMapCamera(box, wrapW, wrapH, { inset })
+    const mid = project(
+      camera,
+      (box.minX + box.maxX) / 2,
+      (box.minY + box.maxY) / 2,
+      wrapW,
+      wrapH,
+    )
+    const holeTop = inset.top
+    const holeBottom = wrapH - inset.bottom
+    const holeCy = (holeTop + holeBottom) / 2
+    assert.ok(Math.abs(mid.x - wrapW / 2) < 1)
+    assert.ok(Math.abs(mid.y - holeCy) < 1)
+
+    const topLeft = project(camera, box.minX, box.minY, wrapW, wrapH)
+    const bottomRight = project(camera, box.maxX, box.maxY, wrapW, wrapH)
+    assert.ok(topLeft.y >= holeTop)
+    assert.ok(bottomRight.y <= holeBottom)
+  })
 })
