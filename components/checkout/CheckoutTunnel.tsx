@@ -120,7 +120,7 @@ import {
   cartLineQuantity,
   sumCartQuantities,
 } from "@/lib/checkout/cart"
-import { splitAbsorbFee } from "@/lib/pricing/absorb-fee-split"
+import { calculateDisplayPrice } from "@/lib/pricing/display-price"
 import {
   cartHasPurchasableItems,
   resolveCheckoutProgressStep,
@@ -434,7 +434,7 @@ export function CheckoutTunnel({
   eventTitle = "Elegí tu entrada",
   currentUserId = null,
   initialBuyer = null,
-  tiers,
+  tiers = [],
   referralCode = null,
   seatingUnits = [],
   seatingSectorSummaries = [],
@@ -627,7 +627,7 @@ export function CheckoutTunnel({
   >({})
   const displayTiers = useMemo(
     () =>
-      tiers.map((tier) => ({
+      (tiers ?? []).map((tier) => ({
         ...tier,
         ...tierOverrides[tier.id],
       })),
@@ -1548,12 +1548,7 @@ export function CheckoutTunnel({
     absorbFees,
   }
   const customerUnitTotal = (price: unknown) =>
-    splitAbsorbFee({
-      ticketPrice: price,
-      feeRate: feeRate,
-      absorbFees,
-      fixedFee: platformFixedFee,
-    }).customerTotal
+    calculateDisplayPrice(price, feeRate, absorbFees, platformFixedFee)
   const numberedSubtotal = selectedSeat
     ? customerUnitTotal(selectedSeat.price) +
       layoutSeats
@@ -3243,6 +3238,7 @@ export function CheckoutTunnel({
     }
 
     startTransition(async () => {
+      try {
       for (const seat of seats) {
         const cached = seat.seatingUnitId
           ? mergedSeatingUnits.find((unit) => unit.id === seat.seatingUnitId)
@@ -3289,11 +3285,17 @@ export function CheckoutTunnel({
           asHoldEventDateId(selectedDateId) ??
           comboDays[0] ??
           null
-        const units = await getEventSeatingUnitsForSector(
-          eventId,
-          selectionPayload.sectorId,
-          holdDateId,
-        )
+        let units: EventSeatingUnit[] = []
+        try {
+          units = await getEventSeatingUnitsForSector(
+            eventId,
+            selectionPayload.sectorId,
+            holdDateId,
+          )
+        } catch {
+          toast.error("No se pudo cargar el inventario de esta zona.")
+          return
+        }
         const cacheKey = `${selectionPayload.sectorId}::${holdDateId ?? selectedDateId ?? ""}`
         setLoadedUnitsBySector((current) => ({
           ...current,
@@ -3326,6 +3328,9 @@ export function CheckoutTunnel({
         if (!ok) return
       }
       if (!options?.keepOpen && !hasInteractiveMap) returnToCheckout()
+      } catch {
+        toast.error("No se pudo reservar esa ubicación. Probá de nuevo.")
+      }
     })
   }
 
@@ -3333,10 +3338,21 @@ export function CheckoutTunnel({
     const cacheKey = `${sectorId}::${selectedDateId ?? ""}`
     const cached = loadedUnitsRef.current[cacheKey]
     if (cached) return cached
-    const units = seatingUnitsForOccupancyDay(
-      await getEventSeatingUnitsForSector(eventId, sectorId, selectedDateId),
-      { eventDateId: selectedDateId, scheduleDayCount },
-    )
+    let fetched: EventSeatingUnit[] = []
+    try {
+      fetched = await getEventSeatingUnitsForSector(
+        eventId,
+        sectorId,
+        selectedDateId,
+      )
+    } catch {
+      toast.error("No se pudo cargar el inventario de esta zona.")
+      return []
+    }
+    const units = seatingUnitsForOccupancyDay(fetched, {
+      eventDateId: selectedDateId,
+      scheduleDayCount,
+    })
     loadedUnitsRef.current = { ...loadedUnitsRef.current, [cacheKey]: units }
     setLoadedUnitsBySector((current) =>
       current[cacheKey] ? current : { ...current, [cacheKey]: units },
@@ -3345,10 +3361,17 @@ export function CheckoutTunnel({
   }, [eventId, scheduleDayCount, selectedDateId])
 
   const loadAllUnits = useCallback(async () => {
-    const units = seatingUnitsForOccupancyDay(
-      await getEventSeatingAvailability(eventId, selectedDateId),
-      { eventDateId: selectedDateId, scheduleDayCount },
-    )
+    let fetched: EventSeatingUnit[] = []
+    try {
+      fetched = await getEventSeatingAvailability(eventId, selectedDateId)
+    } catch {
+      toast.error("No se pudo cargar el mapa de asientos.")
+      return []
+    }
+    const units = seatingUnitsForOccupancyDay(fetched, {
+      eventDateId: selectedDateId,
+      scheduleDayCount,
+    })
     const bySector: Record<string, EventSeatingUnit[]> = {}
     for (const unit of units) {
       const key = `${unit.sectorId || "_sector"}::${selectedDateId ?? ""}`
@@ -3465,7 +3488,7 @@ export function CheckoutTunnel({
           setHighlightContinue(true)
           window.setTimeout(() => setHighlightContinue(false), 2400)
         },
-        sectorSummaries: seatingSectorSummaries.map((row) => ({
+        sectorSummaries: (seatingSectorSummaries ?? []).map((row) => ({
           sectorId: row.sectorId,
           sectorName: row.sectorName,
           available: row.available,

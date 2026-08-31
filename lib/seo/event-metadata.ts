@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 
 import { resolveTicketCommerceType } from "@/lib/events/ticket-commerce-type"
+import { calculateDisplayPrice } from "@/lib/pricing/display-price"
 import { formatEventDay } from "@/lib/format"
 import { publicEventUrl, toArgentinaIso8601 } from "@/lib/seo/site"
 
@@ -250,6 +251,10 @@ export function eventSeoFromDetails(event: {
   organizerBio?: string | null
   organizerAvatarUrl?: string | null
   lineup?: { artists?: EventSeoPerformer[] } | null
+  serviceChargeRate?: number
+  platformFixedFee?: number
+  absorbFees?: boolean
+  isSponsoredByTokePass?: boolean
   venue?: {
     name: string
     location: string
@@ -299,7 +304,14 @@ export function eventSeoFromDetails(event: {
       (sum, tier) => sum + Math.max(0, tier.available ?? 0),
       0,
     ),
-    prices: admissions.map((tier) => Number(tier.price)),
+    prices: admissions.map((tier) =>
+      calculateDisplayPrice(
+        tier.price,
+        event.isSponsoredByTokePass ? 0 : event.serviceChargeRate,
+        event.absorbFees === true,
+        event.isSponsoredByTokePass ? 0 : event.platformFixedFee,
+      ),
+    ),
     organizer: organizerName
       ? {
           name: organizerName,

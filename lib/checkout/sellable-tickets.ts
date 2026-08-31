@@ -1,5 +1,5 @@
 import { isValidPublicPrice } from "@/lib/checkout/public-price"
-import { customerFacingUnitPrice } from "@/lib/pricing/absorb-fee-split"
+import { calculateDisplayPrice } from "@/lib/pricing/display-price"
 import {
   resolveTicketCommerceType,
   type TicketCommerceSource,
@@ -137,7 +137,12 @@ export function startingPriceFromSellable(
 ): number | null {
   const prices = sellablePublicTickets(tickets, now).map((ticket) =>
     feeRule
-      ? customerFacingUnitPrice(ticket.price, feeRule)
+      ? calculateDisplayPrice(
+          ticket.price,
+          feeRule.rate,
+          feeRule.absorbFees,
+          feeRule.fixedFee,
+        )
       : Number(ticket.price),
   )
   if (prices.length === 0) return null

@@ -1,4 +1,5 @@
 import { splitAbsorbFee } from "@/lib/pricing/absorb-fee-split"
+import { calculateDisplayPrice } from "@/lib/pricing/display-price"
 import { isMapDraftTicket } from "@/lib/events/draft-seating-map-v2"
 import {
   draftNumberValue,
@@ -218,7 +219,10 @@ export function isDraftLaunchReady(values: DraftLaunchValues): boolean {
   return isEventDraftPublishable(values)
 }
 
-export function draftLaunchPreview(values: DraftLaunchValues): DraftLaunchPreview {
+export function draftLaunchPreview(
+  values: DraftLaunchValues,
+  displayFee?: { rate?: unknown; fixedFee?: unknown },
+): DraftLaunchPreview {
   const days = resolveDraftSchedule(values)
   const name =
     typeof values.basicInfo?.name === "string" ? values.basicInfo.name.trim() : ""
@@ -233,13 +237,22 @@ export function draftLaunchPreview(values: DraftLaunchValues): DraftLaunchPrevie
       : "")
   const flyer = typeof values.flyerUrl === "string" ? values.flyerUrl.trim() : ""
   const banner = typeof values.bannerUrl === "string" ? values.bannerUrl.trim() : ""
+  const baseMin = cheapestDraftTicketPrice(values.tickets, values)
 
   return {
     name: name || "Sin título",
     startDate: days[0]?.startDate.trim() ?? "",
     imageUrl: flyer || banner,
     locationName: locationName || "Ubicación pendiente",
-    minPrice: cheapestDraftTicketPrice(values.tickets, values),
+    minPrice:
+      baseMin == null
+        ? null
+        : calculateDisplayPrice(
+            baseMin,
+            displayFee?.rate ?? 0,
+            values.settings?.absorbFees === true,
+            displayFee?.fixedFee,
+          ),
   }
 }
 

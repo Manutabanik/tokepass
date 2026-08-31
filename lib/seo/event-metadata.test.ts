@@ -202,6 +202,23 @@ describe("eventSeoFromDetails", () => {
     assert.deepEqual(seo.prices, [18000])
     assert.equal(seo.ticketsLeft, 0)
   })
+
+  it("publishes the all-in offer price when the buyer pays the fee", () => {
+    const seo = eventSeoFromDetails({
+      id: "11111111-1111-4111-8111-111111111111",
+      title: "Luna en el Anfiteatro",
+      description: "Show en vivo.",
+      date: "2026-09-20T22:00:00.000Z",
+      endsAt: "2026-09-21T02:00:00.000Z",
+      location: "Jachal, San Juan",
+      imageUrl: null,
+      serviceChargeRate: 0.08,
+      platformFixedFee: 200,
+      absorbFees: false,
+      tiers: [{ price: 15000, available: 10, tier_type: "general" }],
+    })
+    assert.deepEqual(seo.prices, [16400])
+  })
 })
 
 describe("website json-ld", () => {

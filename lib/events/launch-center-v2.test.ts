@@ -161,6 +161,28 @@ describe("draftLaunchPreview", () => {
     assert.equal(preview.locationName, "Niceto")
     assert.equal(preview.minPrice, 9000)
   })
+
+  it("shows the all-in public price when the buyer pays the fee", () => {
+    const preview = draftLaunchPreview(
+      {
+        tickets: [{ price: 15000 }],
+        settings: { absorbFees: false },
+      },
+      { rate: 0.08, fixedFee: 200 },
+    )
+    assert.equal(preview.minPrice, 16400)
+  })
+
+  it("keeps the base price when the organizer absorbs the fee", () => {
+    const preview = draftLaunchPreview(
+      {
+        tickets: [{ price: 15000 }],
+        settings: { absorbFees: true },
+      },
+      { rate: 0.08, fixedFee: 200 },
+    )
+    assert.equal(preview.minPrice, 15000)
+  })
 })
 
 describe("draftLaunchSubmitLabel", () => {

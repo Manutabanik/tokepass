@@ -49,6 +49,7 @@ import {
   type CheckoutIdentityMode,
 } from "@/lib/checkout/identity"
 import type { CheckoutFlowStep } from "@/components/public/checkout-stepper"
+import { calculateDisplayPrice } from "@/lib/pricing/display-price"
 import { fallbackServiceFeeRate } from "@/lib/pricing/event-fees"
 import { useStorefrontSeatStore } from "@/lib/stores/storefront-seat-store"
 
@@ -1155,7 +1156,13 @@ export function useCartLineUnitMoney(ticketPrice: number): CartLineMoney {
 }
 
 export function useCustomerFacingUnitPrice(ticketPrice: number): number {
-  return useCartLineUnitMoney(ticketPrice).customerTotal
+  const rule = useCartServiceFeeRule()
+  return calculateDisplayPrice(
+    ticketPrice,
+    rule.rate,
+    rule.absorbFees,
+    rule.fixedFee,
+  )
 }
 
 export function useActiveCheckoutSelection(eventId: string) {

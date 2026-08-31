@@ -7,6 +7,7 @@ import type { FieldErrors } from "react-hook-form"
 import type { ValidatedPromo } from "@/app/actions/coupons"
 import type { CheckoutPromoterPreview } from "@/app/actions/promoters"
 import { CheckoutCartBottomSheet } from "@/components/checkout/checkout-cart-bottom-sheet"
+import { CheckoutServiceFeeNotice } from "@/components/checkout/checkout-service-fee-notice"
 import { CheckoutBuyerFields } from "@/components/public/checkout-buyer-fields"
 import { CheckoutPromoterCodeInput } from "@/components/public/checkout-promoter-code-input"
 import {
@@ -286,6 +287,7 @@ function PaymentOrderSummary({
           className="shrink-0 text-xl font-black text-card-foreground"
         />
       </div>
+      <CheckoutServiceFeeNotice className="text-left" />
       <TokepassGuaranteeBadge variant="full" isOnline={isOnline} />
 
       <CheckoutCartBottomSheet

@@ -79,13 +79,17 @@ export function EventEditorV2LaunchStep({
     hasMap,
     seatingMaps,
     seatingMap,
+    settings: { absorbFees },
   }
   const samplePrice = cheapestDraftTicketPrice(tickets, launchValues)
   const sale =
     samplePrice == null
       ? null
       : simulateDraftSale(samplePrice, absorbFees, platformFeeRate)
-  const preview = draftLaunchPreview(launchValues)
+  const preview = draftLaunchPreview(launchValues, {
+    rate: platformFeeRate,
+    fixedFee: fee.isSponsoredByTokePass ? 0 : fee.platformFixedFee,
+  })
   const checks = draftLaunchChecklist(launchValues)
 
   return (
@@ -129,6 +133,7 @@ export function EventEditorV2LaunchStep({
         <Controller
           name="settings.absorbFees"
           control={control}
+          shouldUnregister={false}
           render={({ field }) => (
             <div className="flex items-start justify-between gap-4 rounded-xl border border-border/60 px-3 py-3">
               <div className="min-w-0">
@@ -152,15 +157,20 @@ export function EventEditorV2LaunchStep({
                   field.onChange(checked)
                   setSavingAbsorb(true)
                   onAbsorbHold?.(true)
-                  void updateEventAbsorbFees(eventId, checked).then(
-                    (result) => {
-                      setSavingAbsorb(false)
-                      onAbsorbHold?.(false)
+                  void updateEventAbsorbFees(eventId, checked)
+                    .then((result) => {
                       if (result.success) return
                       field.onChange(previous)
                       toast.error(result.error)
-                    },
-                  )
+                    })
+                    .catch(() => {
+                      field.onChange(previous)
+                      toast.error("No se pudo actualizar la comisión.")
+                    })
+                    .finally(() => {
+                      setSavingAbsorb(false)
+                      onAbsorbHold?.(false)
+                    })
                 }}
                 className="mt-0.5 shrink-0 data-checked:bg-emerald-500"
                 aria-label="Absorber cargos"
