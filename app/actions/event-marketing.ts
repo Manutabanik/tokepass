@@ -184,6 +184,17 @@ export async function getPurchaseAnalyticsForOrder(
   const clean = orderId?.trim()
   if (!clean) return null
 
+  try {
+    return await loadPurchaseAnalyticsForOrder(clean)
+  } catch (error) {
+    console.error("[getPurchaseAnalyticsForOrder]", error)
+    return null
+  }
+}
+
+async function loadPurchaseAnalyticsForOrder(
+  clean: string,
+): Promise<PurchaseAnalyticsPayload | null> {
   const supabase = await createClient()
   const {
     data: { user },

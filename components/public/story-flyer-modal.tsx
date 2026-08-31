@@ -632,14 +632,14 @@ export function StoryFlyerSuccessCard({ data }: { data: StoryFlyerData }) {
             Contalo en Historias
           </p>
           <h2 className="mt-1 text-lg font-black tracking-tight text-white">
-            Presumí que vas al evento
+          COMPARTÍ LA NOTICIA
           </h2>
           <p className="mt-1.5 text-sm leading-6 text-zinc-400">
-            Historia 9:16 estilo Wrapped: elegí fondo, frase y compartí.
+          Creá un póster personalizado para tus redes y avisale a tus amigos que vas a estar ahí. (100% seguro, sin mostrar tus datos de compra).
           </p>
           <StoryFlyerTrigger
             data={data}
-            label="Subir mi entrada a Historias"
+            label="Crear historia para redes"
             icon={<ImagePlus className="size-4 shrink-0" aria-hidden />}
             variant="primary"
             className="mt-4 w-full rounded-full"

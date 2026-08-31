@@ -4,6 +4,7 @@ import { useEffect } from "react"
 
 import { getMyTickets } from "@/app/actions/tickets"
 import { saveTicketsOffline } from "@/lib/offline-store"
+import { shouldPrecacheCheckoutWallet } from "@/lib/pwa/checkout-wallet-precache"
 import { createClient } from "@/lib/supabase/client"
 
 /**
@@ -15,6 +16,8 @@ export function CheckoutWalletPrecache() {
     let cancelled = false
 
     void (async () => {
+      if (!shouldPrecacheCheckoutWallet(window.location.search)) return
+
       const supabase = createClient()
       const {
         data: { user },
@@ -30,7 +33,7 @@ export function CheckoutWalletPrecache() {
             return
           }
         } catch {
-          // webhook puede no haber emitido tickets aún
+          // getMyTickets is fail-closed; keep retrying only for empty webhook lag
         }
         await new Promise((resolve) => setTimeout(resolve, 1500))
       }

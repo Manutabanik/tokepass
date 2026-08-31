@@ -406,14 +406,7 @@ export function EventStorefront({
       undefined,
       buyerFeeRule,
     )
-  }, [
-    admissionTickets,
-    buyerFeeRule.absorbFees,
-    buyerFeeRule.fixedFee,
-    buyerFeeRule.rate,
-    selectedDate,
-    startingPrice,
-  ])
+  }, [admissionTickets, buyerFeeRule, selectedDate, startingPrice])
 
   function renderPurchaseAside() {
     const dateLabel = [

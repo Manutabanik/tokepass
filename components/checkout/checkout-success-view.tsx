@@ -152,8 +152,8 @@ export function CheckoutSuccessView({
               : purchaseAnalytics.value
           }
           ticketIds={
-            fulfillment.tickets.length > 0
-              ? fulfillment.tickets.map((ticket) => ticket.id)
+            (fulfillment.tickets ?? []).length > 0
+              ? (fulfillment.tickets ?? []).map((ticket) => ticket.id)
               : purchaseAnalytics.ticketIds
           }
         />

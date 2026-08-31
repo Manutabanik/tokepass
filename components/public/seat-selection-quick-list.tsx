@@ -31,7 +31,8 @@ export function SeatSelectionQuickList({
   onTogglePlace: (placeId: string) => void
   onAssignZoneQuantity: (sectorId: string, quantity: number) => void
 }) {
-  if (sectors.length === 0) {
+  const catalog = sectors ?? []
+  if (catalog.length === 0) {
     return (
       <p className="px-1 py-10 text-center text-sm text-muted-foreground">
         No hay lugares configurados en el mapa.
@@ -40,9 +41,9 @@ export function SeatSelectionQuickList({
   }
 
   const openId =
-    (focusedSectorId && sectors.some((sector) => sector.id === focusedSectorId)
+    (focusedSectorId && catalog.some((sector) => sector.id === focusedSectorId)
       ? focusedSectorId
-      : sectors[0]?.id) ?? ""
+      : catalog[0]?.id) ?? ""
 
   return (
     <Accordion
@@ -51,7 +52,7 @@ export function SeatSelectionQuickList({
       defaultValue={openId ? [openId] : []}
       className="flex flex-col gap-2"
     >
-      {sectors.map((sector) => {
+      {catalog.map((sector) => {
         const gaQty = gaQuantityBySector[sector.id] ?? 0
         const gaMax = Math.max(0, gaMaxBySector[sector.id] ?? 0)
         return (
@@ -74,7 +75,7 @@ export function SeatSelectionQuickList({
                   <span className="block text-xs text-muted-foreground">
                     {sector.kind === "ga"
                       ? `Acceso general · ${formatTicketPrice(sector.price)}`
-                      : `${sector.options.length} ${sector.options.length === 1 ? "opción" : "opciones"} · ${formatTicketPrice(sector.price)}`}
+                      : `${(sector.options ?? []).length} ${(sector.options ?? []).length === 1 ? "opción" : "opciones"} · ${formatTicketPrice(sector.price)}`}
                   </span>
                 </span>
               </span>
@@ -90,7 +91,7 @@ export function SeatSelectionQuickList({
                 />
               ) : (
                 <div className="grid grid-cols-1 gap-2">
-                  {sector.options.map((option) => (
+                  {(sector.options ?? []).map((option) => (
                     <PlaceOptionButton
                       key={option.id}
                       option={option}

@@ -38,7 +38,7 @@ export function SocialShareButton({
         organizerName: undefined,
         organizerAvatarUrl: undefined,
       }}
-      label="Subir mi entrada a Historias"
+      label="Crear historia para redes"
       icon={<ImagePlus className="size-4 shrink-0" aria-hidden />}
       variant="primary"
       className={cn("w-full rounded-full sm:w-auto", className)}

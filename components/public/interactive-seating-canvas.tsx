@@ -455,7 +455,7 @@ export function InteractiveSeatingCanvas({
     wrapWidth,
   ])
 
-  function readSelectionIds() {
+  const readSelectionIds = useCallback(() => {
     const store = useStorefrontSeatStore.getState()
     return buyerSelectionUnitIds({
       selectedItems: store.selectedItems,
@@ -465,18 +465,18 @@ export function InteractiveSeatingCanvas({
       mapScheduleId,
       scheduleDayCount,
     })
-  }
+  }, [map, mapScheduleId, scheduleDayCount])
 
-  function syncSelectionPaint() {
+  const syncSelectionPaint = useCallback(() => {
     selectionIdsRef.current = readSelectionIds()
     paintBuyerMapSelection(
       svgRef.current,
       selectionIdsRef.current,
       useStorefrontSeatStore.getState().focusedMapIds,
     )
-  }
+  }, [readSelectionIds])
 
-  function armSelectionQuiet() {
+  const armSelectionQuiet = useCallback(() => {
     selectionQuietRef.current = true
     if (selectionQuietTimer.current != null) {
       window.clearTimeout(selectionQuietTimer.current)
@@ -485,7 +485,7 @@ export function InteractiveSeatingCanvas({
       selectionQuietRef.current = false
       selectionQuietTimer.current = null
     }, 160)
-  }
+  }, [])
 
   function rememberBuyerTap(event: React.PointerEvent) {
     const session = tapSessionRef.current
@@ -522,7 +522,7 @@ export function InteractiveSeatingCanvas({
 
   useLayoutEffect(() => {
     syncSelectionPaint()
-  }, [inventoryRev, viewMode, focusedZoneId, revealReady, map])
+  }, [inventoryRev, viewMode, focusedZoneId, revealReady, map, syncSelectionPaint])
 
   useEffect(() => {
     syncSelectionPaint()
@@ -539,14 +539,14 @@ export function InteractiveSeatingCanvas({
         applyContextCameraRef.current(state.focusedMapIds)
       }
     })
-  }, [map, mapScheduleId, scheduleDayCount])
+  }, [armSelectionQuiet, map, mapScheduleId, scheduleDayCount, syncSelectionPaint])
 
   useEffect(() => {
     return useCheckoutStore.subscribe((state, prev) => {
       if (state.lines === prev.lines) return
       syncSelectionPaint()
     })
-  }, [map, mapScheduleId, scheduleDayCount])
+  }, [map, mapScheduleId, scheduleDayCount, syncSelectionPaint])
 
   useEffect(() => {
     return () => {

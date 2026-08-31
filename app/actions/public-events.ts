@@ -1858,32 +1858,36 @@ export async function getEventSeatingUnitsForSector(
   if (!cleanEvent || !cleanSector) return []
   if (!(await allowPublicStockRead())) return []
 
-  const supabase = await createClient()
-  const args = {
-    p_event_id: cleanEvent,
-    p_sector_id: cleanSector,
-    ...(dateId ? { p_event_date_id: dateId } : {}),
-  }
-  const [rpc, scheduleDayCount] = await Promise.all([
-    supabase.rpc("get_event_seating_units_by_sector", args),
-    scheduleDayCountForEvent(supabase, cleanEvent),
-  ])
-  let { data, error } = rpc
-  if (error && /p_event_date_id|PGRST202/i.test(error.message)) {
-    const retry = await supabase.rpc("get_event_seating_units_by_sector", {
+  try {
+    const supabase = await createClient()
+    const args = {
       p_event_id: cleanEvent,
       p_sector_id: cleanSector,
-    })
-    data = retry.data
-    error = retry.error
-  }
+      ...(dateId ? { p_event_date_id: dateId } : {}),
+    }
+    const [rpc, scheduleDayCount] = await Promise.all([
+      supabase.rpc("get_event_seating_units_by_sector", args),
+      scheduleDayCountForEvent(supabase, cleanEvent),
+    ])
+    let { data, error } = rpc
+    if (error && /p_event_date_id|PGRST202/i.test(error.message)) {
+      const retry = await supabase.rpc("get_event_seating_units_by_sector", {
+        p_event_id: cleanEvent,
+        p_sector_id: cleanSector,
+      })
+      data = retry.data
+      error = retry.error
+    }
 
-  if (error || !data) return []
-  return filterSeatingUnitsForRequestedDay(
-    data.map(mapAvailabilityUnit),
-    dateId,
-    scheduleDayCount,
-  )
+    if (error || !data) return []
+    return filterSeatingUnitsForRequestedDay(
+      (data ?? []).map(mapAvailabilityUnit),
+      dateId,
+      scheduleDayCount,
+    )
+  } catch {
+    return []
+  }
 }
 
 /** Ocupación de todo el evento (teatros). Evitar en festivales de miles de unidades. */
@@ -1896,30 +1900,34 @@ export async function getEventSeatingAvailability(
   if (!cleanEvent) return []
   if (!(await allowPublicStockRead())) return []
 
-  const supabase = await createClient()
-  const args = {
-    p_event_id: cleanEvent,
-    ...(dateId ? { p_event_date_id: dateId } : {}),
-  }
-  const [rpc, scheduleDayCount] = await Promise.all([
-    supabase.rpc("get_event_seating_availability", args),
-    scheduleDayCountForEvent(supabase, cleanEvent),
-  ])
-  let { data, error } = rpc
-  if (error && /p_event_date_id|PGRST202/i.test(error.message)) {
-    const retry = await supabase.rpc("get_event_seating_availability", {
+  try {
+    const supabase = await createClient()
+    const args = {
       p_event_id: cleanEvent,
-    })
-    data = retry.data
-    error = retry.error
-  }
+      ...(dateId ? { p_event_date_id: dateId } : {}),
+    }
+    const [rpc, scheduleDayCount] = await Promise.all([
+      supabase.rpc("get_event_seating_availability", args),
+      scheduleDayCountForEvent(supabase, cleanEvent),
+    ])
+    let { data, error } = rpc
+    if (error && /p_event_date_id|PGRST202/i.test(error.message)) {
+      const retry = await supabase.rpc("get_event_seating_availability", {
+        p_event_id: cleanEvent,
+      })
+      data = retry.data
+      error = retry.error
+    }
 
-  if (error || !data) return []
-  return filterSeatingUnitsForRequestedDay(
-    data.map(mapAvailabilityUnit),
-    dateId,
-    scheduleDayCount,
-  )
+    if (error || !data) return []
+    return filterSeatingUnitsForRequestedDay(
+      (data ?? []).map(mapAvailabilityUnit),
+      dateId,
+      scheduleDayCount,
+    )
+  } catch {
+    return []
+  }
 }
 
 const RELATED_POOL_LIMIT = 48

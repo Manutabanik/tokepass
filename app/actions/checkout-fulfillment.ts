@@ -53,6 +53,18 @@ export async function getCheckoutOrderFulfillment(
   const clean = orderId.trim()
   if (!clean) return emptyFulfillment("")
 
+  try {
+    return await loadCheckoutOrderFulfillment(clean)
+  } catch (error) {
+    console.error("[getCheckoutOrderFulfillment]", error)
+    return emptyFulfillment(clean)
+  }
+}
+
+async function loadCheckoutOrderFulfillment(
+  clean: string,
+): Promise<CheckoutOrderFulfillment> {
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -178,12 +190,16 @@ async function resolveFulfillmentHoldExpiresAt(
 async function loadReservedUntilWithSession(
   orderId: string,
 ): Promise<string | null> {
-  const supabase = await createClient()
-  const { data: holdRows } = await supabase
-    .from("tickets")
-    .select("seating_unit:event_seating_units(reserved_until)")
-    .eq("order_id", orderId)
-  return earliestReservedUntil(holdRows)
+  try {
+    const supabase = await createClient()
+    const { data: holdRows } = await supabase
+      .from("tickets")
+      .select("seating_unit:event_seating_units(reserved_until)")
+      .eq("order_id", orderId)
+    return earliestReservedUntil(holdRows)
+  } catch {
+    return null
+  }
 }
 
 async function loadReservedUntilWithAdmin(
@@ -235,7 +251,12 @@ async function loadFulfillmentTickets(input: {
 
   const guestToken = input.guestToken?.trim() ?? ""
   if (!guestToken) return []
-  const wallet = await getGuestOrderWallet(guestToken)
-  if (!wallet || wallet.orderId !== input.orderId) return []
-  return wallet.tickets
+  try {
+    const wallet = await getGuestOrderWallet(guestToken)
+    if (!wallet || wallet.orderId !== input.orderId) return []
+    return wallet.tickets
+  } catch (error) {
+    console.error("[loadFulfillmentTickets]", error)
+    return []
+  }
 }

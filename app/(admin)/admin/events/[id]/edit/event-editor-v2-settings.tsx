@@ -41,6 +41,7 @@ export function EventEditorV2SettingsStep({
     <Controller
       name="settings.isPublic"
       control={control}
+      shouldUnregister={false}
       render={({ field }) => {
         const isPublic = field.value !== false
         return (
@@ -68,15 +69,20 @@ export function EventEditorV2SettingsStep({
                     if (!isPublished) return
                     setSaving(true)
                     onPersistHold?.(true)
-                    void updateEventCatalogVisibility(eventId, option.value).then(
-                      (result) => {
-                        setSaving(false)
-                        onPersistHold?.(false)
+                    void updateEventCatalogVisibility(eventId, option.value)
+                      .then((result) => {
                         if (result.success) return
                         field.onChange(previous)
                         toast.error(result.error)
-                      },
-                    )
+                      })
+                      .catch(() => {
+                        field.onChange(previous)
+                        toast.error("No se pudo actualizar la visibilidad.")
+                      })
+                      .finally(() => {
+                        setSaving(false)
+                        onPersistHold?.(false)
+                      })
                   }}
                   className={cn(
                     "flex min-h-[4.5rem] items-start gap-3 rounded-xl border px-3 py-3 text-left transition-all duration-200",

@@ -4223,9 +4223,9 @@ export function InteractiveVenueMapEditor({
                   }}
                 />
               ) : null}
-              {renderMap.sectors.map((sector) => (
+              {(renderMap.sectors ?? []).map((sector) => (
                 <g key={sector.id}>
-                  {sector.seats.map((seat) => {
+                  {(sector.seats ?? []).map((seat) => {
                     const key = seatKey(sector.id, seat.id)
                     if (liveSeatKeys.has(key)) return null
                     const active =
@@ -5516,11 +5516,11 @@ export function InteractiveVenueMapEditor({
           ) : selection?.kind === "label" ? (
             <Field label="Texto de nivel">
               <Input
-                value={map.labels.find((item) => item.id === selection.id)?.text ?? ""}
+                value={(map.labels ?? []).find((item) => item.id === selection.id)?.text ?? ""}
                 onChange={(event) =>
                   commit({
                     ...map,
-                    labels: map.labels.map((item) =>
+                    labels: (map.labels ?? []).map((item) =>
                       item.id === selection.id
                         ? { ...item, text: event.target.value.toUpperCase() }
                         : item,

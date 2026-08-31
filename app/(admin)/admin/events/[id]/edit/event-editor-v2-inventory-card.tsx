@@ -39,6 +39,13 @@ import {
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
 
+function useKeepDraftField() {
+  const { register } = useFormContext<EventDraftV2>()
+  const keepField: UseFormRegister<EventDraftV2> = (fieldName, options) =>
+    register(fieldName, { ...options, shouldUnregister: false })
+  return keepField
+}
+
 export function DraftInventoryItemFields({
   name,
   index,
@@ -53,6 +60,8 @@ export function DraftInventoryItemFields({
     setValue,
     formState: { errors },
   } = useFormContext<EventDraftV2>()
+  const keepField: typeof register = (fieldName, options) =>
+    register(fieldName, { ...options, shouldUnregister: false })
   const schedule = useWatch({ control, name: "schedule" }) ?? []
   const slotId = useWatch({ control, name: `${name}.${index}.slotId` })
   const validDayIds =
@@ -140,11 +149,11 @@ export function DraftInventoryItemFields({
 
   return (
     <div className="space-y-4">
-      <input type="hidden" {...register(`${name}.${index}.id`)} />
-      <input type="hidden" {...register(`${name}.${index}.source`)} />
-      <input type="hidden" {...register(`${name}.${index}.sectorId`)} />
-      <input type="hidden" {...register(`${name}.${index}.layoutType`)} />
-      <input type="hidden" {...register(`${name}.${index}.slotId`)} />
+      <input type="hidden" {...keepField(`${name}.${index}.id`)} />
+      <input type="hidden" {...keepField(`${name}.${index}.source`)} />
+      <input type="hidden" {...keepField(`${name}.${index}.sectorId`)} />
+      <input type="hidden" {...keepField(`${name}.${index}.layoutType`)} />
+      <input type="hidden" {...keepField(`${name}.${index}.slotId`)} />
 
       <div className="grid grid-cols-1 gap-3">
         <div className="grid gap-1.5">
@@ -155,7 +164,7 @@ export function DraftInventoryItemFields({
             id={`event-v2-${name}-${index}-name`}
             className={DRAFT_FIELD_CLASS}
             placeholder={name === "tickets" ? "General" : "Cerveza"}
-            {...register(`${name}.${index}.name`)}
+            {...keepField(`${name}.${index}.name`)}
           />
           <DraftFieldError message={itemErrors?.name?.message} />
         </div>
@@ -166,7 +175,7 @@ export function DraftInventoryItemFields({
           <select
             id={`event-v2-${name}-${index}-ticketType`}
             className={DRAFT_FIELD_CLASS}
-            {...register(`${name}.${index}.ticketType`)}
+            {...keepField(`${name}.${index}.ticketType`)}
           >
             {TICKET_COMMERCE_TYPES.map((value) => (
               <option key={value} value={value}>
@@ -179,13 +188,13 @@ export function DraftInventoryItemFields({
           <>
             <input
               type="hidden"
-              {...register(`${name}.${index}.price`, {
+              {...keepField(`${name}.${index}.price`, {
                 setValueAs: draftNumberValue,
               })}
             />
             <input
               type="hidden"
-              {...register(`${name}.${index}.stock`, {
+              {...keepField(`${name}.${index}.stock`, {
                 setValueAs: draftNumberValue,
               })}
             />
@@ -206,7 +215,7 @@ export function DraftInventoryItemFields({
                 step={1}
                 inputMode="numeric"
                 className={DRAFT_FIELD_CLASS}
-                {...register(`${name}.${index}.price`, {
+                {...keepField(`${name}.${index}.price`, {
                   setValueAs: draftNumberValue,
                 })}
               />
@@ -227,7 +236,7 @@ export function DraftInventoryItemFields({
                 step={1}
                 inputMode="numeric"
                 className={DRAFT_FIELD_CLASS}
-                {...register(`${name}.${index}.stock`, {
+                {...keepField(`${name}.${index}.stock`, {
                   setValueAs: draftNumberValue,
                 })}
               />
@@ -242,7 +251,6 @@ export function DraftInventoryItemFields({
           name={name}
           index={index}
           rows={dayRows}
-          register={register}
           onRateChange={syncHeadlineFromDayRates}
         />
       ) : null}
@@ -259,7 +267,7 @@ export function DraftInventoryItemFields({
           rows={2}
           className={DRAFT_TEXTAREA_CLASS}
           placeholder="Qué incluye o cómo se usa."
-          {...register(`${name}.${index}.description`)}
+          {...keepField(`${name}.${index}.description`)}
         />
         <DraftHint>Una línea alcanza. El comprador lo ve en el checkout.</DraftHint>
         <DraftFieldError message={itemErrors?.description?.message} />
@@ -357,7 +365,7 @@ export function DraftInventoryItemFields({
               id={`event-v2-${name}-${index}-sale-start`}
               type="datetime-local"
               className={DRAFT_FIELD_CLASS}
-              {...register(`${name}.${index}.startDate`)}
+              {...keepField(`${name}.${index}.startDate`)}
             />
             <DraftHint>Vacío = se vende apenas publiques.</DraftHint>
           </div>
@@ -372,7 +380,7 @@ export function DraftInventoryItemFields({
               id={`event-v2-${name}-${index}-sale-end`}
               type="datetime-local"
               className={DRAFT_FIELD_CLASS}
-              {...register(`${name}.${index}.endDate`)}
+              {...keepField(`${name}.${index}.endDate`)}
             />
             <DraftHint>Vacío = hasta la fecha del evento.</DraftHint>
           </div>
@@ -387,7 +395,7 @@ export function DraftInventoryItemFields({
               step={1}
               inputMode="numeric"
               className={DRAFT_FIELD_CLASS}
-              {...register(`${name}.${index}.minOrder`, {
+              {...keepField(`${name}.${index}.minOrder`, {
                 setValueAs: (value) => draftNumberValue(value, 1),
               })}
             />
@@ -404,7 +412,7 @@ export function DraftInventoryItemFields({
               step={1}
               inputMode="numeric"
               className={DRAFT_FIELD_CLASS}
-              {...register(`${name}.${index}.maxOrder`, {
+              {...keepField(`${name}.${index}.maxOrder`, {
                 setValueAs: (value) => draftNumberValue(value, 10),
               })}
             />
@@ -421,16 +429,15 @@ function DraftDayRatePriceField({
   index,
   rowIndex,
   dayId,
-  register,
   onRateChange,
 }: {
   name: "tickets" | "extras"
   index: number
   rowIndex: number
   dayId: string
-  register: UseFormRegister<EventDraftV2>
   onRateChange: () => void
 }) {
+  const keepField = useKeepDraftField()
   const { control } = useFormContext<EventDraftV2>()
   const price = useWatch({
     control,
@@ -453,7 +460,7 @@ function DraftDayRatePriceField({
         inputMode="numeric"
         className={DRAFT_FIELD_CLASS}
         data-field={`${name}.${index}.dayRates.${rowIndex}.price`}
-        {...register(`${name}.${index}.dayRates.${rowIndex}.price`, {
+        {...keepField(`${name}.${index}.dayRates.${rowIndex}.price`, {
           setValueAs: draftNumberValue,
           onChange: onRateChange,
         })}
@@ -467,15 +474,14 @@ function DraftDayRateFields({
   name,
   index,
   rows,
-  register,
   onRateChange,
 }: {
   name: "tickets" | "extras"
   index: number
   rows: Array<{ dayId: string; label: string }>
-  register: UseFormRegister<EventDraftV2>
   onRateChange: () => void
 }) {
+  const keepField = useKeepDraftField()
   return (
     <div className="grid gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
       <DraftFieldLabel>Precio y stock por día</DraftFieldLabel>
@@ -491,11 +497,11 @@ function DraftDayRateFields({
           >
             <input
               type="hidden"
-              {...register(`${name}.${index}.dayRates.${rowIndex}.dayId`)}
+              {...keepField(`${name}.${index}.dayRates.${rowIndex}.dayId`)}
             />
             <input
               type="hidden"
-              {...register(`${name}.${index}.dayRates.${rowIndex}.ticketId`)}
+              {...keepField(`${name}.${index}.dayRates.${rowIndex}.ticketId`)}
             />
             <p className="text-sm font-semibold text-slate-800 sm:pt-7 dark:text-zinc-100">
               {row.label}
@@ -505,7 +511,6 @@ function DraftDayRateFields({
               index={index}
               rowIndex={rowIndex}
               dayId={row.dayId}
-              register={register}
               onRateChange={onRateChange}
             />
             <div className="grid gap-1.5">
@@ -523,7 +528,7 @@ function DraftDayRateFields({
                 inputMode="numeric"
                 className={DRAFT_FIELD_CLASS}
                 data-field={`${name}.${index}.dayRates.${rowIndex}.stock`}
-                {...register(`${name}.${index}.dayRates.${rowIndex}.stock`, {
+                {...keepField(`${name}.${index}.dayRates.${rowIndex}.stock`, {
                   setValueAs: draftNumberValue,
                   onChange: onRateChange,
                 })}

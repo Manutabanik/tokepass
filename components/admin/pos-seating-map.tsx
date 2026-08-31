@@ -55,6 +55,7 @@ export function PosSeatingMap({
   onToggleSeat: (pick: PosSeatPick) => void
 }) {
   const [catalog, setCatalog] = useState<PosSeatingCatalog | null>(null)
+  const [catalogError, setCatalogError] = useState(false)
   const [selectedDateId, setSelectedDateId] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<{
     eventId: string
@@ -65,7 +66,7 @@ export function PosSeatingMap({
   const priceBySectorId = useMemo(
     () =>
       buildTierUnitPriceIndex(
-        event.tiers.map((tier) => ({
+        (event.tiers ?? []).map((tier) => ({
           id: tier.id,
           price: tier.price,
           seatingSectorId: tier.seatingSectorId,
@@ -78,17 +79,29 @@ export function PosSeatingMap({
   if (catalogEventId !== event.id) {
     setCatalogEventId(event.id)
     setCatalog(null)
+    setCatalogError(false)
     setSelectedDateId(null)
     setSnapshot(null)
   }
 
   useEffect(() => {
     let cancelled = false
-    void getPosSeatingCatalog(event.id).then((next) => {
-      if (cancelled || !next) return
-      setCatalog(next)
-      setSelectedDateId(next.days[0]?.id ?? null)
-    })
+    void getPosSeatingCatalog(event.id)
+      .then((next) => {
+        if (cancelled) return
+        if (!next) {
+          setCatalogError(true)
+          return
+        }
+        setCatalogError(false)
+        setCatalog(next)
+        setSelectedDateId(next.days[0]?.id ?? null)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setCatalogError(true)
+        toast.error("No se pudo cargar el plano de asientos.")
+      })
     return () => {
       cancelled = true
     }
@@ -121,7 +134,8 @@ export function PosSeatingMap({
     if (!catalog) return
     if (scheduleDayCount >= 2 && !selectedDateId) return
     let cancelled = false
-    void getEventSeatingAvailability(event.id, selectedDateId).then((units) => {
+    void getEventSeatingAvailability(event.id, selectedDateId)
+      .then((units) => {
       if (cancelled) return
       const scoped = seatingUnitsForOccupancyDay(units, {
         eventDateId: selectedDateId,
@@ -140,7 +154,7 @@ export function PosSeatingMap({
                   ),
                   occupancyFromSoldOutTicketTypes(
                     liveMap,
-                    soldOutTicketTypeIds(event.tiers),
+                    soldOutTicketTypeIds(event.tiers ?? []),
                   ),
                 ),
                 liveMap,
@@ -150,6 +164,15 @@ export function PosSeatingMap({
           : {},
       })
     })
+      .catch(() => {
+        if (cancelled) return
+        setSnapshot({
+          eventId: event.id,
+          dateId: selectedDateId,
+          occupancy: {},
+        })
+        toast.error("No se pudo actualizar la ocupación del mapa.")
+      })
     return () => {
       cancelled = true
     }
@@ -159,7 +182,7 @@ export function PosSeatingMap({
     snapshot?.eventId === event.id && snapshot.dateId === selectedDateId
       ? snapshot.occupancy
       : {}
-  const loading = !catalog || snapshot?.eventId !== event.id
+  const loading = !catalogError && (!catalog || snapshot?.eventId !== event.id)
 
   function resolvePick(
     seatId: string,
@@ -171,7 +194,7 @@ export function PosSeatingMap({
     const tierId = resolveTierIdForUniversalSector(
       sectorId,
       sectorName,
-      event.tiers.map((tier) => ({
+      (event.tiers ?? []).map((tier) => ({
         id: tier.id,
         name: tier.name,
         price: tier.price,
@@ -181,7 +204,7 @@ export function PosSeatingMap({
       })),
     )
     if (!tierId) return null
-    const tier = event.tiers.find((item) => item.id === tierId)
+    const tier = (event.tiers ?? []).find((item) => item.id === tierId)
     return {
       seatId,
       eventDateId: selectedDateId,
@@ -190,6 +213,14 @@ export function PosSeatingMap({
       sectorName,
       price: tier?.price ?? fallbackPrice,
     }
+  }
+
+  if (catalogError) {
+    return (
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+        No se pudo cargar el plano de asientos.
+      </div>
+    )
   }
 
   if (loading) {
@@ -219,9 +250,9 @@ export function PosSeatingMap({
 
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-muted/30">
-      {catalog && catalog.days.length >= 2 ? (
+      {catalog && (catalog.days ?? []).length >= 2 ? (
         <div className="absolute left-3 top-3 z-20 flex flex-wrap gap-1.5">
-          {catalog.days.map((day) => (
+          {(catalog.days ?? []).map((day) => (
             <button
               key={day.id}
               type="button"

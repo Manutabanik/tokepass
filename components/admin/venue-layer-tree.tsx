@@ -128,11 +128,11 @@ export function buildVenueLayerTree(map: InteractiveVenueMap): LayerNode[] {
   for (const zone of map.zones ?? []) {
     const children: LayerNode[] = []
 
-    for (const sector of map.sectors) {
+    for (const sector of map.sectors ?? []) {
       const belongs =
         sector.id === zone.id ||
         namesMatch(sector.name, zone.name) ||
-        sector.seats.some((seat) =>
+        (sector.seats ?? []).some((seat) =>
           seatBelongsToZone(
             {
               x: seat.x,
@@ -149,7 +149,7 @@ export function buildVenueLayerTree(map: InteractiveVenueMap): LayerNode[] {
         id: sector.id,
         label: sector.name.trim() || "Sector",
         selection: { kind: "sector", id: sector.id },
-        children: sector.seats.map((seat) => ({
+        children: (sector.seats ?? []).map((seat) => ({
           id: `${sector.id}::${seat.id}`,
           label: seatNodeLabel(seat),
           selection: { kind: "seats", ids: [`${sector.id}::${seat.id}`] },
@@ -170,8 +170,8 @@ export function buildVenueLayerTree(map: InteractiveVenueMap): LayerNode[] {
         label: elementLabel(element.type, element.customLabel || element.label),
         selection: { kind: "element", id: element.id },
         children:
-          element.seats.length > 0 && element.sellMode !== "group"
-            ? element.seats.map((seat) => ({
+          (element.seats ?? []).length > 0 && element.sellMode !== "group"
+            ? (element.seats ?? []).map((seat) => ({
                 id: `${element.id}::${seat.id}`,
                 label: seatNodeLabel(seat),
                 selection: { kind: "seats", ids: [`${element.id}::${seat.id}`] },
@@ -188,13 +188,13 @@ export function buildVenueLayerTree(map: InteractiveVenueMap): LayerNode[] {
     })
   }
 
-  for (const sector of map.sectors) {
+  for (const sector of map.sectors ?? []) {
     if (claimedSectors.has(sector.id)) continue
     nodes.push({
       id: sector.id,
       label: sector.name.trim() || "Sector",
       selection: { kind: "sector", id: sector.id },
-      children: sector.seats.map((seat) => ({
+      children: (sector.seats ?? []).map((seat) => ({
         id: `${sector.id}::${seat.id}`,
         label: seatNodeLabel(seat),
         selection: { kind: "seats", ids: [`${sector.id}::${seat.id}`] },
@@ -204,12 +204,12 @@ export function buildVenueLayerTree(map: InteractiveVenueMap): LayerNode[] {
 
   for (const element of map.elements ?? []) {
     if (claimedElements.has(element.id)) continue
-    if (element.seats.length > 0 && element.sellMode !== "group") {
+    if ((element.seats ?? []).length > 0 && element.sellMode !== "group") {
       nodes.push({
         id: element.id,
         label: elementLabel(element.type, element.customLabel || element.label),
         selection: { kind: "element", id: element.id },
-        children: element.seats.map((seat) => ({
+        children: (element.seats ?? []).map((seat) => ({
           id: `${element.id}::${seat.id}`,
           label: seatNodeLabel(seat),
           selection: { kind: "seats", ids: [`${element.id}::${seat.id}`] },

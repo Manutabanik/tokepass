@@ -312,14 +312,15 @@ export function EventEditorV2({
           </div>
 
           <section className="min-w-0">
-            {step === 1 ? (
-              <div className="animate-in fade-in duration-200">
-                <EventEditorV2InfoStep
-                  eventId={eventId}
-                  revealField={revealField}
-                />
-              </div>
-            ) : null}
+            <div
+              hidden={step !== 1}
+              className={step === 1 ? "animate-in fade-in duration-200" : undefined}
+            >
+              <EventEditorV2InfoStep
+                eventId={eventId}
+                revealField={revealField}
+              />
+            </div>
             <div
               hidden={step !== 2}
               className={step === 2 ? "animate-in fade-in duration-200" : undefined}
@@ -330,23 +331,24 @@ export function EventEditorV2({
                 active={step === 2}
               />
             </div>
-            {step === 3 ? (
-              <div className="animate-in fade-in duration-200">
-                <EventEditorV2LaunchStep
-                  eventId={eventId}
-                  isPublished={nowPublished}
-                  publishing={busy === "publish"}
-                  previewing={busy === "preview"}
-                  launchReady={launchReady}
-                  launchBlockedReason={launchBlockedReason}
-                  onPreview={() => void handlePreviewDraft()}
-                  onAbsorbHold={(hold) => {
-                    persistHoldRef.current = hold
-                    if (!hold) void persistDraft()
-                  }}
-                />
-              </div>
-            ) : null}
+            <div
+              hidden={step !== 3}
+              className={step === 3 ? "animate-in fade-in duration-200" : undefined}
+            >
+              <EventEditorV2LaunchStep
+                eventId={eventId}
+                isPublished={nowPublished}
+                publishing={busy === "publish"}
+                previewing={busy === "preview"}
+                launchReady={launchReady}
+                launchBlockedReason={launchBlockedReason}
+                onPreview={() => void handlePreviewDraft()}
+                onAbsorbHold={(hold) => {
+                  persistHoldRef.current = hold
+                  if (!hold) void persistDraft()
+                }}
+              />
+            </div>
 
             {saveStatus === "error" ? (
               <div className="mt-6 space-y-3">

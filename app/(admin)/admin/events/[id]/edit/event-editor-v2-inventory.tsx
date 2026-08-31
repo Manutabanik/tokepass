@@ -361,7 +361,7 @@ export function EventEditorV2InventoryStep({
       <Sheet
         open={active && editor != null}
         onOpenChange={(open) => {
-          if (!open && active) discardEditor()
+          if (!open && active) keepAndClose()
         }}
       >
         <SheetContent
@@ -464,7 +464,7 @@ function LineItemSummaryList({
   onEdit: (index: number) => void
   onRemove: (index: number) => void
 }) {
-  const visible = items
+  const visible = (items ?? [])
     .map((item, index) => ({ item, index }))
     .filter(
       ({ item }) =>
