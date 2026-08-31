@@ -82,6 +82,10 @@ import {
   resolveBuyerHoverFromTarget,
   type BuyerMapHoverItem,
 } from "@/components/public/seat-tooltip"
+import {
+  SeatPreviewOverlay,
+  type BuyerPlacePreview,
+} from "@/components/public/seat-preview-overlay"
 import { StorefrontSelectionCard } from "@/components/public/storefront-selection-card"
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
@@ -267,6 +271,7 @@ export function InteractiveSeatingCanvas({
   const [viewMode, setViewMode] = useState<MapLodMode>("macro")
   const [focusedZoneId, setFocusedZoneId] = useState<string | null>(null)
   const [revealedZoneId, setRevealedZoneId] = useState<string | null>(null)
+  const [previewSeat, setPreviewSeat] = useState<BuyerPlacePreview | null>(null)
   const storeScheduleId = useCheckoutStore((state) => state.selectedScheduleId)
   const activeScheduleId = eventDateIdProp?.trim() || storeScheduleId
   const mapScheduleId = asHoldEventDateId(activeScheduleId)
@@ -407,6 +412,18 @@ export function InteractiveSeatingCanvas({
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (!previewSeat) return
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.stopPropagation()
+        setPreviewSeat(null)
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [previewSeat])
 
   useEffect(() => {
     const node = wrapRef.current
@@ -904,6 +921,98 @@ export function InteractiveSeatingCanvas({
     return { ok: true as const, added: result.added }
   }
 
+  const confirmBuyerPick =
+    buyerChrome &&
+    !readOnly &&
+    !onPickSeat &&
+    !onPickElement &&
+    !posWorkstation
+
+  function panPreviewIntoView(focusId: string) {
+    const controls = transformRef.current
+    const node = document.getElementById(`venue-sel-${focusId}`)
+    if (!controls || !node) return
+    controls.zoomToElement(
+      node as unknown as HTMLElement,
+      zoom,
+      280,
+      "easeOut",
+    )
+  }
+
+  function openPlacePreview(preview: BuyerPlacePreview) {
+    markActivity()
+    setHoveredItem(null)
+    setPreviewSeat(preview)
+    window.requestAnimationFrame(() => panPreviewIntoView(preview.focusId))
+  }
+
+  function previewFromItem(
+    item: StorefrontSelectedItem,
+    options?: { increment?: boolean; focusId?: string },
+  ): BuyerPlacePreview {
+    const sectorName =
+      item.sectorName?.trim() || item.name.split(" · ")[0]?.trim() || "Sector"
+    const placeName =
+      canvasSeatLabel(item) ||
+      item.displayName?.trim() ||
+      item.name.trim() ||
+      sectorName
+    return {
+      sectorName,
+      placeName,
+      price: item.price,
+      selected: selectionIdsRef.current.has(item.id),
+      focusId: options?.focusId ?? item.id,
+      increment: Boolean(options?.increment),
+      item,
+    }
+  }
+
+  function requestPlacePreview(
+    item: StorefrontSelectedItem,
+    options?: { increment?: boolean; focusId?: string },
+  ) {
+    if (!confirmBuyerPick) return false
+    openPlacePreview(previewFromItem(item, options))
+    return true
+  }
+
+  function confirmPlacePreview() {
+    if (!previewSeat || pending) return
+    if (previewSeat.layoutSeat) {
+      armSelectionQuiet()
+      const result = toggleLayoutSeat(previewSeat.layoutSeat, maxSelectable)
+      if (!result.ok) {
+        toast.error(storefrontLimitMessage(result.reason))
+        return
+      }
+      syncSelectionPaint()
+      hapticSelectFeedback()
+      setPreviewSeat(null)
+      return
+    }
+    if (previewSeat.increment) {
+      armSelectionQuiet()
+      const result = useStorefrontSeatStore
+        .getState()
+        .incrementSelectedItem(
+          stampCanvasSelection(previewSeat.item),
+          maxSelectable,
+        )
+      if (!result.ok) {
+        toast.error(storefrontLimitMessage(result.reason))
+        return
+      }
+      syncSelectionPaint()
+      hapticSelectFeedback()
+      setPreviewSeat(null)
+      return
+    }
+    const result = applyToggle(previewSeat.item)
+    if (result.ok) setPreviewSeat(null)
+  }
+
   function selectGeneralZone(zone: VenueMapZone) {
     if (onSelectZone) {
       onSelectZone(zone)
@@ -911,6 +1020,14 @@ export function InteractiveSeatingCanvas({
     }
     const item = storefrontItemFromZone(zone, priceBySectorId)
     if (!item) return
+    if (
+      requestPlacePreview(item, {
+        increment: true,
+        focusId: zone.id,
+      })
+    ) {
+      return
+    }
     armSelectionQuiet()
     const result = useStorefrontSeatStore
       .getState()
@@ -1048,6 +1165,7 @@ export function InteractiveSeatingCanvas({
     if (tableElement && !onPickSeat) {
       const item = storefrontItemFromElement(tableElement, priceBySectorId, map)
       if (item) {
+        if (requestPlacePreview(item, { focusId: tableElement.id })) return
         markActivity()
         applyToggle(item)
         return
@@ -1094,9 +1212,7 @@ export function InteractiveSeatingCanvas({
         row: seat.row,
         number: seat.number,
       })
-    armSelectionQuiet()
-    const result = toggleLayoutSeat(
-      {
+    const layoutSeat = {
         id: seat.id,
         row: seat.row,
         number: seat.number,
@@ -1109,9 +1225,35 @@ export function InteractiveSeatingCanvas({
           asHoldEventDateId(
             useCheckoutStore.getState().selectedScheduleId,
           ) ?? undefined,
-      },
-      maxSelectable,
-    )
+    }
+    if (confirmBuyerPick) {
+      openPlacePreview({
+        sectorName: seat.sectorName?.trim() || "Sector",
+        placeName: seatLabel || `Asiento ${seat.number}`,
+        price,
+        selected: selectionIdsRef.current.has(seat.id),
+        focusId: seat.id,
+        increment: false,
+        item: {
+          id: seat.id,
+          name: seat.sectorName,
+          displayName: seatLabel,
+          type: "seat",
+          price,
+          capacity: 1,
+          sectorId: holdSectorId,
+          sectorName: seat.sectorName,
+          color: seat.color,
+          row: seat.row,
+          number: seat.number,
+          seatLabel,
+        },
+        layoutSeat,
+      })
+      return
+    }
+    armSelectionQuiet()
+    const result = toggleLayoutSeat(layoutSeat, maxSelectable)
     if (!result.ok) {
       toast.error(storefrontLimitMessage(result.reason))
       return
@@ -1172,6 +1314,7 @@ export function InteractiveSeatingCanvas({
             isMappedSelection: true,
           }
       if (item) {
+        if (requestPlacePreview(item, { focusId: seatId ?? live.id })) return
         markActivity()
         applyToggle(item)
         return
@@ -1213,6 +1356,9 @@ export function InteractiveSeatingCanvas({
     if (!item) return
     markActivity()
     if (live.type === "standing_zone") {
+      if (requestPlacePreview(item, { increment: true, focusId: live.id })) {
+        return
+      }
       armSelectionQuiet()
       const result = useStorefrontSeatStore
         .getState()
@@ -1225,6 +1371,7 @@ export function InteractiveSeatingCanvas({
       hapticSelectFeedback()
       return
     }
+    if (requestPlacePreview(item, { focusId: live.id })) return
     applyToggle(item)
   }
 
@@ -1566,8 +1713,16 @@ export function InteractiveSeatingCanvas({
           />
         </div>
       ) : null}
-      {!silentHover && hoveredItem ? (
+      {!silentHover && hoveredItem && !previewSeat ? (
         <SeatTooltip item={hoveredItem} x={hoverPos.x} y={hoverPos.y} />
+      ) : null}
+      {previewSeat ? (
+        <SeatPreviewOverlay
+          preview={previewSeat}
+          pending={pending}
+          onCancel={() => setPreviewSeat(null)}
+          onConfirm={confirmPlacePreview}
+        />
       ) : null}
       {buyerChrome && !readOnly && canPaintInventory && !hideZoomDock ? (
         <BuyerMapZoomDock
@@ -1579,7 +1734,7 @@ export function InteractiveSeatingCanvas({
           showReset={zoomDockShowReset}
         />
       ) : null}
-      {lodEnabled && viewMode === "micro" && !readOnly ? (
+      {lodEnabled && viewMode === "micro" && !readOnly && !previewSeat ? (
         <button
           type="button"
           onClick={exitLodView}
