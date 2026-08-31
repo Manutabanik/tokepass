@@ -76,6 +76,7 @@ import {
   type EventFeeConfig,
 } from "@/lib/pricing/event-fees"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { organizerTableClient } from "@/lib/supabase/organizer-table-client"
 import { createClient } from "@/lib/supabase/server"
 import {
   eventPublishSchema,
@@ -180,7 +181,8 @@ export async function getEventDraftV2(
     "id, organizer_id, status, draft_state, title, date, ends_at, location, description, flyer_url, image_url, social_share_image_url, visibility, refund_policy, province, department, delivery_mode, venue_map, venue_id, schedule_days, promo_video_url, gallery_urls, restrictions, what_to_bring, lineup, platform_fee_percentage, platform_fixed_fee, absorb_fees, max_free_tickets, is_sponsored_by_tokepass"
   const draftEventSelectLegacy =
     "id, organizer_id, status, draft_state, title, date, ends_at, location, description, flyer_url, image_url, social_share_image_url, visibility, refund_policy, province, department, delivery_mode, venue_map, venue_id, schedule_days, promo_video_url, gallery_urls, restrictions, what_to_bring, lineup, platform_fee_percentage, platform_fixed_fee, max_free_tickets, is_sponsored_by_tokepass"
-  let eventQuery = await gate.supabase
+  const { table } = await organizerTableClient()
+  let eventQuery = await table
     .from("events")
     .select(draftEventSelect)
     .eq("id", id)
@@ -191,7 +193,7 @@ export async function getEventDraftV2(
       eventQuery.error.message,
     )
   ) {
-    eventQuery = await gate.supabase
+    eventQuery = await table
       .from("events")
       .select(draftEventSelectCore)
       .eq("id", id)
@@ -201,7 +203,7 @@ export async function getEventDraftV2(
     eventQuery.error &&
     /absorb_fees|schema cache|PGRST204|42703/i.test(eventQuery.error.message)
   ) {
-    eventQuery = await gate.supabase
+    eventQuery = await table
       .from("events")
       .select(draftEventSelectLegacy)
       .eq("id", id)

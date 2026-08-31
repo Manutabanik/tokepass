@@ -2,7 +2,7 @@ import "server-only"
 
 import { assertEventOpsAccess } from "@/lib/event-ops-access"
 import { readValidDoorGuestSession } from "@/lib/scanner/door-guest-session"
-import { createAdminClient } from "@/lib/supabase/admin"
+import { createAdminClient, tryCreateAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 export type ScannerDb =
@@ -38,7 +38,7 @@ export async function resolveScannerActor(
       mode: "account",
       userId: account.userId,
       isOrganizer: account.isOrganizer,
-      db: await createClient(),
+      db: tryCreateAdminClient() ?? (await createClient()),
       validatedBy: account.userId,
     }
   }

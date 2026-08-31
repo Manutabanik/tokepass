@@ -14,7 +14,12 @@ export default async function AdminEventsPage({
   searchParams: Promise<{ boost?: string }>
 }) {
   const { boost } = await searchParams
-  const events = await getOrganizerEvents()
+  let events: Awaited<ReturnType<typeof getOrganizerEvents>> = []
+  try {
+    events = await getOrganizerEvents()
+  } catch {
+    events = []
+  }
 
   const boostHint =
     boost === "success" || boost === "pending" || boost === "failure"

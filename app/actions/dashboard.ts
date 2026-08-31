@@ -1,5 +1,6 @@
 "use server"
 
+import { logger } from "@/lib/logger"
 import { createClient } from "@/lib/supabase/server"
 import {
   filterPaidRecentSales,
@@ -105,7 +106,12 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   })
 
   if (error) {
-    throw new Error(`No se pudieron cargar las métricas: ${error.message}`)
+    logger.error({
+      context: "getDashboardMetrics",
+      message: "organizer_metrics_rpc_failed",
+      error,
+    })
+    return EMPTY_METRICS
   }
 
   if (data == null) {

@@ -5,7 +5,7 @@ import {
   eventDashboardMetricsFromRpc,
   type EventDashboardMetrics,
 } from "@/lib/finance/event-dashboard-metrics"
-import { createAdminClient } from "@/lib/supabase/admin"
+import { organizerTableClient } from "@/lib/supabase/organizer-table-client"
 import { createClient } from "@/lib/supabase/server"
 
 const EMPTY: EventDashboardMetrics = {
@@ -33,7 +33,8 @@ export async function getEventDashboardMetrics(
     .eq("id", user.id)
     .maybeSingle()
 
-  const owned = await supabase
+  const { table } = await organizerTableClient()
+  const owned = await table
     .from("events")
     .select("id, organizer_id")
     .eq("id", clean)
@@ -43,7 +44,7 @@ export async function getEventDashboardMetrics(
   const isSuper = profile?.role === "super_admin"
   if (!isOwner && !isSuper) return EMPTY
 
-  const reader = isOwner ? supabase : createAdminClient()
+  const reader = table
   const rpc = await reader.rpc("get_event_dashboard_metrics", {
     p_event_id: clean,
   })

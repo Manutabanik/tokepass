@@ -176,14 +176,23 @@ export async function getScannerEvents(): Promise<ScannerEventOption[]> {
   } = await supabase.auth.getUser()
 
   if (user) {
-    const rows = await listOperableEvents({ roles: ["door_staff"] })
-    return rows.map((event) => ({
-      id: event.id,
-      title: event.title,
-      date: event.date,
-      status: event.status,
-      qrType: event.qr_type === "static" ? "static" : "dynamic",
-    }))
+    try {
+      const rows = await listOperableEvents({ roles: ["door_staff"] })
+      return rows.map((event) => ({
+        id: event.id,
+        title: event.title,
+        date: event.date,
+        status: event.status,
+        qrType: event.qr_type === "static" ? "static" : "dynamic",
+      }))
+    } catch (error) {
+      logger.error({
+        context: "getScannerEvents",
+        message: "list_operable_events_failed",
+        error,
+      })
+      return []
+    }
   }
 
   const guest = await readValidDoorGuestSession()

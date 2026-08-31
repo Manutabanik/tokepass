@@ -1,5 +1,10 @@
 "use server"
 
+import { logger } from "@/lib/logger"
+import {
+  isEventsRlsRecursion,
+  organizerTableClient,
+} from "@/lib/supabase/organizer-table-client"
 import { createClient } from "@/lib/supabase/server"
 import type { EventStaffRole } from "@/types/auth"
 
@@ -27,7 +32,8 @@ export async function assertEventOpsAccess(
     return { ok: true, userId: user.id, isOrganizer: true }
   }
 
-  const { data: event } = await supabase
+  const { table } = await organizerTableClient()
+  const { data: event } = await table
     .from("events")
     .select("organizer_id")
     .eq("id", eventId)
@@ -103,6 +109,14 @@ async function queryOperableEvents(
     const { data, error } = await run(operableEventsSelect(tierSelect))
     if (!error) return (data ?? []) as OperableEventRow[]
     lastError = error
+    if (isEventsRlsRecursion(error.message)) {
+      logger.error({
+        context: "listOperableEvents",
+        message: "events_rls_recursion",
+        error,
+      })
+      return []
+    }
     if (!isMissingOperableTierColumn(error.message)) {
       throw new Error(error.message)
     }
@@ -126,8 +140,9 @@ export async function listOperableEvents(input: {
     .maybeSingle()
 
   if (profile?.role === "admin" || profile?.role === "super_admin") {
+    const { table } = await organizerTableClient()
     return queryOperableEvents((selectCols) => {
-      let query = supabase
+      let query = table
         .from("events")
         .select(selectCols)
         .in("status", ["published", "draft"])
@@ -154,8 +169,9 @@ export async function listOperableEvents(input: {
   ]
   if (eventIds.length === 0) return []
 
+  const { table } = await organizerTableClient()
   return queryOperableEvents((selectCols) =>
-    supabase
+    table
       .from("events")
       .select(selectCols)
       .in("id", eventIds)

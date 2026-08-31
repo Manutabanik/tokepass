@@ -26,6 +26,7 @@ import { EventBoosterCard } from "@/components/admin/booster/event-booster-card"
 import { DoorAccessPinCard } from "@/components/admin/door-access-pin-card"
 import { EventCommandHeader } from "@/components/admin/event-command-header"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { organizerTableClient } from "@/lib/supabase/organizer-table-client"
 import { createClient } from "@/lib/supabase/server"
 import { formatCurrency, formatEventDate, formatNumber } from "@/lib/format"
 
@@ -59,9 +60,10 @@ export default async function ManageEventPage({
 
   if (!user) redirect(`/login-organizador?next=/admin/events/${id}`)
 
+  const { table } = await organizerTableClient()
   const [{ data: profile }, ownedEvent] = await Promise.all([
     supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
-    supabase
+    table
       .from("events")
       .select(
         "id, title, date, location, status, organizer_id, is_sponsored_by_tokepass, review_note, is_featured, featured_tier, featured_until, storefront_views",
