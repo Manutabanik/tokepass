@@ -39,6 +39,7 @@ import { validatePromoCode } from "@/app/actions/coupons"
 import {
   getEventSeatingAvailability,
   getEventSeatingUnitsForSector,
+  getEventSoldTicketOccupancy,
   getPublicEventVenueMap,
 } from "@/app/actions/public-events"
 import { CheckoutHeader } from "@/components/checkout/CheckoutHeader"
@@ -537,6 +538,9 @@ export function CheckoutTunnel({
   const loadedUnitsRef = useRef(loadedUnitsBySector)
   loadedUnitsRef.current = loadedUnitsBySector
   const [seatingInventoryFetched, setSeatingInventoryFetched] = useState(false)
+  const [soldTicketOccupancy, setSoldTicketOccupancy] = useState<
+    Record<string, SeatStatus>
+  >({})
   const [liveOccupancy, setLiveOccupancy] = useState<Record<string, SeatStatus>>(
     {},
   )
@@ -1232,6 +1236,7 @@ export function CheckoutTunnel({
   if (inventoryScopeKey !== inventoryScope) {
     setInventoryScope(inventoryScopeKey)
     setSeatingInventoryFetched(!hasInteractiveMap)
+    setSoldTicketOccupancy({})
   }
   const seatingInventoryReady = !hasInteractiveMap || seatingInventoryFetched
 
@@ -1357,6 +1362,7 @@ export function CheckoutTunnel({
             liveMap,
             soldOutTicketTypeIds(dayTiers),
           ),
+          soldTicketOccupancy,
           liveOccupancy,
         ),
         liveMap,
@@ -1369,6 +1375,7 @@ export function CheckoutTunnel({
     liveMap,
     liveOccupancy,
     mergedSeatingUnits,
+    soldTicketOccupancy,
     scheduleDayCount,
     seatingInventoryReady,
     selectedDateId,
@@ -3385,15 +3392,22 @@ export function CheckoutTunnel({
   useEffect(() => {
     if (!hasInteractiveMap) return
     let cancelled = false
-    // Occupancy is server state. setState runs after the fetch resolves.
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set
-    void loadAllUnits().finally(() => {
-      if (!cancelled) setSeatingInventoryFetched(true)
-    })
+    void Promise.all([
+      // Occupancy is server state. setState runs after the fetch resolves.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-then-set
+      loadAllUnits(),
+      getEventSoldTicketOccupancy(eventId, selectedDateId),
+    ])
+      .then(([, tickets]) => {
+        if (!cancelled) setSoldTicketOccupancy(tickets)
+      })
+      .finally(() => {
+        if (!cancelled) setSeatingInventoryFetched(true)
+      })
     return () => {
       cancelled = true
     }
-  }, [hasInteractiveMap, loadAllUnits])
+  }, [eventId, hasInteractiveMap, loadAllUnits, selectedDateId])
 
   const seatFlowOverlay =
     showSeatFlow && !hasInteractiveMap ? (
@@ -3405,6 +3419,7 @@ export function CheckoutTunnel({
           eventId={eventId}
           eventTitle={eventTitle}
           occupancyBySeatId={occupancyBySeatId}
+          inventoryPending={!seatingInventoryReady}
           heldSeatIds={heldSeatIds}
           mapImageUrl={
             universalPayload?.mapImageUrl ?? seatingBackgroundUrl ?? null

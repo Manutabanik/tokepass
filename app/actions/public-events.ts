@@ -4,7 +4,7 @@ import { listEventSponsors } from "@/app/actions/event-sponsors"
 import { logger } from "@/lib/logger"
 import { getRequestIp, isRateLimitableIp } from "@/lib/request-ip"
 import { consumeNamedRateLimit } from "@/lib/security/distributed-rate-limit"
-import { createAdminClient } from "@/lib/supabase/admin"
+import { createAdminClient, tryCreateAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import {
   createPublicClient,
@@ -1927,6 +1927,49 @@ export async function getEventSeatingAvailability(
     )
   } catch {
     return []
+  }
+}
+
+const LIVE_TICKET_STATUS = [
+  "valid",
+  "used",
+  "transferred",
+  "pending_payment",
+  "scanned",
+] as const
+
+/** IDs de asiento/unidad ya emitidos. Sin PII. Cruza el plano estático con tickets reales. */
+export async function getEventSoldTicketOccupancy(
+  eventId: string,
+  eventDateId?: string | null,
+): Promise<Record<string, "occupied">> {
+  const cleanEvent = eventId.trim()
+  const dateId = asHoldEventDateId(eventDateId)
+  if (!cleanEvent) return {}
+  const admin = tryCreateAdminClient()
+  if (!admin) return {}
+  try {
+    let query = admin
+      .from("tickets")
+      .select("seat_id, seating_unit_id, status, event_date_id")
+      .eq("event_id", cleanEvent)
+      .in("status", [...LIVE_TICKET_STATUS])
+    if (dateId) {
+      query = query.or(`event_date_id.eq.${dateId},event_date_id.is.null`)
+    }
+    const { data, error } = await query
+    if (error || !data) return {}
+    const occupancy: Record<string, "occupied"> = {}
+    for (const row of data) {
+      if (dateId && row.event_date_id && row.event_date_id !== dateId) continue
+      for (const raw of [row.seat_id, row.seating_unit_id]) {
+        const id = raw?.trim()
+        if (id) occupancy[id] = "occupied"
+      }
+    }
+    return occupancy
+  } catch {
+    return {}
   }
 }
 

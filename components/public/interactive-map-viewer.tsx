@@ -23,6 +23,7 @@ export function InteractiveMapViewer({
   onSelectZone,
   onContinue,
   immersive = false,
+  inventoryPending = false,
   className,
 }: {
   map: InteractiveVenueMap
@@ -37,6 +38,7 @@ export function InteractiveMapViewer({
   onSelectZone?: (zone: VenueMapZone) => void
   onContinue?: (seats: InteractiveSelectedSeat[]) => void
   immersive?: boolean
+  inventoryPending?: boolean
   className?: string
 }) {
   return (
@@ -49,27 +51,37 @@ export function InteractiveMapViewer({
       )}
     >
       <BuyerMapGrid isEditMode={false} />
-      <InteractiveSeatingCanvas
-        map={map}
-        eventId={eventId}
-        occupancyBySeatId={occupancyBySeatId}
-        priceBySectorId={priceBySectorId}
-        pending={pending}
-        selectedZoneId={selectedZoneId}
-        unavailableZoneIds={unavailableZoneIds}
-        heldSeatIds={heldSeatIds}
-        maxSelectable={maxSelectable}
-        onSelectZone={onSelectZone}
-        onContinue={onContinue ?? (() => {})}
-        fillParent
-        disableIdlePrompt
-        hideChrome
-        hideToolbar
-        buyerChrome
-        zoomDockClassName={immersive ? "bottom-3" : undefined}
-        lodBackClassName={immersive ? "top-3" : undefined}
-      />
-      {pending ? (
+      {inventoryPending ? (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/55">
+          <LoaderCircle
+            className="size-6 animate-spin text-muted-foreground"
+            aria-label="Cargando inventario del mapa"
+          />
+        </div>
+      ) : (
+        <InteractiveSeatingCanvas
+          map={map}
+          eventId={eventId}
+          occupancyBySeatId={occupancyBySeatId}
+          priceBySectorId={priceBySectorId}
+          pending={pending}
+          inventoryPending={inventoryPending}
+          selectedZoneId={selectedZoneId}
+          unavailableZoneIds={unavailableZoneIds}
+          heldSeatIds={heldSeatIds}
+          maxSelectable={maxSelectable}
+          onSelectZone={onSelectZone}
+          onContinue={onContinue ?? (() => {})}
+          fillParent
+          disableIdlePrompt
+          hideChrome
+          hideToolbar
+          buyerChrome
+          zoomDockClassName={immersive ? "bottom-3" : undefined}
+          lodBackClassName={immersive ? "top-3" : undefined}
+        />
+      )}
+      {pending && !inventoryPending ? (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/55">
           <LoaderCircle className="size-6 animate-spin text-muted-foreground" />
         </div>

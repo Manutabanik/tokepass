@@ -66,6 +66,7 @@ function SummaryVenueMap({
       selectedZoneId={seatSelection.selectedZoneId}
       unavailableZoneIds={seatSelection.unavailableZoneIds}
       occupancyBySeatId={seatSelection.occupancyBySeatId}
+      inventoryPending={seatSelection.inventoryPending}
       heldSeatIds={seatSelection.heldSeatIds}
       priceBySectorId={seatSelection.priceBySectorId}
       sectors={seatSelection.sectors}

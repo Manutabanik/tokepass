@@ -168,6 +168,40 @@ export function rollupOccupancyToParents(
   return next
 }
 
+const VOID_TICKET_STATUS = new Set([
+  "cancelled",
+  "refunded",
+  "revoked",
+])
+
+/** Tickets emitidos → IDs de asiento/unidad para pintar SOLD antes del primer frame. */
+export function occupancyFromSoldTicketRefs(
+  tickets: ReadonlyArray<{
+    seat_id?: string | null
+    seating_unit_id?: string | null
+    status?: string | null
+  }>,
+): Record<string, SeatStatus> {
+  const occupancy: Record<string, SeatStatus> = {}
+  for (const ticket of tickets) {
+    const status = (ticket.status ?? "").trim().toLowerCase()
+    if (VOID_TICKET_STATUS.has(status)) continue
+    markOccupied(occupancy, ticket.seat_id)
+    markOccupied(occupancy, ticket.seating_unit_id)
+  }
+  return occupancy
+}
+
+export function shouldPaintBuyerMapInventory(input: {
+  inventoryPending?: boolean
+  snapshotReady: boolean
+  hasEventId: boolean
+}): boolean {
+  if (input.inventoryPending) return false
+  if (input.hasEventId && !input.snapshotReady) return false
+  return true
+}
+
 export function isVenueMapElementSoldOut(
   element: VenueMapElement,
   occupancy: Record<string, SeatStatus>,

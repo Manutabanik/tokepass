@@ -39,6 +39,7 @@ function seatInteractionProps(
   if (!seatId) return undefined
   return {
     "data-seat-id": seatId,
+    "data-locked": locked ? "1" : undefined,
     className: locked ? "pointer-events-none" : undefined,
     style: locked ? { pointerEvents: "none" as const } : undefined,
     onPointerDown:

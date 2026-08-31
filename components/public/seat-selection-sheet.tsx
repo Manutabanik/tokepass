@@ -578,6 +578,7 @@ function SeatSelectionModalInner({
               occupancyBySeatId={context.occupancyBySeatId}
               priceBySectorId={context.priceBySectorId}
               pending={pending}
+              inventoryPending={Boolean(context.inventoryPending)}
               selectedZoneId={focusedSectorId}
               unavailableZoneIds={context.unavailableZoneIds}
               heldSeatIds={context.heldSeatIds}

@@ -7,7 +7,9 @@ import {
   collectVenueMapInventoryIds,
   isVenueMapElementSoldOut,
   occupancyFromSoldOutTicketTypes,
+  occupancyFromSoldTicketRefs,
   rollupOccupancyToParents,
+  shouldPaintBuyerMapInventory,
   soldOutTicketTypeIds,
 } from "./map-inventory-hydration"
 
@@ -119,6 +121,51 @@ describe("map-inventory-hydration", () => {
     assert.equal(
       isVenueMapElementSoldOut(element, {
         "mesa-9": "occupied",
+      }),
+      true,
+    )
+  })
+
+  it("maps issued tickets to occupied layout ids", () => {
+    const occupancy = occupancyFromSoldTicketRefs([
+      { seat_id: "mesa-9", seating_unit_id: "unit-9", status: "valid" },
+      { seat_id: "mesa-10", status: "cancelled" },
+    ])
+    assert.equal(occupancy["mesa-9"], "occupied")
+    assert.equal(occupancy["unit-9"], "occupied")
+    assert.equal(occupancy["mesa-10"], undefined)
+  })
+
+  it("does not paint the buyer map until inventory is ready", () => {
+    assert.equal(
+      shouldPaintBuyerMapInventory({
+        inventoryPending: true,
+        snapshotReady: true,
+        hasEventId: true,
+      }),
+      false,
+    )
+    assert.equal(
+      shouldPaintBuyerMapInventory({
+        inventoryPending: false,
+        snapshotReady: false,
+        hasEventId: true,
+      }),
+      false,
+    )
+    assert.equal(
+      shouldPaintBuyerMapInventory({
+        inventoryPending: false,
+        snapshotReady: true,
+        hasEventId: true,
+      }),
+      true,
+    )
+    assert.equal(
+      shouldPaintBuyerMapInventory({
+        inventoryPending: false,
+        snapshotReady: false,
+        hasEventId: false,
       }),
       true,
     )

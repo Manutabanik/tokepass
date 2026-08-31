@@ -121,6 +121,7 @@ const VenueElementShape = memo(function VenueElementShape({
     <g
       id={`venue-sel-${element.id}`}
       data-element-id={element.id}
+      data-locked={soldOut ? "1" : undefined}
       transform={transform}
       opacity={opacity}
       className={

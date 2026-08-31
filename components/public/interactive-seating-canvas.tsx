@@ -7,6 +7,7 @@ import {
   Minus,
   Plus,
   Trash2,
+  LoaderCircle,
   X,
 } from "lucide-react"
 import {
@@ -59,6 +60,7 @@ import {
   lookupOccupancyStatus,
   resolveLiveVenueSeatStatus,
 } from "@/lib/seating/venue-map-occupancy"
+import { shouldPaintBuyerMapInventory } from "@/lib/seating/map-inventory-hydration"
 import {
   hydrateStorefrontItemsFromMap,
   isTablePurchaseSku,
@@ -205,6 +207,7 @@ export function InteractiveSeatingCanvas({
   eventDateId: eventDateIdProp = null,
   zoomDockClassName,
   lodBackClassName,
+  inventoryPending = false,
 }: {
   map: InteractiveVenueMap
   eventId?: string | null
@@ -235,6 +238,7 @@ export function InteractiveSeatingCanvas({
   eventDateId?: string | null
   zoomDockClassName?: string
   lodBackClassName?: string
+  inventoryPending?: boolean
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const tooltipHostRef = useRef<HTMLDivElement>(null)
@@ -275,12 +279,19 @@ export function InteractiveSeatingCanvas({
   )
   const occupancyScopeKey = `${eventId ?? ""}::${activeScheduleId ?? ""}`
   const [occupancyScope, setOccupancyScope] = useState(occupancyScopeKey)
+  const [snapshotReady, setSnapshotReady] = useState(
+    !buyerChrome || !eventId?.trim(),
+  )
   if (occupancyScopeKey !== occupancyScope) {
     setOccupancyScope(occupancyScopeKey)
     setLiveOccupancy({})
+    setSnapshotReady(!buyerChrome || !eventId?.trim())
   }
   const applyOccupancyPatch = useCallback((patch: Record<string, SeatStatus>) => {
     setLiveOccupancy((current) => mergeInventoryOccupancy(current, patch))
+  }, [])
+  const markSnapshotReady = useCallback(() => {
+    setSnapshotReady(true)
   }, [])
   useSeatingOccupancyRealtime(
     readOnly ? null : eventId,
@@ -288,6 +299,7 @@ export function InteractiveSeatingCanvas({
     "canvas",
     activeScheduleId,
     scheduleDayCount,
+    buyerChrome ? markSnapshotReady : undefined,
   )
   useSeatHoldsRealtime(
     eventId,
@@ -304,6 +316,11 @@ export function InteractiveSeatingCanvas({
       ),
     [liveOccupancy, map, occupancyBySeatId],
   )
+  const canPaintInventory = shouldPaintBuyerMapInventory({
+    inventoryPending: inventoryPending && !readOnly,
+    snapshotReady: snapshotReady || readOnly,
+    hasEventId: Boolean(eventId?.trim()) && !readOnly,
+  })
   const inventoryRev = useMemo(() => {
     let sold = 0
     let held = 0
@@ -1397,10 +1414,13 @@ export function InteractiveSeatingCanvas({
               focusedZoneId={focusedZoneId}
               buyerOccupancy={buyerOccupancy}
               onSelect={
-                readOnly ? undefined : (zone) => handleZoneClick(zone.id)
+                readOnly || !canPaintInventory
+                  ? undefined
+                  : (zone) => handleZoneClick(zone.id)
               }
             />
-            {revealElements.length > 0 || revealSeats.length > 0 ? (
+            {canPaintInventory &&
+            (revealElements.length > 0 || revealSeats.length > 0) ? (
             <g
               key={focusedZoneId ?? "overview"}
               data-inventory-rev={inventoryRev}
@@ -1521,10 +1541,18 @@ export function InteractiveSeatingCanvas({
         </TransformComponent>
       </div>
       </TransformWrapper>
+      {!canPaintInventory ? (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/55">
+          <LoaderCircle
+            className="size-6 animate-spin text-muted-foreground"
+            aria-label="Cargando inventario del mapa"
+          />
+        </div>
+      ) : null}
       {!silentHover && hoveredItem ? (
         <SeatTooltip item={hoveredItem} x={hoverPos.x} y={hoverPos.y} />
       ) : null}
-      {buyerChrome && !readOnly ? (
+      {buyerChrome && !readOnly && canPaintInventory ? (
         <BuyerMapZoomDock
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}

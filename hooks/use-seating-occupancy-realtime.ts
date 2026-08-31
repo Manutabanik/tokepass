@@ -47,21 +47,20 @@ async function fetchOccupancySnapshot(
       .from("event_seating_occupancy")
       .select("id, layout_item_id, status")
       .eq("event_id", eventId)
-    if (fallback.error || !fallback.data?.length) return null
+    if (fallback.error) return null
     const patch: Record<string, SeatStatus> = {}
-    for (const row of fallback.data) {
+    for (const row of fallback.data ?? []) {
       const next = occupancyPatchFromSeatingRow(row, scope)
       if (next) Object.assign(patch, next)
     }
-    return Object.keys(patch).length > 0 ? patch : null
+    return patch
   }
-  if (!data?.length) return null
   const patch: Record<string, SeatStatus> = {}
-  for (const row of data) {
+  for (const row of data ?? []) {
     const next = occupancyPatchFromSeatingRow(row, scope)
     if (next) Object.assign(patch, next)
   }
-  return Object.keys(patch).length > 0 ? patch : null
+  return patch
 }
 
 export function useSeatingOccupancyRealtime(
@@ -70,11 +69,16 @@ export function useSeatingOccupancyRealtime(
   channelKey = "map",
   eventDateId?: string | null,
   scheduleDayCount = 0,
+  onSnapshotReady?: () => void,
 ) {
   const onPatchRef = useRef(onPatch)
+  const onReadyRef = useRef(onSnapshotReady)
   useEffect(() => {
     onPatchRef.current = onPatch
   }, [onPatch])
+  useEffect(() => {
+    onReadyRef.current = onSnapshotReady
+  }, [onSnapshotReady])
 
   useEffect(() => {
     const cleanEventId = eventId?.trim()
@@ -91,12 +95,17 @@ export function useSeatingOccupancyRealtime(
     let poll: { stop: () => void } | null = null
 
     function applySnapshot(patch: Record<string, SeatStatus> | null) {
-      if (cancelled || !patch) return
-      onPatchRef.current(patch)
+      if (cancelled) return
+      if (patch) onPatchRef.current(patch)
+      onReadyRef.current?.()
     }
 
     function pollAvailability() {
-      void fetchOccupancySnapshot(resolvedEventId, scope).then(applySnapshot)
+      void fetchOccupancySnapshot(resolvedEventId, scope)
+        .then(applySnapshot)
+        .catch(() => {
+          if (!cancelled) onReadyRef.current?.()
+        })
     }
 
     pollAvailability()
