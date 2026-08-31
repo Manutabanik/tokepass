@@ -65,7 +65,10 @@ import {
   publicTierAvailable,
 } from "@/lib/inventory/public-stock-cap"
 import { startingPriceFromSellable } from "@/lib/checkout/sellable-tickets"
-import { resolvePublicEventFeeRule } from "@/lib/pricing/event-fees"
+import {
+  publicBuyerFeeRule,
+  resolvePublicEventFeeRule,
+} from "@/lib/pricing/event-fees"
 import type { Event, TicketTier, Venue } from "@/types/database"
 import type { ScheduleDay } from "@/types/events"
 import type { EventSeatingUnit, SeatingSectorSummary, VenueSeatingLayout } from "@/types/venues"
@@ -264,6 +267,9 @@ type EventListRow = {
   featured_tier: Event["featured_tier"]
   featured_until: string | null
   is_sponsored_by_tokepass: boolean | null
+  platform_fee_percentage?: number | null
+  platform_fixed_fee?: number | null
+  absorb_fees?: boolean | null
   category_id: string | null
   delivery_mode?: EventDeliveryMode | null
   venues: { name: string; location: string; capacity?: number | null } | null
@@ -375,20 +381,25 @@ type EventDetailRow = {
 }
 
 function computeStartingPrice(
-  tiers: Array<{
-    price: number
-    capacity?: number
-    sold?: number
-    visibility?: string | null
-    sale_starts_at?: string | null
-    sale_ends_at?: string | null
-    category?: string | null
-    tier_type?: string | null
-    layout_type?: string | null
-    ticket_type?: string | null
-  }> | null,
+  event: Pick<
+    EventListRow,
+    | "ticket_tiers"
+    | "platform_fee_percentage"
+    | "platform_fixed_fee"
+    | "absorb_fees"
+    | "is_sponsored_by_tokepass"
+  >,
 ): number | null {
-  return startingPriceFromSellable(tiers)
+  return startingPriceFromSellable(
+    event.ticket_tiers,
+    undefined,
+    publicBuyerFeeRule({
+      platformFeePercentage: event.platform_fee_percentage,
+      platformFixedFee: event.platform_fixed_fee,
+      isSponsored: Boolean(event.is_sponsored_by_tokepass),
+      absorbFees: event.absorb_fees === true,
+    }),
+  )
 }
 
 function computeInventory(
@@ -414,7 +425,7 @@ function computeInventory(
 }
 
 const EVENT_LIST_SELECT =
-  "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, sale_starts_at, sale_ends_at, category, tier_type, layout_type, ticket_type), profiles!events_organizer_id_fkey(full_name)"
+  "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, platform_fee_percentage, platform_fixed_fee, absorb_fees, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, sale_starts_at, sale_ends_at, category, tier_type, layout_type, ticket_type), profiles!events_organizer_id_fkey(full_name)"
 const EVENT_LIST_SELECT_MINIMAL =
   "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, category, tier_type, layout_type), profiles!events_organizer_id_fkey(full_name)"
 const EVENT_LIST_SELECT_WITH_DELIVERY = `${EVENT_LIST_SELECT}, delivery_mode`
@@ -422,7 +433,7 @@ const EVENT_LIST_SELECT_WITH_DELIVERY = `${EVENT_LIST_SELECT}, delivery_mode`
 function isCatalogListRetryable(message: string): boolean {
   return (
     isMissingArtistSchema(message) ||
-    /lineup|delivery_mode|sale_starts_at|sale_ends_at|schedule_days|is_deleted|ticket_type|schema cache|PGRST204|42703/i.test(
+    /lineup|delivery_mode|sale_starts_at|sale_ends_at|schedule_days|is_deleted|ticket_type|platform_fee_percentage|platform_fixed_fee|absorb_fees|schema cache|PGRST204|42703/i.test(
       message,
     )
   )
@@ -698,7 +709,7 @@ function mapEventListRow(event: EventListRow): CatalogEvent {
     venueName: event.venues?.name ?? null,
     venueLocation: event.venues?.location ?? null,
     organizerName: event.profiles?.full_name ?? null,
-    startingPrice: computeStartingPrice(event.ticket_tiers),
+    startingPrice: computeStartingPrice(event),
     soldRatio: inventory.soldRatio,
     ticketsLeft: inventory.ticketsLeft,
     isFeatured: stillActive,
@@ -1946,9 +1957,7 @@ export async function getRelatedEvents(input: {
   let related = await withActiveEvents(
     supabase
       .from("events")
-      .select(
-        "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, sale_starts_at, sale_ends_at, category, tier_type, layout_type), profiles!events_organizer_id_fkey(full_name)",
-      )
+      .select(EVENT_LIST_SELECT)
       .eq("status", "published")
       .eq("visibility", PUBLIC_CATALOG_VISIBILITY),
     hideDeleted,
@@ -1962,9 +1971,7 @@ export async function getRelatedEvents(input: {
     related = await withActiveEvents(
       supabase
         .from("events")
-        .select(
-          "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, sale_starts_at, sale_ends_at, category, tier_type, layout_type), profiles!events_organizer_id_fkey(full_name)",
-        )
+        .select(EVENT_LIST_SELECT)
         .eq("status", "published")
         .eq("visibility", PUBLIC_CATALOG_VISIBILITY),
       hideDeleted,

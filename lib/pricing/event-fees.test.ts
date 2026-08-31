@@ -8,6 +8,7 @@ import {
   fallbackFeePercentagePoints,
   fallbackServiceFeeRate,
   organizerRateToFeePercentage,
+  publicBuyerFeeRule,
   resolvePublicEventFeeRule,
 } from "./event-fees"
 
@@ -68,6 +69,25 @@ describe("resolvePublicEventFeeRule", () => {
         rpcRate: null,
       }).rate,
       DEFAULT_PLATFORM_FEE_PERCENTAGE / 100,
+    )
+  })
+
+  it("exposes absorbFees for the public starting price", () => {
+    assert.deepEqual(
+      publicBuyerFeeRule({
+        platformFeePercentage: 8,
+        platformFixedFee: 200,
+        absorbFees: false,
+      }),
+      { rate: 0.08, fixedFee: 200, absorbFees: false },
+    )
+    assert.equal(
+      publicBuyerFeeRule({
+        platformFeePercentage: 8,
+        platformFixedFee: 200,
+        absorbFees: true,
+      }).absorbFees,
+      true,
     )
   })
 

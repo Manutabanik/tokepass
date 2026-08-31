@@ -4,7 +4,7 @@ import { Calendar, Lock, MapPin } from "lucide-react"
 
 import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import { Button } from "@/components/ui/button"
-import { CustomerFacingTicketPrice } from "@/components/public/customer-facing-price"
+import { formatTicketPrice } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 export function EventStorefrontBuyBox({
@@ -57,9 +57,7 @@ export function EventStorefrontBuyBox({
           ? "Ver entradas"
           : price === 0
             ? "Entrada gratuita"
-            : (
-              <CustomerFacingTicketPrice price={price} />
-            )}
+            : formatTicketPrice(price)}
       </p>
 
       <ul className="mt-5 flex flex-col gap-3 border-t border-border/60 pt-5">

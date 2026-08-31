@@ -571,11 +571,16 @@ export function CheckoutTunnel({
     })
   }
   useEffect(() => {
-    useCheckoutStore.getState().setServiceChargeRule({
-      rate: feeRate,
-      fixedFee: platformFixedFee,
-      absorbFees,
-    })
+    const applyEventFees = () => {
+      useCheckoutStore.getState().setServiceChargeRule({
+        rate: feeRate,
+        fixedFee: platformFixedFee,
+        absorbFees,
+      })
+    }
+    applyEventFees()
+    if (useCheckoutStore.persist.hasHydrated()) return
+    return useCheckoutStore.persist.onFinishHydration(applyEventFees)
   }, [absorbFees, feeRate, platformFixedFee])
   const buyer = useCheckoutStore((state) => state.buyer)
   const setBuyer = useCheckoutStore((state) => state.setBuyer)
@@ -1002,6 +1007,11 @@ export function CheckoutTunnel({
         restoredHoldCleanup.add(eventId)
         store.resetIfOtherEvent(eventId)
         store.clearCart()
+        store.setServiceChargeRule({
+          rate: feeRate,
+          fixedFee: platformFixedFee,
+          absorbFees,
+        })
         if (store.eventId !== eventId) {
           setIntentRestored(true)
           return

@@ -114,6 +114,25 @@ export function resolvePublicEventFeeRule(input: {
   return { rate, fixedFee: roundMoney(fixedFee) }
 }
 
+/** Regla pública para “Desde $X” y el carrito: all-in si el comprador paga el cargo. */
+export function publicBuyerFeeRule(input: {
+  platformFeePercentage?: unknown
+  platformFixedFee?: unknown
+  isSponsored?: boolean
+  absorbFees?: boolean | null
+}): { rate: number; fixedFee: number; absorbFees: boolean } {
+  const rule = resolvePublicEventFeeRule({
+    platformFeePercentage: input.platformFeePercentage,
+    platformFixedFee: input.platformFixedFee,
+    isSponsored: Boolean(input.isSponsored),
+  })
+  return {
+    rate: rule.rate,
+    fixedFee: rule.fixedFee,
+    absorbFees: input.absorbFees === true,
+  }
+}
+
 /** Decimal rate for allInBreakdown (0.08 = 8%). Sponsored → 0. */
 export function eventFeeRate(config: EventFeeConfig): number {
   if (config.isSponsoredByTokePass) return 0

@@ -600,9 +600,6 @@ export const useCheckoutStore = create<CheckoutState>()(
           subtotal: 0,
           serviceFee: 0,
           grandTotal: 0,
-          serviceChargeRate: fallbackServiceFeeRate(null),
-          serviceChargeFixedFee: 0,
-          absorbFees: false,
           holdExpiresAt: null,
           holdFrozen: false,
           holdFrozenSeconds: null,
@@ -677,12 +674,17 @@ export const useCheckoutStore = create<CheckoutState>()(
         set({ buyer: next })
       },
 
-      setServiceChargeRule: ({ rate, fixedFee = 0, absorbFees }) => {
+      setServiceChargeRule: ({ rate, fixedFee, absorbFees }) => {
         const current = get()
-        const nextRate = fallbackServiceFeeRate(rate)
-        const nextFixed = Number.isFinite(Number(fixedFee))
-          ? Math.max(0, Number(fixedFee))
-          : 0
+        const nextRate =
+          rate == null ? current.serviceChargeRate : fallbackServiceFeeRate(rate)
+        const parsedFixed = Number(fixedFee)
+        const nextFixed =
+          fixedFee == null
+            ? current.serviceChargeFixedFee
+            : Number.isFinite(parsedFixed)
+              ? Math.max(0, parsedFixed)
+              : current.serviceChargeFixedFee
         const nextAbsorb =
           absorbFees == null ? current.absorbFees : absorbFees === true
         if (
@@ -1012,6 +1014,7 @@ export const useCheckoutStore = create<CheckoutState>()(
       clearCart: () => {
         useStorefrontSeatStore.getState().clearSelectedItems()
         useStorefrontSeatStore.getState().clearLayoutSeats()
+        // Solo vacía el carrito. feeRate / absorbFees / eventId quedan intactos.
         set({
           quantities: {},
           selectedSeat: null,
@@ -1047,6 +1050,8 @@ export const useCheckoutStore = create<CheckoutState>()(
       storage: createJSONStorage(() => localStorage),
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<CheckoutState>
+        const savedRate = Number(saved.serviceChargeRate)
+        const savedFixed = Number(saved.serviceChargeFixedFee)
         return {
           ...current,
           eventId: saved.eventId ?? current.eventId,
@@ -1054,6 +1059,18 @@ export const useCheckoutStore = create<CheckoutState>()(
           mode: saved.mode ?? current.mode,
           isGuest: saved.isGuest || saved.mode === "guest" || current.isGuest,
           buyer: saved.buyer ?? current.buyer,
+          serviceChargeRate:
+            saved.serviceChargeRate != null && Number.isFinite(savedRate)
+              ? savedRate
+              : current.serviceChargeRate,
+          serviceChargeFixedFee:
+            saved.serviceChargeFixedFee != null && Number.isFinite(savedFixed)
+              ? Math.max(0, savedFixed)
+              : current.serviceChargeFixedFee,
+          absorbFees:
+            typeof saved.absorbFees === "boolean"
+              ? saved.absorbFees
+              : current.absorbFees,
           viewMode: current.viewMode,
           quantities: {},
           selectedSeat: null,
@@ -1082,6 +1099,9 @@ export const useCheckoutStore = create<CheckoutState>()(
         isGuest: state.isGuest || state.mode === "guest",
         buyer: state.buyer,
         cartSessionId: state.cartSessionId,
+        serviceChargeRate: state.serviceChargeRate,
+        serviceChargeFixedFee: state.serviceChargeFixedFee,
+        absorbFees: state.absorbFees,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return

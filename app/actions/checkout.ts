@@ -38,7 +38,7 @@ import { fulfillSandboxPaidOrder } from "@/lib/checkout/sandbox-fulfillment"
 import { shouldFallbackSandboxFinalize } from "@/lib/checkout/sandbox-finalize"
 import { orderTestFlags } from "@/lib/finance/order-test-flags"
 import { logger } from "@/lib/logger"
-import { DEFAULT_PLATFORM_FEE_PERCENTAGE } from "@/lib/pricing/event-fees"
+import { resolvePublicEventFeeRule } from "@/lib/pricing/event-fees"
 import { captureCriticalException } from "@/lib/sentry/capture"
 import { getSiteUrl } from "@/lib/mercadopago"
 import {
@@ -1233,35 +1233,23 @@ async function loadEventServiceFeeRule(
       .maybeSingle()
   }
   const event = feeRow.data
-  const absorbFees = event?.absorb_fees === true
-
-  if (event?.is_sponsored_by_tokepass) {
-    return { rate: 0, fixedFee: 0, absorbFees }
-  }
-
-  let rate = Number(
-    event?.platform_fee_percentage ?? DEFAULT_PLATFORM_FEE_PERCENTAGE,
-  )
-  if (Number.isFinite(rate) && rate > 1) rate = rate / 100
   const { data: rateRpc } = await supabase.rpc("get_event_service_charge_rate", {
     p_event_id: eventId,
   })
-  if (rateRpc != null && Number.isFinite(Number(rateRpc))) {
-    rate = Number(rateRpc)
-  }
-
-  let fixedFee = Number(event?.platform_fixed_fee ?? 0)
   const { data: fixedRpc } = await supabase.rpc("get_event_platform_fixed_fee", {
     p_event_id: eventId,
   })
-  if (fixedRpc != null && Number.isFinite(Number(fixedRpc))) {
-    fixedFee = Number(fixedRpc)
-  }
-
+  const rule = resolvePublicEventFeeRule({
+    platformFeePercentage: event?.platform_fee_percentage,
+    rpcRate: rateRpc,
+    platformFixedFee: event?.platform_fixed_fee,
+    rpcFixedFee: fixedRpc,
+    isSponsored: Boolean(event?.is_sponsored_by_tokepass),
+  })
   return {
-    rate: Number.isFinite(rate) ? Math.max(0, rate) : 0,
-    fixedFee: Number.isFinite(fixedFee) ? Math.max(0, fixedFee) : 0,
-    absorbFees,
+    rate: rule.rate,
+    fixedFee: rule.fixedFee,
+    absorbFees: event?.absorb_fees === true,
   }
 }
 

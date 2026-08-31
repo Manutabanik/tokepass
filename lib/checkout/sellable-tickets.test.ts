@@ -173,6 +173,39 @@ describe("sellable public tickets", () => {
     )
   })
 
+  it("adds the transferred service fee to the public starting price", () => {
+    assert.equal(
+      startingPriceFromSellable(
+        [
+          {
+            price: 15000,
+            available: 20,
+            visibility: "public",
+            tier_type: "general",
+          },
+        ],
+        now,
+        { rate: 0.08, fixedFee: 200, absorbFees: false },
+      ),
+      16400,
+    )
+    assert.equal(
+      startingPriceFromSellable(
+        [
+          {
+            price: 15000,
+            available: 20,
+            visibility: "public",
+            tier_type: "general",
+          },
+        ],
+        now,
+        { rate: 0.08, fixedFee: 200, absorbFees: true },
+      ),
+      15000,
+    )
+  })
+
   it("uses the cheapest sellable admission price, never an addon", () => {
     assert.equal(
       startingPriceFromSellable(

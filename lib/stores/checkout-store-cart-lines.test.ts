@@ -63,4 +63,41 @@ describe("setCartLines", () => {
     assert.equal(afterSecond.lines, linesRef)
     assert.equal(afterSecond.quantities, quantitiesRef)
   })
+
+  it("keeps event fee configuration when the cart is cleared", async () => {
+    const { useCheckoutStore } = await import("./checkout-store")
+    const store = useCheckoutStore.getState()
+    store.resetIfOtherEvent("550e8400-e29b-41d4-a716-446655440010")
+    store.setServiceChargeRule({
+      rate: 0.08,
+      fixedFee: 200,
+      absorbFees: false,
+    })
+    store.setCartLines(
+      [
+        {
+          id: `${general}_${friday}`,
+          ticketTierId: general,
+          name: "General",
+          detail: "1 entrada",
+          dateId: friday,
+          dateLabel: "Viernes",
+          scheduleId: friday,
+          dateString: "Viernes",
+          sectorName: "General",
+          quantity: 1,
+          price: 15000,
+        },
+      ],
+      { replaceGeneralDays: [friday, null] },
+    )
+
+    store.clearCart()
+    const after = useCheckoutStore.getState()
+    assert.equal(after.lines.length, 0)
+    assert.equal(after.serviceChargeRate, 0.08)
+    assert.equal(after.serviceChargeFixedFee, 200)
+    assert.equal(after.absorbFees, false)
+    assert.equal(after.eventId, "550e8400-e29b-41d4-a716-446655440010")
+  })
 })

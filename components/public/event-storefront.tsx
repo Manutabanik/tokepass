@@ -60,7 +60,7 @@ import {
 } from "@/components/ui/dialog"
 import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll"
 import { releaseCheckoutCartHolds } from "@/lib/checkout/release-cart-holds"
-import { fallbackServiceFeeRate } from "@/lib/pricing/event-fees"
+import { publicBuyerFeeRule } from "@/lib/pricing/event-fees"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import { useStorefrontChromeStore } from "@/lib/stores/storefront-chrome-store"
 import {
@@ -207,7 +207,17 @@ export function EventStorefront({
   }, [event.slug, pathname, router])
 
   const admissionTickets = publicEventTickets(event)
-  const startingPrice = startingPriceFromSellable(admissionTickets)
+  const buyerFeeRule = publicBuyerFeeRule({
+    platformFeePercentage: event.serviceChargeRate,
+    platformFixedFee: event.platformFixedFee,
+    isSponsored: event.isSponsoredByTokePass,
+    absorbFees: event.absorbFees,
+  })
+  const startingPrice = startingPriceFromSellable(
+    admissionTickets,
+    undefined,
+    buyerFeeRule,
+  )
   const hasSellableTickets = hasSellablePublicTickets(admissionTickets)
   const saleState = deriveEventSaleState({
     date: event.date,
@@ -293,34 +303,43 @@ export function EventStorefront({
     }
   }, [])
 
-  const eventFeeRate = fallbackServiceFeeRate(event.serviceChargeRate)
   const checkoutFeeRate = useCheckoutStore((state) => state.serviceChargeRate)
   const checkoutFeeFixed = useCheckoutStore((state) => state.serviceChargeFixedFee)
   const checkoutAbsorbFees = useCheckoutStore((state) => state.absorbFees)
   if (
-    checkoutFeeRate !== eventFeeRate ||
-    checkoutFeeFixed !== event.platformFixedFee ||
-    checkoutAbsorbFees !== event.absorbFees
+    checkoutFeeRate !== buyerFeeRule.rate ||
+    checkoutFeeFixed !== buyerFeeRule.fixedFee ||
+    checkoutAbsorbFees !== buyerFeeRule.absorbFees
   ) {
     useCheckoutStore.getState().setServiceChargeRule({
-      rate: eventFeeRate,
-      fixedFee: event.platformFixedFee,
-      absorbFees: event.absorbFees,
+      rate: buyerFeeRule.rate,
+      fixedFee: buyerFeeRule.fixedFee,
+      absorbFees: buyerFeeRule.absorbFees,
     })
   }
 
   useEffect(() => {
-    const store = useCheckoutStore.getState()
-    if (store.eventId && store.eventId !== event.id) {
-      store.resetIfOtherEvent(event.id)
-      store.setViewMode("info")
+    const applyEventFees = () => {
+      const store = useCheckoutStore.getState()
+      if (store.eventId && store.eventId !== event.id) {
+        store.resetIfOtherEvent(event.id)
+        store.setViewMode("info")
+      }
+      store.setServiceChargeRule({
+        rate: buyerFeeRule.rate,
+        fixedFee: buyerFeeRule.fixedFee,
+        absorbFees: buyerFeeRule.absorbFees,
+      })
     }
-    store.setServiceChargeRule({
-      rate: eventFeeRate,
-      fixedFee: event.platformFixedFee,
-      absorbFees: event.absorbFees,
-    })
-  }, [event.absorbFees, event.id, event.platformFixedFee, eventFeeRate])
+    applyEventFees()
+    if (useCheckoutStore.persist.hasHydrated()) return
+    return useCheckoutStore.persist.onFinishHydration(applyEventFees)
+  }, [
+    buyerFeeRule.absorbFees,
+    buyerFeeRule.fixedFee,
+    buyerFeeRule.rate,
+    event.id,
+  ])
 
   useEffect(() => {
     const bind = () => useStorefrontSeatStore.getState().bindEvent(event.id)
@@ -346,6 +365,11 @@ export function EventStorefront({
     const store = useCheckoutStore.getState()
     store.resetIfOtherEvent(event.id)
     store.clearCart()
+    store.setServiceChargeRule({
+      rate: buyerFeeRule.rate,
+      fixedFee: buyerFeeRule.fixedFee,
+      absorbFees: buyerFeeRule.absorbFees,
+    })
     useStorefrontChromeStore.getState().setCheckoutTunnel(true)
     store.setViewMode("checkout")
   }
@@ -377,8 +401,19 @@ export function EventStorefront({
     const forDay = sellable.filter(
       (tier) => !tier.day_id || tier.day_id === selectedDate,
     )
-    return startingPriceFromSellable(forDay.length > 0 ? forDay : sellable)
-  }, [admissionTickets, selectedDate, startingPrice])
+    return startingPriceFromSellable(
+      forDay.length > 0 ? forDay : sellable,
+      undefined,
+      buyerFeeRule,
+    )
+  }, [
+    admissionTickets,
+    buyerFeeRule.absorbFees,
+    buyerFeeRule.fixedFee,
+    buyerFeeRule.rate,
+    selectedDate,
+    startingPrice,
+  ])
 
   function renderPurchaseAside() {
     const dateLabel = [
