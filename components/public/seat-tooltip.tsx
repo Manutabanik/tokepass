@@ -110,19 +110,28 @@ export function BuyerMapZoomDock({
   onZoomOut,
   onReset,
   className,
+  size = "default",
+  showReset = true,
 }: {
   onZoomIn: () => void
   onZoomOut: () => void
   onReset: () => void
   className?: string
+  size?: "default" | "lg"
+  showReset?: boolean
 }) {
-  const buttonClass =
-    "flex h-10 w-10 items-center justify-center rounded-full text-white hover:bg-white/10"
+  const large = size === "lg"
+  const buttonClass = large
+    ? "flex size-12 min-h-12 min-w-12 items-center justify-center rounded-xl border border-border bg-background text-foreground shadow-md hover:bg-accent"
+    : "flex h-10 w-10 items-center justify-center rounded-full text-white hover:bg-white/10"
+  const iconClass = large ? "size-6" : "size-4"
 
   return (
     <div
       className={cn(
-        "absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 flex-row items-center gap-1 rounded-full border border-white/10 bg-black/60 p-1 backdrop-blur-md",
+        large
+          ? "absolute right-4 bottom-4 z-10 flex flex-col gap-2"
+          : "absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 flex-row items-center gap-1 rounded-full border border-white/10 bg-black/60 p-1 backdrop-blur-md",
         className,
       )}
       role="toolbar"
@@ -134,7 +143,7 @@ export function BuyerMapZoomDock({
         aria-label="Acercar"
         className={buttonClass}
       >
-        <Plus className="size-4" aria-hidden="true" />
+        <Plus className={iconClass} aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -142,17 +151,19 @@ export function BuyerMapZoomDock({
         aria-label="Alejar"
         className={buttonClass}
       >
-        <Minus className="size-4" aria-hidden="true" />
+        <Minus className={iconClass} aria-hidden="true" />
       </button>
-      <button
-        type="button"
-        onClick={onReset}
-        title="Restablecer vista"
-        aria-label="Restablecer vista"
-        className={buttonClass}
-      >
-        <Locate className="size-4" aria-hidden="true" />
-      </button>
+      {showReset ? (
+        <button
+          type="button"
+          onClick={onReset}
+          title="Restablecer vista"
+          aria-label="Restablecer vista"
+          className={buttonClass}
+        >
+          <Locate className={iconClass} aria-hidden="true" />
+        </button>
+      ) : null}
     </div>
   )
 }

@@ -207,6 +207,8 @@ export function InteractiveSeatingCanvas({
   scheduleDayCount = 0,
   eventDateId: eventDateIdProp = null,
   zoomDockClassName,
+  zoomDockSize = "default",
+  zoomDockShowReset = true,
   lodBackClassName,
   inventoryPending = false,
   buyerFitInset,
@@ -240,6 +242,8 @@ export function InteractiveSeatingCanvas({
   scheduleDayCount?: number
   eventDateId?: string | null
   zoomDockClassName?: string
+  zoomDockSize?: "default" | "lg"
+  zoomDockShowReset?: boolean
   lodBackClassName?: string
   inventoryPending?: boolean
   buyerFitInset?: BuyerMapFitInset
@@ -1572,6 +1576,8 @@ export function InteractiveSeatingCanvas({
           onZoomOut={handleZoomOut}
           onReset={handleResetView}
           className={zoomDockClassName}
+          size={zoomDockSize}
+          showReset={zoomDockShowReset}
         />
       ) : null}
       {lodEnabled && viewMode === "micro" && !readOnly ? (

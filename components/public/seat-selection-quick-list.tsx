@@ -33,7 +33,7 @@ export function SeatSelectionQuickList({
   const catalog = sectors ?? []
   if (catalog.length === 0) {
     return (
-      <p className="px-1 py-10 text-center text-sm text-white/60">
+      <p className="px-1 py-10 text-center text-sm text-muted-foreground">
         No hay lugares configurados en el mapa.
       </p>
     )
@@ -54,20 +54,20 @@ export function SeatSelectionQuickList({
           <AccordionItem
             key={sector.id}
             value={sector.id}
-            className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 px-1 shadow-[0_8px_30px_rgba(0,0,0,0.25)] not-last:border-b-white/10"
+            className="overflow-hidden rounded-2xl border border-border bg-card px-1"
           >
-            <AccordionTrigger className="min-h-14 px-3 py-3 hover:no-underline **:data-[slot=accordion-trigger-icon]:text-white/50">
+            <AccordionTrigger className="min-h-14 px-3 py-3 hover:no-underline">
               <span className="flex min-w-0 items-center gap-3">
                 <span
-                  className="size-3.5 shrink-0 rounded-full shadow-[0_0_0_3px_rgba(255,255,255,0.08)]"
+                  className="size-3.5 shrink-0 rounded-full ring-1 ring-border"
                   style={{ backgroundColor: sector.color }}
                   aria-hidden="true"
                 />
                 <span className="min-w-0 text-left">
-                  <span className="block truncate text-base font-semibold text-white">
+                  <span className="block truncate text-base font-semibold text-foreground">
                     {sector.name}
                   </span>
-                  <span className="mt-0.5 block text-xs text-white/60">
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
                     Precio: {formatTicketPrice(sector.price)} • {available}{" "}
                     {available === 1
                       ? "lugar disponible"
@@ -86,7 +86,7 @@ export function SeatSelectionQuickList({
                   onChange={(next) => onAssignZoneQuantity(sector.id, next)}
                 />
               ) : (
-                <div className="flex flex-col divide-y divide-white/10">
+                <div className="flex flex-col divide-y divide-border">
                   {(sector.options ?? []).map((option) => (
                     <PlaceOptionRow
                       key={option.id}
@@ -133,8 +133,8 @@ function GaSectorPicker({
   if (disabled && max <= 0) {
     return (
       <div className="pointer-events-none flex items-center justify-between gap-3 px-1 py-2 opacity-50">
-        <p className="text-sm text-white/70">Acceso general</p>
-        <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/50">
+        <p className="text-sm text-muted-foreground">Acceso general</p>
+        <span className="rounded-md bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
           Agotado
         </span>
       </div>
@@ -143,7 +143,7 @@ function GaSectorPicker({
   const nextMax = Math.max(1, max)
   return (
     <div className="flex items-center justify-between gap-3 py-1">
-      <p className="text-sm text-white/70">Acceso general</p>
+      <p className="text-sm text-muted-foreground">Acceso general</p>
       <QuantityCounter
         compact
         quantity={quantity}
@@ -174,11 +174,11 @@ function PlaceOptionRow({
         (pending || taken) && "opacity-50",
       )}
     >
-      <span className="min-w-0 truncate text-sm font-medium text-white">
+      <span className="min-w-0 truncate text-sm font-medium text-foreground">
         {option.label}
       </span>
       {taken ? (
-        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-white/50">
+        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
           Agotado
         </span>
       ) : (

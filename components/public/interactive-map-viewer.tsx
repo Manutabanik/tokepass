@@ -6,17 +6,10 @@ import {
   InteractiveSeatingCanvas,
   type InteractiveSelectedSeat,
 } from "@/components/public/interactive-seating-canvas"
-import {
-  BUYER_FLOATING_CHROME_INSET,
-  type BuyerMapFitInset,
-} from "@/lib/seating/venue-map-lod"
 import { cn } from "@/lib/utils"
+import type { BuyerMapFitInset } from "@/lib/seating/venue-map-lod"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import type { InteractiveVenueMap, VenueMapZone } from "@/types/venue-map"
-
-const IMMERSIVE_ZOOM_DOCK_CLASS =
-  "bottom-32 right-4 left-auto z-[55] translate-x-0 flex-col gap-2"
-const IMMERSIVE_LOD_BACK_CLASS = "top-24 left-4 z-[55]"
 
 export function InteractiveMapViewer({
   map,
@@ -61,7 +54,7 @@ export function InteractiveMapViewer({
     <div
       className={cn(
         immersive
-          ? "absolute inset-0 z-10 flex h-full w-full max-w-none flex-col overflow-hidden rounded-none border-0 bg-transparent"
+          ? "relative h-full min-h-0 w-full max-w-none overflow-hidden rounded-none border-0 bg-black/90"
           : "relative h-[320px] w-full max-w-[100vw] overflow-hidden rounded-xl border border-border/70 bg-background/50 touch-none md:h-[450px] md:touch-auto",
         className,
       )}
@@ -93,18 +86,13 @@ export function InteractiveMapViewer({
           hideChrome
           hideToolbar
           buyerChrome
-          buyerFitInset={
-            buyerFitInset ?? (immersive ? BUYER_FLOATING_CHROME_INSET : undefined)
-          }
+          buyerFitInset={buyerFitInset}
           hideZoomDock={hideZoomDock}
-          zoomDockClassName={
-            hideZoomDock
-              ? undefined
-              : (zoomDockClassName ??
-                (immersive ? IMMERSIVE_ZOOM_DOCK_CLASS : undefined))
-          }
+          zoomDockSize={immersive ? "lg" : "default"}
+          zoomDockShowReset={!immersive}
+          zoomDockClassName={zoomDockClassName}
           lodBackClassName={
-            lodBackClassName ?? (immersive ? IMMERSIVE_LOD_BACK_CLASS : undefined)
+            lodBackClassName ?? (immersive ? "top-4 left-4 z-10" : undefined)
           }
         />
       )}
