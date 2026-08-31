@@ -226,7 +226,6 @@ import {
 } from "@/lib/seating/venue-touch"
 import {
   pruneVenueMapSelection,
-  venueMapSelectionsEqual,
 } from "@/lib/seating/venue-map-selection"
 import {
   createVenueZone,
@@ -359,7 +358,7 @@ class VenueCanvasErrorBoundary extends Component<
     return (
       <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-slate-100/90 px-6 text-center dark:bg-zinc-950/90">
         <p className="text-sm font-medium text-foreground">
-          El lienzo quedó vacío. Las herramientas siguen activas.
+          Hubo un error al dibujar el mapa. Las herramientas siguen activas.
         </p>
         <button
           type="button"
@@ -456,9 +455,6 @@ export function InteractiveVenueMapEditor({
   const [zoom, setZoom] = useState(1)
   const [paletteCollapsed, setPaletteCollapsed] = useState(false)
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false)
-  const [inspectorOpenedFor, setInspectorOpenedFor] = useState<Selection | null>(
-    null,
-  )
   const [svgViewBox, setSvgViewBox] = useState<{
     x: number
     y: number
@@ -576,11 +572,15 @@ export function InteractiveVenueMapEditor({
   const [handPan, setHandPan] = useState(false)
   const [isPanning, setIsPanning] = useState(false)
   const handPanRef = useRef(false)
+  const liveSelection = useMemo(
+    () => pruneVenueMapSelection(selection, map),
+    [map, selection],
+  )
   useLayoutEffect(() => {
     isolationIdRef.current = isolationId
     activeZoneIdRef.current = activeZoneId
     workModeRef.current = workMode
-    selectionRef.current = selection
+    selectionRef.current = liveSelection
     compactChromeRef.current = compactChrome
     lassoModeRef.current = lassoMode
     seatEditModeRef.current = seatEditMode
@@ -593,7 +593,7 @@ export function InteractiveVenueMapEditor({
     isolationId,
     activeZoneId,
     workMode,
-    selection,
+    liveSelection,
     compactChrome,
     lassoMode,
     seatEditMode,
@@ -605,7 +605,7 @@ export function InteractiveVenueMapEditor({
   ])
   const panRef = useRef(pan)
   const zoomRef = useRef(zoom)
-  const selectionRef = useRef(selection)
+  const selectionRef = useRef(liveSelection)
   const selectedElementIdsRef = useRef<string[]>([])
   const toolRef = useRef(tool)
   const polygonDraftRef = useRef(polygonDraft)
@@ -744,19 +744,21 @@ export function InteractiveVenueMapEditor({
   }
 
   const selectedSector =
-    selection?.kind === "sector"
-      ? (map.sectors ?? []).find((sector) => sector.id === selection.id) ?? null
+    liveSelection?.kind === "sector"
+      ? (map.sectors ?? []).find((sector) => sector.id === liveSelection.id) ??
+        null
       : null
   const selectedZone =
-    selection?.kind === "zone"
-      ? (map.zones ?? []).find((zone) => zone.id === selection.id) ?? null
+    liveSelection?.kind === "zone"
+      ? (map.zones ?? []).find((zone) => zone.id === liveSelection.id) ?? null
       : null
   const selectedAisle =
-    selection?.kind === "aisle"
-      ? (map.aisles ?? []).find((aisle) => aisle.id === selection.id) ?? null
+    liveSelection?.kind === "aisle"
+      ? (map.aisles ?? []).find((aisle) => aisle.id === liveSelection.id) ??
+        null
       : null
   const selectedStage =
-    selection?.kind === "stage" && map.stage ? map.stage : null
+    liveSelection?.kind === "stage" && map.stage ? map.stage : null
   const activeZone = useMemo(
     () =>
       activeZoneId
@@ -773,20 +775,21 @@ export function InteractiveVenueMapEditor({
     return ids
   }, [activeZone, map.elements])
   const selectedElement =
-    selection?.kind === "element"
-      ? (map.elements ?? []).find((item) => item.id === selection.id) ?? null
-      : selection?.kind === "elements" && selection.ids.length === 1
-        ? (map.elements ?? []).find((item) => item.id === selection.ids[0]) ??
+    liveSelection?.kind === "element"
+      ? (map.elements ?? []).find((item) => item.id === liveSelection.id) ??
+        null
+      : liveSelection?.kind === "elements" && liveSelection.ids.length === 1
+        ? (map.elements ?? []).find((item) => item.id === liveSelection.ids[0]) ??
           null
         : null
   const selectedElementIds = useMemo(
     () =>
-      selection?.kind === "elements"
-        ? selection.ids
-        : selection?.kind === "element"
-          ? [selection.id]
+      liveSelection?.kind === "elements"
+        ? liveSelection.ids
+        : liveSelection?.kind === "element"
+          ? [liveSelection.id]
           : [],
-    [selection],
+    [liveSelection],
   )
   useEffect(() => {
     selectedElementIdsRef.current = selectedElementIds
@@ -795,19 +798,6 @@ export function InteractiveVenueMapEditor({
     const ids = new Set(selectedElementIds)
     return (map.elements ?? []).filter((item) => ids.has(item.id))
   }, [map.elements, selectedElementIds])
-  useLayoutEffect(() => {
-    const next = pruneVenueMapSelection(selection, map)
-    if (venueMapSelectionsEqual(next, selection)) return
-    setSelection(next)
-    if (!next) {
-      setIsolationId(null)
-      setContextMenu(null)
-      setSeatEditMode(false)
-      setInspectorOpenedFor(null)
-      cancelLiveTransform()
-      elementDrag.current = null
-    }
-  }, [map, selection])
   const selectedGroupId = useMemo(() => {
     const fromOne = selectedElement?.groupId?.trim() ?? ""
     if (fromOne) return fromOne
@@ -839,8 +829,8 @@ export function InteractiveVenueMapEditor({
       : null
   const selectedSeatEntries = useMemo((): SelectedSeatEntry[] => {
     if (preview || tool !== "select" || handPan) return []
-    if (selection?.kind === "sector") {
-      const sector = (map.sectors ?? []).find((item) => item.id === selection.id)
+    if (liveSelection?.kind === "sector") {
+      const sector = (map.sectors ?? []).find((item) => item.id === liveSelection.id)
       return (sector?.seats ?? []).map((seat) => ({
         key: seatKey(sector!.id, seat.id),
         x: seat.x,
@@ -850,8 +840,8 @@ export function InteractiveVenueMapEditor({
         seatId: seat.id,
       }))
     }
-    if (selection?.kind !== "seats") return []
-    return selection.ids.flatMap((key): SelectedSeatEntry[] => {
+    if (liveSelection?.kind !== "seats") return []
+    return liveSelection.ids.flatMap((key): SelectedSeatEntry[] => {
       const { ownerId, seatId } = parseSeatSelectionKey(key)
       const sector = (map.sectors ?? []).find((item) => item.id === ownerId)
       const sectorSeat = sector?.seats?.find((item) => item.id === seatId)
@@ -883,7 +873,7 @@ export function InteractiveVenueMapEditor({
       }
       return []
     })
-  }, [handPan, map.elements, map.sectors, preview, selection, tool])
+  }, [handPan, liveSelection, map.elements, map.sectors, preview, tool])
   const selectedSeatBounds = useMemo(
     () =>
       selectedSeatEntries.length > 0
@@ -1643,6 +1633,18 @@ export function InteractiveVenueMapEditor({
     } catch {
       /* Keep the canvas usable if a parent persist throws. */
     }
+    const pruned = pruneVenueMapSelection(selectionRef.current, safe)
+    if (pruned !== selectionRef.current) {
+      setSelection(pruned)
+      if (!pruned) {
+        setIsolationId(null)
+        setContextMenu(null)
+        setSeatEditMode(false)
+        paintLive(null)
+        setTransformingKind(null)
+        elementDrag.current = null
+      }
+    }
   }
 
   function applyCanvasBackground(patch: VenueMapBackgroundPatch) {
@@ -1654,14 +1656,13 @@ export function InteractiveVenueMapEditor({
   }
 
   function clearTransientSelection() {
-    selectionRef.current = null
     selectedElementIdsRef.current = []
     setSelection(null)
     setIsolationId(null)
     setContextMenu(null)
     setSeatEditMode(false)
-    setInspectorOpenedFor(null)
-    cancelLiveTransform()
+    paintLive(null)
+    setTransformingKind(null)
     elementDrag.current = null
   }
 
@@ -3504,12 +3505,16 @@ export function InteractiveVenueMapEditor({
     if (selectedZone) {
       return { title: selectedZone.name, detail: "Zona" }
     }
-    if (selection?.kind === "stage") {
+    if (liveSelection?.kind === "stage") {
       return { title: map.stage?.label || "Escenario", detail: "Escenario" }
     }
-    if (selection?.kind === "label") {
-      const text = map.labels.find((item) => item.id === selection.id)?.text
+    if (liveSelection?.kind === "label") {
+      const text = (map.labels ?? []).find((item) => item.id === liveSelection.id)
+        ?.text
       return { title: text || "Etiqueta", detail: "Texto de nivel" }
+    }
+    if (selectedAisle) {
+      return { title: "Pasillo", detail: "Circulación" }
     }
     return {
       title: "Propiedades del lienzo",
@@ -3526,13 +3531,13 @@ export function InteractiveVenueMapEditor({
           ? ({ kind: "element" } as const)
           : selectedElements.length > 1
             ? ({ kind: "elements" } as const)
-            : selection?.kind === "seats"
+            : liveSelection?.kind === "seats"
               ? ({ kind: "seats" } as const)
-              : selection?.kind === "stage"
+              : liveSelection?.kind === "stage"
                 ? ({ kind: "stage" } as const)
-                : selection?.kind === "label"
+                : liveSelection?.kind === "label"
                   ? ({ kind: "label" } as const)
-                  : selection?.kind === "aisle"
+                  : liveSelection?.kind === "aisle"
                     ? ({ kind: "aisle" } as const)
                     : null
   const orientationState = (() => {
@@ -3887,6 +3892,7 @@ export function InteractiveVenueMapEditor({
     setHandPan(false)
     setTool("select")
     setPlacement(null)
+    setInspectorCollapsed(false)
     setIsolationId(null)
     if (next.kind === "seats") {
       enterSeatEdit(next.ids)
@@ -3903,28 +3909,18 @@ export function InteractiveVenueMapEditor({
       : "select"
 
   const hasPropertiesTarget =
-    Boolean(selection) ||
+    Boolean(liveSelection) ||
     workMode === "pricing" ||
     workMode === "indexing" ||
     workMode === "architecture"
   const propertiesTargetKey =
-    selection?.kind === "seats"
-      ? selection.ids[0] ?? "seats"
-      : selection?.kind === "elements"
-        ? selection.ids[0] ?? "elements"
-        : selection && "id" in selection && selection.id
-          ? selection.id
+    liveSelection?.kind === "seats"
+      ? liveSelection.ids[0] ?? "seats"
+      : liveSelection?.kind === "elements"
+        ? liveSelection.ids[0] ?? "elements"
+        : liveSelection && "id" in liveSelection && liveSelection.id
+          ? liveSelection.id
           : "predio"
-  useEffect(() => {
-    if (!isStudio || compactChrome) return
-    if (!selection) {
-      setInspectorOpenedFor((current) => (current ? null : current))
-      return
-    }
-    if (selection === inspectorOpenedFor) return
-    setInspectorOpenedFor(selection)
-    setInspectorCollapsed(false)
-  }, [compactChrome, inspectorOpenedFor, isStudio, selection])
   const mobileSheetOpen = toolsOpen || propertiesOpen || modesOpen
   const showSelectionToolbar =
     selectedElements.length >= 1 &&
@@ -4045,13 +4041,14 @@ export function InteractiveVenueMapEditor({
           isStudio ? (
             <VenueStudioSidebar
               map={map}
-              selection={selection}
+              selection={liveSelection}
               onSelect={selectFromLayerTree}
               onSpawn={pickPaletteItem}
               activePlacement={placement}
               collapsed={paletteCollapsed}
               onCollapsedChange={setPaletteCollapsed}
               activeZoneId={activeZoneId}
+              spawnDisabled={geometryLocked}
               className={isWorkspace ? "h-full" : undefined}
             />
           ) : (
@@ -4924,6 +4921,11 @@ export function InteractiveVenueMapEditor({
             <>
           {showRings ? (
             <ConcentricRingGenerator
+              key={
+                ringCenter
+                  ? `${Math.round(ringCenter.x)}:${Math.round(ringCenter.y)}`
+                  : "default"
+              }
               onGenerate={applyGeneratedRing}
               center={ringCenter}
             />
@@ -5468,6 +5470,49 @@ export function InteractiveVenueMapEditor({
                 }
               />
             </Field>
+          ) : selectedAisle ? (
+            <div className="space-y-3">
+              <Field label="Ancho (px)">
+                <Input
+                  type="number"
+                  min={4}
+                  value={selectedAisle.width}
+                  onChange={(event) =>
+                    commit({
+                      ...mapRef.current,
+                      aisles: (mapRef.current.aisles ?? []).map((aisle) =>
+                        aisle.id === selectedAisle.id
+                          ? {
+                              ...aisle,
+                              width: Math.max(4, Number(event.target.value) || 4),
+                            }
+                          : aisle,
+                      ),
+                    })
+                  }
+                />
+              </Field>
+              <Field label="Alto (px)">
+                <Input
+                  type="number"
+                  min={4}
+                  value={selectedAisle.height}
+                  onChange={(event) =>
+                    commit({
+                      ...mapRef.current,
+                      aisles: (mapRef.current.aisles ?? []).map((aisle) =>
+                        aisle.id === selectedAisle.id
+                          ? {
+                              ...aisle,
+                              height: Math.max(4, Number(event.target.value) || 4),
+                            }
+                          : aisle,
+                      ),
+                    })
+                  }
+                />
+              </Field>
+            </div>
           ) : selection?.kind === "label" ? (
             <Field label="Texto de nivel">
               <Input
@@ -5693,7 +5738,7 @@ export function InteractiveVenueMapEditor({
             </div>
           )}
 
-          {selection ? (
+          {liveSelection ? (
             <Button
               type="button"
               className="w-full bg-red-600 text-white hover:bg-red-500"
@@ -5702,17 +5747,6 @@ export function InteractiveVenueMapEditor({
               <Trash2 className="h-4 w-4" />
               Eliminar selección
             </Button>
-          ) : null}
-
-          {!isStudio ? (
-            <VenueMapBackgroundPanel
-              map={map}
-              onChange={(patch) => {
-                const current = mapRef.current
-                if (!current) return
-                commit({ ...current, ...patch })
-              }}
-            />
           ) : null}
             </>
           )}

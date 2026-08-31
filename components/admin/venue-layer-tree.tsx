@@ -279,14 +279,12 @@ export function VenueLayerTree({
   const [expandedFor, setExpandedFor] = useState(expandKey)
 
   if ((selectedKey || activeZoneId || query.trim()) && expandKey !== expandedFor) {
+    const nextOpen = new Set(openIds)
+    if (selectedKey) collectOpenIds(nodes, selectedKey, nextOpen)
+    if (activeZoneId) nextOpen.add(activeZoneId)
+    if (query.trim()) collectAllOpenIds(visibleNodes, nextOpen)
     setExpandedFor(expandKey)
-    setOpenIds((current) => {
-      const next = new Set(current)
-      if (selectedKey) collectOpenIds(nodes, selectedKey, next)
-      if (activeZoneId) next.add(activeZoneId)
-      if (query.trim()) collectAllOpenIds(visibleNodes, next)
-      return next
-    })
+    setOpenIds(nextOpen)
   }
 
   function toggle(id: string) {

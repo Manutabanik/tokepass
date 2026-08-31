@@ -102,6 +102,7 @@ export function VenueStudioSidebar({
   collapsed = false,
   onCollapsedChange,
   activeZoneId = null,
+  spawnDisabled = false,
   className,
 }: {
   map: InteractiveVenueMap
@@ -112,6 +113,7 @@ export function VenueStudioSidebar({
   collapsed?: boolean
   onCollapsedChange?: (collapsed: boolean) => void
   activeZoneId?: string | null
+  spawnDisabled?: boolean
   className?: string
 }) {
   if (collapsed) {
@@ -182,12 +184,14 @@ export function VenueStudioSidebar({
             items={COMMERCIAL}
             active={activePlacement}
             onSpawn={onSpawn}
+            disabled={spawnDisabled}
           />
           <CatalogGroup
             title="Infraestructura"
             items={INFRASTRUCTURE}
             active={activePlacement}
             onSpawn={onSpawn}
+            disabled={spawnDisabled}
             className="mt-4"
           />
         </TabsContent>
@@ -215,12 +219,14 @@ function CatalogGroup({
   items,
   active,
   onSpawn,
+  disabled = false,
   className,
 }: {
   title: string
   items: CatalogItem[]
   active: PalettePlacement | null
   onSpawn: (placement: PalettePlacement) => void
+  disabled?: boolean
   className?: string
 }) {
   return (
@@ -238,11 +244,17 @@ function CatalogGroup({
             <button
               key={item.label}
               type="button"
-              title={item.label}
+              title={
+                disabled
+                  ? "Cambiá a Arquitectura para agregar elementos"
+                  : item.label
+              }
               aria-label={item.label}
+              disabled={disabled}
               onClick={() => onSpawn(item.placement)}
               className={cn(
                 "flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-xl border px-2 py-3 text-center transition",
+                disabled && "cursor-not-allowed opacity-50",
                 selected
                   ? "border-emerald-500/50 bg-emerald-500/10 text-foreground ring-1 ring-emerald-500/30"
                   : "border-border bg-background text-foreground hover:border-emerald-500/40 hover:bg-muted",

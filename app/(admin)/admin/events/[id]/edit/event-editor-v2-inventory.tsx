@@ -404,7 +404,7 @@ export function EventEditorV2InventoryStep({
               <Button
                 type="button"
                 onClick={saveEditor}
-                disabled={editor.name === "tickets" && meter.overCapacity}
+                disabled={editor?.name === "tickets" && meter.overCapacity}
               >
                 Guardar
               </Button>
