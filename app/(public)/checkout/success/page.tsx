@@ -7,7 +7,6 @@ import { CheckoutSuccessView } from "@/components/checkout/checkout-success-view
 import { EventStoreUpsell } from "@/components/public/event-store-upsell"
 import { StoryFlyerSuccessCard } from "@/components/public/story-flyer-modal"
 import { CheckoutWalletPrecache } from "@/components/pwa/checkout-wallet-precache"
-import { getWalletUiFlags } from "@/lib/wallet-cache"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -34,23 +33,24 @@ export default async function CheckoutSuccessPage({
   const isFree = free === "1"
   const isSandbox = sandbox === "1"
   const skipPolling = isFree || isSandbox
-  const walletFlags = getWalletUiFlags()
+
+  const emptyFulfillment = {
+    orderId: orderId,
+    status: "not_found" as const,
+    tickets: [],
+    userId: "",
+    eventTitle: null,
+    totalAmount: 0,
+    holdExpiresAt: null,
+    checkoutMessage: null,
+  }
 
   const fulfillment = orderId
-    ? await getCheckoutOrderFulfillment(orderId)
-    : {
-        orderId: "",
-        status: "not_found" as const,
-        tickets: [],
-        userId: "",
-        eventTitle: null,
-        totalAmount: 0,
-        holdExpiresAt: null,
-        checkoutMessage: null,
-      }
+    ? await getCheckoutOrderFulfillment(orderId).catch(() => emptyFulfillment)
+    : emptyFulfillment
 
   const purchaseAnalytics = orderId
-    ? await getPurchaseAnalyticsForOrder(orderId)
+    ? await getPurchaseAnalyticsForOrder(orderId).catch(() => null)
     : null
 
   const eventId = purchaseAnalytics?.eventId?.trim() || ""
@@ -71,8 +71,6 @@ export default async function CheckoutSuccessPage({
           orderId={orderId}
           initial={fulfillment}
           skipPolling={skipPolling && fulfillment.status === "paid"}
-          appleWalletEnabled={walletFlags.appleWalletEnabled}
-          googleWalletEnabled={walletFlags.googleWalletEnabled}
           purchaseAnalytics={purchaseAnalytics}
         />
 

@@ -3,22 +3,17 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
-import { ArrowRight, CheckCircle2, Download, LoaderCircle, Ticket } from "lucide-react"
-import useEmblaCarousel from "embla-carousel-react"
+import { ArrowRight, CheckCircle2, LoaderCircle, Ticket } from "lucide-react"
 
 import type { PurchaseAnalyticsPayload } from "@/app/actions/event-marketing"
 import { getCheckoutOrderFulfillment } from "@/app/actions/checkout-fulfillment"
 import type { CheckoutOrderFulfillment } from "@/app/actions/checkout-fulfillment"
 import { PurchaseAnalyticsTracker } from "@/components/public/purchase-analytics-tracker"
 import { hasActivePixels } from "@/lib/analytics/pixels"
-import { WalletPassButtons } from "@/components/account/wallet-pass-buttons"
-import { LivingTicketCard } from "@/components/public/living-ticket-card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { nextFulfillmentPollDelay } from "@/lib/checkout/fulfillment"
-import { ticketPdfPath } from "@/lib/pdf/ticket-pdf-model"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
-import { cn } from "@/lib/utils"
 
 function PendingSkeleton() {
   return (
@@ -26,7 +21,7 @@ function PendingSkeleton() {
       <Skeleton className="mx-auto size-24 rounded-full" />
       <Skeleton className="mx-auto h-8 w-56" />
       <Skeleton className="mx-auto h-4 w-72" />
-      <Skeleton className="mt-6 h-80 w-full rounded-3xl" />
+      <Skeleton className="mt-6 h-14 w-full rounded-xl" />
     </div>
   )
 }
@@ -57,15 +52,11 @@ function SuccessBurst() {
 export function CheckoutSuccessView({
   orderId,
   initial,
-  appleWalletEnabled,
-  googleWalletEnabled,
   skipPolling = false,
   purchaseAnalytics = null,
 }: {
   orderId: string
   initial: CheckoutOrderFulfillment
-  appleWalletEnabled: boolean
-  googleWalletEnabled: boolean
   skipPolling?: boolean
   purchaseAnalytics?: PurchaseAnalyticsPayload | null
 }) {
@@ -103,7 +94,23 @@ export function CheckoutSuccessView({
     startedAt.current = Date.now()
 
     async function tick() {
-      const next = await getCheckoutOrderFulfillment(orderId)
+      let next: CheckoutOrderFulfillment
+      try {
+        next = await getCheckoutOrderFulfillment(orderId)
+      } catch {
+        if (cancelled) return
+        const wait = nextFulfillmentPollDelay(Date.now() - startedAt.current, {
+          holdExpiresAt,
+        })
+        if (wait == null) {
+          setTimedOut(true)
+          return
+        }
+        timer = window.setTimeout(() => {
+          void tick()
+        }, wait)
+        return
+      }
       if (cancelled) return
       setFulfillment(next)
       if (next.status !== "pending") return
@@ -128,21 +135,6 @@ export function CheckoutSuccessView({
       window.clearTimeout(timer)
     }
   }, [holdExpiresAt, orderId, polling])
-
-  const tickets = fulfillment.tickets
-  const firstTicket = tickets[0]
-  const pdfHref = firstTicket
-    ? ticketPdfPath(firstTicket.id, {
-        size: "a4",
-        download: true,
-        ids: tickets.map((ticket) => ticket.id),
-      })
-    : null
-  const [emblaRef] = useEmblaCarousel({
-    align: "center",
-    loop: tickets.length > 1,
-    skipSnaps: false,
-  })
 
   return (
     <div className="flex w-full flex-col items-center text-center">
@@ -243,71 +235,18 @@ export function CheckoutSuccessView({
                   </p>
                 ) : null}
                 <p className="mx-auto max-w-md text-lg font-medium text-muted-foreground md:text-xl">
-                  Las entradas fueron enviadas a tu correo. No hace falta
-                  contraseña: también las tenés en &quot;Mis entradas&quot;
-                </p>
-                <p className="mx-auto max-w-md text-sm leading-6 text-muted-foreground">
-                  {firstTicket?.deliveryMode === "ONLINE"
-                    ? "El botón para entrar al vivo está en Mis entradas. No hay QR de puerta."
-                    : "En puerta mostrá esta pantalla. El código se actualiza solo para evitar reventas truchas (no le saques captura de pantalla)."}
+                  Las entradas fueron enviadas a tu correo y ya están
+                  disponibles en &quot;Mis entradas&quot;.
                 </p>
               </div>
             </div>
 
-            {tickets.length > 0 ? (
-              <div className="mt-8 w-full">
-                <div ref={emblaRef} className="overflow-hidden">
-                  <div className="flex">
-                    {tickets.map((ticket) => (
-                      <div
-                        key={ticket.id}
-                        className={cn(
-                          "min-w-0 shrink-0 grow-0 basis-full px-1",
-                          tickets.length > 1 && "basis-[88%] sm:basis-[70%]",
-                        )}
-                      >
-                        <LivingTicketCard
-                          ticket={ticket}
-                          userId={fulfillment.userId}
-                          showQr
-                          appleWalletEnabled={appleWalletEnabled}
-                          googleWalletEnabled={googleWalletEnabled}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <p className="mt-8 text-sm text-muted-foreground">
-                Pago acreditado. Abrí tu billetera para ver el QR.
-              </p>
-            )}
-
             <div className="mx-auto mt-8 flex w-full max-w-sm flex-col gap-3 pt-2">
-              {pdfHref ? (
-                <a
-                  href={pdfHref}
-                  className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 text-lg font-black text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-colors hover:bg-emerald-400"
-                >
-                  <Download className="size-5" aria-hidden="true" />
-                  Descargar entradas ahora
-                </a>
-              ) : null}
-              {firstTicket ? (
-                <WalletPassButtons
-                  ticketId={firstTicket.id}
-                  flyerUrl={firstTicket.flyerUrl}
-                  appleWalletEnabled={appleWalletEnabled}
-                  googleWalletEnabled={googleWalletEnabled}
-                  hidePdf
-                />
-              ) : null}
               <Link
                 href="/cuenta/entradas"
-                className="inline-flex h-12 items-center justify-center gap-2 text-sm font-medium text-emerald-600 transition-colors hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300"
+                className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 text-lg font-black text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-colors hover:bg-emerald-400"
               >
-                <Ticket className="size-4" aria-hidden="true" />
+                <Ticket className="size-5" aria-hidden="true" />
                 Ir a mis entradas
               </Link>
             </div>
