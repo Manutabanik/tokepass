@@ -69,18 +69,30 @@ describe("inventory-seat-state", () => {
     assert.equal(merged.c, "held")
   })
 
-  it("keeps pending_payment holds painted even after expires_at", () => {
+  it("releases pending_payment holds after expires_at so Mesa 05 is selectable", () => {
     const occupancy = occupancyFromSeatHolds(
       [
         {
-          layoutItemId: "s-frozen",
+          layoutItemId: "mesa-05",
           expiresAt: "2020-01-01T00:00:00.000Z",
           status: "pending_payment",
         },
       ],
       { nowMs: Date.parse("2026-08-16T00:00:00.000Z") },
     )
-    assert.equal(occupancy["s-frozen"], "held")
+    assert.equal(occupancy["mesa-05"], undefined)
+    assert.deepEqual(
+      seatHoldRealtimePatch(
+        "UPDATE",
+        {
+          layout_item_id: "mesa-05",
+          expires_at: "2020-01-01T00:00:00.000Z",
+          status: "pending_payment",
+        },
+        { nowMs: Date.parse("2026-08-16T00:00:00.000Z") },
+      ),
+      { "mesa-05": "available" },
+    )
   })
 
   it("builds occupancy from active seat_holds and ignores other dates", () => {

@@ -1,5 +1,6 @@
 import { inventoryRowMatchesActiveDay } from "@/lib/checkout/seat-hold-day"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
+import { effectiveSeatingUnitStatus } from "@/lib/seating/venue-map-occupancy"
 
 export type OccupancyRealtimeRow = {
   id?: string
@@ -7,6 +8,7 @@ export type OccupancyRealtimeRow = {
   layout_item_id?: string
   status?: string
   event_date_id?: string | null
+  reserved_until?: string | null
 }
 
 function occupancyAliasPatch(
@@ -23,12 +25,22 @@ function occupancyAliasPatch(
 export type OccupancyDayScope = {
   eventDateId?: string | null
   scheduleDayCount?: number
+  nowMs?: number
 }
 
-function statusToOccupancy(status: string | undefined): SeatStatus {
-  if (status === "available") return "available"
-  if (status === "blocked") return "blocked"
-  if (status === "reserved" || status === "held") return "held"
+function statusToOccupancy(
+  status: string | undefined,
+  reservedUntil?: string | null,
+  nowMs?: number,
+): SeatStatus {
+  const effective = effectiveSeatingUnitStatus(
+    status ?? "",
+    reservedUntil,
+    nowMs,
+  )
+  if (effective === "available") return "available"
+  if (effective === "blocked") return "blocked"
+  if (effective === "reserved" || effective === "held") return "held"
   return "occupied"
 }
 
@@ -52,7 +64,7 @@ export function occupancyPatchFromSeatingRow(
   if (!layoutItemId) return null
   return occupancyAliasPatch(
     layoutItemId,
-    statusToOccupancy(row.status),
+    statusToOccupancy(row.status, row.reserved_until, scope?.nowMs),
     row.id,
   )
 }

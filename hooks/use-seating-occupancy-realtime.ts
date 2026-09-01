@@ -31,16 +31,37 @@ async function fetchOccupancySnapshot(
   const multi = (scope.scheduleDayCount ?? 0) >= 2
   let query = supabase
     .from("event_seating_occupancy")
-    .select("id, layout_item_id, status, event_date_id")
+    .select("id, layout_item_id, status, event_date_id, reserved_until")
     .eq("event_id", eventId)
   if (selected && multi) {
     query = query.eq("event_date_id", selected)
   }
   const { data, error } = await query
   if (error) {
+    const missingUntilColumn = /reserved_until|PGRST204|42703/i.test(
+      error.message,
+    )
     const missingDayColumn = /event_date_id|PGRST204|42703/i.test(
       error.message,
     )
+    if (missingUntilColumn && !/event_date_id/i.test(error.message)) {
+      let withoutUntilQuery = supabase
+        .from("event_seating_occupancy")
+        .select("id, layout_item_id, status, event_date_id")
+        .eq("event_id", eventId)
+      if (selected && multi) {
+        withoutUntilQuery = withoutUntilQuery.eq("event_date_id", selected)
+      }
+      const withoutUntil = await withoutUntilQuery
+      if (!withoutUntil.error) {
+        const patch: Record<string, SeatStatus> = {}
+        for (const row of withoutUntil.data ?? []) {
+          const next = occupancyPatchFromSeatingRow(row, scope)
+          if (next) Object.assign(patch, next)
+        }
+        return patch
+      }
+    }
     if (!missingDayColumn) return null
     if (multi) return null
     const fallback = await supabase

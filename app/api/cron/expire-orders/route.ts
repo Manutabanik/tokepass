@@ -28,8 +28,9 @@ function authorizeCron(request: NextRequest): boolean {
 }
 
 /**
- * Libera stock de checkouts abandonados (barrido).
- * Lotes de 500 + SKIP LOCKED, un RPC a la vez, para no pelear
+ * Libera stock de checkouts abandonados (barrido cada minuto).
+ * Reconcile MP primero (aprueba cobros huérfanos), después TTL 15m.
+ * Lotes de 2000 + SKIP LOCKED, un RPC a la vez, para no pelear
  * locks con reserve_unified_cart_tx.
  */
 export async function GET(request: NextRequest) {
@@ -76,6 +77,16 @@ export async function GET(request: NextRequest) {
       throw new Error(seatHolds.error.message)
     }
 
+    const purged = await admin.rpc("purge_expired_checkout_holds")
+    if (
+      purged.error &&
+      !/could not find|schema cache|does not exist|pgrst202|p_event_id es requerido/i.test(
+        purged.error.message,
+      )
+    ) {
+      throw new Error(purged.error.message)
+    }
+
     const resaleHolds = await admin.rpc("expire_resale_listing_reservations", batch)
     if (resaleHolds.error) {
       throw new Error(resaleHolds.error.message)
@@ -92,6 +103,7 @@ export async function GET(request: NextRequest) {
       expiredCartHoldCount: Number(cartHolds.data ?? 0),
       expiredGaHoldCount: Number(gaHolds.data ?? 0),
       expiredSeatHoldCount: Number(seatHolds.data ?? 0),
+      purgedHoldCount: Number(purged.data ?? 0),
       expiredResaleHoldCount: Number(resaleHolds.data ?? 0),
       expiredTransferHoldCount: Number(transfers.data ?? 0),
       reconciled,

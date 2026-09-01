@@ -13,13 +13,16 @@ describe("orphan payment reconcile", () => {
     assert.equal(decided.payment?.id, "2")
   })
 
-  it("keeps inventory when the gateway is still in flight or unknown", () => {
+  it("keeps inventory while the gateway payment is still in flight", () => {
     assert.equal(
       decideOrphanPaymentAction([{ id: "1", status: "pending", amount: 10 }])
         .action,
       "keep",
     )
-    assert.equal(decideOrphanPaymentAction([]).action, "keep")
+  })
+
+  it("releases a preference that never created a payment", () => {
+    assert.equal(decideOrphanPaymentAction([]).action, "release")
   })
 
   it("releases only after the gateway rejected or cancelled the attempt", () => {

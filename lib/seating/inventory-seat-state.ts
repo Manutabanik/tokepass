@@ -96,8 +96,7 @@ export function occupancyFromSeatHolds(
     } else if (dateId && holdDate && holdDate !== dateId) {
       continue
     }
-    const frozen = hold.status === "pending_payment"
-    if (!frozen && isCheckoutHoldExpired(hold.expiresAt, nowMs)) continue
+    if (isCheckoutHoldExpired(hold.expiresAt, nowMs)) continue
     occupancy[id] = "held"
   }
   return occupancy
@@ -128,10 +127,9 @@ export function seatHoldRealtimePatch(
   } else if (dateId && rowDate && rowDate !== dateId) {
     return null
   }
-  const frozen = row.status === "pending_payment"
   if (
     event === "DELETE" ||
-    (!frozen && isCheckoutHoldExpired(row.expires_at, options?.nowMs))
+    isCheckoutHoldExpired(row.expires_at, options?.nowMs)
   ) {
     return { [layoutItemId]: "available" }
   }

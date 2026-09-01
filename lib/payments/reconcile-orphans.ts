@@ -1,5 +1,6 @@
 import "server-only"
 
+import { RECONCILE_ORPHAN_BATCH_SIZE } from "@/lib/checkout/expire-holds-policy"
 import { logger } from "@/lib/logger"
 import { getMercadoPagoAccessToken } from "@/lib/mercadopago"
 import { processPaidOrderNotification } from "@/lib/payments/core/confirm-order"
@@ -85,7 +86,7 @@ export async function reconcileOrphanPaymentHolds(): Promise<{
     .eq("status", "pending")
     .not("payment_started_at", "is", null)
     .order("payment_started_at", { ascending: true })
-    .limit(40)
+    .limit(RECONCILE_ORPHAN_BATCH_SIZE)
 
   if (error) {
     logger.error({

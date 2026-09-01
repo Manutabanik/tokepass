@@ -12,8 +12,8 @@ export const SEATING_HOLD_MINUTES = 15
 
 export const GA_CHECKOUT_HOLD_INTERVAL = `${GA_CHECKOUT_HOLD_MINUTES} minutes` as const
 
-/** Cron de expiracion: lotes chicos + SKIP LOCKED para no pelear con reserve. */
-export const EXPIRE_HOLD_BATCH_SIZE = 500
+/** Cron cada minuto: lote al tope SQL (SKIP LOCKED) para drenar picos de 3k carritos. */
+export const EXPIRE_HOLD_BATCH_SIZE = 2000
 
 export const GA_CHECKOUT_HOLD_MS = GA_CHECKOUT_HOLD_MINUTES * 60 * 1000
 

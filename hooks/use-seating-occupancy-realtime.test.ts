@@ -7,6 +7,31 @@ import {
 } from "@/lib/realtime/occupancy-patches"
 
 describe("occupancyPatchFromSeatingRow", () => {
+  it("treats an expired reserved seat as selectable without waiting for cron", () => {
+    assert.deepEqual(
+      occupancyPatchFromSeatingRow(
+        {
+          layout_item_id: "mesa-05",
+          status: "reserved",
+          reserved_until: "2020-01-01T00:00:00.000Z",
+        },
+        { nowMs: Date.parse("2026-08-31T18:00:00.000Z") },
+      ),
+      { "mesa-05": "available" },
+    )
+    assert.deepEqual(
+      occupancyPatchFromSeatingRow(
+        {
+          layout_item_id: "mesa-05",
+          status: "reserved",
+          reserved_until: "2099-01-01T00:00:00.000Z",
+        },
+        { nowMs: Date.parse("2026-08-31T18:00:00.000Z") },
+      ),
+      { "mesa-05": "held" },
+    )
+  })
+
   it("maps live statuses and ignores empty rows", () => {
     assert.deepEqual(
       occupancyPatchFromSeatingRow({ layout_item_id: "s-1", status: "sold" }),

@@ -11,8 +11,12 @@ export type OrphanGatewayPayment = {
 }
 
 /**
- * Zero-trust: un hold con intento de pago no se libera por TTL local.
- * Primero se mira el estado real de la pasarela.
+ * Zero-trust sobre el gateway, no sobre un hold eterno:
+ * - approved → confirmar
+ * - pending / in_mediation → keep (el cron igual corta a los 15m)
+ * - búsqueda OK sin pagos (preferencia abandonada) → release
+ * - rejected / cancelled → release
+ * Si la búsqueda a MP falla, el caller no invoca esto (keep).
  */
 export function decideOrphanPaymentAction(
   payments: readonly OrphanGatewayPayment[],
@@ -31,7 +35,7 @@ export function decideOrphanPaymentAction(
   })
   if (inFlight) return { action: "keep", payment: inFlight }
 
-  if (payments.length === 0) return { action: "keep" }
+  if (payments.length === 0) return { action: "release" }
 
   return { action: "release", payment: payments[0] }
 }
