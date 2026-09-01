@@ -1,3 +1,4 @@
+import { TheatreSeatDefs } from "@/components/admin/venue-svg-symbols"
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
 import { VenueMapZoneLayer } from "@/components/venue/venue-map-zone-layer"
@@ -20,6 +21,7 @@ export function VenueMapCanvas({
       role="img"
       aria-label="Plano de asientos"
     >
+      <TheatreSeatDefs />
       <rect
         width={VENUE_MAP_CANVAS.width}
         height={VENUE_MAP_CANVAS.height}

@@ -41,6 +41,7 @@ const VenueElementShape = memo(function VenueElementShape({
   popSelected = true,
   buyerOccupancy = false,
   soldOut = false,
+  delegateEvents = false,
 }: {
   element: VenueMapElement
   selected: boolean
@@ -97,6 +98,7 @@ const VenueElementShape = memo(function VenueElementShape({
   popSelected?: boolean
   buyerOccupancy?: boolean
   soldOut?: boolean
+  delegateEvents?: boolean
 }) {
   const lit = selected || highlighted
   const transform =
@@ -122,6 +124,7 @@ const VenueElementShape = memo(function VenueElementShape({
   return (
     <g
       id={`venue-sel-${element.id}`}
+      data-inventory="element"
       data-element-id={element.id}
       data-locked={soldOut ? "1" : undefined}
       transform={transform}
@@ -141,12 +144,12 @@ const VenueElementShape = memo(function VenueElementShape({
             : undefined
       }
       onPointerDown={
-        interactive && !soldOut && !selectOnPointerUp
+        !delegateEvents && interactive && !soldOut && !selectOnPointerUp
           ? (event) => onElementPointerDown?.(event, element)
           : undefined
       }
       onPointerUp={
-        interactive && selectOnPointerUp
+        !delegateEvents && interactive && selectOnPointerUp
           ? (event) => {
               isolateCanvasPointer(event)
               onElementPointerUp?.(event, element)
@@ -154,7 +157,7 @@ const VenueElementShape = memo(function VenueElementShape({
           : undefined
       }
       onClick={
-        interactive && !soldOut
+        !delegateEvents && interactive && !soldOut
           ? (event) => {
               isolateCanvasPointer(event)
               event.preventDefault()
@@ -162,22 +165,22 @@ const VenueElementShape = memo(function VenueElementShape({
           : undefined
       }
       onMouseEnter={
-        interactive && !soldOut
+        !delegateEvents && interactive && !soldOut
           ? (event) => onElementPointerEnter?.(event, element)
           : undefined
       }
       onMouseLeave={
-        interactive && !soldOut
+        !delegateEvents && interactive && !soldOut
           ? (event) => onElementPointerLeave?.(event, element)
           : undefined
       }
       onContextMenu={
-        interactive && !soldOut
+        !delegateEvents && interactive && !soldOut
           ? (event) => onElementContextMenu?.(event, element)
           : undefined
       }
       onDoubleClick={
-        interactive && !soldOut
+        !delegateEvents && interactive && !soldOut
           ? (event) => {
               isolateCanvasPointer(event)
               event.preventDefault()
@@ -230,7 +233,7 @@ const VenueElementShape = memo(function VenueElementShape({
           zoom={zoom}
           label={element.type === "standing_zone" ? undefined : labelText}
           onSeatPointerDown={
-            onSeatPointerDown && !soldOut && !selectOnPointerUp
+            !delegateEvents && onSeatPointerDown && !soldOut && !selectOnPointerUp
               ? (event, seatId) => {
                   isolateCanvasPointer(event)
                   onSeatPointerDown(event, element, seatId)
@@ -238,7 +241,7 @@ const VenueElementShape = memo(function VenueElementShape({
               : undefined
           }
           onSeatPointerUp={
-            onSeatPointerUp && (!soldOut || selectOnPointerUp)
+            !delegateEvents && onSeatPointerUp && (!soldOut || selectOnPointerUp)
               ? (event, seatId) => {
                   isolateCanvasPointer(event)
                   onSeatPointerUp(event, element, seatId)
@@ -247,7 +250,7 @@ const VenueElementShape = memo(function VenueElementShape({
           }
           hitPadding={hitPadding}
           onSeatDoubleClick={
-            onSeatDoubleClick
+            !delegateEvents && onSeatDoubleClick
               ? (event, seatId) => {
                   isolateCanvasPointer(event)
                   event.preventDefault()
@@ -302,7 +305,7 @@ const VenueElementShape = memo(function VenueElementShape({
   )
 })
 
-export function VenueMapElementLayer({
+export const VenueMapElementLayer = memo(function VenueMapElementLayer({
   elements,
   selectedIds = [],
   selectedSeatIds,
@@ -329,6 +332,7 @@ export function VenueMapElementLayer({
   isolationDimIds = null,
   buyerOccupancy = false,
   preserveOrder = false,
+  delegateEvents = false,
 }: {
   elements: VenueMapElement[]
   selectedIds?: string[]
@@ -386,6 +390,7 @@ export function VenueMapElementLayer({
   isolationDimIds?: Set<string> | null
   buyerOccupancy?: boolean
   preserveOrder?: boolean
+  delegateEvents?: boolean
 }) {
   const selected = new Set(selectedIds)
   const highlighted = new Set(highlightedIds)
@@ -479,13 +484,14 @@ export function VenueMapElementLayer({
               highlighted={isHighlighted}
               popSelected={popSelected}
               buyerOccupancy={buyerOccupancy}
+              delegateEvents={delegateEvents}
             />
           </g>
         )
       })}
     </>
   )
-}
+})
 
 export function hasRenderableVenueMap(map: InteractiveVenueMap): boolean {
   return (

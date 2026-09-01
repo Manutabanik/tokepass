@@ -92,7 +92,10 @@ import { StorefrontSelectionCard } from "@/components/public/storefront-selectio
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
 import { VenueMapZoneLayer } from "@/components/venue/venue-map-zone-layer"
-import { TheatreSeatSymbol } from "@/components/admin/venue-svg-symbols"
+import {
+  TheatreSeatDefs,
+  TheatreSeatSymbol,
+} from "@/components/admin/venue-svg-symbols"
 import {
   storefrontSelectionCount,
   storefrontSelectionTotal,
@@ -1553,6 +1556,7 @@ export function InteractiveSeatingCanvas({
               : "Plano del recinto. Pellizcá para acercar, arrastrá para mover y tocá una zona o butaca."
           }
         >
+          <TheatreSeatDefs />
           <rect
             x={0}
             y={-VIEW_TOP_PAD}

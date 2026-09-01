@@ -1,5 +1,6 @@
 "use client"
 
+import { useId, type SVGProps } from "react"
 import {
   ChefHat,
   DoorOpen,
@@ -35,9 +36,12 @@ function seatInteractionProps(
   onSeatDoubleClick?: (event: React.MouseEvent, seatId: string) => void,
   locked = false,
   onSeatPointerUp?: (event: React.PointerEvent, seatId: string) => void,
+  parentId?: string,
 ) {
   if (!seatId) return undefined
   return {
+    "data-inventory": parentId ? "element-seat" : "seat",
+    "data-element-id": parentId,
     "data-seat-id": seatId,
     "data-locked": locked ? "1" : undefined,
     className: locked ? "pointer-events-none" : undefined,
@@ -70,6 +74,7 @@ function expandedChairHit(
   onSeatDoubleClick?: (event: React.MouseEvent, seatId: string) => void,
   onSeatPointerUp?: (event: React.PointerEvent, seatId: string) => void,
   locked = false,
+  parentId?: string,
 ) {
   if (!seatId || locked) return null
   if (
@@ -94,6 +99,7 @@ function expandedChairHit(
         onSeatDoubleClick,
         false,
         onSeatPointerUp,
+        parentId,
       )}
     />
   )
@@ -221,6 +227,49 @@ function tableSurfaceProps(
   }
 }
 
+export const THEATRE_SEAT_SYMBOL_ID = "tokepass-theatre-seat"
+const THEATRE_SEAT_UNIT = 12
+
+/** Unit seat (back + cushion) for hardware-instanced `<use>` copies. */
+export function TheatreSeatDefs({
+  id = THEATRE_SEAT_SYMBOL_ID,
+}: {
+  id?: string
+}) {
+  return (
+    <defs>
+      <symbol
+        id={id}
+        viewBox="-6 -6 12 12"
+        overflow="visible"
+      >
+        <rect
+          x="-5.04"
+          y="-6"
+          width="10.08"
+          height="3.84"
+          rx="2.64"
+          fill="currentColor"
+          fillOpacity={0.95}
+          stroke="currentColor"
+          strokeWidth={0.9}
+        />
+        <rect
+          x="-4.8"
+          y="-1.68"
+          width="9.6"
+          height="6.96"
+          rx="2.16"
+          fill="currentColor"
+          fillOpacity={0.82}
+          stroke="currentColor"
+          strokeWidth={0.9}
+        />
+      </symbol>
+    </defs>
+  )
+}
+
 export function TheatreSeatSymbol({
   cx,
   cy,
@@ -234,6 +283,8 @@ export function TheatreSeatSymbol({
   label,
   showLabel = false,
   buyerOccupancy = false,
+  symbolId = THEATRE_SEAT_SYMBOL_ID,
+  ...useProps
 }: {
   cx: number
   cy: number
@@ -247,7 +298,11 @@ export function TheatreSeatSymbol({
   label?: string
   showLabel?: boolean
   buyerOccupancy?: boolean
-}) {
+  symbolId?: string
+} & Omit<
+  SVGProps<SVGUseElement>,
+  "href" | "x" | "y" | "width" | "height" | "color" | "transform"
+>) {
   const w = Math.max(10, width)
   const h = Math.max(10, height)
   const state: Occupancy = occupied
@@ -259,40 +314,31 @@ export function TheatreSeatSymbol({
         : "available"
   const fill = fillFor(color, state, buyerOccupancy)
   const stroke = strokeFor(color, selected, state, buyerOccupancy)
-  const rxBack = Math.min(3.2, w * 0.22)
-  const rxSeat = Math.min(2.4, w * 0.18)
   const fontSize = Math.max(5, Math.min(7.5, w * 0.42))
   const selectedGlow = buyerOccupancy
     ? "drop-shadow(0px 0px 10px rgba(16, 185, 129, 0.9))"
     : "drop-shadow(0px 0px 8px rgba(255, 255, 255, 0.8))"
+  const scale = Math.max(w, h) / THEATRE_SEAT_UNIT
 
   return (
-    <g
-      transform={`rotate(${rotation} ${cx} ${cy})`}
-      className="transition-all duration-200 ease-in-out"
-      style={selected ? { filter: selectedGlow } : undefined}
-    >
-      <rect
-        x={cx - w * 0.42}
-        y={cy - h * 0.5}
-        width={w * 0.84}
-        height={h * 0.32}
-        rx={rxBack}
+    <>
+      <use
+        href={`#${symbolId}`}
+        x={cx - THEATRE_SEAT_UNIT / 2}
+        y={cy - THEATRE_SEAT_UNIT / 2}
+        width={THEATRE_SEAT_UNIT}
+        height={THEATRE_SEAT_UNIT}
+        transform={
+          rotation || scale !== 1
+            ? `rotate(${rotation} ${cx} ${cy})${scale !== 1 ? ` translate(${cx} ${cy}) scale(${scale}) translate(${-cx} ${-cy})` : ""}`
+            : undefined
+        }
         fill={fill}
-        fillOpacity={occupancyOpacity(state, buyerOccupancy, 0.4, 0.95)}
         stroke={stroke}
+        color={fill}
         strokeWidth={selected ? (buyerOccupancy ? 2.4 : 3) : 0.9}
-      />
-      <rect
-        x={cx - w * 0.4}
-        y={cy - h * 0.14}
-        width={w * 0.8}
-        height={h * 0.58}
-        rx={rxSeat}
-        fill={fill}
-        fillOpacity={occupancyOpacity(state, buyerOccupancy, 0.35, 0.82)}
-        stroke={stroke}
-        strokeWidth={selected ? (buyerOccupancy ? 2.4 : 3) : 0.9}
+        style={selected ? { filter: selectedGlow, color: fill } : { color: fill }}
+        {...useProps}
       />
       {showLabel && label ? (
         <text
@@ -306,7 +352,7 @@ export function TheatreSeatSymbol({
           {label}
         </text>
       ) : null}
-    </g>
+    </>
   )
 }
 
@@ -369,6 +415,7 @@ export function RoundTableSymbol({
               onSeatDoubleClick,
               onSeatPointerUp,
               locked,
+              parentIds[0],
             )}
             <circle
               cx={x}
@@ -384,6 +431,7 @@ export function RoundTableSymbol({
                 onSeatDoubleClick,
                 locked,
                 onSeatPointerUp,
+                parentIds[0],
               )}
             />
           </g>
@@ -467,6 +515,7 @@ export function LongTableSymbol({
             onSeatDoubleClick,
             onSeatPointerUp,
             locked,
+            parentIds[0],
           )}
           <circle
             cx={x}
@@ -482,6 +531,7 @@ export function LongTableSymbol({
               onSeatDoubleClick,
               locked,
               onSeatPointerUp,
+              parentIds[0],
             )}
           />
         </g>
@@ -637,6 +687,7 @@ export function VipBoxSymbol({
               onSeatDoubleClick,
               onSeatPointerUp,
               locked,
+              parentIds[0],
             )}
             <circle
               cx={x}
@@ -652,6 +703,7 @@ export function VipBoxSymbol({
                 onSeatDoubleClick,
                 locked,
                 onSeatPointerUp,
+                parentIds[0],
               )}
             />
           </g>
@@ -973,6 +1025,7 @@ export function VenueShapePreview({
   shapeType: VenueShapeType
   color?: string
 }) {
+  const symbolId = `tokepass-theatre-preview-${useId().replace(/:/g, "")}`
   const chairs: VenueMapElementSeat[] = Array.from({ length: 6 }, (_, index) => ({
     id: `preview-${index}`,
     number: index + 1,
@@ -983,7 +1036,17 @@ export function VenueShapePreview({
   return (
     <svg viewBox="-20 -20 40 40" className="h-11 w-11" aria-hidden>
       {shapeType === "theatre_seat" ? (
-        <TheatreSeatSymbol cx={0} cy={0} width={14} height={14} color={color} />
+        <>
+          <TheatreSeatDefs id={symbolId} />
+          <TheatreSeatSymbol
+            cx={0}
+            cy={0}
+            width={14}
+            height={14}
+            color={color}
+            symbolId={symbolId}
+          />
+        </>
       ) : null}
       {shapeType === "round_table" ? (
         <RoundTableSymbol
