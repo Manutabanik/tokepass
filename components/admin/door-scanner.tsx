@@ -112,6 +112,7 @@ import {
   isRetiredTransferSecret,
   resolveScanSecret,
 } from "@/lib/scan-payload"
+import { canAcceptStaticTpsAtDoor } from "@/lib/tickets/static-tps-policy"
 import { hashTotpSecretSha256 } from "@/lib/scanner/totp-secret-hash"
 import { serverAlignedNowMs } from "@/lib/totp-offline"
 import { cn } from "@/lib/utils"
@@ -844,6 +845,16 @@ export function DoorScanner({
           }
 
           if (!local) {
+            showOverlay({ kind: "invalid" })
+            return
+          }
+          if (
+            resolved.mode === "tps" &&
+            !canAcceptStaticTpsAtDoor({
+              qrType,
+              issuanceChannel: local.issuance_channel,
+            })
+          ) {
             showOverlay({ kind: "invalid" })
             return
           }

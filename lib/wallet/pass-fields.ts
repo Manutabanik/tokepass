@@ -2,6 +2,10 @@ import type { MyTicket } from "@/app/actions/tickets"
 import { formatEventDay, formatEventTime } from "@/lib/format"
 import { getSeoOrigin, toArgentinaIso8601 } from "@/lib/seo/site"
 import { signedDoorQrOrFallback } from "@/lib/totp-offline"
+import {
+  DigitalTicketStaticExportError,
+  ticketAllowsStaticAdmissionExport,
+} from "@/lib/tickets/static-tps-policy"
 
 export const WALLET_BG = "#090014"
 export const WALLET_FG = "#fafafa"
@@ -64,6 +68,9 @@ export function walletGoogleId(issuerId: string, suffix: string): string {
 }
 
 export function buildWalletPassFields(ticket: MyTicket): WalletPassFields {
+  if (!ticketAllowsStaticAdmissionExport(ticket)) {
+    throw new DigitalTicketStaticExportError()
+  }
   const origin = getSeoOrigin()
   const seating = walletSeatingLabel(ticket)
   const venue = ticket.venueName?.trim() || ticket.eventLocation || "Online"

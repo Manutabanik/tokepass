@@ -14,7 +14,12 @@ import {
   resolveTicketVisualStatus,
   type TicketVisualStatus,
 } from "@/lib/ticket-visual-status"
-import type { EventDeliveryMode, QrType, TicketStatus } from "@/types/database"
+import type {
+  EventDeliveryMode,
+  QrType,
+  TicketIssuanceChannel,
+  TicketStatus,
+} from "@/types/database"
 import { parseDeliveryMode } from "@/lib/events/delivery-mode"
 import { tryCreateAdminClient } from "@/lib/supabase/admin"
 import {
@@ -22,6 +27,7 @@ import {
   ticketsTierSelect,
 } from "@/lib/tickets/wallet-query"
 import { shouldKeepOwnedWalletTicket } from "@/lib/tickets/wallet-visibility"
+import { normalizeIssuanceChannel } from "@/lib/tickets/static-tps-policy"
 
 export type MyTicket = {
   id: string
@@ -59,6 +65,9 @@ export type MyTicket = {
   organizerAvatarUrl: string | null
   venueName: string | null
   qrType: QrType
+  /** `events.qr_type` sin mezclar `is_dynamic_qr` (export TPS / Living QR). */
+  eventQrType: QrType
+  issuanceChannel: TicketIssuanceChannel
   holderName: string
   holderDni: string | null
   orderId?: string | null
@@ -87,6 +96,7 @@ type TicketRow = {
   max_transfers_allowed: number
   created_at: string
   is_dynamic_qr: boolean
+  issuance_channel?: TicketIssuanceChannel | null
   max_admissions: number
   admissions_used: number
   is_test?: boolean | null
@@ -195,9 +205,9 @@ async function loadMyTickets(options?: {
 
   const tierEmbed = ticketsTierSelect("name, bonus_reward, day_id, price")
   const ticketSelectWithDelivery =
-    `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, delivery_mode, access_link, venues(name)), orders(status, created_at)`
+    `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, issuance_channel, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, delivery_mode, access_link, venues(name)), orders(status, created_at)`
   const ticketSelectLegacy =
-    `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, venues(name)), orders(status, created_at)`
+    `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, issuance_channel, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, venues(name)), orders(status, created_at)`
 
   let query = supabase
     .from("tickets")
@@ -303,8 +313,10 @@ async function loadMyTickets(options?: {
         : null)
     if (!event) continue
 
+    const eventQrType: QrType =
+      event.qr_type === "static" ? "static" : "dynamic"
     const qrType: QrType =
-      event.qr_type === "static" || ticket.is_dynamic_qr === false
+      eventQrType === "static" || ticket.is_dynamic_qr === false
         ? "static"
         : "dynamic"
 
@@ -359,6 +371,8 @@ async function loadMyTickets(options?: {
       organizerAvatarUrl: organizer?.avatarUrl ?? null,
       venueName: event.venues?.name ?? null,
       qrType,
+      eventQrType,
+      issuanceChannel: normalizeIssuanceChannel(ticket.issuance_channel),
       holderName,
       holderDni,
       orderId: ticket.order_id,

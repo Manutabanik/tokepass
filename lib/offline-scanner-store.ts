@@ -72,6 +72,8 @@ export type ScannerManifestTicket = {
   totp_secret_hash?: string | null
   /** FK a event_schedules / abono si es null. */
   day_id?: string | null
+  /** Canal de emisión: TPS solo válido si no es compra online en evento Living QR. */
+  issuance_channel?: string | null
 }
 
 export type ScannerManifestMeta = {

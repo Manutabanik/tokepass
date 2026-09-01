@@ -7,6 +7,10 @@ import { PrintTicketActions } from "@/components/public/print-ticket-actions"
 import { PrintableTicketView } from "@/components/public/printable-ticket"
 import { isPublicEntityId } from "@/lib/security/public-ids"
 import { createClient } from "@/lib/supabase/server"
+import {
+  DIGITAL_TICKET_STATIC_EXPORT_MESSAGE,
+  DigitalTicketStaticExportError,
+} from "@/lib/tickets/static-tps-policy"
 
 export const metadata: Metadata = {
   title: "Entrada para imprimir",
@@ -34,7 +38,30 @@ export default async function TicketPrintPage({
     redirect(`/login?next=/tickets/${id}/print`)
   }
 
-  const ticket = await getPrintableTicket(id)
+  let ticket
+  try {
+    ticket = await getPrintableTicket(id)
+  } catch (error) {
+    if (error instanceof DigitalTicketStaticExportError) {
+      return (
+        <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
+          <h1 className="text-xl font-semibold text-zinc-950">
+            {DIGITAL_TICKET_STATIC_EXPORT_MESSAGE}
+          </h1>
+          <p className="text-sm text-zinc-600">
+            Abrí Mis entradas y mostrá el código vivo en la puerta.
+          </p>
+          <Link
+            href="/cuenta/entradas"
+            className="text-sm font-semibold text-zinc-950 underline underline-offset-4"
+          >
+            Ir a mis entradas
+          </Link>
+        </div>
+      )
+    }
+    throw error
+  }
   if (!ticket) notFound()
 
   return (

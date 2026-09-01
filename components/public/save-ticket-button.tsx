@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { upsertTicketsOffline } from "@/lib/offline-store"
+import { ticketAllowsStaticAdmissionExport } from "@/lib/tickets/static-tps-policy"
 import { requestTicketAssetCache } from "@/lib/wallet-cache"
 
 export function SaveTicketButton({
@@ -46,6 +47,8 @@ export function SaveTicketButton({
       }
     })
   }
+
+  const allowStaticExport = ticketAllowsStaticAdmissionExport(ticket)
 
   function persistBeforePrint() {
     void upsertTicketsOffline(userId, [ticket]).catch(() => {})
@@ -89,23 +92,26 @@ export function SaveTicketButton({
               Guardar en la billetera web
             </Button>
 
-            <Button
-              type="button"
-              variant="outline"
-              className="h-12 justify-start rounded-2xl"
-              nativeButton={false}
-              render={<Link href={`/tickets/${ticket.id}/print`} />}
-              onClick={persistBeforePrint}
-            >
-              <Download className="size-4" />
-              Descargar PDF
-            </Button>
+            {allowStaticExport ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-12 justify-start rounded-2xl"
+                nativeButton={false}
+                render={<Link href={`/tickets/${ticket.id}/print`} />}
+                onClick={persistBeforePrint}
+              >
+                <Download className="size-4" />
+                Descargar PDF
+              </Button>
+            ) : null}
 
             <WalletPassButtons
               ticketId={ticket.id}
               flyerUrl={ticket.flyerUrl}
               appleWalletEnabled={appleWalletEnabled}
               googleWalletEnabled={googleWalletEnabled}
+              allowStaticExport={allowStaticExport}
             />
           </div>
         </DialogContent>

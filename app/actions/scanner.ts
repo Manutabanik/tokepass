@@ -7,6 +7,10 @@ import {
   assertStaticMac,
   resolveScanSecret,
 } from "@/lib/scan-payload"
+import {
+  canAcceptStaticTpsAtDoor,
+  STATIC_TPS_ONLINE_DYNAMIC_REJECT_MESSAGE,
+} from "@/lib/tickets/static-tps-policy"
 import { listOperableEvents } from "@/lib/event-ops-access"
 import { readValidDoorGuestSession } from "@/lib/scanner/door-guest-session"
 import { isTerminalOfflineSyncConflict } from "@/lib/scanner/offline-sync-conflicts"
@@ -35,7 +39,7 @@ import { ScannerSetupError } from "@/lib/scanner/scanner-setup-error"
 import type { QrType, TicketStatus } from "@/types/database"
 
 const TICKET_SCAN_SELECT =
-  "id, status, event_id, order_id, totp_secret, scanned_at, validated_by, holder_name, holder_dni, max_admissions, admissions_used, is_test, is_dynamic_qr, ticket_type, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers!tickets_tier_id_fkey(name, price, time_limit, bonus_reward, day_id, seating_sector_id), events(id, title, organizer_id, qr_type, date, schedule_days, status), orders!tickets_order_id_fkey(payment_method)"
+  "id, status, event_id, order_id, totp_secret, scanned_at, validated_by, holder_name, holder_dni, max_admissions, admissions_used, is_test, is_dynamic_qr, ticket_type, issuance_channel, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers!tickets_tier_id_fkey(name, price, time_limit, bonus_reward, day_id, seating_sector_id), events(id, title, organizer_id, qr_type, date, schedule_days, status), orders!tickets_order_id_fkey(payment_method)"
 
 export type ScannerEventOption = {
   id: string
@@ -109,6 +113,7 @@ type TicketScanRow = {
   is_test?: boolean | null
   is_dynamic_qr?: boolean | null
   ticket_type?: string | null
+  issuance_channel?: string | null
   event_seating_units: {
     label: string
     sector_id?: string | null
@@ -485,6 +490,20 @@ export async function scanAndValidateTicket(
 
   const row = ticket as TicketScanRow
 
+  if (
+    resolved.mode === "tps" &&
+    !canAcceptStaticTpsAtDoor({
+      qrType,
+      issuanceChannel: row.issuance_channel,
+    })
+  ) {
+    return {
+      success: false,
+      status: "invalid_payload",
+      message: STATIC_TPS_ONLINE_DYNAMIC_REJECT_MESSAGE,
+    }
+  }
+
   // Refuerzo: tickets de boletería física nunca rotan por ventana temporal.
   if (
     row.is_dynamic_qr !== false &&
@@ -843,6 +862,7 @@ export type EventTicketManifestPayload = {
     pending_transfer: boolean
     listed_for_resale: boolean
     day_id: string | null
+    issuance_channel: string | null
   }>
 }
 
@@ -882,7 +902,7 @@ export async function fetchEventTicketManifest(
   const withHolder = await supabase
     .from("tickets")
     .select(
-      "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, ticket_type, holder_name, holder_dni, holder_email, group_id, group_slot, batch_id, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers!tickets_tier_id_fkey(name, price, seating_sector_id, day_id), orders!tickets_order_id_fkey(payment_method)",
+      "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, ticket_type, issuance_channel, holder_name, holder_dni, holder_email, group_id, group_slot, batch_id, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers!tickets_tier_id_fkey(name, price, seating_sector_id, day_id), orders!tickets_order_id_fkey(payment_method)",
     )
     .eq("event_id", eventId)
     .in("status", ["valid", "used", "scanned"])
@@ -919,6 +939,7 @@ export async function fetchEventTicketManifest(
     batch_id?: string | null
     is_test?: boolean | null
     ticket_type?: string | null
+    issuance_channel?: string | null
     orders?:
       | { payment_method?: string | null }
       | Array<{ payment_method?: string | null }>
@@ -1061,13 +1082,14 @@ export async function fetchEventTicketManifest(
       pending_transfer: pendingTransferIds.has(row.id),
       listed_for_resale: listedForResaleIds.has(row.id),
       day_id: row.ticket_tiers?.day_id ?? null,
+      issuance_channel: row.issuance_channel ?? "online",
     }
   })
 
   const hashSource = tickets
     .map(
       (t) =>
-        `${t.id}:${t.status}:${t.totp_secret}:${t.is_test ? 1 : 0}:${t.is_sandbox ? 1 : 0}:${t.pending_transfer ? 1 : 0}:${t.listed_for_resale ? 1 : 0}:${t.day_id ?? ""}`,
+        `${t.id}:${t.status}:${t.totp_secret}:${t.is_test ? 1 : 0}:${t.is_sandbox ? 1 : 0}:${t.pending_transfer ? 1 : 0}:${t.listed_for_resale ? 1 : 0}:${t.day_id ?? ""}:${t.issuance_channel ?? ""}`,
     )
     .sort()
     .join("|")

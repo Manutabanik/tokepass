@@ -10,6 +10,10 @@ import {
   parseTicketPdfSize,
   ticketPdfFilename,
 } from "@/lib/pdf/ticket-pdf-model"
+import {
+  DIGITAL_TICKET_STATIC_EXPORT_MESSAGE,
+  DigitalTicketStaticExportError,
+} from "@/lib/tickets/static-tps-policy"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -49,6 +53,16 @@ export async function GET(
     if (tickets === "not_found") {
       return jsonError(404, "ticket_not_found", "No encontramos esa entrada.", id)
     }
+    if (tickets === "forbidden") {
+      return NextResponse.json(
+        {
+          error: "digital_ticket_static_export_forbidden",
+          message: DIGITAL_TICKET_STATIC_EXPORT_MESSAGE,
+          fallback: "/cuenta/entradas",
+        },
+        { status: 403 },
+      )
+    }
 
     const audits = await loadTicketPdfAudits(tickets.map((ticket) => ticket.id))
     const pdf = await renderAdmissionTicketPdf({
@@ -69,6 +83,16 @@ export async function GET(
       },
     })
   } catch (error) {
+    if (error instanceof DigitalTicketStaticExportError) {
+      return NextResponse.json(
+        {
+          error: error.code,
+          message: error.message,
+          fallback: "/cuenta/entradas",
+        },
+        { status: 403 },
+      )
+    }
     console.error("[ticket-pdf]", error)
     return jsonError(
       500,

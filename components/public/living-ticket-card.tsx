@@ -50,6 +50,7 @@ import { ticketAdmissionTitle, ticketExactSeatLabel } from "@/lib/ticket-wallet"
 import { cn } from "@/lib/utils"
 import { eventAccessTimeLabel, isOnlineDelivery } from "@/lib/events/delivery-mode"
 import { OnlineAccessButton } from "@/components/account/online-access-button"
+import { ticketAllowsStaticAdmissionExport } from "@/lib/tickets/static-tps-policy"
 
 function isVipTier(tierName: string): boolean {
   return /\bvip\b/i.test(tierName)
@@ -86,6 +87,7 @@ function TicketActionStack({
   sending,
   onSend,
   onResale,
+  allowStaticExport,
 }: {
   ticket: MyTicket
   offline: boolean
@@ -94,6 +96,7 @@ function TicketActionStack({
   sending: boolean
   onSend: () => void
   onResale: () => void
+  allowStaticExport: boolean
 }) {
   function savePdf() {
     window.open(`/tickets/${ticket.id}/print`, "_blank", "noopener,noreferrer")
@@ -123,16 +126,19 @@ function TicketActionStack({
         className="h-11 w-full rounded-xl bg-purple-600 text-sm font-semibold text-white hover:bg-purple-700"
       />
 
+      {allowStaticExport || canResale ? (
       <DropdownMenu>
         <DropdownMenuTrigger className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-100 px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-200">
           <MoreHorizontal className="size-4" aria-hidden="true" />
           Opciones
         </DropdownMenuTrigger>
         <DropdownMenuContent align="center" className="w-[min(calc(100vw-2.5rem),20rem)]">
-          <DropdownMenuItem onClick={savePdf}>
-            <Download className="size-4 text-muted-foreground" aria-hidden="true" />
-            Guardar como PDF
-          </DropdownMenuItem>
+          {allowStaticExport ? (
+            <DropdownMenuItem onClick={savePdf}>
+              <Download className="size-4 text-muted-foreground" aria-hidden="true" />
+              Guardar como PDF
+            </DropdownMenuItem>
+          ) : null}
           {canResale ? (
             <DropdownMenuItem
               disabled={offline}
@@ -145,6 +151,7 @@ function TicketActionStack({
           ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
+      ) : null}
     </div>
   )
 }
@@ -186,6 +193,7 @@ export function LivingTicketCard({
       Boolean(ticket.pendingTransfer) ||
       Boolean(ticket.activeResaleListingId))
   const isStatic = ticket.qrType === "static"
+  const allowStaticExport = ticketAllowsStaticAdmissionExport(ticket)
   const canTransfer =
     ticket.status === "valid" &&
     ticket.admissionsUsed === 0 &&
@@ -583,6 +591,7 @@ export function LivingTicketCard({
             sending={transfer.pending}
             onSend={() => setTransferConfirmOpen(true)}
             onResale={() => setResaleConfirmOpen(true)}
+            allowStaticExport={allowStaticExport}
           />
         ) : null}
       </div>

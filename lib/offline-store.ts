@@ -4,7 +4,7 @@
  */
 
 import type { MyTicket } from "@/app/actions/tickets"
-import type { TicketStatus } from "@/types/database"
+import type { QrType, TicketIssuanceChannel, TicketStatus } from "@/types/database"
 import { resolveTicketVisualStatus } from "@/lib/ticket-visual-status"
 import { requestTicketAssetCache } from "@/lib/wallet-cache"
 
@@ -40,6 +40,8 @@ export type OfflineEventData = {
   maxAdmissions?: number
   admissionsUsed?: number
   qrType: "dynamic" | "static"
+  eventQrType?: QrType
+  issuanceChannel?: TicketIssuanceChannel
   holderName: string
   holderDni: string | null
   isTest?: boolean
@@ -318,6 +320,8 @@ export function ticketToOfflineRecord(
       maxAdmissions: ticket.maxAdmissions,
       admissionsUsed: ticket.admissionsUsed,
       qrType: ticket.qrType,
+      eventQrType: ticket.eventQrType,
+      issuanceChannel: ticket.issuanceChannel,
       holderName: ticket.holderName,
       holderDni: ticket.holderDni,
       isTest: ticket.isTest,
@@ -375,6 +379,8 @@ export function offlineRecordToTicket(record: OfflineTicketRecord): MyTicket {
     organizerAvatarUrl: record.event_data.organizerAvatarUrl ?? null,
     venueName: record.event_data.venueName,
     qrType: record.event_data.qrType ?? "dynamic",
+    eventQrType: record.event_data.eventQrType ?? record.event_data.qrType ?? "dynamic",
+    issuanceChannel: record.event_data.issuanceChannel ?? "online",
     holderName: record.event_data.holderName ?? "Titular",
     holderDni: record.event_data.holderDni ?? null,
     orderId: record.event_data.orderId ?? null,

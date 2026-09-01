@@ -1,5 +1,6 @@
 import { getPrintableTicket } from "@/app/actions/pos"
 import type { TicketPdfAudit, TicketPdfSource } from "@/lib/pdf/ticket-pdf-model"
+import { DigitalTicketStaticExportError } from "@/lib/tickets/static-tps-policy"
 import { createClient } from "@/lib/supabase/server"
 
 export async function loadTicketPdfAudits(
@@ -53,7 +54,7 @@ export async function loadTicketPdfAudits(
 
 export async function loadAuthorizedTicketsForPdf(
   ids: string[],
-): Promise<TicketPdfSource[] | "unauthorized" | "not_found"> {
+): Promise<TicketPdfSource[] | "unauthorized" | "not_found" | "forbidden"> {
   const supabase = await createClient()
   const {
     data: { user },
@@ -62,9 +63,14 @@ export async function loadAuthorizedTicketsForPdf(
 
   const tickets: TicketPdfSource[] = []
   for (const id of ids) {
-    const ticket = await getPrintableTicket(id)
-    if (!ticket) return "not_found"
-    tickets.push(ticket)
+    try {
+      const ticket = await getPrintableTicket(id)
+      if (!ticket) return "not_found"
+      tickets.push(ticket)
+    } catch (error) {
+      if (error instanceof DigitalTicketStaticExportError) return "forbidden"
+      throw error
+    }
   }
   return tickets
 }

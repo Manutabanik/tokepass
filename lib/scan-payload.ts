@@ -12,6 +12,7 @@ import {
   verifyLivingQrMac,
   verifyStaticQrMac,
 } from "@/lib/totp-offline"
+import { canAcceptStaticTpsAtDoor } from "@/lib/tickets/static-tps-policy"
 import type { QrType } from "@/types/database"
 
 export type DecodedLivingV2 = {
@@ -142,7 +143,11 @@ export function isLivingWindowAccepted(
 export function resolveScanSecret(
   rawPayload: string,
   qrType: QrType,
-  options?: { nowMs?: number },
+  options?: {
+    nowMs?: number
+    /** Canal de emisión del ticket. Si se informa, un TPS online en evento Living QR se descarta. */
+    issuanceChannel?: string | null
+  },
 ): ResolvedScan | null {
   const cleaned = rawPayload.trim()
   if (!cleaned) return null
@@ -150,6 +155,16 @@ export function resolveScanSecret(
 
   const signed = decodeStaticSignedPayload(cleaned)
   if (signed) {
+    if (
+      options &&
+      "issuanceChannel" in options &&
+      !canAcceptStaticTpsAtDoor({
+        qrType,
+        issuanceChannel: options.issuanceChannel,
+      })
+    ) {
+      return null
+    }
     return {
       mode: "tps",
       ticketId: signed.ticketId,

@@ -45,6 +45,8 @@ function sampleTicket(overrides: Partial<MyTicket> = {}): MyTicket {
     organizerAvatarUrl: null,
     venueName: "Niceto Club",
     qrType: "dynamic",
+    eventQrType: "dynamic",
+    issuanceChannel: "pos",
     holderName: "Ana Perez",
     holderDni: "30111222",
     isTest: false,
@@ -74,6 +76,20 @@ describe("wallet pass fields", () => {
     assert.equal(
       walletBarcodeValue(sampleTicket({ totpSecret: "", qrCode: "", id: "ticket-id" })),
       "ticket-id",
+    )
+  })
+
+  it("refuses to build a wallet pass for an online Living QR ticket", () => {
+    assert.throws(
+      () =>
+        buildWalletPassFields(
+          sampleTicket({
+            qrType: "static",
+            eventQrType: "dynamic",
+            issuanceChannel: "online",
+          }),
+        ),
+      /solo son accesibles desde la app/,
     )
   })
 

@@ -3,6 +3,9 @@
 import { Download, Loader2 } from "lucide-react"
 import { useMemo, useState } from "react"
 
+import { toast } from "sonner"
+
+import { DIGITAL_TICKET_STATIC_EXPORT_MESSAGE } from "@/lib/tickets/static-tps-policy"
 import { requestTicketAssetCache } from "@/lib/wallet-cache"
 import { resolveWalletSaveTarget, type WalletSaveTarget } from "@/lib/wallet-os"
 import { cn } from "@/lib/utils"
@@ -43,6 +46,7 @@ export function WalletPassButtons({
   googleWalletEnabled = false,
   alwaysShowPdf = false,
   hidePdf = false,
+  allowStaticExport = true,
   className,
 }: {
   ticketId: string
@@ -52,6 +56,7 @@ export function WalletPassButtons({
   googleWalletEnabled?: boolean
   alwaysShowPdf?: boolean
   hidePdf?: boolean
+  allowStaticExport?: boolean
   className?: string
 }) {
   const [busy, setBusy] = useState(false)
@@ -69,7 +74,7 @@ export function WalletPassButtons({
   }
 
   async function addToAppleWallet() {
-    if (disabled || busy) return
+    if (disabled || busy || !allowStaticExport) return
     setBusy(true)
     precache()
     try {
@@ -80,6 +85,10 @@ export function WalletPassButtons({
         redirect: "follow",
       })
       const contentType = response.headers.get("content-type") ?? ""
+      if (response.status === 403) {
+        toast.error(DIGITAL_TICKET_STATIC_EXPORT_MESSAGE)
+        return
+      }
       if (!response.ok || contentType.includes("application/json")) {
         openTicketPdf(ticketId)
         return
@@ -109,6 +118,10 @@ export function WalletPassButtons({
         redirect: "follow",
       })
       const contentType = response.headers.get("content-type") ?? ""
+      if (response.status === 403) {
+        toast.error(DIGITAL_TICKET_STATIC_EXPORT_MESSAGE)
+        return
+      }
       if (!response.ok || !contentType.includes("application/json")) {
         openTicketPdf(ticketId)
         return
@@ -127,10 +140,12 @@ export function WalletPassButtons({
   }
 
   function downloadPdf() {
-    if (disabled || busy) return
+    if (disabled || busy || !allowStaticExport) return
     precache()
     openTicketPdf(ticketId)
   }
+
+  if (!allowStaticExport) return null
 
   return (
     <div className={cn("grid gap-2", className)}>

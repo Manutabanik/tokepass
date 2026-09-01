@@ -28,6 +28,9 @@ import {
 import { posEventHasInteractiveMap } from "@/lib/pos-map"
 import { ticketPaymentPrintLabel } from "@/lib/ticket-print"
 import { ticketExactSeatLabel } from "@/lib/ticket-wallet"
+import {
+  assertStaticAdmissionExportAllowed,
+} from "@/lib/tickets/static-tps-policy"
 import { signedDoorQrOrFallback } from "@/lib/totp-offline"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -1475,7 +1478,7 @@ export async function getPrintableTicket(
   const rich = await supabase
     .from("tickets")
     .select(
-      "id, status, event_id, totp_secret, scanned_at, is_dynamic_qr, is_test, owner_id, holder_name, holder_dni, event_seating_units(label, sector_name, row_label, layout_type), ticket_tiers!tickets_tier_id_fkey(name, price, day_id), events(id, title, date, location, qr_type, organizer_id, flyer_url, image_url, schedule_days, venues(name))",
+      "id, status, event_id, totp_secret, scanned_at, is_dynamic_qr, is_test, issuance_channel, owner_id, holder_name, holder_dni, event_seating_units(label, sector_name, row_label, layout_type), ticket_tiers!tickets_tier_id_fkey(name, price, day_id), events(id, title, date, location, qr_type, organizer_id, flyer_url, image_url, schedule_days, venues(name))",
     )
     .eq("id", ticketId)
     .maybeSingle()
@@ -1488,7 +1491,7 @@ export async function getPrintableTicket(
       ? await supabase
           .from("tickets")
           .select(
-            "id, status, event_id, totp_secret, scanned_at, is_dynamic_qr, is_test, owner_id, holder_name, holder_dni, ticket_tiers!tickets_tier_id_fkey(name, price), events(id, title, date, location, qr_type, organizer_id)",
+            "id, status, event_id, totp_secret, scanned_at, is_dynamic_qr, is_test, issuance_channel, owner_id, holder_name, holder_dni, ticket_tiers!tickets_tier_id_fkey(name, price), events(id, title, date, location, qr_type, organizer_id)",
           )
           .eq("id", ticketId)
           .maybeSingle()
@@ -1506,6 +1509,7 @@ export async function getPrintableTicket(
     scanned_at: string | null
     is_dynamic_qr: boolean
     is_test?: boolean | null
+    issuance_channel?: string | null
     owner_id: string | null
     holder_name: string | null
     holder_dni: string | null
@@ -1595,6 +1599,13 @@ export async function getPrintableTicket(
     holderName =
       owner?.full_name?.trim() || owner?.email || "Titular TokePass"
   }
+
+  const eventQrType: QrType =
+    row.events.qr_type === "static" ? "static" : "dynamic"
+  assertStaticAdmissionExportAllowed({
+    qrType: eventQrType,
+    issuanceChannel: row.issuance_channel,
+  })
 
   // Papel / POS: siempre payload estático (secreto) para que el escáner lo acepte.
   const qrType: QrType =

@@ -37,6 +37,7 @@ import { createClient } from "@/lib/supabase/server"
 import type { MyTicket } from "@/app/actions/tickets"
 import { parseDeliveryMode } from "@/lib/events/delivery-mode"
 import { isMissingTicketWalletColumnError } from "@/lib/tickets/wallet-query"
+import { normalizeIssuanceChannel } from "@/lib/tickets/static-tps-policy"
 import type { OrderStatus, TicketStatus } from "@/types/database"
 
 const MAX_OTP_ATTEMPTS = 5
@@ -147,9 +148,9 @@ export async function listGuestOrderTickets(): Promise<GuestTicketPreview[]> {
 const GUEST_SEATING_EMBED =
   "event_seating_units(label, sector_name, row_label, layout_type)"
 const GUEST_TICKET_DETAIL_SELECT =
-  `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, holder_name, holder_dni, ${GUEST_SEATING_EMBED}, ticket_tiers!tickets_tier_id_fkey(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, delivery_mode, access_link, venues(name))`
+  `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, issuance_channel, max_admissions, admissions_used, is_test, holder_name, holder_dni, ${GUEST_SEATING_EMBED}, ticket_tiers!tickets_tier_id_fkey(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, delivery_mode, access_link, venues(name))`
 const GUEST_TICKET_DETAIL_SELECT_LEGACY =
-  `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, holder_name, holder_dni, ${GUEST_SEATING_EMBED}, ticket_tiers!tickets_tier_id_fkey(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, venues(name))`
+  `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, issuance_channel, max_admissions, admissions_used, is_test, holder_name, holder_dni, ${GUEST_SEATING_EMBED}, ticket_tiers!tickets_tier_id_fkey(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, venues(name))`
 
 type GuestTicketDetailRow = {
   id: string
@@ -162,6 +163,7 @@ type GuestTicketDetailRow = {
   max_transfers_allowed: number
   created_at: string
   is_dynamic_qr?: boolean | null
+  issuance_channel?: string | null
   max_admissions?: number | null
   admissions_used?: number | null
   is_test?: boolean | null
@@ -283,6 +285,8 @@ function mapGuestTicketRow(row: GuestTicketDetailRow, revealQr: boolean): MyTick
     organizerAvatarUrl: null,
     venueName: venue?.name ?? null,
     qrType: events.qr_type === "static" ? "static" : "dynamic",
+    eventQrType: events.qr_type === "static" ? "static" : "dynamic",
+    issuanceChannel: normalizeIssuanceChannel(row.issuance_channel),
     holderName: row.holder_name ?? "Invitado",
     holderDni: row.holder_dni ?? null,
     orderId: row.order_id,

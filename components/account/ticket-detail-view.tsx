@@ -44,6 +44,7 @@ import { ticketAdmissionTitle } from "@/lib/ticket-wallet"
 import { ticketBackupCode } from "@/lib/ticket-print"
 import { eventAccessTimeLabel, isOnlineDelivery } from "@/lib/events/delivery-mode"
 import { OnlineAccessButton } from "@/components/account/online-access-button"
+import { ticketAllowsStaticAdmissionExport } from "@/lib/tickets/static-tps-policy"
 
 export function TicketDetailView({
   ticket: initialTicket,
@@ -97,6 +98,7 @@ export function TicketDetailView({
     visualStatus === "active" &&
     Boolean(ticket.totpSecret)
   const isStatic = ticket.qrType === "static"
+  const allowStaticExport = ticketAllowsStaticAdmissionExport(ticket)
   const canTransfer =
     ticket.status === "valid" &&
     ticket.admissionsUsed === 0 &&
@@ -333,6 +335,7 @@ export function TicketDetailView({
               disabled={!online}
               appleWalletEnabled={appleWalletEnabled}
               googleWalletEnabled={googleWalletEnabled}
+              allowStaticExport={allowStaticExport}
             />
             <SaveTicketButton
               ticket={ticket}
@@ -359,6 +362,7 @@ export function TicketDetailView({
                 }),
               }}
             />
+            {allowStaticExport ? (
             <Button
               className="min-h-12 w-full rounded-2xl border-border bg-background text-foreground hover:bg-muted"
               variant="outline"
@@ -370,6 +374,7 @@ export function TicketDetailView({
               <Printer className="size-4" />
               Guardar / Imprimir
             </Button>
+            ) : null}
           </>
         ) : null}
 

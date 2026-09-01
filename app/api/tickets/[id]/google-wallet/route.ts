@@ -3,6 +3,11 @@ import { NextResponse, type NextRequest } from "next/server"
 import { getMyTicketById } from "@/app/actions/buyer-orders"
 import { HAS_GOOGLE_WALLET_KEYS } from "@/lib/wallet-cache"
 import { buildGoogleWalletSaveUrl } from "@/lib/wallet/google-wallet"
+import {
+  DIGITAL_TICKET_STATIC_EXPORT_MESSAGE,
+  DigitalTicketStaticExportError,
+  ticketAllowsStaticAdmissionExport,
+} from "@/lib/tickets/static-tps-policy"
 
 export const runtime = "nodejs"
 
@@ -40,6 +45,16 @@ export async function GET(
         id,
       )
     }
+    if (!ticketAllowsStaticAdmissionExport(ticket)) {
+      return NextResponse.json(
+        {
+          error: "digital_ticket_static_export_forbidden",
+          message: DIGITAL_TICKET_STATIC_EXPORT_MESSAGE,
+          fallback: "/cuenta/entradas",
+        },
+        { status: 403 },
+      )
+    }
 
     const saveUrl = await buildGoogleWalletSaveUrl(ticket)
     const wantsJson = request.headers.get("accept")?.includes("application/json")
@@ -48,6 +63,16 @@ export async function GET(
     }
     return NextResponse.redirect(saveUrl, 302)
   } catch (error) {
+    if (error instanceof DigitalTicketStaticExportError) {
+      return NextResponse.json(
+        {
+          error: error.code,
+          message: error.message,
+          fallback: "/cuenta/entradas",
+        },
+        { status: 403 },
+      )
+    }
     if (error instanceof Error && error.message === "auth_required") {
       return jsonError(401, "auth_required", "Iniciá sesión para guardar el pase.", id)
     }

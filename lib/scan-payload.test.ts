@@ -99,6 +99,25 @@ describe("Living QR time window", () => {
     })
   })
 
+  it("rejects TPS payloads for online tickets on Living QR events", async () => {
+    const ticketId = "9dfcc6ca-8d97-4d9c-951d-ffabc21e6210"
+    const payload = await generateStaticQrPayload(ticketId, "a".repeat(48))
+    assert.equal(
+      resolveScanSecret(payload, "dynamic", { issuanceChannel: "online" }),
+      null,
+    )
+    assert.equal(
+      resolveScanSecret(payload, "dynamic", { issuanceChannel: null }),
+      null,
+    )
+    const pos = resolveScanSecret(payload, "dynamic", { issuanceChannel: "pos" })
+    assert.equal(pos?.mode, "tps")
+    assert.equal(
+      resolveScanSecret(payload, "static", { issuanceChannel: "online" })?.mode,
+      "tps",
+    )
+  })
+
   it("accepts legacy 16-hex Living MACs and current 32-hex MACs", async () => {
     const ticketId = "9dfcc6ca-8d97-4d9c-951d-ffabc21e6210"
     const secret = "server-issued-secret"
