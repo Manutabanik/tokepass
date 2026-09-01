@@ -116,7 +116,9 @@ export function EmergencyTicketSearch({
                 "rounded-2xl border px-4 py-3",
                 ticket.status === "valid"
                   ? "border-emerald-500/30 bg-emerald-500/10"
-                  : "border-zinc-200 bg-zinc-100 opacity-80 dark:border-zinc-800 dark:bg-zinc-900",
+                  : ticket.sync_conflict
+                    ? "border-amber-500/40 bg-amber-500/10"
+                    : "border-zinc-200 bg-zinc-100 opacity-80 dark:border-zinc-800 dark:bg-zinc-900",
               )}
             >
               <div className="flex items-start gap-3">
@@ -165,7 +167,9 @@ export function EmergencyTicketSearch({
                 </div>
               ) : (
                 <p className="mt-2 text-xs font-bold uppercase tracking-wide text-red-300">
-                  Usada
+                  {ticket.sync_conflict
+                    ? "Conflicto: ya usada en otra puerta"
+                    : "Usada"}
                 </p>
               )}
             </div>

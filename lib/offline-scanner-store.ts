@@ -77,6 +77,8 @@ export type ScannerManifestTicket = {
   day_id?: string | null
   /** Canal de emisión: TPS solo válido si no es compra online en evento Living QR. */
   issuance_channel?: string | null
+  /** Sync offline: already_used en servidor (otra puerta). Terminal, no reintentar. */
+  sync_conflict?: string | null
 }
 
 export type ScannerManifestMeta = {
@@ -238,6 +240,7 @@ function persistedTicket(ticket: ScannerManifestTicket): ScannerManifestTicket {
     listed_for_resale: Boolean(ticket.listed_for_resale),
     totp_secret_hash: ticket.totp_secret_hash ?? null,
     day_id: ticket.day_id ?? null,
+    sync_conflict: ticket.sync_conflict ?? null,
   }
 }
 
@@ -447,8 +450,16 @@ export async function saveEventManifest(input: {
     ticketStore.delete(row.id)
   }
 
+  const conflictById = new Map(
+    existing
+      .filter((row) => row.sync_conflict)
+      .map((row) => [row.id, row.sync_conflict]),
+  )
   for (const ticket of sealed) {
-    ticketStore.put(ticket)
+    ticketStore.put({
+      ...ticket,
+      sync_conflict: ticket.sync_conflict ?? conflictById.get(ticket.id) ?? null,
+    })
   }
 
   tx.objectStore(MANIFESTS).put(meta)
@@ -674,6 +685,34 @@ export async function clearSyncQueueItems(ticketIds: string[]): Promise<void> {
   }
   await txDone(tx)
   db.close()
+}
+
+/** Marca tickets evictados por already_used para el historial del supervisor. */
+export async function markTicketsSyncConflict(
+  items: Array<{ ticketId: string; reason: string }>,
+): Promise<ScannerManifestTicket[]> {
+  if (items.length === 0) return []
+  const db = await openDb()
+  const tx = db.transaction(TICKETS, "readwrite")
+  const store = tx.objectStore(TICKETS)
+  const updated: ScannerManifestTicket[] = []
+
+  for (const item of items) {
+    const current = (await requestToPromise(
+      store.get(item.ticketId),
+    )) as ScannerManifestTicket | undefined
+    if (!current) continue
+    const next: ScannerManifestTicket = {
+      ...current,
+      sync_conflict: item.reason.trim() || "already_used",
+    }
+    store.put(persistedTicket(next))
+    updated.push(next)
+  }
+
+  await txDone(tx)
+  db.close()
+  return updated
 }
 
 export async function searchManifestTickets(

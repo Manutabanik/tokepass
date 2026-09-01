@@ -4,7 +4,16 @@ import type { ReactNode } from "react"
 import { Flashlight, FlashlightOff, Search, Sun } from "lucide-react"
 
 import { offlineDegradedModeMessage } from "@/lib/scanner/offline-degraded-mode"
+import { formatScanClock } from "@/lib/scanner/scan-copy"
 import { cn } from "@/lib/utils"
+
+export type DoorScannerHistoryEntry = {
+  id: string
+  at: number
+  kind: "valid" | "sync_conflict"
+  holderName: string
+  detail?: string
+}
 
 export function NeonFocusFrame() {
   return (
@@ -25,6 +34,7 @@ export function DoorScannerSessionChrome({
   gateLabel,
   online,
   admittedCount,
+  history = [],
   torchOn,
   torchAvailable,
   wakeLockHeld = false,
@@ -38,6 +48,7 @@ export function DoorScannerSessionChrome({
   gateLabel: string
   online: boolean
   admittedCount: number
+  history?: DoorScannerHistoryEntry[]
   torchOn: boolean
   torchAvailable: boolean
   wakeLockHeld?: boolean
@@ -128,12 +139,15 @@ export function DoorScannerSessionChrome({
               <FlashlightOff className="size-6" aria-hidden="true" />
             )}
           </button>
-          <p className="font-mono text-2xl font-black tabular-nums tracking-tight">
-            {admittedCount}
-            <span className="ml-2 text-sm font-semibold uppercase tracking-[0.14em] text-white/50">
-              Ingresados
-            </span>
-          </p>
+          <div className="min-w-0 flex-1 text-center">
+            <p className="font-mono text-2xl font-black tabular-nums tracking-tight">
+              {admittedCount}
+              <span className="ml-2 text-sm font-semibold uppercase tracking-[0.14em] text-white/50">
+                Ingresados
+              </span>
+            </p>
+            <DoorScannerHistoryList entries={history} />
+          </div>
           <button
             type="button"
             onClick={onSearch}
@@ -145,11 +159,51 @@ export function DoorScannerSessionChrome({
         </div>
       ) : (
         <div className="relative z-30 flex shrink-0 justify-center px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 pointer-events-auto">
-          <p className="font-mono text-lg font-black tabular-nums text-white/70">
-            {admittedCount} ingresados
-          </p>
+          <div className="min-w-0 text-center">
+            <p className="font-mono text-lg font-black tabular-nums text-white/70">
+              {admittedCount} ingresados
+            </p>
+            <DoorScannerHistoryList entries={history} />
+          </div>
         </div>
       )}
     </div>
+  )
+}
+
+function DoorScannerHistoryList({
+  entries,
+}: {
+  entries: DoorScannerHistoryEntry[]
+}) {
+  if (entries.length === 0) return null
+  return (
+    <ul
+      role="log"
+      aria-live="polite"
+      aria-label="Historial de escaneos"
+      className="mt-1 max-h-16 space-y-0.5 overflow-y-auto text-left"
+    >
+      {entries.slice(0, 4).map((entry) => (
+        <li
+          key={entry.id}
+          className={cn(
+            "truncate text-[11px] font-semibold leading-4",
+            entry.kind === "sync_conflict" ? "text-amber-200" : "text-white/55",
+          )}
+        >
+          {entry.kind === "sync_conflict" ? (
+            <>
+              Conflicto · {entry.holderName}
+              {entry.detail ? ` · ${entry.detail}` : ""}
+            </>
+          ) : (
+            <>
+              {formatScanClock(entry.at)} · {entry.holderName}
+            </>
+          )}
+        </li>
+      ))}
+    </ul>
   )
 }

@@ -13,7 +13,7 @@ import {
 } from "@/lib/tickets/static-tps-policy"
 import { listOperableEvents } from "@/lib/event-ops-access"
 import { readValidDoorGuestSession } from "@/lib/scanner/door-guest-session"
-import { isTerminalOfflineSyncConflict } from "@/lib/scanner/offline-sync-conflicts"
+import { resolveOfflineSyncAdmission } from "@/lib/scanner/offline-sync-conflicts"
 import { SCAN_REPLAY_HTTP_STATUS } from "@/lib/scanner/scan-replay"
 import { isScannerBlacklistTicketStatus } from "@/lib/scanner/ticket-blacklist"
 import { resolveScannerActor } from "@/lib/scanner/resolve-scanner-access"
@@ -1372,6 +1372,7 @@ export async function syncOfflineScansBatch(
       Math.min(100, Number(item.admissionsCount) || 1),
     )
     let syncError: string | null = null
+    let admitted = 0
 
     for (let admission = 0; admission < admissionsCount; admission += 1) {
       const { data, error } = await actor.db.rpc("scan_ticket_admission", {
@@ -1387,23 +1388,31 @@ export async function syncOfflineScansBatch(
         syncError = result.code ?? "sync_failed"
         break
       }
+      admitted += 1
     }
 
-    if (syncError) {
-      if (isTerminalOfflineSyncConflict(syncError)) {
-        evictedIds.push(item.ticketId)
-        continue
-      }
-      conflicts.push({
-        ticketId: item.ticketId,
-        reason: syncError,
+    const outcome = resolveOfflineSyncAdmission(admitted, syncError)
+    if (outcome.kind === "synced") {
+      syncedIds.push(item.ticketId)
+      await actor.db.rpc("mark_guest_entry_checked_in", {
+        p_ticket_id: item.ticketId,
       })
       continue
     }
+    if (outcome.kind === "evict" || outcome.kind === "evict_conflict") {
+      evictedIds.push(item.ticketId)
+      if (outcome.kind === "evict_conflict") {
+        conflicts.push({
+          ticketId: item.ticketId,
+          reason: outcome.reason,
+        })
+      }
+      continue
+    }
 
-    syncedIds.push(item.ticketId)
-    await actor.db.rpc("mark_guest_entry_checked_in", {
-      p_ticket_id: item.ticketId,
+    conflicts.push({
+      ticketId: item.ticketId,
+      reason: outcome.reason,
     })
   }
 

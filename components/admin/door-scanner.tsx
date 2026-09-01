@@ -16,7 +16,10 @@ import {
   useSyncExternalStore,
 } from "react"
 
-import { DoorScannerSessionChrome } from "@/components/admin/door-scanner-session"
+import {
+  DoorScannerSessionChrome,
+  type DoorScannerHistoryEntry,
+} from "@/components/admin/door-scanner-session"
 import {
   DoorScannerSetup,
   DoorScannerUnconfigured,
@@ -33,7 +36,11 @@ import {
   type ScanTicketResult,
 } from "@/app/actions/scanner"
 import { toast } from "sonner"
-import { overlayKindFromDeniedScanStatus } from "@/lib/scanner/offline-sync-conflicts"
+import {
+  isSupervisorOfflineSyncAlert,
+  offlineSyncConflictCopy,
+  overlayKindFromDeniedScanStatus,
+} from "@/lib/scanner/offline-sync-conflicts"
 import { parseScannerBlacklistPayload } from "@/lib/scanner/ticket-blacklist"
 import {
   ScanResultOverlay,
@@ -83,6 +90,7 @@ import {
   getScannerEventsCache,
   getScannerGatesCache,
   getTicketBySecret,
+  markTicketsSyncConflict,
   markTicketUsedLocally,
   putAdmissionLease,
   saveScannerEventsCache,
@@ -225,6 +233,7 @@ export function DoorScanner({
   const [isSyncing, setIsSyncing] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [admittedCount, setAdmittedCount] = useState(0)
+  const [scanHistory, setScanHistory] = useState<DoorScannerHistoryEntry[]>([])
   const [torchOn, setTorchOn] = useState(false)
   const [detectedTorch, setDetectedTorch] = useState(false)
   const [sessionPin, setSessionPin] = useState("")
@@ -373,6 +382,34 @@ export function DoorScanner({
         ...result.data.syncedIds,
         ...(result.data.evictedIds ?? []),
       ])
+      const alerts = (result.data.conflicts ?? []).filter((row) =>
+        isSupervisorOfflineSyncAlert(row.reason),
+      )
+      if (alerts.length > 0) {
+        const marked = await markTicketsSyncConflict(alerts)
+        const byId = new Map(marked.map((ticket) => [ticket.id, ticket]))
+        const at = Date.now()
+        setScanHistory((current) =>
+          [
+            ...alerts.map((alert) => ({
+              id: `conflict:${alert.ticketId}:${at}`,
+              at,
+              kind: "sync_conflict" as const,
+              holderName:
+                byId.get(alert.ticketId)?.owner_name.trim() || "Titular",
+              detail: offlineSyncConflictCopy(alert.reason),
+            })),
+            ...current,
+          ].slice(0, 8),
+        )
+        const firstName =
+          byId.get(alerts[0]!.ticketId)?.owner_name.trim() || "un ticket"
+        toast.warning(
+          alerts.length === 1
+            ? `Conflicto: ${firstName} ya había ingresado por otra puerta`
+            : `Conflicto: ${alerts.length} tickets aceptados offline ya habían ingresado por otra puerta`,
+        )
+      }
       await refreshQueueCount()
     } catch (error) {
       logger.error({
@@ -608,9 +645,21 @@ export function DoorScanner({
   const showLocalSuccess = useCallback(
     (ticket: ScannerManifestTicket) => {
       setAdmittedCount((count) => count + 1)
+      const holderName = ticket.owner_name || "Titular"
+      setScanHistory((current) =>
+        [
+          {
+            id: `valid:${ticket.id}:${Date.now()}`,
+            at: Date.now(),
+            kind: "valid" as const,
+            holderName,
+          },
+          ...current,
+        ].slice(0, 8),
+      )
       showOverlay({
         kind: "valid",
-        holderName: ticket.owner_name || "Titular",
+        holderName,
         passType: ticket.ticket_tier || "GENERAL",
         sector: ticket.seating_sector_name,
         place: ticket.seating_label,
@@ -635,9 +684,21 @@ export function DoorScanner({
     (result: ScanTicketResult) => {
       if (result.success) {
         setAdmittedCount((count) => count + 1)
+        const holderName = result.ticket.ownerLabel ?? "Titular"
+        setScanHistory((current) =>
+          [
+            {
+              id: `valid:${result.ticket.id}:${Date.now()}`,
+              at: Date.now(),
+              kind: "valid" as const,
+              holderName,
+            },
+            ...current,
+          ].slice(0, 8),
+        )
         showOverlay({
           kind: "valid",
-          holderName: result.ticket.ownerLabel ?? "Titular",
+          holderName,
           passType: result.ticket.tierName || "GENERAL",
           sector: result.ticket.seatingSectorName,
           place: result.ticket.seatingLabel,
@@ -1212,6 +1273,7 @@ export function DoorScanner({
         gateLabel={selectedGate?.label ?? "Gatera"}
         online={online}
         admittedCount={admittedCount}
+        history={scanHistory}
         torchOn={torchOn}
         torchAvailable={torchAvailable}
         wakeLockHeld={wakeLockHeld}
