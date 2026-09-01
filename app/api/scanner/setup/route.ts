@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 
-import {
-  getScannerEvents,
-  getScannerOperatorLabel,
-} from "@/app/actions/scanner"
 import { NO_STORE_HEADERS } from "@/lib/checkout/no-store"
+import {
+  loadScannerEvents,
+  loadScannerOperatorLabel,
+} from "@/lib/scanner/load-scanner-catalog"
 import {
   classifyScannerSetupError,
   isScannerSetupError,
@@ -18,8 +18,8 @@ export const fetchCache = "force-no-store"
 export async function GET() {
   try {
     const [events, operatorName] = await Promise.all([
-      getScannerEvents(),
-      getScannerOperatorLabel(),
+      loadScannerEvents(),
+      loadScannerOperatorLabel(),
     ])
     return NextResponse.json(
       { ok: true, events, operatorName },

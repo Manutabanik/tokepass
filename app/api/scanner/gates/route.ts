@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-import { getScannerGates } from "@/app/actions/scanner"
 import { NO_STORE_HEADERS } from "@/lib/checkout/no-store"
+import { loadScannerGates } from "@/lib/scanner/load-scanner-catalog"
 import {
   classifyScannerSetupError,
   isScannerSetupError,
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const gates = await getScannerGates(eventId)
+    const gates = await loadScannerGates(eventId)
     return NextResponse.json(
       { ok: true, gates },
       { headers: NO_STORE_HEADERS },

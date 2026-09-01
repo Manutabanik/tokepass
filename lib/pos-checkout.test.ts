@@ -28,5 +28,7 @@ describe("pos checkout staff and payment aliases", () => {
     assert.equal(posLiveAvailable(100, 40, "draft"), 100)
     assert.equal(posLiveAvailable(100, 40, "published"), 60)
     assert.equal(posLiveAvailable(10, 12, "published"), 0)
+    assert.equal(posLiveAvailable(100, 10, "cancellation_requested"), 0)
+    assert.equal(posLiveAvailable(100, 10, "cancelled"), 0)
   })
 })

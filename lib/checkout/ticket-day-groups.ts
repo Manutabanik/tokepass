@@ -1,6 +1,9 @@
 import { COMBO_PACKS_TAB_ID, isComboPackOffer } from "@/lib/checkout/combo-schedule"
 import { cartQuantityOnSchedule, normalizeCartScheduleId } from "@/lib/checkout/cart-item-identity"
-import { isUndatedCheckoutOffer } from "@/lib/events/ticket-commerce-type"
+import {
+  isUndatedCheckoutOffer,
+  resolveTicketCommerceType,
+} from "@/lib/events/ticket-commerce-type"
 import { isFullPassDayId, normalizeDayId } from "@/lib/event-schedule"
 import {
   isComboOrPassOffer,
@@ -128,8 +131,8 @@ export function scheduleDayCartLabel(
 }
 
 /**
- * Stamp for +/- of generals: the active jornada, not the catalog day_id.
- * Extras / combos / abonos stay undated so they are not tied to a tab.
+ * Stamp for +/- of generals and extras: the active jornada, not the catalog day_id.
+ * Combos / abonos stay undated so they are not tied to a tab.
  */
 export function generalQuantityScheduleStamp(input: {
   selectedDateId?: string | null
@@ -139,8 +142,11 @@ export function generalQuantityScheduleStamp(input: {
 }): { scheduleId: string | null; dateString: string | null } {
   const tier = input.tier ?? {}
   const meta = resolveTicketDateMeta(tier)
-  const comboOrPass = meta.isFullPass || isComboOrPassOffer(tier)
-  const undated = input.undated || comboOrPass || isUndatedCheckoutOffer(tier)
+  const extra = resolveTicketCommerceType(tier) === "extra"
+  const comboOrPass =
+    !extra && (meta.isFullPass || isComboOrPassOffer(tier))
+  const undated =
+    input.undated || comboOrPass || isUndatedCheckoutOffer(tier)
   if (undated) {
     return {
       scheduleId: null,
@@ -298,7 +304,12 @@ export function ticketVisibleOnCheckoutDay(
 ): boolean {
   void scheduleDays
   if (dateId === COMBO_PACKS_TAB_ID) return isComboPackOffer(tier)
-  if (isComboOrPassOffer(tier)) return false
+  if (
+    resolveTicketCommerceType(tier) !== "extra" &&
+    isComboOrPassOffer(tier)
+  ) {
+    return false
+  }
   if (!dateId) return true
   const days = ticketValidDayIds(tier)
   if (days.includes(dateId)) return true

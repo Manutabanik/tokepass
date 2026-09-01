@@ -82,7 +82,11 @@ export function resolveEventShareImage(event: {
 }
 
 export function isSeoHiddenEventStatus(status?: string | null): boolean {
-  return status === "paused" || status === "cancelled"
+  return (
+    status === "paused" ||
+    status === "cancelled" ||
+    status === "cancellation_requested"
+  )
 }
 
 export function buildNoindexEventMetadata(title: string): Metadata {

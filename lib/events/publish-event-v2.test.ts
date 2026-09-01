@@ -144,16 +144,90 @@ describe("buildPublishEventV2Payload", () => {
     assert.deepEqual(payload.schedule_days, [])
   })
 
-  it("does not bind extras to a leftover jornada slot", () => {
+  it("binds extras to the jornada like generals", () => {
+    const fridayId = "550e8400-e29b-41d4-a716-446655440001"
+    const saturdayId = "550e8400-e29b-41d4-a716-446655440002"
     const draft = publishableDraft()
+    draft.schedule = [
+      {
+        id: fridayId,
+        name: "Viernes",
+        date: "2026-09-04",
+        startDate: "2026-09-04T18:00",
+        endDate: "2026-09-04T23:00",
+        slots: [],
+      },
+      {
+        id: saturdayId,
+        name: "Sábado",
+        date: "2026-09-05",
+        startDate: "2026-09-05T18:00",
+        endDate: "2026-09-05T23:00",
+        slots: [],
+      },
+    ]
     draft.extras[0] = {
       ...draft.extras[0]!,
-      slotId: "550e8400-e29b-41d4-a716-446655440001",
-      validDayIds: ["550e8400-e29b-41d4-a716-446655440001"],
+      slotId: fridayId,
+      validDayIds: [fridayId],
     }
     const payload = buildPublishEventV2Payload(draft)
     const extra = payload.tickets.find((ticket) => ticket.ticket_type === "extra")
-    assert.equal(extra?.day_id, null)
+    assert.equal(extra?.day_id, fridayId)
+    assert.equal(extra?.name, "Cerveza")
+  })
+
+  it("expands a visual extra with dayRates into one ticket_tiers row per jornada", () => {
+    const fridayId = "550e8400-e29b-41d4-a716-446655440001"
+    const saturdayId = "550e8400-e29b-41d4-a716-446655440002"
+    const fridayExtraId = "550e8400-e29b-41d4-a716-446655440031"
+    const saturdayExtraId = "550e8400-e29b-41d4-a716-446655440032"
+    const draft = publishableDraft()
+    draft.schedule = [
+      {
+        id: fridayId,
+        name: "Viernes",
+        date: "2026-09-04",
+        startDate: "2026-09-04T18:00",
+        endDate: "2026-09-04T23:00",
+        slots: [],
+      },
+      {
+        id: saturdayId,
+        name: "Sábado",
+        date: "2026-09-05",
+        startDate: "2026-09-05T18:00",
+        endDate: "2026-09-05T23:00",
+        slots: [],
+      },
+    ]
+    draft.extras = [
+      {
+        ...draft.extras[0]!,
+        id: fridayExtraId,
+        name: "Estacionamiento",
+        price: 5000,
+        stock: 80,
+        validDayIds: [],
+        slotId: "",
+        ticketType: "extra",
+        dayRates: [
+          { dayId: fridayId, price: 5000, stock: 40, ticketId: fridayExtraId },
+          { dayId: saturdayId, price: 8000, stock: 40, ticketId: saturdayExtraId },
+        ],
+      },
+    ]
+    const payload = buildPublishEventV2Payload(draft)
+    const extras = payload.tickets.filter((ticket) => ticket.ticket_type === "extra")
+    assert.equal(extras.length, 2)
+    assert.equal(extras[0]?.id, fridayExtraId)
+    assert.equal(extras[0]?.day_id, fridayId)
+    assert.equal(extras[0]?.price, 5000)
+    assert.equal(extras[0]?.capacity, 40)
+    assert.equal(extras[1]?.id, saturdayExtraId)
+    assert.equal(extras[1]?.day_id, saturdayId)
+    assert.equal(extras[1]?.price, 8000)
+    assert.equal(extras[1]?.capacity, 40)
   })
 
   it("writes presale windows and the online access link", () => {

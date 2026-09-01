@@ -68,13 +68,11 @@ export function DraftInventoryItemFields({
     useWatch({ control, name: `${name}.${index}.validDayIds` }) ?? []
   const source = useWatch({ control, name: `${name}.${index}.source` })
   const sectorId = useWatch({ control, name: `${name}.${index}.sectorId` })
-  const multiDay = name === "tickets" && schedule.length > 1
-  const pricedByDay =
-    name === "tickets" &&
-    generalTicketNeedsDayPricing(
-      { source, validDayIds, sectorId },
-      schedule.length,
-    )
+  const multiDay = schedule.length > 1
+  const pricedByDay = generalTicketNeedsDayPricing(
+    { source, validDayIds, sectorId },
+    schedule.length,
+  )
   const scheduleDayKey = schedule
     .map((day) => day.id?.trim())
     .filter(Boolean)
@@ -109,7 +107,7 @@ export function DraftInventoryItemFields({
     : []
 
   useLayoutEffect(() => {
-    if (!pricedByDay || name !== "tickets") return
+    if (!pricedByDay) return
     const current = getValues(`${name}.${index}`)
     if (!current) return
     const synced = ensureDraftDayRates(current, getValues("schedule") ?? [])
@@ -276,7 +274,9 @@ export function DraftInventoryItemFields({
       {multiDay ? (
         <div className="grid gap-1.5">
           <DraftFieldLabel optional>
-            ¿Para qué días es válida esta entrada?
+            {name === "tickets"
+              ? "¿Para qué días es válida esta entrada?"
+              : "¿Para qué días vale este extra?"}
           </DraftFieldLabel>
           <div className="flex flex-wrap gap-1.5">
             {schedule.map((day, dayIndex) => {
@@ -303,8 +303,12 @@ export function DraftInventoryItemFields({
           </div>
           <DraftHint>
             {validDayIds.length === 1
-              ? "Este precio y stock son solo para ese día."
-              : "Un día = pase diario con su propio precio. Varios días = abono al mismo valor."}
+              ? name === "extras"
+                ? "Este extra solo se vende ese día."
+                : "Este precio y stock son solo para ese día."
+              : name === "extras"
+                ? "Sin días = el comprador elige la jornada, como en las generales. Un día = solo esa jornada."
+                : "Un día = pase diario con su propio precio. Varios días = abono al mismo valor."}
           </DraftHint>
         </div>
       ) : null}

@@ -371,6 +371,7 @@ export function hydrateEventDraftV2ForEditor(raw: unknown): EventDraftV2 {
   return {
     ...draft,
     tickets: collapseDayPricedTicketsForEditor(draft.tickets, draft.schedule),
+    extras: collapseDayPricedTicketsForEditor(draft.extras, draft.schedule),
   }
 }
 
@@ -385,7 +386,7 @@ export function createDraftLineItemsForScheduleDays(
     ensureDraftDayRates(
       {
         ...item,
-        name: "General",
+        name: ticketType === "extra" ? "" : "General",
         slotId: "",
         validDayIds: [],
       },

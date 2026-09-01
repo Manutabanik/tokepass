@@ -78,9 +78,9 @@ describe("ticket commerce type", () => {
     )
   })
 
-  it("treats extras and combos as undated, not jornada-scoped generals", () => {
+  it("treats combos as undated; extras follow the jornada like generals", () => {
     assert.equal(isUndatedCheckoutOffer({ name: "General", tierType: "general" }), false)
-    assert.equal(isUndatedCheckoutOffer({ ticketType: "extra" }), true)
+    assert.equal(isUndatedCheckoutOffer({ ticketType: "extra" }), false)
     assert.equal(isUndatedCheckoutOffer({ ticketType: "combo" }), true)
   })
 })

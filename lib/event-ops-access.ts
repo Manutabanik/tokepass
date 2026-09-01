@@ -1,6 +1,7 @@
 "use server"
 
 import { logger } from "@/lib/logger"
+import { withActiveEvents } from "@/lib/events/soft-delete"
 import {
   isEventsRlsRecursion,
   organizerTableClient,
@@ -142,11 +143,13 @@ export async function listOperableEvents(input: {
   if (profile?.role === "admin" || profile?.role === "super_admin") {
     const { table } = await organizerTableClient()
     return queryOperableEvents((selectCols) => {
-      let query = table
-        .from("events")
-        .select(selectCols)
-        .in("status", ["published", "draft"])
-        .order("date", { ascending: true })
+      let query = withActiveEvents(
+        table
+          .from("events")
+          .select(selectCols)
+          .in("status", ["published", "draft", "cancellation_requested"]),
+        true,
+      ).order("date", { ascending: true })
       if (profile.role === "admin") {
         query = query.eq("organizer_id", user.id)
       }
@@ -171,11 +174,13 @@ export async function listOperableEvents(input: {
 
   const { table } = await organizerTableClient()
   return queryOperableEvents((selectCols) =>
-    table
-      .from("events")
-      .select(selectCols)
-      .in("id", eventIds)
-      .in("status", ["published", "draft"])
-      .order("date", { ascending: true }),
+    withActiveEvents(
+      table
+        .from("events")
+        .select(selectCols)
+        .in("id", eventIds)
+        .in("status", ["published", "draft", "cancellation_requested"]),
+      true,
+    ).order("date", { ascending: true }),
   )
 }

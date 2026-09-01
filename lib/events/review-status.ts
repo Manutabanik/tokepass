@@ -38,16 +38,18 @@ export function isPendingEventReview(status: string | null | undefined) {
   return status === "pending_approval"
 }
 
-export function isEventStatus(value: string): value is EventStatus {
+export function isEventStatus(value: string | null | undefined): value is EventStatus {
   return (
-    value === "draft" ||
+    Boolean(value) &&
+    (value === "draft" ||
     value === "pending_approval" ||
     value === "needs_revision" ||
     value === "rejected" ||
     value === "published" ||
     value === "paused" ||
+    value === "cancellation_requested" ||
     value === "cancelled" ||
     value === "completed" ||
-    value === "archived"
+    value === "archived")
   )
 }

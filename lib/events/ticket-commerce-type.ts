@@ -95,13 +95,12 @@ export function resolveTicketCommerceType(
   return "standard"
 }
 
-/** Extras / combos / abonos are not scoped to the jornada tab. */
+/** Combos / abonos are not scoped to the jornada tab. Extras (parking, merch) follow the day like generals. */
 export function isUndatedCheckoutOffer(
   ticket: TicketCommerceSource | null | undefined,
 ): boolean {
   if (!ticket) return false
-  const kind = resolveTicketCommerceType(ticket)
-  return kind === "extra" || kind === "combo"
+  return resolveTicketCommerceType(ticket) === "combo"
 }
 
 export function partitionCheckoutTickets<T extends TicketCommerceSource>(

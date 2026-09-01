@@ -59,6 +59,11 @@ const eventStatusStyles: Record<
     className:
       "border-orange-500/30 bg-orange-500/15 text-orange-800 dark:text-orange-300",
   },
+  cancellation_requested: {
+    label: "Cancelación pedida",
+    className:
+      "border-amber-500/40 bg-amber-500/15 text-amber-900 dark:text-amber-200",
+  },
   cancelled: {
     label: "Cancelado",
     className:
@@ -149,7 +154,10 @@ export function RoleBadge({ role }: { role: UserRole }) {
 }
 
 export function EventStatusBadge({ status }: { status: EventStatus }) {
-  const style = eventStatusStyles[status]
+  const style = eventStatusStyles[status] ?? {
+    label: status,
+    className: "border-border bg-muted text-muted-foreground",
+  }
   return (
     <Badge variant="outline" className={cn(style.className)}>
       {style.label}

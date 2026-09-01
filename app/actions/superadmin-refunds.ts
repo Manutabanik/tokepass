@@ -55,6 +55,8 @@ export type MassRefundPreview = {
   paidOrders: number
   validTickets: number
   refundableAmount: number
+  cancellationRequestReason: string | null
+  cancellationRequestedAt: string | null
 }
 
 export type MassRefundResult =
@@ -122,16 +124,32 @@ export async function getMassRefundPreview(
   const id = eventId.trim()
   if (!id) return null
 
-  const { data: event, error } = await admin
+  const eventSelect =
+    "id, title, date, location, status, organizer_id, cancellation_request_reason, cancellation_requested_at, profiles!events_organizer_id_fkey(full_name, email, risk_tier)"
+  let loaded = await admin
     .from("events")
-    .select(
-      "id, title, date, location, status, organizer_id, profiles!events_organizer_id_fkey(full_name, email, risk_tier)",
-    )
+    .select(eventSelect)
     .eq("id", id)
     .maybeSingle()
 
-  if (error) throw new Error(error.message)
-  if (!event) return null
+  if (
+    loaded.error &&
+    /cancellation_request|42703|PGRST204|schema cache/i.test(
+      loaded.error.message,
+    )
+  ) {
+    loaded = await admin
+      .from("events")
+      .select(
+        "id, title, date, location, status, organizer_id, profiles!events_organizer_id_fkey(full_name, email, risk_tier)",
+      )
+      .eq("id", id)
+      .maybeSingle()
+  }
+
+  if (loaded.error) throw new Error(loaded.error.message)
+  if (!loaded.data) return null
+  const event = loaded.data
 
   type EventRow = {
     id: string
@@ -140,6 +158,8 @@ export async function getMassRefundPreview(
     location: string
     status: EventStatus
     organizer_id: string
+    cancellation_request_reason: string | null
+    cancellation_requested_at: string | null
     profiles: {
       full_name: string | null
       email: string
@@ -166,6 +186,8 @@ export async function getMassRefundPreview(
       (sum, order) => sum + Number(order.total_amount ?? 0),
       0,
     ),
+    cancellationRequestReason: row.cancellation_request_reason?.trim() || null,
+    cancellationRequestedAt: row.cancellation_requested_at,
   }
 }
 
@@ -225,6 +247,17 @@ export async function executeMassEventRefund(
     const row = event as unknown as EventRow
     const riskTier = row.profiles?.risk_tier ?? "TIER_1_CUSTODY"
     const organizerId = row.organizer_id
+
+    if (
+      row.status !== "cancellation_requested" &&
+      row.status !== "cancelled"
+    ) {
+      return {
+        success: false,
+        error:
+          "La cancelación masiva solo está disponible cuando el organizador pidió cancelar el evento.",
+      }
+    }
 
     const { paidOrders } = await loadPaidEventOrders(admin, id)
 

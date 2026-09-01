@@ -26,21 +26,7 @@ import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
 import { formatDateTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import type { EventStatus } from "@/types/database"
-
-function isEventStatus(value: string | null): value is EventStatus {
-  return (
-    value === "draft" ||
-    value === "pending_approval" ||
-    value === "needs_revision" ||
-    value === "rejected" ||
-    value === "published" ||
-    value === "paused" ||
-    value === "cancelled" ||
-    value === "completed" ||
-    value === "archived"
-  )
-}
+import { isEventStatus } from "@/lib/events/review-status"
 
 export function SupportInbox({
   threads,

@@ -145,6 +145,17 @@ describe("draft-day-priced-tickets", () => {
       multi[0]?.dayRates.map((rate) => rate.dayId),
       [friday.id, saturday.id],
     )
+    const extra = createDraftLineItemsForScheduleDays(
+      [friday, saturday],
+      "extra",
+    )
+    assert.equal(extra.length, 1)
+    assert.equal(extra[0]?.ticketType, "extra")
+    assert.equal(extra[0]?.name, "")
+    assert.deepEqual(
+      extra[0]?.dayRates.map((rate) => rate.dayId),
+      [friday.id, saturday.id],
+    )
   })
 
   it("fills dayRates when the schedule grows and the drawer never opened", () => {

@@ -1,4 +1,4 @@
-import type { ScannerEventOption } from "@/app/actions/scanner"
+import type { ScannerEventOption } from "@/lib/scanner/scanner-catalog-types"
 import type { ScannerGate } from "@/lib/scanner/gate"
 import {
   ScannerSetupError,

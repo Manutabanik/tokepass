@@ -196,7 +196,37 @@ export default async function SuperAdminEventDetailPage({
         </CardContent>
       </Card>
 
-      <EventMassRefundDangerZone preview={preview} />
+      {preview.cancellationRequestReason ? (
+        <Card className="mb-6 border border-amber-500/30 bg-amber-500/10 py-0 text-card-foreground">
+          <CardHeader className="border-b border-amber-500/20 px-6 py-5">
+            <CardTitle className="text-foreground">
+              Solicitud de cancelación
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 px-6 py-5 text-sm">
+            <p className="text-muted-foreground">
+              El organizador pidió cancelar. La devolución masiva (MFA) solo
+              corre acá, desde Super Admin.
+            </p>
+            <p className="rounded-xl border border-amber-500/30 bg-background/70 px-3 py-2 text-foreground">
+              {preview.cancellationRequestReason}
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {preview.eventStatus === "cancellation_requested" ||
+      (preview.eventStatus === "cancelled" && preview.paidOrders > 0) ? (
+        <EventMassRefundDangerZone preview={preview} />
+      ) : (
+        <Card className="border border-border bg-card py-0 text-card-foreground">
+          <CardContent className="px-6 py-5 text-sm text-muted-foreground">
+            La cancelación masiva con MFA queda bloqueada hasta que el
+            organizador envíe una solicitud de cancelación. Así no se toca el
+            dinero de las compras por error.
+          </CardContent>
+        </Card>
+      )}
     </>
   )
 }

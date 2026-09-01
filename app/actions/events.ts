@@ -785,6 +785,7 @@ export async function deleteOrArchiveEvent(
 
   const decision = eventSoftDeleteDecision({
     isDeleted: Boolean(event.is_deleted),
+    status: event.status,
     paidOrders: paidOrderCount,
     confirmedTickets: count ?? 0,
   })

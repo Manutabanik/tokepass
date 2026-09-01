@@ -37,7 +37,6 @@ import {
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
-  createDraftLineItem,
   DRAFT_CAPACITY_OVERFLOW_MESSAGE,
   draftCapacityThermometer,
   draftNumberValue,
@@ -174,7 +173,7 @@ export function EventEditorV2InventoryStep({
   function openNew(name: LineItemName) {
     if (name === "extras") {
       const index = extraArray.fields.length
-      extraArray.append(createDraftLineItem("extra"))
+      extraArray.append(createDraftLineItemsForScheduleDays(schedule, "extra"))
       setEditor({ name, index, isNew: true })
       return
     }

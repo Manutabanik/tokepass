@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-import { DoorScanner } from "@/components/admin/door-scanner"
+import { DoorScannerClient } from "@/components/admin/door-scanner-entry"
 
 export const metadata: Metadata = {
   title: "Validador de acceso",
@@ -9,5 +9,5 @@ export const metadata: Metadata = {
 }
 
 export default function AdminValidatorPage() {
-  return <DoorScanner />
+  return <DoorScannerClient />
 }

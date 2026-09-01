@@ -32,6 +32,12 @@ export function posLiveAvailable(
   sold: number,
   eventStatus?: string | null,
 ): number {
+  if (
+    eventStatus === "cancellation_requested" ||
+    eventStatus === "cancelled"
+  ) {
+    return 0
+  }
   if (isSandboxEventStatus(eventStatus)) {
     return Math.max(0, Math.floor(Number(capacity) || 0))
   }

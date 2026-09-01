@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-import { DoorScanner } from "@/components/admin/door-scanner"
+import { DoorScannerClient } from "@/components/admin/door-scanner-entry"
 
 export const metadata: Metadata = {
   title: "Control de Puerta",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 }
 
 export default function AdminScannerPage() {
-  return <DoorScanner />
+  return <DoorScannerClient />
 }

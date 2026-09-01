@@ -29,7 +29,7 @@ import {
   deleteOrArchiveEvent,
   type OrganizerEvent,
 } from "@/app/actions/events"
-import { requestEventCancellationSupport } from "@/app/actions/support"
+import { OrganizerCancellationRequestDialog } from "@/components/admin/organizer-cancellation-request-dialog"
 import { BoostModal } from "@/components/admin/boost-modal"
 import { getBoostPlan } from "@/lib/boost-plans"
 import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
@@ -52,6 +52,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  canOrganizerRequestCancellation,
+  canOrganizerSoftDeleteStatus,
+} from "@/lib/events/event-delete-policy"
 import { canSubmitEventForReview } from "@/lib/events/review-status"
 import { isBoostActive } from "@/lib/services/events-service"
 import { formatEventDay } from "@/lib/format"
@@ -94,7 +98,6 @@ export function OrganizerEventsManager({
   const [supportTarget, setSupportTarget] = useState<OrganizerEvent | null>(null)
   const [pendingDelete, startDelete] = useTransition()
   const [pendingArchive, startArchive] = useTransition()
-  const [pendingSupport, startSupport] = useTransition()
 
   const hint = useMemo(() => {
     if (boostHint === "success") {
@@ -332,25 +335,35 @@ export function OrganizerEventsManager({
                           Archivar
                         </DropdownMenuItem>
                       ) : null}
-                      {event.status !== "cancelled" ? (
+                      {event.status === "cancellation_requested" ? (
                         <>
                           <DropdownMenuSeparator />
-                          {event.paidOrderCount > 0 ? (
-                            <DropdownMenuItem
-                              onClick={() => setSupportTarget(event)}
-                            >
-                              <ShieldAlert className="size-4" aria-hidden="true" />
-                              Solicitar Cancelación a Soporte
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem
-                              className="text-destructive data-highlighted:bg-destructive/10 data-highlighted:text-destructive"
-                              onClick={() => setDeleteTarget(event)}
-                            >
-                              <Trash2 className="size-4" aria-hidden="true" />
-                              Eliminar
-                            </DropdownMenuItem>
-                          )}
+                          <DropdownMenuItem disabled>
+                            <ShieldAlert className="size-4" aria-hidden="true" />
+                            Cancelación solicitada
+                          </DropdownMenuItem>
+                        </>
+                      ) : canOrganizerRequestCancellation(event.status) ? (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => setSupportTarget(event)}
+                          >
+                            <ShieldAlert className="size-4" aria-hidden="true" />
+                            Solicitar Cancelación
+                          </DropdownMenuItem>
+                        </>
+                      ) : canOrganizerSoftDeleteStatus(event.status) &&
+                        event.status !== "cancelled" ? (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive data-highlighted:bg-destructive/10 data-highlighted:text-destructive"
+                            onClick={() => setDeleteTarget(event)}
+                          >
+                            <Trash2 className="size-4" aria-hidden="true" />
+                            Eliminar borrador
+                          </DropdownMenuItem>
                         </>
                       ) : null}
                     </DropdownMenuContent>
@@ -383,12 +396,12 @@ export function OrganizerEventsManager({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-foreground">
               <TriangleAlert className="size-4 text-rose-600 dark:text-rose-300" aria-hidden="true" />
-              ¿Querés eliminar esto?
+              ¿Eliminar este borrador?
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
               {deleteTarget && deleteTarget.ticketsSold > 0
-                ? `“${deleteTarget.title}” tiene ventas confirmadas. No se puede eliminar: pedí la cancelación a soporte.`
-                : `“${deleteTarget?.title ?? "Este evento"}” no tiene ventas. Se ocultará con un borrado lógico. El historial no se destruye.`}
+                ? `“${deleteTarget.title}” tiene ventas confirmadas. No se puede eliminar: pedí la cancelación.`
+                : `“${deleteTarget?.title ?? "Este evento"}” se oculta con soft delete. No se destruyen filas ni el historial.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-2">
@@ -439,70 +452,19 @@ export function OrganizerEventsManager({
               )}
               {deleteTarget && deleteTarget.ticketsSold > 0
                 ? "No se puede eliminar"
-                : "Eliminar (borrado lógico)"}
+                : "Eliminar borrador"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog
+      <OrganizerCancellationRequestDialog
+        event={supportTarget}
         open={Boolean(supportTarget)}
         onOpenChange={(open) => {
           if (!open) setSupportTarget(null)
         }}
-      >
-        <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-foreground">
-              <ShieldAlert className="size-4 text-amber-600 dark:text-amber-300" aria-hidden="true" />
-              Cancelación con ventas cobradas
-            </DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              {supportTarget
-                ? `“${supportTarget.title}” tiene ${supportTarget.paidOrderCount} compra(s) pagada(s). No podés cancelarlo desde el panel. Soporte debe evaluar el reembolso por la pasarela de pago.`
-                : "Este evento tiene compras pagadas."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="border-border"
-              onClick={() => setSupportTarget(null)}
-            >
-              Volver
-            </Button>
-            <Button
-              type="button"
-              disabled={pendingSupport || !supportTarget}
-              className="bg-amber-600 text-white hover:bg-amber-500"
-              onClick={() => {
-                if (!supportTarget) return
-                startSupport(async () => {
-                  const result = await requestEventCancellationSupport(
-                    supportTarget.id,
-                  )
-                  if (!result.success) {
-                    toast.error(result.error)
-                    return
-                  }
-                  toast.success("Solicitud enviada a soporte", {
-                    description: "El equipo de TokePass va a revisar la cancelación y los reembolsos.",
-                  })
-                  setSupportTarget(null)
-                })
-              }}
-            >
-              {pendingSupport ? (
-                <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <ShieldAlert className="size-4" aria-hidden="true" />
-              )}
-              Solicitar Cancelación a Soporte
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      />
     </div>
   )
 }

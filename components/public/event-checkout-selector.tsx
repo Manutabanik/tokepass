@@ -1132,6 +1132,8 @@ export function QuantityList({
   onQuantityChange,
   action = "stepper",
   maxTicketsPerUser = null,
+  selectedDateId = null,
+  scheduleDays = [],
 }: {
   tiers: TicketSelectorTier[]
   quantities: Record<string, number>
@@ -1141,6 +1143,8 @@ export function QuantityList({
   action?: "stepper" | "add"
   maxTicketsPerUser?: number | null
   selectedCount?: number
+  selectedDateId?: string | null
+  scheduleDays?: ScheduleDay[]
 }) {
   return (
     <ul className="space-y-3">
@@ -1148,7 +1152,8 @@ export function QuantityList({
         const sale = resolveSalePhases(tier.phases)
         const current = sale.current
         const quantity = quantityForPublicTier(quantities, tier, {
-          undated: true,
+          selectedDateId,
+          scheduleDays,
         })
         const remaining = purchaseCapForTier({
           layoutType: tier.layoutType,

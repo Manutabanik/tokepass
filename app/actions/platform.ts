@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache"
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import type { PlatformEventFilter } from "@/lib/events/platform-events-filter"
+import { parsePlatformEventFilter } from "@/lib/events/platform-events-filter"
 import type {
   EventStatus,
   OrganizerApprovalStatus,
@@ -89,7 +91,7 @@ export async function getPlatformOverview(): Promise<PlatformOverview> {
     venuesCount,
   ] = await Promise.all([
     admin.from("profiles").select("role"),
-    admin.from("events").select("status"),
+    admin.from("events").select("status, is_deleted"),
     admin.from("ticket_tiers").select("id, price, sold"),
     admin.from("tickets").select("created_at, tier_id"),
     admin.from("orders").select("status, total_amount, created_at"),
@@ -108,11 +110,13 @@ export async function getPlatformOverview(): Promise<PlatformOverview> {
     rejected: 0,
     published: 0,
     paused: 0,
+    cancellation_requested: 0,
     cancelled: 0,
     completed: 0,
     archived: 0,
   }
   for (const event of events ?? []) {
+    if ("is_deleted" in event && event.is_deleted) continue
     eventsByStatus[event.status] = (eventsByStatus[event.status] ?? 0) + 1
   }
 
@@ -272,21 +276,85 @@ export interface PlatformEvent {
   location: string
   organizerName: string
   organizerEmail: string
+  isDeleted: boolean
 }
 
-export async function getPlatformEvents(): Promise<PlatformEvent[]> {
-  const { admin } = await requireSuperAdmin()
+export type PlatformEventsBoard = {
+  filter: PlatformEventFilter
+  events: PlatformEvent[]
+  counts: Record<PlatformEventFilter, number>
+}
 
-  const { data, error } = await admin
+export async function getPlatformEvents(
+  filter?: string | null,
+): Promise<PlatformEventsBoard> {
+  const { admin } = await requireSuperAdmin()
+  const resolved = parsePlatformEventFilter(filter)
+  const eventSelect =
+    "id, title, status, date, location, is_deleted, profiles!events_organizer_id_fkey(full_name, email)"
+
+  let listQuery = admin
     .from("events")
-    .select(
-      "id, title, status, date, location, profiles!events_organizer_id_fkey(full_name, email)",
-    )
+    .select(eventSelect)
     .order("date", { ascending: false })
     .limit(200)
 
-  if (error) {
-    throw new Error(`No se pudieron cargar los eventos: ${error.message}`)
+  if (resolved === "eliminados") {
+    listQuery = listQuery.eq("is_deleted", true)
+  } else if (resolved === "solicitudes") {
+    listQuery = listQuery
+      .eq("is_deleted", false)
+      .eq("status", "cancellation_requested")
+  } else {
+    listQuery = listQuery
+      .eq("is_deleted", false)
+      .neq("status", "cancellation_requested")
+  }
+
+  const [listed, activos, solicitudes, eliminados] = await Promise.all([
+    listQuery,
+    admin
+      .from("events")
+      .select("id", { count: "exact", head: true })
+      .eq("is_deleted", false)
+      .neq("status", "cancellation_requested"),
+    admin
+      .from("events")
+      .select("id", { count: "exact", head: true })
+      .eq("is_deleted", false)
+      .eq("status", "cancellation_requested"),
+    admin
+      .from("events")
+      .select("id", { count: "exact", head: true })
+      .eq("is_deleted", true),
+  ])
+
+  let listedRows = listed.data
+  let listedError = listed.error
+
+  if (
+    listedError &&
+    /cancellation_requested|22P02|invalid input value/i.test(
+      listedError.message,
+    )
+  ) {
+    const fallback = await admin
+      .from("events")
+      .select(eventSelect)
+      .eq("is_deleted", resolved === "eliminados")
+      .order("date", { ascending: false })
+      .limit(200)
+    if (fallback.error) {
+      throw new Error(
+        `No se pudieron cargar los eventos: ${fallback.error.message}`,
+      )
+    }
+    listedRows = fallback.data
+    listedError = null
+  }
+
+  if (listedError) {
+    throw new Error(`No se pudieron cargar los eventos: ${listedError.message}`)
   }
 
   type Row = {
@@ -295,18 +363,28 @@ export async function getPlatformEvents(): Promise<PlatformEvent[]> {
     status: EventStatus
     date: string
     location: string
+    is_deleted: boolean | null
     profiles: { full_name: string | null; email: string } | null
   }
 
-  return ((data ?? []) as unknown as Row[]).map((event) => ({
-    id: event.id,
-    title: event.title,
-    status: event.status,
-    date: event.date,
-    location: event.location,
-    organizerName: event.profiles?.full_name ?? "—",
-    organizerEmail: event.profiles?.email ?? "—",
-  }))
+  return {
+    filter: resolved,
+    counts: {
+      activos: activos.count ?? 0,
+      solicitudes: solicitudes.count ?? 0,
+      eliminados: eliminados.count ?? 0,
+    },
+    events: ((listedRows ?? []) as unknown as Row[]).map((event) => ({
+      id: event.id,
+      title: event.title,
+      status: event.status,
+      date: event.date,
+      location: event.location,
+      organizerName: event.profiles?.full_name ?? "—",
+      organizerEmail: event.profiles?.email ?? "—",
+      isDeleted: Boolean(event.is_deleted),
+    })),
+  }
 }
 
 export interface PlatformOrder {

@@ -344,9 +344,7 @@ function mapLineItemToTier(
     category: isExtra ? "special" : "standard",
     layout_type: isExtra ? "general" : publishLayoutType(item, isMap),
     seating_sector_id: isMap && sectorId ? sectorId : null,
-    day_id: isExtra
-      ? null
-      : asPublishUuid((item as { slotId?: string }).slotId),
+    day_id: asPublishUuid((item as { slotId?: string }).slotId),
     ticket_type: ticketType,
     sale_starts_at: saleWindowToIso(
       (item as { startDate?: string }).startDate,
@@ -392,6 +390,43 @@ export function resolvePublishedTicketDayIds(
         .filter((id): id is string => id != null && publishedDayIds.has(id)),
     ),
   ]
+}
+
+function expandDraftItemsForPublish(
+  items: EventDraftV2LineItem[],
+  kind: "ticket" | "extra",
+  fee: EventFeeConfig,
+  absorbFees: boolean,
+  publishedDayIds: Set<string>,
+  occurrences: DraftScheduleOccurrence[],
+  schedule: ReturnType<typeof resolveDraftSchedule>,
+): PublishEventV2TierPayload[] {
+  return expandDayPricedTicketsForPersist(items, schedule).flatMap(
+    (item): PublishEventV2TierPayload[] => {
+      const mapped = mapLineItemToTier(item, kind, fee, absorbFees)
+      if (!mapped) return []
+      const dayIds = resolvePublishedTicketDayIds(
+        item,
+        publishedDayIds,
+        occurrences,
+      )
+      if (mapped.ticket_type === "combo") {
+        const comboDays =
+          dayIds.length >= 2 ? dayIds : [...publishedDayIds]
+        if (comboDays.length >= 2) {
+          return [{ ...mapped, day_id: null, combo_schedule_ids: comboDays }]
+        }
+      }
+      if (dayIds.length === 0) {
+        return [{ ...mapped, day_id: null }]
+      }
+      return dayIds.map((day_id, index) => ({
+        ...mapped,
+        id: index === 0 ? mapped.id : null,
+        day_id,
+      }))
+    },
+  )
 }
 
 export function assertPublishedSeatedTicketsBoundToDays(
@@ -574,10 +609,6 @@ export function buildPublishEventV2Payload(
   const occurrences = flattenDraftScheduleOccurrences(
     resolveDraftSchedule(parsed),
   ).filter((item) => item.startDateTime.trim())
-  const extras = (parsed.extras ?? [])
-    .map((item) => mapLineItemToTier(item, "extra", fee, absorbFees))
-    .filter((item): item is PublishEventV2TierPayload => item != null)
-    .map((item) => ({ ...item, day_id: null }))
   const flyer = parsed.flyerUrl?.trim() || null
   const banner = parsed.bannerUrl?.trim() || null
   const publishedMaps = publishSeatingMapsFromDraft(parsed, occurrences)
@@ -601,34 +632,25 @@ export function buildPublishEventV2Payload(
       .map((day) => day.id)
       .filter((id): id is string => Boolean(id)),
   )
-  const persistTickets = expandDayPricedTicketsForPersist(
+  const draftSchedule = resolveDraftSchedule(parsed)
+  const tickets = expandDraftItemsForPublish(
     parsed.tickets,
-    resolveDraftSchedule(parsed),
+    "ticket",
+    fee,
+    absorbFees,
+    publishedDayIds,
+    occurrences,
+    draftSchedule,
   )
-  const tickets = persistTickets.flatMap((item): PublishEventV2TierPayload[] => {
-    const mapped = mapLineItemToTier(item, "ticket", fee, absorbFees)
-    if (!mapped) return []
-    const dayIds = resolvePublishedTicketDayIds(
-      item,
-      publishedDayIds,
-      occurrences,
-    )
-    if (mapped.ticket_type === "combo") {
-      const comboDays =
-        dayIds.length >= 2 ? dayIds : [...publishedDayIds]
-      if (comboDays.length >= 2) {
-        return [{ ...mapped, day_id: null, combo_schedule_ids: comboDays }]
-      }
-    }
-    if (dayIds.length === 0) {
-      return [{ ...mapped, day_id: null }]
-    }
-    return dayIds.map((day_id, index) => ({
-      ...mapped,
-      id: index === 0 ? mapped.id : null,
-      day_id,
-    }))
-  })
+  const extras = expandDraftItemsForPublish(
+    parsed.extras ?? [],
+    "extra",
+    fee,
+    absorbFees,
+    publishedDayIds,
+    occurrences,
+    draftSchedule,
+  )
 
   if (tickets.length < 1) {
     throw new Error("Agregá al menos una entrada")

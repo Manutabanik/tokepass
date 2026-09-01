@@ -24,16 +24,24 @@ export function useSyncDraftDayRates() {
   useLayoutEffect(() => {
     const days = getValues("schedule") ?? []
     const tickets = getValues("tickets") ?? []
+    const extras = getValues("extras") ?? []
 
-    tickets.forEach((ticket, index) => {
-      const synced = nextDraftTicketAfterScheduleChange(ticket, days)
+    function syncLine(
+      path: "tickets" | "extras",
+      item: (typeof tickets)[number],
+      index: number,
+    ) {
+      const synced = nextDraftTicketAfterScheduleChange(item, days)
       if (!synced) return
-      setValue(`tickets.${index}.dayRates`, synced.dayRates, {
+      setValue(`${path}.${index}.dayRates`, synced.dayRates, {
         shouldDirty: false,
         shouldTouch: false,
       })
-      setValue(`tickets.${index}.price`, synced.price, { shouldDirty: false })
-      setValue(`tickets.${index}.stock`, synced.stock, { shouldDirty: false })
-    })
+      setValue(`${path}.${index}.price`, synced.price, { shouldDirty: false })
+      setValue(`${path}.${index}.stock`, synced.stock, { shouldDirty: false })
+    }
+
+    tickets.forEach((ticket, index) => syncLine("tickets", ticket, index))
+    extras.forEach((extra, index) => syncLine("extras", extra, index))
   }, [getValues, scheduleKey, setValue])
 }

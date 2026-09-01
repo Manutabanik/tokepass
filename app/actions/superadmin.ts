@@ -89,7 +89,7 @@ export async function getAllOrganizers(): Promise<OrganizerPlatformRow[]> {
       .select("id, full_name, email")
       .eq("role", "admin")
       .order("full_name", { ascending: true }),
-    admin.from("events").select("id, organizer_id, status"),
+    admin.from("events").select("id, organizer_id, status, is_deleted"),
     admin.from("orders").select("id, total_amount, subtotal").eq("status", "paid"),
   ])
 
@@ -107,6 +107,7 @@ export async function getAllOrganizers(): Promise<OrganizerPlatformRow[]> {
   const activeEventsByOrganizer = new Map<string, number>()
 
   for (const event of events ?? []) {
+    if ("is_deleted" in event && event.is_deleted) continue
     eventOrganizer.set(event.id, event.organizer_id)
     if (
       event.status === "published" ||

@@ -90,10 +90,15 @@ export function EventMassRefundDangerZone({
             Cancelar evento y devolver la plata
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-rose-900/70 dark:text-rose-100/70">
-            Usá esto solo en caso de fuerza mayor. Primero se pide el
-            reembolso a Mercado Pago. Solo si la pasarela confirma el
-            éxito se anulan esa compra y sus códigos QR.
+            Solo Super Admin. Primero se pide el reembolso a Mercado Pago.
+            Solo si la pasarela confirma el éxito se anulan esa compra y
+            sus códigos QR.
           </p>
+          {preview.cancellationRequestReason ? (
+            <p className="mt-3 max-w-2xl rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
+              Motivo del organizador: {preview.cancellationRequestReason}
+            </p>
+          ) : null}
         </div>
         <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-right">
           <p className="font-mono text-2xl font-black text-rose-700 dark:text-rose-200 sm:text-3xl">

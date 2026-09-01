@@ -287,21 +287,39 @@ describe("generalQuantityScheduleStamp", () => {
     assert.equal(stamp.dateString, formatEventCartDateLong(days[0].start_time))
   })
 
-  it("keeps extras undated so they are not tied to a day tab", () => {
+  it("stamps extras with the active jornada like generals", () => {
     const extra = tier({
       id: "park",
       name: "Estacionamiento",
       isFullPass: false,
       dayId: null,
+      ticketType: "extra",
+      tierType: "addon",
     })
     const stamp = generalQuantityScheduleStamp({
       selectedDateId: "d1",
       scheduleDays: days,
       tier: extra,
-      undated: true,
+    })
+    assert.equal(stamp.scheduleId, "d1")
+    assert.equal(stamp.dateString, formatEventCartDateLong(days[0].start_time))
+  })
+
+  it("keeps combos undated so they are not tied to a day tab", () => {
+    const combo = tier({
+      id: "pass",
+      name: "Abono",
+      isFullPass: true,
+      dayId: null,
+      ticketType: "combo",
+    })
+    const stamp = generalQuantityScheduleStamp({
+      selectedDateId: "d1",
+      scheduleDays: days,
+      tier: combo,
     })
     assert.equal(stamp.scheduleId, null)
-    assert.equal(stamp.dateString, null)
+    assert.equal(stamp.dateString, "Todos los días")
   })
 
   it("reads friday and saturday as independent counters for the same general", () => {
@@ -330,21 +348,27 @@ describe("generalQuantityScheduleStamp", () => {
     )
   })
 
-  it("does not read a jornada key for an extra even if a day tab is selected", () => {
+  it("reads friday and saturday as independent counters for the same extra", () => {
     const extra = tier({
       id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       name: "Estacionamiento",
+      isFullPass: false,
       ticketType: "extra",
       dayId: null,
     })
     const friday = "550e8400-e29b-41d4-a716-446655440001"
+    const saturday = "550e8400-e29b-41d4-a716-446655440002"
     const quantities = {
-      [`${extra.id}_all`]: 3,
-      [`${extra.id}_${friday}`]: 9,
+      [`${extra.id}_${friday}`]: 2,
+      [`${extra.id}_${saturday}`]: 1,
     }
     assert.equal(
       quantityForPublicTier(quantities, extra, { selectedDateId: friday }),
-      3,
+      2,
+    )
+    assert.equal(
+      quantityForPublicTier(quantities, extra, { selectedDateId: saturday }),
+      1,
     )
   })
 })

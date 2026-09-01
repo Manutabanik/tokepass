@@ -8,6 +8,7 @@ import { logger } from "@/lib/logger"
 import { buildSupportEscalateMessage } from "@/lib/support-escalate"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { eventCancellationRequestDecision } from "@/lib/events/event-delete-policy"
 import type { SupportMessage, SupportThread } from "@/types/database"
 
 export type SupportActionResult<T> =
@@ -588,8 +589,10 @@ async function notifyOrganizerSupportReply(input: {
 
 export async function requestEventCancellationSupport(
   eventId: string,
+  reason = "",
 ): Promise<SupportActionResult<{ threadId: string }>> {
   const id = eventId.trim()
+  const cleanReason = reason.trim()
   if (!id) {
     return { success: false, error: "Evento inválido." }
   }
@@ -602,12 +605,31 @@ export async function requestEventCancellationSupport(
 
     const { data: event } = await admin
       .from("events")
-      .select("id, title, organizer_id, status")
+      .select("id, title, organizer_id, status, is_deleted")
       .eq("id", id)
       .maybeSingle()
 
     if (!event || (event.organizer_id !== user.id && profile.role !== "super_admin")) {
       return { success: false, error: "No tenés permiso sobre este evento." }
+    }
+
+    if (event.is_deleted) {
+      return { success: false, error: "Este evento ya fue eliminado." }
+    }
+
+    if (event.status === "cancellation_requested") {
+      const thread = await getOrCreateOrganizerThread(id)
+      return thread.success
+        ? { success: true, data: { threadId: thread.data.threadId } }
+        : thread
+    }
+
+    const decision = eventCancellationRequestDecision({
+      status: event.status,
+      reason: cleanReason,
+    })
+    if (!decision.ok) {
+      return { success: false, error: decision.error }
     }
 
     const { data: ticketRows, error: ticketError } = await admin
@@ -641,10 +663,27 @@ export async function requestEventCancellationSupport(
       paidCount = count ?? 0
     }
 
-    if (paidCount === 0) {
+    const now = new Date().toISOString()
+    const { error: statusError } = await admin
+      .from("events")
+      .update({
+        status: "cancellation_requested",
+        cancellation_requested_at: now,
+        cancellation_request_reason: cleanReason,
+        updated_at: now,
+      })
+      .eq("id", id)
+      .eq("is_deleted", false)
+      .in("status", ["published", "paused"])
+
+    if (statusError) {
       return {
         success: false,
-        error: "Este evento no tiene compras pagadas. Podés eliminarlo o archivarlo desde el panel.",
+        error: /cancellation_requested|22P02|invalid input value/i.test(
+          statusError.message,
+        )
+          ? "Falta aplicar la migración de solicitud de cancelación."
+          : statusError.message,
       }
     }
 
@@ -655,22 +694,30 @@ export async function requestEventCancellationSupport(
     const alreadyAsked = existing.some((message) =>
       message.content.includes("Solicitud de cancelación de evento"),
     )
-    if (alreadyAsked) {
-      return { success: true, data: { threadId: thread.data.threadId } }
+    if (!alreadyAsked) {
+      const sent = await sendSupportMessage(
+        thread.data.threadId,
+        [
+          "Solicitud de cancelación de evento",
+          `Evento: ${event.title}`,
+          `Estado anterior: ${event.status}`,
+          `Compras pagadas: ${paidCount}`,
+          `Motivo: ${cleanReason}`,
+          "El organizador no puede devolver el dinero. Super Admin debe procesar la cancelación con MFA.",
+        ].join("\n"),
+      )
+      if (!sent.success) return sent
     }
 
-    const sent = await sendSupportMessage(
-      thread.data.threadId,
-      [
-        "Solicitud de cancelación de evento",
-        `Evento: ${event.title}`,
-        `Estado actual: ${event.status}`,
-        `Compras pagadas: ${paidCount}`,
-        "No puedo cancelar el evento desde el panel porque ya hay dinero recaudado. Pedimos que soporte evalúe la cancelación y el reembolso por la pasarela de pago.",
-      ].join("\n"),
-    )
+    revalidatePath("/admin")
+    revalidatePath("/admin/events")
+    revalidatePath(`/admin/events/${id}`)
+    revalidatePath("/superadmin/events")
+    revalidatePath(`/superadmin/events/${id}`)
+    revalidatePath(`/events/${id}`)
+    revalidatePath("/events")
+    revalidatePath("/")
 
-    if (!sent.success) return sent
     return { success: true, data: { threadId: thread.data.threadId } }
   } catch (error) {
     return {

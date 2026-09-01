@@ -24,21 +24,52 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { parsePlatformEventFilter } from "@/lib/events/platform-events-filter"
 import { formatDateTime } from "@/lib/format"
+import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = {
   title: "Eventos",
 }
 
-export default async function SuperAdminEventsPage() {
-  const events = await getPlatformEvents()
+function filterHref(filter: "activos" | "solicitudes" | "eliminados") {
+  if (filter === "activos") return "/superadmin/events"
+  return `/superadmin/events?filtro=${filter}`
+}
+
+export default async function SuperAdminEventsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ filtro?: string }>
+}) {
+  const params = await searchParams
+  const { events, counts, filter } = await getPlatformEvents(params.filtro)
+  const resolved = parsePlatformEventFilter(params.filtro)
+
+  const tabs = [
+    {
+      id: "activos" as const,
+      label: "Cartelera",
+      count: counts.activos,
+    },
+    {
+      id: "solicitudes" as const,
+      label: "Cancelación pedida",
+      count: counts.solicitudes,
+    },
+    {
+      id: "eliminados" as const,
+      label: "Eliminados",
+      count: counts.eliminados,
+    },
+  ]
 
   return (
     <>
       <PageHeading
         eyebrow="Cartelera"
         title="Todos los eventos"
-        description="Acá ves todos los eventos de la plataforma, sin importar qué productora los creó."
+        description="La cartelera oculta borradores borrados y las solicitudes de cancelación. Usá los filtros para ver esas colas."
         actions={
           <Link
             href="/superadmin/auditoria"
@@ -49,10 +80,45 @@ export default async function SuperAdminEventsPage() {
         }
       />
 
+      <div className="mb-4 flex flex-wrap gap-2">
+        {tabs.map((tab) => {
+          const active = resolved === tab.id
+          return (
+            <Link
+              key={tab.id}
+              href={filterHref(tab.id)}
+              className={cn(
+                "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition",
+                active
+                  ? "border-sky-500/40 bg-sky-500/15 text-sky-900 dark:text-sky-100"
+                  : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              {tab.label}
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[11px] tabular-nums",
+                  active
+                    ? "bg-sky-500/20 text-sky-900 dark:text-sky-100"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                {tab.count}
+              </span>
+            </Link>
+          )
+        })}
+      </div>
+
       <Card className="border border-border bg-card py-0 text-card-foreground">
         <CardHeader className="border-b border-border px-5 py-5 sm:px-6">
           <CardTitle className="text-base font-medium text-muted-foreground">
             {events.length} {events.length === 1 ? "evento" : "eventos"}
+            {filter === "solicitudes"
+              ? " con cancelación pedida"
+              : filter === "eliminados"
+                ? " eliminados (soft delete)"
+                : " en cartelera"}
           </CardTitle>
         </CardHeader>
 
@@ -105,7 +171,14 @@ export default async function SuperAdminEventsPage() {
                       {formatDateTime(event.date)}
                     </TableCell>
                     <TableCell className="pr-6 text-right">
-                      <EventStatusBadge status={event.status} />
+                      <div className="flex flex-col items-end gap-1">
+                        <EventStatusBadge status={event.status} />
+                        {event.isDeleted ? (
+                          <span className="text-[11px] font-medium text-muted-foreground">
+                            Soft delete
+                          </span>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell className="pr-6 text-right">
                       <Link
@@ -127,7 +200,11 @@ export default async function SuperAdminEventsPage() {
                   <CalendarDays className="size-5" aria-hidden="true" />
                 </span>
                 <p className="mt-4 text-sm text-muted-foreground">
-                  Aún no se han creado eventos en la plataforma.
+                  {filter === "solicitudes"
+                    ? "No hay solicitudes de cancelación pendientes."
+                    : filter === "eliminados"
+                      ? "No hay eventos con soft delete."
+                      : "Aún no se han creado eventos en la plataforma."}
                 </p>
               </div>
             </div>

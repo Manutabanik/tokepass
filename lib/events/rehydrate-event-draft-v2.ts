@@ -239,6 +239,7 @@ export function rehydrateEventDraftV2(
   return {
     ...parsed,
     tickets: collapseDayPricedTicketsForEditor(parsed.tickets, parsed.schedule),
+    extras: collapseDayPricedTicketsForEditor(parsed.extras, parsed.schedule),
   }
 }
 

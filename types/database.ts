@@ -12,6 +12,7 @@ export type EventStatus =
   | "rejected"
   | "published"
   | "paused"
+  | "cancellation_requested"
   | "cancelled"
   | "completed"
   | "archived"
@@ -365,6 +366,9 @@ export type Event = {
   /** Soft delete. El panel nunca hace DELETE físico. */
   is_deleted: boolean
   deleted_at: string | null
+  /** Pedido del organizador. Super Admin ejecuta la cancelación financiera. */
+  cancellation_requested_at: string | null
+  cancellation_request_reason: string | null
   /** Event Creator V2: progreso crudo del wizard. No es catálogo público. */
   draft_state?: Json | null
 }
@@ -1379,6 +1383,8 @@ type EventInsert = Omit<
   | "reviewed_by"
   | "is_deleted"
   | "deleted_at"
+  | "cancellation_requested_at"
+  | "cancellation_request_reason"
   | "created_at"
   | "updated_at"
 > & {
@@ -1433,6 +1439,8 @@ type EventInsert = Omit<
   reviewed_by?: string | null
   is_deleted?: boolean
   deleted_at?: string | null
+  cancellation_requested_at?: string | null
+  cancellation_request_reason?: string | null
   created_at?: string
   updated_at?: string
   draft_state?: Json | null

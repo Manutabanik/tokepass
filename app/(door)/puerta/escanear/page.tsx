@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation"
 
 import { getDoorGuestScannerContext } from "@/app/actions/door-access"
-import { DoorScanner } from "@/components/admin/door-scanner"
+import { DoorScannerClient } from "@/components/admin/door-scanner-entry"
 
 export default async function DoorGuestScannerPage() {
   const session = await getDoorGuestScannerContext()
   if (!session) redirect("/puerta")
-  return <DoorScanner guestEvent={session.event} />
+  return <DoorScannerClient guestEvent={session.event} />
 }
