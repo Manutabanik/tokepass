@@ -3,6 +3,7 @@
 import { Maximize2, X } from "lucide-react"
 import type { ReactNode } from "react"
 
+import { LivingStoreQR } from "@/components/public/living-store-qr"
 import { LivingTicketQR } from "@/components/public/living-ticket-qr"
 import { StaticSignedQR } from "@/components/public/static-signed-qr"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ export function QrScanLightbox({
   holderName,
   holderDni,
   caption = "Acercá este código al escáner de ingreso",
+  kind = "door",
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -34,8 +36,10 @@ export function QrScanLightbox({
   holderName?: string | null
   holderDni?: string | null
   caption?: string
+  kind?: "door" | "store"
 }) {
-  const backup = ticketBackupCode(ticketId)
+  const isStore = kind === "store"
+  const backup = isStore ? null : ticketBackupCode(ticketId)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -58,7 +62,9 @@ export function QrScanLightbox({
           <span className="sr-only">Cerrar</span>
         </DialogClose>
 
-        <DialogTitle className="sr-only">Código de ingreso</DialogTitle>
+        <DialogTitle className="sr-only">
+          {isStore ? "Código de canje" : "Código de ingreso"}
+        </DialogTitle>
         <DialogDescription className="sr-only">{caption}</DialogDescription>
 
         <div className="pointer-events-auto relative z-[110] flex w-full max-w-md flex-col items-center justify-center py-8">
@@ -67,7 +73,14 @@ export function QrScanLightbox({
             style={{ colorScheme: "light" }}
           >
             <div className="size-[min(20rem,calc(100vw-5rem))] bg-white">
-              {isStatic ? (
+              {isStore ? (
+                <LivingStoreQR
+                  token={ticketId}
+                  size={320}
+                  variant="scan"
+                  className="size-full max-w-none bg-white"
+                />
+              ) : isStatic ? (
                 <StaticSignedQR
                   ticketId={ticketId}
                   totpSecret={totpSecret}
@@ -84,9 +97,11 @@ export function QrScanLightbox({
                 />
               )}
             </div>
-            <p className="mt-5 font-mono text-sm font-semibold tracking-[0.22em] text-zinc-800">
-              {backup}
-            </p>
+            {backup ? (
+              <p className="mt-5 font-mono text-sm font-semibold tracking-[0.22em] text-zinc-800">
+                {backup}
+              </p>
+            ) : null}
             {holderName ? (
               <p className="mt-3 text-center text-base font-bold text-zinc-950">
                 {holderName}

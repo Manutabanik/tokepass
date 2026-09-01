@@ -36,6 +36,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { MyTicket } from "@/app/actions/tickets"
 import { parseDeliveryMode } from "@/lib/events/delivery-mode"
+import { resolveTicketCommerceType } from "@/lib/events/ticket-commerce-type"
 import { isMissingTicketWalletColumnError } from "@/lib/tickets/wallet-query"
 import { normalizeIssuanceChannel } from "@/lib/tickets/static-tps-policy"
 import type { OrderStatus, TicketStatus } from "@/types/database"
@@ -148,7 +149,7 @@ export async function listGuestOrderTickets(): Promise<GuestTicketPreview[]> {
 const GUEST_SEATING_EMBED =
   "event_seating_units(label, sector_name, row_label, layout_type)"
 const GUEST_TICKET_DETAIL_SELECT =
-  `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, issuance_channel, max_admissions, admissions_used, is_test, holder_name, holder_dni, ${GUEST_SEATING_EMBED}, ticket_tiers!tickets_tier_id_fkey(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, delivery_mode, access_link, venues(name))`
+  `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, issuance_channel, max_admissions, admissions_used, is_test, holder_name, holder_dni, ${GUEST_SEATING_EMBED}, ticket_tiers!tickets_tier_id_fkey(name, bonus_reward, day_id, price, ticket_type, tier_type), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, delivery_mode, access_link, venues(name))`
 const GUEST_TICKET_DETAIL_SELECT_LEGACY =
   `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, issuance_channel, max_admissions, admissions_used, is_test, holder_name, holder_dni, ${GUEST_SEATING_EMBED}, ticket_tiers!tickets_tier_id_fkey(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, venues(name))`
 
@@ -184,8 +185,22 @@ type GuestTicketDetailRow = {
       }[]
     | null
   ticket_tiers?:
-    | { name?: string; bonus_reward?: string | null; day_id?: string | null; price?: number }
-    | { name?: string; bonus_reward?: string | null; day_id?: string | null; price?: number }[]
+    | {
+        name?: string
+        bonus_reward?: string | null
+        day_id?: string | null
+        price?: number
+        ticket_type?: string | null
+        tier_type?: string | null
+      }
+    | {
+        name?: string
+        bonus_reward?: string | null
+        day_id?: string | null
+        price?: number
+        ticket_type?: string | null
+        tier_type?: string | null
+      }[]
     | null
   events?:
     | {
@@ -293,6 +308,12 @@ function mapGuestTicketRow(row: GuestTicketDetailRow, revealQr: boolean): MyTick
     orderCreatedAt: null,
     isTest: Boolean(row.is_test),
     tierPrice: Number(tier?.price ?? 0),
+    ticketType: resolveTicketCommerceType({
+      ticketType: tier?.ticket_type,
+      tierType: tier?.tier_type,
+      name: tier?.name,
+    }),
+    tierType: tier?.tier_type?.trim() || null,
     isSponsoredByTokePass: false,
     activeResaleListingId: null,
     pendingTransfer: null,

@@ -10,11 +10,14 @@ import {
   parseEventItemCategory,
   type EventItemCategory,
 } from "@/lib/store-categories"
+import {
+  STORE_QR_GRACE_BLOCKS,
+  STORE_QR_ROTATION_MS,
+  decodeLivingStorePayload,
+} from "@/lib/store/living-store-payload"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
-const ROTATION_MS = 15_000
-const GRACE_BLOCKS = 1
 const MAX_STORE_IMAGE_BYTES = 5 * 1024 * 1024
 const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
@@ -96,44 +99,6 @@ type RedeemRpcRow = {
   redeemed_at: string | null
   already_redeemed: boolean
   previous_redeemed_at: string | null
-}
-
-function decodeLivingStorePayload(base64Payload: string): {
-  token: string
-  timestampBlock: number
-} | null {
-  try {
-    const cleaned = base64Payload.trim()
-
-    if (cleaned.startsWith("bar_") && !cleaned.includes(" ")) {
-      return {
-        token: cleaned,
-        timestampBlock: Math.floor(Date.now() / ROTATION_MS),
-      }
-    }
-
-    const decoded = Buffer.from(cleaned, "base64").toString("utf8")
-    const separator = decoded.lastIndexOf("-")
-
-    if (separator <= 0 || separator === decoded.length - 1) {
-      return null
-    }
-
-    const token = decoded.slice(0, separator)
-    const timestampBlock = Number(decoded.slice(separator + 1))
-
-    if (
-      !token ||
-      !Number.isFinite(timestampBlock) ||
-      !Number.isInteger(timestampBlock)
-    ) {
-      return null
-    }
-
-    return { token, timestampBlock }
-  } catch {
-    return null
-  }
 }
 
 function mapEventItemRow(row: {
@@ -343,8 +308,8 @@ export async function redeemItemRPC(
 
   const isRawToken = qrToken.trim().startsWith("bar_")
   if (!isRawToken) {
-    const currentBlock = Math.floor(Date.now() / ROTATION_MS)
-    if (decoded.timestampBlock < currentBlock - GRACE_BLOCKS) {
+    const currentBlock = Math.floor(Date.now() / STORE_QR_ROTATION_MS)
+    if (decoded.timestampBlock < currentBlock - STORE_QR_GRACE_BLOCKS) {
       return {
         success: false,
         alreadyRedeemed: false,

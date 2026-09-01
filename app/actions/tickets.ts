@@ -23,6 +23,10 @@ import type {
 import { parseDeliveryMode } from "@/lib/events/delivery-mode"
 import { tryCreateAdminClient } from "@/lib/supabase/admin"
 import {
+  resolveTicketCommerceType,
+  type TicketCommerceType,
+} from "@/lib/events/ticket-commerce-type"
+import {
   isMissingTicketWalletColumnError,
   ticketsTierSelect,
 } from "@/lib/tickets/wallet-query"
@@ -85,6 +89,10 @@ export type MyTicket = {
   isTest: boolean
   /** Precio público All-In del tier (0 = gratuita). */
   tierPrice: number
+  /** `ticket_tiers.ticket_type` resuelto (extra/combo/standard). */
+  ticketType: TicketCommerceType
+  /** `ticket_tiers.tier_type` crudo (addon, general, seated…). */
+  tierType: string | null
   isSponsoredByTokePass: boolean
   /** Listado activo en marketplace de reventa (si existe). */
   activeResaleListingId: string | null
@@ -121,6 +129,8 @@ type TicketRow = {
     bonus_reward: string | null
     day_id: string | null
     price?: number | null
+    ticket_type?: string | null
+    tier_type?: string | null
   } | null
   events: {
     id: string
@@ -254,11 +264,16 @@ async function loadMyTickets(options?: {
   const orderId = options?.orderId?.trim() || ""
   const ticketId = options?.ticketId?.trim() || ""
 
-  const tierEmbed = ticketsTierSelect("name, bonus_reward, day_id, price")
+  const tierEmbed = ticketsTierSelect(
+    "name, bonus_reward, day_id, price, ticket_type, tier_type",
+  )
+  const tierEmbedLegacy = ticketsTierSelect(
+    "name, bonus_reward, day_id, price",
+  )
   const ticketSelectWithDelivery =
     `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, issuance_channel, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, delivery_mode, access_link, venues(name)), orders(status, created_at)`
   const ticketSelectLegacy =
-    `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, issuance_channel, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, venues(name)), orders(status, created_at)`
+    `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, issuance_channel, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbedLegacy}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, venues(name)), orders(status, created_at)`
 
   let query = supabase
     .from("tickets")
@@ -396,6 +411,12 @@ async function loadMyTickets(options?: {
       createdAt: ticket.created_at,
       tierName: ticket.ticket_tiers?.name ?? "Entrada",
       bonusReward: ticket.ticket_tiers?.bonus_reward ?? null,
+      ticketType: resolveTicketCommerceType({
+        ticketType: ticket.ticket_tiers?.ticket_type,
+        tierType: ticket.ticket_tiers?.tier_type,
+        name: ticket.ticket_tiers?.name,
+      }),
+      tierType: ticket.ticket_tiers?.tier_type?.trim() || null,
       dayId,
       dayValidityLabel: formatDayValidityLabel({
         scheduleDays,

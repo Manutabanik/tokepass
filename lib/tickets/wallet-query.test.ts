@@ -46,6 +46,12 @@ describe("isMissingTicketWalletColumnError", () => {
       true,
     )
     assert.equal(isMissingTicketWalletColumnError("42703"), true)
+    assert.equal(
+      isMissingTicketWalletColumnError(
+        "Could not find the 'ticket_type' column of 'ticket_tiers' in the schema cache",
+      ),
+      true,
+    )
   })
 
   it("does not swallow unrelated query failures", () => {

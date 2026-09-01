@@ -11,6 +11,7 @@ import {
   getOfflineActiveUserId,
   getTicketsOffline,
 } from "@/lib/offline-store"
+import { isWalletCheckoutExtra } from "@/lib/tickets/wallet-extras"
 
 export function DeviceWalletScreen() {
   const online = useOnlineStatus()
@@ -41,7 +42,9 @@ export function DeviceWalletScreen() {
     }
   }, [])
 
-  const active = tickets.filter((ticket) => ticket.status === "valid")
+  const active = tickets.filter(
+    (ticket) => ticket.status === "valid" && !isWalletCheckoutExtra(ticket),
+  )
 
   return (
     <main className="mx-auto flex min-h-[100dvh] w-full max-w-lg flex-col gap-5 px-4 py-8">

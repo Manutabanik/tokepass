@@ -17,6 +17,7 @@ import {
   saveTicketsOffline,
 } from "@/lib/offline-store"
 import { splitTicketsBySchedule } from "@/lib/ticket-schedule"
+import { walletCheckoutExtras } from "@/lib/tickets/wallet-extras"
 
 type OfflineTicketWalletProps = {
   userId: string
@@ -105,6 +106,10 @@ export function OfflineTicketWallet({
     () => splitTicketsBySchedule(displayTickets),
     [displayTickets],
   )
+  const extraTickets = useMemo(
+    () => walletCheckoutExtras(displayTickets),
+    [displayTickets],
+  )
 
   const showOfflineBanner = !online
   const showEmptyError =
@@ -146,6 +151,7 @@ export function OfflineTicketWallet({
           upcoming={upcoming}
           past={past}
           userId={userId}
+          extraTickets={extraTickets}
           barRedemptions={online ? barRedemptions : []}
           storeOffers={online ? storeOffers : []}
           offline={!online}

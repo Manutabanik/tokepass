@@ -1,4 +1,5 @@
 import type { MyTicket } from "@/app/actions/tickets"
+import { isWalletCheckoutExtra } from "@/lib/tickets/wallet-extras"
 
 export function splitTicketsBySchedule(tickets: MyTicket[]): {
   upcoming: MyTicket[]
@@ -10,6 +11,7 @@ export function splitTicketsBySchedule(tickets: MyTicket[]): {
   const past: MyTicket[] = []
 
   for (const ticket of tickets) {
+    if (isWalletCheckoutExtra(ticket)) continue
     const eventMs = new Date(ticket.eventDate).getTime()
     const isPastEvent = Number.isFinite(eventMs) && eventMs < now
     const isActive = ticket.status === "valid"

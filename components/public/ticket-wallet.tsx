@@ -14,7 +14,10 @@ import { useMemo } from "react"
 import type { EventItem, MyStoreRedemption } from "@/app/actions/addons"
 import type { MyTicket } from "@/app/actions/tickets"
 import { EventStoreUpsell } from "@/components/public/event-store-upsell"
-import { LivingStoreCard } from "@/components/public/living-store-card"
+import {
+  LivingCheckoutExtraCard,
+  LivingStoreCard,
+} from "@/components/public/living-store-card"
 import { LivingTicketCard } from "@/components/public/living-ticket-card"
 import { Button } from "@/components/ui/button"
 import {
@@ -187,24 +190,34 @@ type ExtraEventGroup = {
   eventTitle: string
   eventDate: string
   redemptions: MyStoreRedemption[]
+  checkoutExtras: MyTicket[]
 }
 
 function groupExtrasByEvent(
   redemptions: MyStoreRedemption[],
+  checkoutExtras: MyTicket[],
 ): ExtraEventGroup[] {
   const map = new Map<string, ExtraEventGroup>()
-  for (const item of redemptions) {
-    const existing = map.get(item.eventId)
-    if (existing) {
-      existing.redemptions.push(item)
-      continue
+  function ensure(eventId: string, eventTitle: string, eventDate: string) {
+    const existing = map.get(eventId)
+    if (existing) return existing
+    const next: ExtraEventGroup = {
+      eventId,
+      eventTitle,
+      eventDate,
+      redemptions: [],
+      checkoutExtras: [],
     }
-    map.set(item.eventId, {
-      eventId: item.eventId,
-      eventTitle: item.eventTitle,
-      eventDate: item.eventDate,
-      redemptions: [item],
-    })
+    map.set(eventId, next)
+    return next
+  }
+  for (const item of redemptions) {
+    ensure(item.eventId, item.eventTitle, item.eventDate).redemptions.push(item)
+  }
+  for (const ticket of checkoutExtras) {
+    ensure(ticket.eventId, ticket.eventTitle, ticket.eventDate).checkoutExtras.push(
+      ticket,
+    )
   }
   return [...map.values()].sort(
     (a, b) =>
@@ -327,6 +340,7 @@ export function TicketWallet({
   past,
   userId,
   barRedemptions = [],
+  extraTickets = [],
   storeOffers = [],
   offline = false,
   appleWalletEnabled = false,
@@ -337,6 +351,7 @@ export function TicketWallet({
   past: MyTicket[]
   userId: string
   barRedemptions?: MyStoreRedemption[]
+  extraTickets?: MyTicket[]
   storeOffers?: StoreOfferBlock[]
   offline?: boolean
   appleWalletEnabled?: boolean
@@ -347,7 +362,7 @@ export function TicketWallet({
     initialTab ??
     (upcoming.length > 0
       ? "upcoming"
-      : barRedemptions.length > 0
+      : barRedemptions.length > 0 || extraTickets.length > 0
         ? "bar"
         : "past")
 
@@ -360,11 +375,13 @@ export function TicketWallet({
     [past],
   )
   const extraGroups = useMemo(
-    () => groupExtrasByEvent(barRedemptions),
-    [barRedemptions],
+    () => groupExtrasByEvent(barRedemptions, extraTickets),
+    [barRedemptions, extraTickets],
   )
 
-  const validBar = barRedemptions.filter((item) => item.status === "valid")
+  const validBar =
+    barRedemptions.filter((item) => item.status === "valid").length +
+    extraTickets.filter((ticket) => ticket.status === "valid").length
   const hasOffers = storeOffers.length > 0 && !offline
 
   const eventsMissingExtras = useMemo(() => {
@@ -398,7 +415,7 @@ export function TicketWallet({
               aria-hidden="true"
             />
             <span>Mis Extras</span>
-            <span className={tabCountClass}>{validBar.length}</span>
+            <span className={tabCountClass}>{validBar}</span>
           </TabsTrigger>
           <TabsTrigger value="past" className={tabTriggerClass}>
             <History className="hidden size-3.5 sm:block" aria-hidden="true" />
@@ -486,12 +503,15 @@ export function TicketWallet({
                   title={group.eventTitle}
                   date={group.eventDate}
                   countLabel={
-                    group.redemptions.length === 1
+                    group.redemptions.length + group.checkoutExtras.length === 1
                       ? "1 extra"
-                      : `${group.redemptions.length} extras`
+                      : `${group.redemptions.length + group.checkoutExtras.length} extras`
                   }
                 />
                 <div className="grid gap-4 md:grid-cols-2 md:items-start lg:grid-cols-3">
+                  {group.checkoutExtras.map((ticket) => (
+                    <LivingCheckoutExtraCard key={ticket.id} ticket={ticket} />
+                  ))}
                   {group.redemptions.map((item) => (
                     <LivingStoreCard key={item.id} redemption={item} />
                   ))}
