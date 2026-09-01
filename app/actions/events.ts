@@ -29,6 +29,13 @@ import {
   type InteractiveVenueMap,
 } from "@/types/venue-map"
 import { assertDraftMapLayoutImmutable } from "@/lib/events/assert-draft-map-immutability"
+import {
+  eventTimestampsMatch,
+  VENUE_MAP_STALE_WRITE_ERROR,
+} from "@/lib/events/venue-map-optimistic-lock"
+import { hydrateVenueMapOccupancy } from "@/lib/seating/map-inventory-hydration"
+import type { VenueMapSeatingUnitRef } from "@/lib/seating/map-inventory-hydration"
+import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { draftLayoutSourceFromSavedVenueMap } from "@/lib/events/draft-map-immutability-v2"
 import { hardReplacePublishedSeatingMaps } from "@/lib/events/hard-replace-seating-maps-v2"
 import { seatingMapsFromSavedVenueMap } from "@/lib/events/publish-seating-inventory"
@@ -1084,10 +1091,93 @@ export async function updateEventCommercialSettings(
   return { success: true, recalculatedTiers }
 }
 
+export async function loadVenueMapEditorInventory(
+  eventId: string,
+): Promise<
+  | {
+      success: true
+      updatedAt: string
+      occupancyBySeatId: Record<string, SeatStatus>
+      seatingUnits: VenueMapSeatingUnitRef[]
+    }
+  | { success: false; error: string }
+> {
+  const id = eventId.trim()
+  if (!id) return { success: false, error: "Evento inválido." }
+
+  let supabase: Awaited<ReturnType<typeof createClient>>
+  let userId: string
+  try {
+    const session = await requireAuthenticatedUser()
+    supabase = session.supabase
+    userId = session.user.id
+  } catch {
+    return { success: false, error: "Debes iniciar sesión para editar el mapa." }
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, organizer_approval_status")
+    .eq("id", userId)
+    .maybeSingle()
+  const isSuperAdmin = isPlatformOwnerRole(profile?.role)
+  const reader = isSuperAdmin ? createAdminClient() : supabase
+
+  const { data: event, error: eventError } = await reader
+    .from("events")
+    .select("id, organizer_id, updated_at")
+    .eq("id", id)
+    .maybeSingle()
+  if (eventError) return { success: false, error: formatSupabaseError(eventError) }
+  if (!event) return { success: false, error: "Evento no encontrado." }
+  if (!isSuperAdmin && event.organizer_id !== userId) {
+    return { success: false, error: "No tenés permiso para editar este evento." }
+  }
+
+  const admin = createAdminClient()
+  const { data: units, error: unitsError } = await admin
+    .from("event_seating_units")
+    .select(
+      "id, layout_item_id, status, reserved_until, sold_order_id, event_date_id",
+    )
+    .eq("event_id", id)
+    .limit(20000)
+  if (unitsError) return { success: false, error: formatSupabaseError(unitsError) }
+
+  const seatingUnits: VenueMapSeatingUnitRef[] = (units ?? []).flatMap((row) => {
+    const layoutItemId = row.layout_item_id?.trim()
+    if (!layoutItemId) return []
+    return [
+      {
+        id: row.id,
+        layoutItemId,
+        status: row.status ?? "available",
+        reservedUntil: row.reserved_until,
+        soldOrderId: row.sold_order_id,
+        eventDateId: row.event_date_id,
+        sold: Boolean(row.sold_order_id) || row.status === "sold",
+      },
+    ]
+  })
+
+  return {
+    success: true,
+    updatedAt: event.updated_at ?? new Date().toISOString(),
+    seatingUnits,
+    occupancyBySeatId: hydrateVenueMapOccupancy(null, {
+      seatingUnits,
+      lockUnknownLayoutIds: false,
+    }),
+  }
+}
+
 export async function saveVenueMapOnly(
   eventId: string,
   venueMapData: unknown,
-): Promise<{ success: true } | { success: false; error: string }> {
+  expectedUpdatedAt?: string | null,
+): Promise<
+  { success: true; updatedAt: string } | { success: false; error: string }
+> {
   const id = eventId.trim()
   if (!id) {
     return { success: false, error: "Evento inválido." }
@@ -1114,7 +1204,7 @@ export async function saveVenueMapOnly(
 
   const { data: event, error: eventError } = await reader
     .from("events")
-    .select("id, organizer_id")
+    .select("id, organizer_id, updated_at")
     .eq("id", id)
     .maybeSingle()
 
@@ -1149,6 +1239,17 @@ export async function saveVenueMapOnly(
 
   const mutationClient =
     event.organizer_id !== userId ? createAdminClient() : supabase
+
+  const currentUpdatedAt =
+    typeof event.updated_at === "string" ? event.updated_at : null
+  if (
+    expectedUpdatedAt?.trim() &&
+    currentUpdatedAt &&
+    !eventTimestampsMatch(expectedUpdatedAt, currentUpdatedAt)
+  ) {
+    return { success: false, error: VENUE_MAP_STALE_WRITE_ERROR }
+  }
+  const casUpdatedAt = expectedUpdatedAt?.trim() || currentUpdatedAt
 
   const parsedMap = parseVenueMap(venueMapData)
   const seatingLayout = venueMapToSeatingLayout(parsedMap) as unknown as Json
@@ -1197,25 +1298,51 @@ export async function saveVenueMapOnly(
     has_seating_plan: true,
     updated_at: now,
   }
-  const { error } = await mutationClient
-    .from("events")
-    .update(mapPatch as never)
-    .eq("id", id)
+  let written = casUpdatedAt
+    ? await mutationClient
+        .from("events")
+        .update(mapPatch as never)
+        .eq("id", id)
+        .eq("updated_at", casUpdatedAt)
+        .select("id, updated_at")
+        .maybeSingle()
+    : await mutationClient
+        .from("events")
+        .update(mapPatch as never)
+        .eq("id", id)
+        .select("id, updated_at")
+        .maybeSingle()
 
-  if (error && OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(error.message)) {
-    const retry = await mutationClient
-      .from("events")
-      .update({
-        venue_map: payload,
-        updated_at: now,
-      } as never)
-      .eq("id", id)
-    if (retry.error) {
-      return { success: false, error: formatSupabaseError(retry.error) }
-    }
-  } else if (error) {
-    return { success: false, error: formatSupabaseError(error) }
+  if (written.error && OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(written.error.message)) {
+    written = casUpdatedAt
+      ? await mutationClient
+          .from("events")
+          .update({
+            venue_map: payload,
+            updated_at: now,
+          } as never)
+          .eq("id", id)
+          .eq("updated_at", casUpdatedAt)
+          .select("id, updated_at")
+          .maybeSingle()
+      : await mutationClient
+          .from("events")
+          .update({
+            venue_map: payload,
+            updated_at: now,
+          } as never)
+          .eq("id", id)
+          .select("id, updated_at")
+          .maybeSingle()
   }
+  if (written.error) {
+    return { success: false, error: formatSupabaseError(written.error) }
+  }
+  if (!written.data?.id) {
+    return { success: false, error: VENUE_MAP_STALE_WRITE_ERROR }
+  }
+  const savedUpdatedAt =
+    typeof written.data.updated_at === "string" ? written.data.updated_at : now
 
   if (eventRow?.venue_id && scheduleDayIds.length < 2) {
     const venueWrite = await mutationClient
@@ -1265,6 +1392,6 @@ export async function saveVenueMapOnly(
   }
 
   await revalidatePersistedEvent(mutationClient, id)
-  return { success: true }
+  return { success: true, updatedAt: savedUpdatedAt }
 }
 

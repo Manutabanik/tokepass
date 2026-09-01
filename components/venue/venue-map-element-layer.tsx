@@ -42,6 +42,7 @@ const VenueElementShape = memo(function VenueElementShape({
   buyerOccupancy = false,
   soldOut = false,
   delegateEvents = false,
+  allowSoldHits = false,
 }: {
   element: VenueMapElement
   selected: boolean
@@ -99,6 +100,7 @@ const VenueElementShape = memo(function VenueElementShape({
   buyerOccupancy?: boolean
   soldOut?: boolean
   delegateEvents?: boolean
+  allowSoldHits?: boolean
 }) {
   const lit = selected || highlighted
   const transform =
@@ -140,7 +142,7 @@ const VenueElementShape = memo(function VenueElementShape({
         isolationDim
           ? { filter: "grayscale(1)" }
           : soldOut
-            ? { cursor: "not-allowed" }
+            ? { cursor: "not-allowed", filter: "grayscale(1)" }
             : undefined
       }
       onPointerDown={
@@ -333,6 +335,7 @@ export const VenueMapElementLayer = memo(function VenueMapElementLayer({
   buyerOccupancy = false,
   preserveOrder = false,
   delegateEvents = false,
+  allowSoldHits = false,
 }: {
   elements: VenueMapElement[]
   selectedIds?: string[]
@@ -391,6 +394,7 @@ export const VenueMapElementLayer = memo(function VenueMapElementLayer({
   buyerOccupancy?: boolean
   preserveOrder?: boolean
   delegateEvents?: boolean
+  allowSoldHits?: boolean
 }) {
   const selected = new Set(selectedIds)
   const highlighted = new Set(highlightedIds)
@@ -427,13 +431,16 @@ export const VenueMapElementLayer = memo(function VenueMapElementLayer({
           highlighted.has(element.id) ||
           element.seats.some((seat) => highlighted.has(seat.id))
         const isolationDim = Boolean(isolationDimIds?.has(element.id))
-        const soldOut = isVenueMapElementSoldOut(element, occupancyBySeatId)
+        const soldOut =
+          isVenueMapElementSoldOut(element, occupancyBySeatId) ||
+          element.isLocked === true
         if (!visible) return null
         return (
           <g
             key={element.id}
             style={{
-              pointerEvents: interactive && !soldOut ? "auto" : "none",
+              pointerEvents:
+                interactive && (!soldOut || allowSoldHits) ? "auto" : "none",
             }}
           >
             <VenueElementShape
@@ -474,7 +481,10 @@ export const VenueMapElementLayer = memo(function VenueMapElementLayer({
               showLabels={renderLabels || isSelected || isHighlighted}
               showChairs={renderChairs || isSelected}
               interactive={
-                visible && interactive && !isolationDim && !soldOut
+                visible &&
+                interactive &&
+                !isolationDim &&
+                (!soldOut || allowSoldHits)
               }
               zoom={zoom}
               dimmed={
@@ -485,6 +495,7 @@ export const VenueMapElementLayer = memo(function VenueMapElementLayer({
               popSelected={popSelected}
               buyerOccupancy={buyerOccupancy}
               delegateEvents={delegateEvents}
+              allowSoldHits={allowSoldHits}
             />
           </g>
         )

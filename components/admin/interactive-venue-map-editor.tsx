@@ -86,6 +86,10 @@ import { TheatreSeatDefs } from "@/components/admin/venue-svg-symbols"
 import { VenueStudioHud } from "@/components/admin/venue-studio-hud"
 import { VenueTemplateLibrary } from "@/components/admin/venue-template-selector"
 import {
+  loadVenueMapEditorInventory,
+  saveVenueMapOnly,
+} from "@/app/actions/events"
+import {
   deleteOrganizerVenueTemplate,
   listOrganizerVenueTemplates,
   saveOrganizerVenueTemplate,
@@ -130,7 +134,22 @@ import { Label } from "@/components/ui/label"
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
 import { VenueMapZoneLayer } from "@/components/venue/venue-map-zone-layer"
-import { inventoryHitFromEvent, inventoryHitFromNode } from "@/lib/seating/inventory-hit"
+import {
+  inventoryHitFromEvent,
+  inventoryHitFromNode,
+  type InventoryHit,
+} from "@/lib/seating/inventory-hit"
+import {
+  applyLocalStockLocks,
+  EDITOR_STOCK_LOCK_MESSAGE,
+  elementHasCommittedStock,
+  elementIdsHaveCommittedStock,
+  layoutIdHasCommittedStock,
+  seatKeysHaveCommittedStock,
+} from "@/lib/seating/editor-stock-lock"
+import { hydrateVenueMapOccupancy } from "@/lib/seating/map-inventory-hydration"
+import type { VenueMapSeatingUnitRef } from "@/lib/seating/map-inventory-hydration"
+import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { canvasLabelFill } from "@/lib/seating/canvas-label-fill"
 import {
   applyLabelOverride,
@@ -420,6 +439,22 @@ function seatKey(sectorId: string, seatId: string) {
 
 const EMPTY_ELEMENT_IDS: string[] = []
 
+const STOCK_LOCKED_ELEMENT_PATCH_KEYS = [
+  "ticketTypeId",
+  "type",
+  "zoneId",
+  "groupId",
+  "x",
+  "y",
+  "width",
+  "height",
+  "rotation",
+  "chairCount",
+  "sideA",
+  "sideB",
+  "sellMode",
+] as const
+
 function isEditorChromeTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return false
   return Boolean(
@@ -463,6 +498,18 @@ export function InteractiveVenueMapEditor({
   const [map, setMap] = useState<InteractiveVenueMap>(
     parseVenueMap(value ?? emptyVenueMap()),
   )
+  const [seatingUnits, setSeatingUnits] = useState<VenueMapSeatingUnitRef[]>([])
+  const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null)
+  const occupancyBySeatId = useMemo(
+    () =>
+      hydrateVenueMapOccupancy(map, {
+        seatingUnits,
+        lockUnknownLayoutIds: false,
+      }),
+    [map, seatingUnits],
+  )
+  const occupancyRef = useRef<Record<string, SeatStatus>>({})
+  const loadedUpdatedAtRef = useRef<string | null>(null)
   const [tool, setTool] = useState<Tool>("select")
   const [placement, setPlacement] = useState<PalettePlacement | null>(null)
   const [selection, setSelection] = useState<Selection>(null)
@@ -549,10 +596,43 @@ export function InteractiveVenueMapEditor({
   useUnsavedChanges(hasUnsavedChanges)
 
   async function persistEditorMap() {
-    if (!onSave) return
+    if (!onSave && !eventId) return
     setExplicitSaveStatus("saving")
     try {
-      await onSave(parseVenueMap(mapRef.current))
+      const nextMap = parseVenueMap(mapRef.current)
+      if (eventId?.trim()) {
+        if (!loadedUpdatedAtRef.current) {
+          const inventory = await loadVenueMapEditorInventory(eventId)
+          if (!inventory.success) {
+            setExplicitSaveStatus("error")
+            toast.error(inventory.error)
+            return
+          }
+          setSeatingUnits(inventory.seatingUnits)
+          setLoadedUpdatedAt(inventory.updatedAt)
+          loadedUpdatedAtRef.current = inventory.updatedAt
+        }
+        const saved = await saveVenueMapOnly(
+          eventId,
+          nextMap,
+          loadedUpdatedAtRef.current,
+        )
+        if (!saved.success) {
+          setExplicitSaveStatus("error")
+          toast.error(saved.error)
+          return
+        }
+        const refreshed = await loadVenueMapEditorInventory(eventId)
+        if (refreshed.success) {
+          setSeatingUnits(refreshed.seatingUnits)
+          setLoadedUpdatedAt(refreshed.updatedAt)
+          loadedUpdatedAtRef.current = refreshed.updatedAt
+        } else {
+          setLoadedUpdatedAt(saved.updatedAt)
+          loadedUpdatedAtRef.current = saved.updatedAt
+        }
+      }
+      if (onSave) await onSave(nextMap)
       setExplicitSaveStatus("saved")
       setIsCanvasDirty(false)
       toast.success("Mapa guardado correctamente")
@@ -568,6 +648,21 @@ export function InteractiveVenueMapEditor({
       }
     }
   }, [])
+
+  useEffect(() => {
+    const id = eventId?.trim()
+    if (!id) return
+    let cancelled = false
+    void loadVenueMapEditorInventory(id).then((result) => {
+      if (cancelled || !result.success) return
+      setSeatingUnits(result.seatingUnits)
+      setLoadedUpdatedAt(result.updatedAt)
+      loadedUpdatedAtRef.current = result.updatedAt
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [eventId])
   const [customTemplates, setCustomTemplates] = useState<OrganizerVenueTemplate[]>(
     [],
   )
@@ -613,6 +708,8 @@ export function InteractiveVenueMapEditor({
     svgViewBoxRef.current = svgViewBox
     handPanRef.current = handPan
     previewRef.current = preview
+    occupancyRef.current = occupancyBySeatId
+    loadedUpdatedAtRef.current = loadedUpdatedAt
   }, [
     isolationId,
     activeZoneId,
@@ -627,6 +724,8 @@ export function InteractiveVenueMapEditor({
     svgViewBox,
     handPan,
     preview,
+    occupancyBySeatId,
+    loadedUpdatedAt,
   ])
   const panRef = useRef(pan)
   const zoomRef = useRef(zoom)
@@ -680,6 +779,25 @@ export function InteractiveVenueMapEditor({
   const [transformingKind, setTransformingKind] = useState<
     "move" | "scale" | "rotate" | null
   >(null)
+  useEffect(() => {
+    const current = selectionRef.current
+    if (!current) return
+    const occupancy = occupancyBySeatId
+    if (!occupancy || Object.keys(occupancy).length === 0) return
+    const locked =
+      (current.kind === "element" &&
+        elementIdsHaveCommittedStock(mapRef.current, [current.id], occupancy)) ||
+      (current.kind === "elements" &&
+        elementIdsHaveCommittedStock(mapRef.current, current.ids, occupancy)) ||
+      (current.kind === "seats" &&
+        seatKeysHaveCommittedStock(current.ids, occupancy))
+    if (!locked) return
+    transformDrag.current = null
+    setLiveTransform(null)
+    setTransformingKind(null)
+    setIsolationId(null)
+    setSelection(null)
+  }, [occupancyBySeatId])
   const [scaleHandle, setScaleHandle] = useState<ResizeHandle | null>(null)
   const compactChromeRef = useRef(compactChrome)
   const lassoModeRef = useRef(lassoMode)
@@ -984,7 +1102,11 @@ export function InteractiveVenueMapEditor({
     computedBounds
   const seatGizmoActive = selection?.kind === "seats"
   const geometryLocked = workMode === "pricing"
-  const selectionLocked = selectedElements.some((item) => item.isLocked === true)
+  const selectionLocked =
+    selectedElements.some((item) => item.isLocked === true) ||
+    elementIdsHaveCommittedStock(map, selectedElementIds, occupancyBySeatId) ||
+    (liveSelection?.kind === "seats" &&
+      seatKeysHaveCommittedStock(liveSelection.ids, occupancyBySeatId))
   const selectionFullyLocked = selectionIsFullyLocked(
     selectedElements,
     selectedElementIds,
@@ -1009,7 +1131,10 @@ export function InteractiveVenueMapEditor({
     map.elements,
     selectedElements,
   ])
-  const renderMap = workMode === "pricing" ? applyHeatmapColors(map) : map
+  const renderMap = useMemo(() => {
+    const locked = applyLocalStockLocks(map, occupancyBySeatId)
+    return workMode === "pricing" ? applyHeatmapColors(locked) : locked
+  }, [map, occupancyBySeatId, workMode])
   const unselectedElements = useMemo(
     () =>
       (renderMap.elements ?? []).filter((item) => !selectedIdSet.has(item.id)),
@@ -1242,10 +1367,47 @@ export function InteractiveVenueMapEditor({
 
   function idsAreLocked(ids: string[]) {
     if (ids.length === 0) return false
-    const locked = new Set(ids)
-    return ensureElements(mapRef.current).some(
-      (item) => locked.has(item.id) && item.isLocked === true,
+    return elementIdsHaveCommittedStock(
+      mapRef.current,
+      ids,
+      occupancyRef.current,
     )
+  }
+
+  function inventoryHitHasCommittedStock(hit: InventoryHit) {
+    const occupancy = occupancyRef.current
+    if (hit.kind === "sector-seat") {
+      return layoutIdHasCommittedStock(occupancy, hit.seatId, hit.sectorId)
+    }
+    if (hit.kind === "element-seat") {
+      const element = ensureElements(mapRef.current).find(
+        (item) => item.id === hit.elementId,
+      )
+      return (
+        layoutIdHasCommittedStock(occupancy, hit.seatId, hit.elementId) ||
+        (element != null && elementHasCommittedStock(element, occupancy))
+      )
+    }
+    const element = ensureElements(mapRef.current).find(
+      (item) => item.id === hit.elementId,
+    )
+    return element
+      ? elementHasCommittedStock(element, occupancy)
+      : layoutIdHasCommittedStock(occupancy, hit.elementId)
+  }
+
+  function refuseStockLocked() {
+    toast.error(EDITOR_STOCK_LOCK_MESSAGE)
+  }
+
+  function unlockedElementIds(ids: readonly string[]) {
+    const occupancy = occupancyRef.current
+    return ids.filter((id) => {
+      const element = ensureElements(mapRef.current).find((item) => item.id === id)
+      return element
+        ? !elementHasCommittedStock(element, occupancy)
+        : !layoutIdHasCommittedStock(occupancy, id)
+    })
   }
 
   function transformTargetFromSelection(): {
@@ -1302,7 +1464,20 @@ export function InteractiveVenueMapEditor({
     ) {
       return
     }
-    if (!extras.zoneId && !usingSeats && extras.target !== "stage" && extras.target !== "aisle" && idsAreLocked(ids)) return
+    if (usingSeats) {
+      if (seatKeysHaveCommittedStock(seatIds, occupancyRef.current)) {
+        refuseStockLocked()
+        return
+      }
+    } else if (
+      !extras.zoneId &&
+      extras.target !== "stage" &&
+      extras.target !== "aisle" &&
+      idsAreLocked(ids)
+    ) {
+      refuseStockLocked()
+      return
+    }
     const point = pointerToSvg(event)
     capturePointer(event)
     transformDrag.current = {
@@ -1324,7 +1499,19 @@ export function InteractiveVenueMapEditor({
     bounds: BoundsRect,
     event: React.PointerEvent,
   ) {
-    if (idsAreLocked(selectedElementIds)) return
+    if (idsAreLocked(selectedElementIds)) {
+      refuseStockLocked()
+      return
+    }
+    if (
+      seatKeysHaveCommittedStock(
+        selectedSeatEntries.map((item) => item.key),
+        occupancyRef.current,
+      )
+    ) {
+      refuseStockLocked()
+      return
+    }
     const point = pointerToSvg(event)
     const origin = resizeOrigin(bounds, handle)
     const corner = handlePoint(bounds, handle)
@@ -1373,7 +1560,25 @@ export function InteractiveVenueMapEditor({
         extras.target !== "aisle" &&
         selectedElementIds.length === 0 &&
         selectedSeatEntries.length > 0)
-    if (!usingSeats && extras.target !== "stage" && extras.target !== "aisle" && extras.zoneId == null && idsAreLocked(selectedElementIds)) return
+    if (usingSeats) {
+      if (
+        seatKeysHaveCommittedStock(
+          selectedSeatEntries.map((item) => item.key),
+          occupancyRef.current,
+        )
+      ) {
+        refuseStockLocked()
+        return
+      }
+    } else if (
+      extras.target !== "stage" &&
+      extras.target !== "aisle" &&
+      extras.zoneId == null &&
+      idsAreLocked(selectedElementIds)
+    ) {
+      refuseStockLocked()
+      return
+    }
     const point = pointerToSvg(event)
     const cx = bounds.x + bounds.width / 2
     const cy = bounds.y + bounds.height / 2
@@ -1464,11 +1669,16 @@ export function InteractiveVenueMapEditor({
   }
 
   function applyElementIds(ids: string[], options?: { isolate?: boolean }) {
+    const unlocked = unlockedElementIds(ids)
+    if (ids.length > 0 && unlocked.length === 0) {
+      refuseStockLocked()
+      return
+    }
     if (!options?.isolate) setIsolationId(null)
     setHandPan(false)
     setPlacement(null)
     setTool("select")
-    const next = selectionFromIds(ids)
+    const next = selectionFromIds(unlocked)
     if (!next) setSelection(null)
     else if (next.kind === "element") setSelection({ kind: "element", id: next.id! })
     else setSelection({ kind: "elements", ids: next.ids! })
@@ -1549,6 +1759,10 @@ export function InteractiveVenueMapEditor({
       toast.error("Seleccioná al menos 2 elementos para agrupar")
       return
     }
+    if (idsAreLocked(selectedElementIds)) {
+      refuseStockLocked()
+      return
+    }
     const current = mapRef.current
     commit({
       ...current,
@@ -1561,6 +1775,10 @@ export function InteractiveVenueMapEditor({
 
   function ungroupSelection() {
     if (workModeRef.current === "pricing") return
+    if (idsAreLocked(selectedElementIds)) {
+      refuseStockLocked()
+      return
+    }
     const current = mapRef.current
     const activeSelection = selectionRef.current
     if (activeSelection?.kind === "sector") {
@@ -1568,6 +1786,15 @@ export function InteractiveVenueMapEditor({
         (item) => item.id === activeSelection.id,
       )
       if (!sector || sector.seats.length === 0) return
+      if (
+        seatKeysHaveCommittedStock(
+          sector.seats.map((seat) => seatKey(sector.id, seat.id)),
+          occupancyRef.current,
+        )
+      ) {
+        refuseStockLocked()
+        return
+      }
       const chairs = explodeVenueSectorToChairs(sector)
       commit({
         ...current,
@@ -1617,6 +1844,10 @@ export function InteractiveVenueMapEditor({
     if (wantsCanvasPan(event)) return
     isolateCanvasPointer(event, { preventGhostClick: true })
     if (event.button !== 0) return
+    if (elementHasCommittedStock(element, occupancyRef.current)) {
+      refuseStockLocked()
+      return
+    }
     let target = element
     if (event.altKey) {
       const clone = cloneVenueElement(element)
@@ -2346,6 +2577,15 @@ export function InteractiveVenueMapEditor({
     skipHistory = false,
   ) {
     const current = mapRef.current
+    const target = ensureElements(current).find((item) => item.id === id)
+    if (
+      target &&
+      elementHasCommittedStock(target, occupancyRef.current) &&
+      STOCK_LOCKED_ELEMENT_PATCH_KEYS.some((key) => patch[key] != null)
+    ) {
+      refuseStockLocked()
+      return
+    }
     commit({
       ...current,
       elements: ensureElements(current).map((item) => {
@@ -2406,7 +2646,11 @@ export function InteractiveVenueMapEditor({
 
   function flipSelection(axis: "horizontal" | "vertical") {
     if (workModeRef.current === "pricing") return
-    if (selectedElementIds.length === 0 || idsAreLocked(selectedElementIds)) return
+    if (selectedElementIds.length === 0) return
+    if (idsAreLocked(selectedElementIds)) {
+      refuseStockLocked()
+      return
+    }
     const current = mapRef.current
     commit({
       ...current,
@@ -2490,6 +2734,10 @@ export function InteractiveVenueMapEditor({
   function rotateSelection(delta = 90, ids = selectedElementIds) {
     if (workModeRef.current === "pricing") return
     if (ids.length === 0) return
+    if (idsAreLocked(ids)) {
+      refuseStockLocked()
+      return
+    }
     const chosen = new Set(ids)
     const current = mapRef.current
     const selected = ensureElements(current).filter((item) => chosen.has(item.id))
@@ -2558,11 +2806,19 @@ export function InteractiveVenueMapEditor({
     price?: number
   }) {
     const current = mapRef.current
+    const unlocked = unlockedElementIds(selectedElementIds)
+    if (selectedElementIds.length > 0 && unlocked.length === 0) {
+      refuseStockLocked()
+      return
+    }
+    if (unlocked.length < selectedElementIds.length) {
+      refuseStockLocked()
+    }
     commit({
       ...current,
       elements: applyBulkElementTicketType(
         ensureElements(current),
-        selectedElementIds,
+        unlocked,
         ticket,
       ),
     })
@@ -2606,7 +2862,37 @@ export function InteractiveVenueMapEditor({
 
   function applySelectedElements(next: VenueMapElement[]) {
     const current = mapRef.current
-    commit({ ...current, elements: next })
+    const occupancy = occupancyRef.current
+    const locked = new Map(
+      ensureElements(current)
+        .filter((item) => elementHasCommittedStock(item, occupancy))
+        .map((item) => [item.id, item]),
+    )
+    if (locked.size === 0) {
+      commit({ ...current, elements: next })
+      return
+    }
+    let blocked = false
+    const merged = next.map((item) => {
+      const previous = locked.get(item.id)
+      if (!previous) return item
+      if (
+        previous.ticketTypeId !== item.ticketTypeId ||
+        previous.zoneId !== item.zoneId ||
+        previous.groupId !== item.groupId ||
+        previous.type !== item.type ||
+        previous.x !== item.x ||
+        previous.y !== item.y ||
+        previous.width !== item.width ||
+        previous.height !== item.height ||
+        previous.rotation !== item.rotation
+      ) {
+        blocked = true
+      }
+      return previous
+    })
+    if (blocked) refuseStockLocked()
+    commit({ ...current, elements: merged })
   }
 
   function selectPriceGroup(group: VenuePriceGroup) {
@@ -2708,7 +2994,11 @@ export function InteractiveVenueMapEditor({
   function alignSelection(
     mode: "left" | "centerX" | "right" | "top" | "centerY" | "bottom",
   ) {
-    if (selectedElementIds.length < 2 || idsAreLocked(selectedElementIds)) return
+    if (selectedElementIds.length < 2) return
+    if (idsAreLocked(selectedElementIds)) {
+      refuseStockLocked()
+      return
+    }
     const current = mapRef.current
     commit({
       ...current,
@@ -2722,6 +3012,10 @@ export function InteractiveVenueMapEditor({
 
   function alignSelectionOnCurve() {
     if (selectedElementIds.length < 2) return
+    if (idsAreLocked(selectedElementIds)) {
+      refuseStockLocked()
+      return
+    }
     const current = mapRef.current
     const stage = current.stage
     commit({
@@ -2743,6 +3037,10 @@ export function InteractiveVenueMapEditor({
 
   function removeSeatsByKeys(keys: Set<string>) {
     if (keys.size === 0) return
+    if (seatKeysHaveCommittedStock([...keys], occupancyRef.current)) {
+      refuseStockLocked()
+      return
+    }
     const current = mapRef.current
     commit({
       ...current,
@@ -2847,7 +3145,10 @@ export function InteractiveVenueMapEditor({
   function nudgeSelection(dx: number, dy: number) {
     if (workModeRef.current === "pricing") return
     if (!selection) return
-    if (idsAreLocked(selectedElementIds)) return
+    if (idsAreLocked(selectedElementIds)) {
+      refuseStockLocked()
+      return
+    }
     const current = mapRef.current
     if (selection.kind === "stage" && current.stage) {
       commit({
@@ -2929,8 +3230,15 @@ export function InteractiveVenueMapEditor({
   }
 
   function enterSeatEdit(ids: string[]) {
+    const unlocked = ids.filter(
+      (key) => !seatKeysHaveCommittedStock([key], occupancyRef.current),
+    )
+    if (ids.length > 0 && unlocked.length === 0) {
+      refuseStockLocked()
+      return
+    }
     setSeatEditMode(true)
-    setSelection({ kind: "seats", ids })
+    setSelection({ kind: "seats", ids: unlocked })
     requestMobileProperties()
   }
 
@@ -2970,6 +3278,12 @@ export function InteractiveVenueMapEditor({
   ) {
     if (!element?.id) return
     if (workModeRef.current === "pricing") return
+    if (elementHasCommittedStock(element, occupancyRef.current)) {
+      isolateCanvasPointer(event)
+      event.preventDefault()
+      refuseStockLocked()
+      return
+    }
     isolateCanvasPointer(event)
     event.preventDefault()
     if (beginElementSeatEdit(element)) return
@@ -2986,11 +3300,22 @@ export function InteractiveVenueMapEditor({
     if (!element?.id || !seatId) return
     isolateCanvasPointer(event)
     event.preventDefault()
+    if (
+      layoutIdHasCommittedStock(occupancyRef.current, seatId, element.id) ||
+      elementHasCommittedStock(element, occupancyRef.current)
+    ) {
+      refuseStockLocked()
+      return
+    }
     beginElementSeatEdit(element, seatId, event.shiftKey)
   }
 
   function convertSelectionToIndividualSeats() {
     if (workModeRef.current === "pricing") return
+    if (idsAreLocked(selectedElementIds)) {
+      refuseStockLocked()
+      return
+    }
     const current = mapRef.current
     const activeSelection = selectionRef.current
     if (activeSelection?.kind === "sector") {
@@ -2998,6 +3323,15 @@ export function InteractiveVenueMapEditor({
         (item) => item.id === activeSelection.id,
       )
       if (!sector || sector.seats.length === 0) return
+      if (
+        seatKeysHaveCommittedStock(
+          sector.seats.map((seat) => seatKey(sector.id, seat.id)),
+          occupancyRef.current,
+        )
+      ) {
+        refuseStockLocked()
+        return
+      }
       const chairs = explodeVenueSectorToChairs(sector)
       commit({
         ...current,
@@ -3031,6 +3365,13 @@ export function InteractiveVenueMapEditor({
     if (wantsCanvasPan(event)) return
     isolateCanvasPointer(event, { preventGhostClick: true })
     if (event.button !== 0) return
+    if (
+      layoutIdHasCommittedStock(occupancyRef.current, seatId, element.id) ||
+      elementHasCommittedStock(element, occupancyRef.current)
+    ) {
+      refuseStockLocked()
+      return
+    }
     const key = elementSeatKey(element.id, seatId)
     if (event.detail >= 2 || seatEditModeRef.current || event.shiftKey) {
       enterIsolation(element.id)
@@ -3058,6 +3399,10 @@ export function InteractiveVenueMapEditor({
     },
   ) {
     if (keys.size === 0) return
+    if (seatKeysHaveCommittedStock([...keys], occupancyRef.current)) {
+      refuseStockLocked()
+      return
+    }
     const current = mapRef.current
     commit({
       ...current,
@@ -3305,6 +3650,11 @@ export function InteractiveVenueMapEditor({
       onPointerDown(event)
       return
     }
+    if (inventoryHitHasCommittedStock(hit)) {
+      isolateCanvasPointer(event, { preventGhostClick: true })
+      refuseStockLocked()
+      return
+    }
     if (hit.kind === "sector-seat") {
       blurCanvasTypingTarget()
       isolateCanvasPointer(event, { preventGhostClick: true })
@@ -3343,6 +3693,10 @@ export function InteractiveVenueMapEditor({
     event.preventDefault()
     if (previewRef.current) return
     const hit = inventoryHitFromEvent(event.nativeEvent)
+    if (hit && inventoryHitHasCommittedStock(hit)) {
+      refuseStockLocked()
+      return
+    }
     if (hit?.kind === "sector-seat") {
       openObjectMenu(event, { kind: "sector", id: hit.sectorId })
       return
@@ -3355,6 +3709,12 @@ export function InteractiveVenueMapEditor({
   function handleInventoryDoubleClick(event: React.MouseEvent<SVGSVGElement>) {
     if (previewRef.current || toolRef.current === "polygon") return
     const hit = inventoryHitFromEvent(event.nativeEvent)
+    if (hit && inventoryHitHasCommittedStock(hit)) {
+      isolateCanvasPointer(event)
+      event.preventDefault()
+      refuseStockLocked()
+      return
+    }
     if (hit?.kind === "sector-seat") {
       isolateCanvasPointer(event)
       event.preventDefault()
@@ -4279,7 +4639,7 @@ export function InteractiveVenueMapEditor({
     zoom,
   ])
 
-  const saveChangesButton = onSave ? (
+  const saveChangesButton = onSave || eventId ? (
     <Button
       type="button"
       disabled={mapBusy}
@@ -4566,6 +4926,7 @@ export function InteractiveVenueMapEditor({
                 showLabels={showSeatLabels}
                 hitsEnabled={objectHitsEnabled}
                 activeZone={activeZone}
+                occupancyBySeatId={occupancyBySeatId}
               />
               <VenueMapElementLayer
                 elements={unselectedElements}
@@ -4577,6 +4938,8 @@ export function InteractiveVenueMapEditor({
                 popSelected={false}
                 isolationDimIds={isolationDimElementIds}
                 selectedSeatIds={selectedRawSeatIds}
+                occupancyBySeatId={occupancyBySeatId}
+                allowSoldHits
               />
               </g>
               <g transform={liveTransformToSvg(liveTransform)}>
@@ -4631,6 +4994,7 @@ export function InteractiveVenueMapEditor({
                   showLabels={showSeatLabels}
                   hitsEnabled={objectHitsEnabled}
                   activeZone={activeZone}
+                  occupancyBySeatId={occupancyBySeatId}
                 />
                 {selectedZone ? (
                   <VenueMapZoneLayer
@@ -4682,6 +5046,8 @@ export function InteractiveVenueMapEditor({
                     popSelected={false}
                     isolationDimIds={isolationDimElementIds}
                     selectedSeatIds={selectedRawSeatIds}
+                    occupancyBySeatId={occupancyBySeatId}
+                    allowSoldHits
                   />
                 </g>
                 {transformBounds && !geometryLocked && objectHitsEnabled ? (

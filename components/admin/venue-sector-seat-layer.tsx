@@ -3,7 +3,10 @@
 import { memo } from "react"
 
 import { TheatreSeatSymbol } from "@/components/admin/venue-svg-symbols"
+import { isCommittedEditorStock } from "@/lib/seating/editor-stock-lock"
+import { lookupOccupancyStatus } from "@/lib/seating/venue-map-occupancy"
 import { seatBelongsToZone } from "@/lib/seating/venue-map-lod"
+import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { cn } from "@/lib/utils"
 import type { VenueMapSeat, VenueMapSector, VenueMapZone } from "@/types/venue-map"
 
@@ -20,30 +23,39 @@ const SectorSeatNode = memo(function SectorSeatNode({
   selected,
   showLabel,
   isolatedOut,
+  occupancy,
 }: {
   sector: VenueMapSector
   seat: VenueMapSeat
   selected: boolean
   showLabel: boolean
   isolatedOut: boolean
+  occupancy?: SeatStatus
 }) {
+  const stockLocked =
+    seat.status === "blocked" || isCommittedEditorStock(occupancy)
   return (
     <TheatreSeatSymbol
       data-inventory="sector-seat"
       data-sector-id={sector.id}
       data-seat-id={seat.id}
       data-seat-key={sectorSeatKey(sector.id, seat.id)}
+      data-locked={stockLocked ? "1" : undefined}
       cx={seat.x}
       cy={seat.y}
       width={12}
       height={12}
       rotation={seat.rotation ?? 0}
-      color={seat.status === "blocked" ? "#3f3f46" : sector.color}
-      selected={selected}
-      occupied={seat.status === "blocked"}
+      color={stockLocked ? "#3f3f46" : sector.color}
+      selected={selected && !stockLocked}
+      occupied={stockLocked}
+      held={occupancy === "held"}
       label={showLabel ? String(seat.number) : undefined}
       showLabel={showLabel}
-      className={cn(isolatedOut && "pointer-events-none opacity-30 grayscale")}
+      className={cn(
+        isolatedOut && "pointer-events-none opacity-30 grayscale",
+        stockLocked && "opacity-60 grayscale",
+      )}
     />
   )
 })
@@ -57,6 +69,7 @@ export const VenueSectorSeatLayer = memo(function VenueSectorSeatLayer({
   showLabels,
   hitsEnabled,
   activeZone = null,
+  occupancyBySeatId = {},
 }: {
   sectors: VenueMapSector[]
   selectedSectorId: string | null
@@ -66,6 +79,7 @@ export const VenueSectorSeatLayer = memo(function VenueSectorSeatLayer({
   showLabels: boolean
   hitsEnabled: boolean
   activeZone?: VenueMapZone | null
+  occupancyBySeatId?: Record<string, SeatStatus>
 }) {
   return (
     <g className={hitsEnabled ? undefined : "pointer-events-none"}>
@@ -98,6 +112,11 @@ export const VenueSectorSeatLayer = memo(function VenueSectorSeatLayer({
                   }
                   showLabel={showLabels}
                   isolatedOut={isolatedOut}
+                  occupancy={lookupOccupancyStatus(
+                    occupancyBySeatId,
+                    seat.id,
+                    sector.id,
+                  )}
                 />
               )
             })}
