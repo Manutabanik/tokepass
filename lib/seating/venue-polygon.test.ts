@@ -10,6 +10,8 @@ import {
   polygonLooksLikePixels,
   polygonToCanvas,
   percentPointToCanvas,
+  popPolygonDraft,
+  setPolygonVertexAtCanvas,
   transformPercentPolygon,
 } from "./venue-polygon"
 import { emptyVenueMap, parseVenueMap } from "@/types/venue-map"
@@ -139,6 +141,25 @@ describe("parametric zone polygons", () => {
     )
     assert.equal(moved[0]?.x, 20)
     assert.equal(moved[0]?.y, 10)
+  })
+
+  it("mueve un solo vértice sin transformar el polígono entero", () => {
+    const polygon = [
+      { x: 10, y: 10 },
+      { x: 40, y: 10 },
+      { x: 40, y: 40 },
+    ]
+    const next = setPolygonVertexAtCanvas(polygon, 1, { x: 480, y: 112 })
+    assert.equal(next[0]?.x, 10)
+    assert.equal(next[0]?.y, 10)
+    assert.equal(next[2]?.x, 40)
+    assert.equal(next[2]?.y, 40)
+    assert.equal(next[1]?.x, 60)
+    assert.equal(next[1]?.y, 20)
+    assert.deepEqual(popPolygonDraft(polygon), [
+      { x: 10, y: 10 },
+      { x: 40, y: 10 },
+    ])
   })
 
   it("scales a percent polygon independently on X and Y", () => {

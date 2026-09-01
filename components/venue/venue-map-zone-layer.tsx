@@ -35,6 +35,8 @@ export function VenueMapZoneLayer({
   onContextMenu,
   onPointerDown,
   onDoubleClick,
+  onVertexPointerDown,
+  editVertices = false,
   selectOnPointerUp = false,
   shouldCommitTap,
   unavailableIds = [],
@@ -55,6 +57,12 @@ export function VenueMapZoneLayer({
   onContextMenu?: (event: React.MouseEvent, zone: VenueMapZone) => void
   onPointerDown?: (event: React.PointerEvent, zone: VenueMapZone) => void
   onDoubleClick?: (event: React.MouseEvent, zone: VenueMapZone) => void
+  onVertexPointerDown?: (
+    event: React.PointerEvent,
+    zone: VenueMapZone,
+    index: number,
+  ) => void
+  editVertices?: boolean
   selectOnPointerUp?: boolean
   shouldCommitTap?: (event: React.PointerEvent) => boolean
   unavailableIds?: string[]
@@ -158,7 +166,12 @@ export function VenueMapZoneLayer({
         const lodSolid = lodMode === "macro"
         const zoneInteractive = interactive && !soldOut && !revealFocused
         const lit = selected || highlighted
-        const pop = emphasizeSelected && lit && !lodSolid && !focusedZoneId
+        const pop =
+          emphasizeSelected &&
+          lit &&
+          !lodSolid &&
+          !focusedZoneId &&
+          !editVertices
 
         return (
           <g
@@ -313,6 +326,35 @@ export function VenueMapZoneLayer({
               {zone.name}
             </text>
             )}
+            {editVertices && selected
+              ? canvasPoints.map((point, index) => {
+                  const radius = Math.max(5, 7 / Math.max(zoom, 0.25))
+                  return (
+                    <g key={`${zone.id}-vertex-${index}`}>
+                      <circle
+                        cx={point.x}
+                        cy={point.y}
+                        r={radius + 6}
+                        className="fill-transparent"
+                        pointerEvents="all"
+                        onPointerDown={(event) => {
+                          event.stopPropagation()
+                          event.preventDefault()
+                          onVertexPointerDown?.(event, zone, index)
+                        }}
+                      />
+                      <circle
+                        cx={point.x}
+                        cy={point.y}
+                        r={radius}
+                        className="cursor-grab fill-white stroke-cyan-500"
+                        strokeWidth={2}
+                        pointerEvents="none"
+                      />
+                    </g>
+                  )
+                })
+              : null}
           </g>
         )
       })}

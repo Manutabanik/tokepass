@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import { emptyVenueMap } from "@/types/venue-map"
 import {
   pushVenueMapPast,
+  shouldUndoPolygonDraft,
   takeVenueMapRedo,
   takeVenueMapUndo,
   VENUE_MAP_HISTORY_LIMIT,
@@ -25,6 +26,21 @@ describe("venue-map-history", () => {
     assert.equal(redone.current.stage?.label, "B")
     assert.equal(redone.past.length, 1)
     assert.equal(redone.future.length, 0)
+  })
+
+  it("deshace el último vértice del trazado activo en vez del mapa", () => {
+    assert.equal(
+      shouldUndoPolygonDraft({ tool: "polygon", draftLength: 3 }),
+      true,
+    )
+    assert.equal(
+      shouldUndoPolygonDraft({ tool: "select", draftLength: 3 }),
+      false,
+    )
+    assert.equal(
+      shouldUndoPolygonDraft({ tool: "polygon", draftLength: 0 }),
+      false,
+    )
   })
 
   it("caps the past stack", () => {

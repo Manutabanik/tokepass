@@ -21,9 +21,12 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Plus,
+  Magnet,
+  Redo2,
   Save,
   Square,
   Trash2,
+  Undo2,
   Wand2,
   PenTool,
   Send,
@@ -133,6 +136,7 @@ import { PriceInput } from "@/components/ui/price-input"
 import { Label } from "@/components/ui/label"
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
+import { VenueMapGridLayer } from "@/components/venue/venue-map-grid-layer"
 import { VenueMapZoneLayer } from "@/components/venue/venue-map-zone-layer"
 import {
   inventoryHitFromEvent,
@@ -177,6 +181,7 @@ import {
 } from "@/lib/seating/venue-grouping"
 import {
   pushVenueMapPast,
+  shouldUndoPolygonDraft,
   takeVenueMapRedo,
   takeVenueMapUndo,
 } from "@/lib/seating/venue-map-history"
@@ -268,10 +273,16 @@ import {
 import {
   polygonFromCanvas,
   isCloseToFirstVertex,
+  popPolygonDraft,
+  setPolygonVertexAtCanvas,
   transformPercentPolygon,
   translatePercentPolygon,
   VENUE_MAP_CANVAS,
 } from "@/lib/seating/venue-polygon"
+import {
+  magneticSnapActive,
+  snapPointToGrid,
+} from "@/lib/seating/venue-grid-snap"
 import {
   applyVenueMapBackgroundPatch,
   type VenueMapBackgroundPatch,
@@ -536,6 +547,8 @@ export function InteractiveVenueMapEditor({
     null,
   )
   const [workMode, setWorkMode] = useState<VenueWorkMode>("architecture")
+  const [magneticSnap, setMagneticSnap] = useState(true)
+  const [vertexEditZoneId, setVertexEditZoneId] = useState<string | null>(null)
   const [gridArrayOpen, setGridArrayOpen] = useState(false)
   const [gridArrayOrigin, setGridArrayOrigin] = useState<{
     x: number
@@ -576,6 +589,13 @@ export function InteractiveVenueMapEditor({
   } | null>(null)
   const mapRef = useRef(map)
   const workModeRef = useRef(workMode)
+  const magneticSnapRef = useRef(true)
+  const vertexEditZoneIdRef = useRef<string | null>(null)
+  const vertexDrag = useRef<{
+    zoneId: string
+    index: number
+    recorded: boolean
+  } | null>(null)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const undoStack = useRef<InteractiveVenueMap[]>([])
   const redoStack = useRef<InteractiveVenueMap[]>([])
@@ -710,6 +730,8 @@ export function InteractiveVenueMapEditor({
     previewRef.current = preview
     occupancyRef.current = occupancyBySeatId
     loadedUpdatedAtRef.current = loadedUpdatedAt
+    magneticSnapRef.current = magneticSnap
+    vertexEditZoneIdRef.current = vertexEditZoneId
   }, [
     isolationId,
     activeZoneId,
@@ -726,6 +748,8 @@ export function InteractiveVenueMapEditor({
     preview,
     occupancyBySeatId,
     loadedUpdatedAt,
+    magneticSnap,
+    vertexEditZoneId,
   ])
   const panRef = useRef(pan)
   const zoomRef = useRef(zoom)
@@ -746,6 +770,7 @@ export function InteractiveVenueMapEditor({
     ungroupSelection: () => void
     undo: () => void
     redo: () => void
+    exitZoneVertexEdit: () => void
     hideEditorPolygonCursor: () => void
     setPolygonDraft: typeof setPolygonDraft
     setSpacePan: typeof setSpacePan
@@ -798,6 +823,16 @@ export function InteractiveVenueMapEditor({
     setIsolationId(null)
     setSelection(null)
   }, [occupancyBySeatId])
+  useEffect(() => {
+    if (!vertexEditZoneId) return
+    if (tool !== "select") {
+      setVertexEditZoneId(null)
+      return
+    }
+    if (liveSelection?.kind !== "zone" || liveSelection.id !== vertexEditZoneId) {
+      setVertexEditZoneId(null)
+    }
+  }, [liveSelection, tool, vertexEditZoneId])
   const [scaleHandle, setScaleHandle] = useState<ResizeHandle | null>(null)
   const compactChromeRef = useRef(compactChrome)
   const lassoModeRef = useRef(lassoMode)
@@ -1260,7 +1295,10 @@ export function InteractiveVenueMapEditor({
   }
 
   function snapActive(shiftKey: boolean) {
-    return shiftKey || shiftHeld.current
+    return magneticSnapActive(
+      magneticSnapRef.current,
+      shiftKey || shiftHeld.current,
+    )
   }
 
   function commitLiveTransform(snap = false) {
@@ -1989,7 +2027,20 @@ export function InteractiveVenueMapEditor({
     }
   }
 
+  function popDraftVertex() {
+    setPolygonDraft((points) => popPolygonDraft(points))
+  }
+
   function undo() {
+    if (
+      shouldUndoPolygonDraft({
+        tool: toolRef.current,
+        draftLength: polygonDraftRef.current.length,
+      })
+    ) {
+      popDraftVertex()
+      return
+    }
     const result = takeVenueMapUndo(
       undoStack.current,
       redoStack.current,
@@ -2152,6 +2203,70 @@ export function InteractiveVenueMapEditor({
       syncCameraReactState()
     }
     viewportAnimRef.current = requestAnimationFrame(step)
+  }
+
+  function enterZoneVertexEdit(zone: VenueMapZone) {
+    if (preview) return
+    if (toolRef.current === "polygon") return
+    abortTransientGestures()
+    vertexDrag.current = null
+    setVertexEditZoneId(zone.id)
+    vertexEditZoneIdRef.current = zone.id
+    setIsolationId(null)
+    setSeatEditMode(false)
+    setTool("select")
+    setSelection({ kind: "zone", id: zone.id })
+  }
+
+  function exitZoneVertexEdit() {
+    vertexDrag.current = null
+    vertexEditZoneIdRef.current = null
+    setVertexEditZoneId(null)
+  }
+
+  function beginVertexDrag(
+    event: React.PointerEvent,
+    zone: VenueMapZone,
+    index: number,
+  ) {
+    if (geometryLocked || workModeRef.current === "pricing") return
+    isolateCanvasPointer(event, { preventGhostClick: true })
+    if (event.button !== 0) return
+    capturePointer(event)
+    vertexDrag.current = { zoneId: zone.id, index, recorded: false }
+    setVertexEditZoneId(zone.id)
+  }
+
+  function applyVertexDragPoint(
+    point: { x: number; y: number },
+    shiftKey: boolean,
+  ) {
+    const dragState = vertexDrag.current
+    if (!dragState) return
+    if (!dragState.recorded) {
+      pushHistory()
+      dragState.recorded = true
+    }
+    const snapped = snapPointToGrid(point, snapActive(shiftKey))
+    const current = mapRef.current
+    commit(
+      {
+        ...current,
+        zones: ensureZones(current).map((zone) =>
+          zone.id === dragState.zoneId
+            ? {
+                ...zone,
+                polygon: setPolygonVertexAtCanvas(
+                  zone.polygon,
+                  dragState.index,
+                  snapped,
+                ),
+              }
+            : zone,
+        ),
+      },
+      { skipHistory: true },
+    )
   }
 
   function enterZoneIsolation(zone: VenueMapZone) {
@@ -2517,9 +2632,14 @@ export function InteractiveVenueMapEditor({
     return current.elements ?? []
   }
 
-  function placeAt(point: { x: number; y: number }, nextPlacement = placement) {
+  function placeAt(
+    point: { x: number; y: number },
+    nextPlacement = placement,
+    options?: { shiftKey?: boolean },
+  ) {
     if (workModeRef.current !== "architecture") return
     if (!nextPlacement) return
+    point = snapPointToGrid(point, snapActive(options?.shiftKey ?? false))
     if (nextPlacement.kind === "zone_polygon") {
       setTool("polygon")
       setPlacement(nextPlacement)
@@ -3558,8 +3678,14 @@ export function InteractiveVenueMapEditor({
     if (event.button !== 0) return
     if (event.detail >= 2) {
       cancelLiveTransform()
-      enterZoneIsolation(zone)
+      enterZoneVertexEdit(zone)
       return
+    }
+    if (
+      vertexEditZoneIdRef.current &&
+      vertexEditZoneIdRef.current !== zone.id
+    ) {
+      exitZoneVertexEdit()
     }
     setIsolationId(null)
     setHandPan(false)
@@ -3567,6 +3693,7 @@ export function InteractiveVenueMapEditor({
     setTool("select")
     setSelection({ kind: "zone", id: zone.id })
     requestMobileProperties()
+    if (vertexEditZoneIdRef.current === zone.id) return
     if (lassoModeRef.current) return
     if (
       activeZoneIdRef.current &&
@@ -3592,12 +3719,12 @@ export function InteractiveVenueMapEditor({
     const point = pointerToSvg(event)
     if (toolRef.current === "polygon") {
       event.preventDefault()
-      const next = {
+      const raw = {
         x: Math.round(point.x * 10) / 10,
         y: Math.round(point.y * 10) / 10,
       }
       const draft = polygonDraftRef.current
-      if (isCloseToFirstVertex(draft, next)) {
+      if (isCloseToFirstVertex(draft, raw)) {
         closePolygonDraft({ pointerId: event.pointerId })
         return
       }
@@ -3607,11 +3734,12 @@ export function InteractiveVenueMapEditor({
         }
         return
       }
+      const next = snapPointToGrid(raw, snapActive(event.shiftKey))
       setPolygonDraft((current) => [...current, next])
       return
     }
     if (placement && workModeRef.current === "architecture" && !event.altKey && !spaceHeld.current) {
-      placeAt(point)
+      placeAt(point, placement, { shiftKey: event.shiftKey })
       return
     }
     if (toolRef.current !== "select") return
@@ -3624,6 +3752,7 @@ export function InteractiveVenueMapEditor({
       if (!event.shiftKey && !shouldBlockCanvasDeselect()) {
         setIsolationId(null)
         setSelection(null)
+        exitZoneVertexEdit()
       }
       return
     }
@@ -3636,6 +3765,7 @@ export function InteractiveVenueMapEditor({
     if (!event.shiftKey) {
       setIsolationId(null)
       setSelection(null)
+      exitZoneVertexEdit()
     }
   }
 
@@ -3753,6 +3883,10 @@ export function InteractiveVenueMapEditor({
 
   function applyPointerMove(sample: PointerSample) {
     if (pinchRef.current) return
+    if (vertexDrag.current) {
+      applyVertexDragPoint(pointerToSvg(sample), sample.shiftKey)
+      return
+    }
     const transforming = transformDrag.current
     if (transforming) {
       const point = pointerToSvg(sample)
@@ -3888,6 +4022,18 @@ export function InteractiveVenueMapEditor({
 
   function finishPointerGesture(shiftKey = false) {
     if (pinchRef.current) return
+    if (vertexDrag.current) {
+      if (pointerFrame.current != null) {
+        window.cancelAnimationFrame(pointerFrame.current)
+        pointerFrame.current = null
+      }
+      if (pendingPointer.current) {
+        applyPointerMove(pendingPointer.current)
+        pendingPointer.current = null
+      }
+      vertexDrag.current = null
+      return
+    }
     syncCameraReactState()
     if (pointerFrame.current != null) {
       window.cancelAnimationFrame(pointerFrame.current)
@@ -4037,7 +4183,9 @@ export function InteractiveVenueMapEditor({
         })()
       : null
   const capacity = useMemo(() => venueMapCapacity(map), [map])
-  const canUndo = undoCount > 0
+  const canUndo =
+    undoCount > 0 ||
+    shouldUndoPolygonDraft({ tool, draftLength: polygonDraft.length })
   const canRedo = redoCount > 0
   const isWorkspace = variant === "workspace"
   const isStudio = variant === "studio" || isWorkspace
@@ -4207,6 +4355,7 @@ export function InteractiveVenueMapEditor({
       ungroupSelection,
       undo,
       redo,
+      exitZoneVertexEdit,
       hideEditorPolygonCursor,
       setPolygonDraft,
       setSpacePan,
@@ -4281,7 +4430,7 @@ export function InteractiveVenueMapEditor({
       if (event.key === "Shift") {
         shiftHeld.current = true
         const sample = pendingPointer.current
-        if (sample && transformDrag.current) {
+        if (sample && (transformDrag.current || vertexDrag.current)) {
           actions.applyPointerMove({ ...sample, shiftKey: true })
         }
         return
@@ -4290,6 +4439,11 @@ export function InteractiveVenueMapEditor({
         if (toolRef.current === "polygon" || polygonDraftRef.current.length > 0) {
           event.preventDefault()
           actions.cancelPolygonDraft()
+          return
+        }
+        if (vertexEditZoneIdRef.current) {
+          event.preventDefault()
+          actions.exitZoneVertexEdit()
           return
         }
         if (liveTransformRef.current || transformDrag.current) {
@@ -4361,6 +4515,7 @@ export function InteractiveVenueMapEditor({
         event.preventDefault()
         if (event.shiftKey) actions.redo()
         else actions.undo()
+        return
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
         event.preventDefault()
@@ -4377,7 +4532,7 @@ export function InteractiveVenueMapEditor({
       if (event.key === "Shift") {
         shiftHeld.current = false
         const sample = pendingPointer.current
-        if (sample && transformDrag.current) {
+        if (sample && (transformDrag.current || vertexDrag.current)) {
           actions?.applyPointerMove({ ...sample, shiftKey: false })
         }
       }
@@ -4639,6 +4794,50 @@ export function InteractiveVenueMapEditor({
     zoom,
   ])
 
+  const historyToolbar = !compactChrome ? (
+    <div className="flex items-center gap-1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        title="Deshacer (Ctrl+Z)"
+        aria-label="Deshacer (Ctrl+Z)"
+        disabled={!canUndo}
+        onClick={undo}
+        className="h-8 px-2 text-muted-foreground"
+      >
+        <Undo2 className="size-3.5" />
+        <span className="hidden xl:inline">Deshacer</span>
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        title="Rehacer (Ctrl+Y)"
+        aria-label="Rehacer (Ctrl+Y)"
+        disabled={!canRedo}
+        onClick={redo}
+        className="h-8 px-2 text-muted-foreground"
+      >
+        <Redo2 className="size-3.5" />
+        <span className="hidden xl:inline">Rehacer</span>
+      </Button>
+      <Button
+        type="button"
+        variant={magneticSnap ? "secondary" : "ghost"}
+        size="sm"
+        title="Atracción Magnética (Shift invierte)"
+        aria-label="Atracción Magnética"
+        aria-pressed={magneticSnap}
+        onClick={() => setMagneticSnap((value) => !value)}
+        className="h-8 px-2"
+      >
+        <Magnet className="size-3.5" />
+        <span className="hidden xl:inline">Atracción Magnética</span>
+      </Button>
+    </div>
+  ) : null
+
   const saveChangesButton = onSave || eventId ? (
     <Button
       type="button"
@@ -4661,7 +4860,10 @@ export function InteractiveVenueMapEditor({
         onChange={setStudioWorkMode}
         className={cn("min-w-0 shrink-0", compactChrome && "hidden")}
       />
-      <div className="ml-auto flex items-center gap-1.5">{saveChangesButton}</div>
+      <div className="ml-auto flex items-center gap-1.5">
+        {historyToolbar}
+        {saveChangesButton}
+      </div>
     </div>
   )
 
@@ -4699,7 +4901,8 @@ export function InteractiveVenueMapEditor({
           onChange={setStudioWorkMode}
         />
       </div>
-      <div className="flex min-w-0 flex-1 items-center justify-end pl-3">
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 pl-3">
+        {historyToolbar}
         {saveChangesButton}
       </div>
     </header>
@@ -4781,6 +4984,7 @@ export function InteractiveVenueMapEditor({
                   clientY: event.clientY,
                 }),
                 next,
+                { shiftKey: event.shiftKey },
               )
             } catch {
               /* ignore */
@@ -4832,6 +5036,13 @@ export function InteractiveVenueMapEditor({
               <g className={activeZoneId ? "opacity-30 grayscale" : undefined}>
               <VenueMapBackgroundLayer map={renderMap} />
               </g>
+              <VenueMapGridLayer
+                x={-80}
+                y={-80}
+                width={CANVAS.width + 160}
+                height={CANVAS.height + 160}
+                visible={!preview}
+              />
               <VenueMapZoneLayer
                 zones={unselectedZones}
                 selectedId={null}
@@ -4839,11 +5050,15 @@ export function InteractiveVenueMapEditor({
                 focusedZoneId={activeZoneId}
                 draft={polygonDraft}
                 cursor={null}
+                zoom={zoom}
                 onSelect={
                   tool === "polygon"
                     ? undefined
                     : (zone) => {
                         setIsolationId(null)
+                        if (vertexEditZoneId && vertexEditZoneId !== zone.id) {
+                          exitZoneVertexEdit()
+                        }
                         setSelection({ kind: "zone", id: zone.id })
                       }
                 }
@@ -4855,7 +5070,7 @@ export function InteractiveVenueMapEditor({
                     ? undefined
                     : (event, zone) => {
                         isolateCanvasPointer(event)
-                        enterZoneIsolation(zone)
+                        enterZoneVertexEdit(zone)
                       }
                 }
                 onContextMenu={(event, zone) =>
@@ -5022,12 +5237,15 @@ export function InteractiveVenueMapEditor({
                             onZonePointerDown(event, zone)
                           }
                     }
+                    zoom={zoom}
+                    editVertices={vertexEditZoneId === selectedZone.id}
+                    onVertexPointerDown={beginVertexDrag}
                     onDoubleClick={
                       tool === "polygon"
                         ? undefined
                         : (event, zone) => {
                             isolateCanvasPointer(event)
-                            enterZoneIsolation(zone)
+                            enterZoneVertexEdit(zone)
                           }
                     }
                     onContextMenu={(event, zone) =>
@@ -5050,7 +5268,10 @@ export function InteractiveVenueMapEditor({
                     allowSoldHits
                   />
                 </g>
-                {transformBounds && !geometryLocked && objectHitsEnabled ? (
+                {transformBounds &&
+                !geometryLocked &&
+                objectHitsEnabled &&
+                !vertexEditZoneId ? (
                   <SvgTransformBox
                     bounds={transformBounds}
                     zoom={zoom}
@@ -5533,11 +5754,36 @@ export function InteractiveVenueMapEditor({
           ) : null}
 
           {selectedZone ? (
-            <VenueParametricRulesPanel
-              zone={selectedZone}
-              autoFocusName={rulesFocusId === selectedZone.id}
-              onChange={(patch) => patchZone(selectedZone.id, patch)}
-            />
+            <div className="space-y-3">
+              <Button
+                type="button"
+                variant={vertexEditZoneId === selectedZone.id ? "secondary" : "outline"}
+                className="w-full"
+                onClick={() => {
+                  if (vertexEditZoneId === selectedZone.id) {
+                    exitZoneVertexEdit()
+                    return
+                  }
+                  enterZoneVertexEdit(selectedZone)
+                }}
+              >
+                <CircleDot className="size-4" />
+                {vertexEditZoneId === selectedZone.id
+                  ? "Listo con los nodos"
+                  : "Editar nodos"}
+              </Button>
+              {vertexEditZoneId === selectedZone.id ? (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Arrastrá cada círculo para mover ese vértice. El resto de la
+                  zona no se transforma.
+                </p>
+              ) : null}
+              <VenueParametricRulesPanel
+                zone={selectedZone}
+                autoFocusName={rulesFocusId === selectedZone.id}
+                onChange={(patch) => patchZone(selectedZone.id, patch)}
+              />
+            </div>
           ) : selectedSector ? (
             <div className="space-y-3">
               <Accordion

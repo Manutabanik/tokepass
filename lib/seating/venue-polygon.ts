@@ -63,6 +63,22 @@ export function polygonToCanvas(points: VenueMapPoint[]): VenueMapPoint[] {
   return points.map(percentPointToCanvas)
 }
 
+/** Replace one vertex in canvas space; every other vertex stays as stored. */
+export function setPolygonVertexAtCanvas(
+  polygon: VenueMapPoint[],
+  index: number,
+  canvasPoint: VenueMapPoint,
+): VenueMapPoint[] {
+  if (index < 0 || index >= polygon.length) return polygon
+  return polygon.map((point, pointIndex) =>
+    pointIndex === index ? canvasPointToPercent(canvasPoint) : point,
+  )
+}
+
+export function popPolygonDraft<T>(points: readonly T[]): T[] {
+  return points.slice(0, -1)
+}
+
 export function translatePercentPolygon(
   points: VenueMapPoint[],
   dx: number,

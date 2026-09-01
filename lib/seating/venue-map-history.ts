@@ -36,6 +36,13 @@ export function takeVenueMapUndo(
   }
 }
 
+export function shouldUndoPolygonDraft(input: {
+  tool?: string | null
+  draftLength: number
+}): boolean {
+  return input.tool === "polygon" && input.draftLength > 0
+}
+
 export function takeVenueMapRedo(
   past: InteractiveVenueMap[],
   future: InteractiveVenueMap[],
