@@ -5,6 +5,7 @@ import {
   buildAdmissionLeaseHash,
   decideOfflineAdmission,
   isGroupAdmissionTicket,
+  parseScannerDeviceSlot,
   ticketBelongsToDeviceSlot,
   ticketDeviceSlot,
 } from "@/lib/scanner/admission-lease"
@@ -17,6 +18,20 @@ describe("offline admission lease", () => {
     assert.equal(ticketBelongsToDeviceSlot(ticketId, slot, 4), true)
     assert.equal(ticketBelongsToDeviceSlot(ticketId, (slot + 1) % 4, 4), false)
     assert.equal(ticketBelongsToDeviceSlot(ticketId, 0, 1), true)
+    assert.equal(ticketBelongsToDeviceSlot(ticketId, 0, 0), false)
+    assert.equal(ticketBelongsToDeviceSlot(ticketId, 0, Number.NaN), false)
+    assert.equal(ticketDeviceSlot(ticketId, 0), -1)
+  })
+
+  it("does not invent a one-pistol slot from missing storage", () => {
+    assert.equal(parseScannerDeviceSlot(null), null)
+    assert.equal(parseScannerDeviceSlot(""), null)
+    assert.equal(parseScannerDeviceSlot("{"), null)
+    assert.deepEqual(parseScannerDeviceSlot(JSON.stringify({ index: 0, count: 1 })), {
+      index: 0,
+      count: 1,
+    })
+    assert.equal(parseScannerDeviceSlot(JSON.stringify({ index: 3, count: 2 })), null)
   })
 
   it("blocks a second local read when the lease already covers the ticket", () => {
@@ -115,6 +130,25 @@ describe("offline admission lease", () => {
     })
     assert.equal(decision.action, "main_gate_review")
     assert.equal(decision.reason, "range_mismatch")
+  })
+
+  it("does not admit offline when the pistol slot is missing or invalid", () => {
+    const ticketId = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
+    const missing = decideOfflineAdmission({
+      status: "valid",
+      admissionsUsed: 0,
+      maxAdmissions: 1,
+      groupId: null,
+      ticketId,
+      deviceSlotIndex: 0,
+      deviceSlotCount: 0,
+      online: false,
+      hasLivePeers: false,
+      localLeaseCount: 0,
+      scannedAt: null,
+    })
+    assert.equal(missing.action, "main_gate_review")
+    assert.equal(missing.reason, "range_mismatch")
   })
 
   it("builds a deterministic lease hash for the same admission tuple", async () => {

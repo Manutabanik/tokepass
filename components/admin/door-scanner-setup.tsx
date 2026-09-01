@@ -4,11 +4,12 @@ import { LoaderCircle, LogOut, Monitor, RefreshCw, Smartphone } from "lucide-rea
 import type { CSSProperties, SelectHTMLAttributes } from "react"
 
 import { endDoorGuestSession } from "@/app/actions/door-access"
-import type { ScannerEventOption } from "@/app/actions/scanner"
+import type { ScannerEventOption } from "@/lib/scanner/scanner-catalog-types"
 import { AppTakeover } from "@/components/ui/app-takeover"
 import { Button } from "@/components/ui/button"
 import type { ScannerAccessMode } from "@/lib/scanner/access-mode"
 import type { ScannerGate } from "@/lib/scanner/gate"
+import { SCANNER_DEVICE_UNCONFIGURED_MESSAGE } from "@/lib/scanner/admission-lease"
 import { cn } from "@/lib/utils"
 
 const NATIVE_SELECT_STYLE: CSSProperties = {
@@ -35,6 +36,36 @@ function NativeSetupSelect({
         {children}
       </select>
     </div>
+  )
+}
+
+export function DoorScannerUnconfigured({
+  onReset,
+}: {
+  onReset: () => void
+}) {
+  return (
+    <AppTakeover className="bg-[#05050a] text-white">
+      <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col items-center justify-center px-6 text-center">
+        <p className="text-[12px] font-black uppercase tracking-[0.28em] text-red-400">
+          Acceso bloqueado
+        </p>
+        <h1 className="mt-5 text-4xl font-black leading-tight tracking-tight text-red-100 sm:text-5xl">
+          {SCANNER_DEVICE_UNCONFIGURED_MESSAGE}
+        </h1>
+        <p className="mt-5 max-w-sm text-sm leading-6 text-white/55">
+          Este aparato no tiene gatera persistida. Sin ese dato el anti-passback
+          offline no puede aislar pistolas.
+        </p>
+        <Button
+          type="button"
+          onClick={onReset}
+          className="mt-10 min-h-16 w-full rounded-2xl bg-white text-lg font-black text-black hover:bg-zinc-200"
+        >
+          Volver al setup de turno
+        </Button>
+      </div>
+    </AppTakeover>
   )
 }
 
@@ -151,7 +182,13 @@ export function DoorScannerSetup({
           </button>
         </div>
 
-        <div className="mt-6 space-y-3">
+        <form
+          className="mt-6 space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (canStart) onStart()
+          }}
+        >
           <label
             htmlFor="scanner-setup-event"
             className="block text-[11px] font-bold uppercase tracking-[0.16em] text-white/45"
@@ -215,7 +252,7 @@ export function DoorScannerSetup({
             id="scanner-setup-pin"
             type="password"
             inputMode="numeric"
-            autoComplete="off"
+            autoComplete="one-time-code"
             maxLength={8}
             value={sessionPin}
             onChange={(event) =>
@@ -227,6 +264,10 @@ export function DoorScannerSetup({
           />
           <p className="text-[11px] leading-5 text-white/40">
             Cifra las semillas LivingQR en este aparato. No se guarda el PIN.
+          </p>
+          <p className="text-[11px] leading-5 text-white/40">
+            Las pistolas de esta gatera quedan guardadas en el aparato (no se
+            pierden al recargar).
           </p>
 
           <div className="grid grid-cols-2 gap-3">
@@ -276,7 +317,6 @@ export function DoorScannerSetup({
               </NativeSetupSelect>
             </div>
           </div>
-        </div>
 
         {loadError || catalogStale ? (
           <div
@@ -305,9 +345,8 @@ export function DoorScannerSetup({
         ) : null}
 
         <Button
-          type="button"
+          type="submit"
           disabled={!canStart}
-          onClick={onStart}
           className="mt-8 min-h-16 w-full touch-manipulation rounded-2xl bg-emerald-500 text-lg font-black tracking-wide text-black hover:bg-emerald-400 disabled:opacity-40"
         >
           {isStarting ? (
@@ -319,6 +358,7 @@ export function DoorScannerSetup({
             "INICIAR CONTROL DE ACCESO"
           )}
         </Button>
+        </form>
         {guestMode ? (
           <button
             type="button"

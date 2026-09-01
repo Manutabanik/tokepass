@@ -17,7 +17,10 @@ import {
 } from "react"
 
 import { DoorScannerSessionChrome } from "@/components/admin/door-scanner-session"
-import { DoorScannerSetup } from "@/components/admin/door-scanner-setup"
+import {
+  DoorScannerSetup,
+  DoorScannerUnconfigured,
+} from "@/components/admin/door-scanner-setup"
 import { EmergencyTicketSearch } from "@/components/admin/emergency-ticket-search"
 import { AppTakeover } from "@/components/ui/app-takeover"
 import { TotemRestOverlay } from "@/components/admin/totem-validator-view"
@@ -91,6 +94,9 @@ import {
   decideOfflineAdmission,
   readScannerDeviceId,
   readScannerDeviceSlot,
+  SCANNER_DEVICE_SLOT_EVENT,
+  SCANNER_DEVICE_SLOT_SETUP_DRAFT,
+  SCANNER_DEVICE_UNCONFIGURED_MESSAGE,
   writeScannerDeviceSlot,
 } from "@/lib/scanner/admission-lease"
 import { selectOfflineScansReadyToFlush } from "@/lib/scanner/flush-offline-queue"
@@ -159,9 +165,11 @@ function subscribeScannerAccessMode(onChange: () => void) {
 }
 
 function subscribeScannerDeviceSlot(onChange: () => void) {
-  window.addEventListener("tokepass-scanner-device-slot", onChange)
+  window.addEventListener(SCANNER_DEVICE_SLOT_EVENT, onChange)
+  window.addEventListener("storage", onChange)
   return () => {
-    window.removeEventListener("tokepass-scanner-device-slot", onChange)
+    window.removeEventListener(SCANNER_DEVICE_SLOT_EVENT, onChange)
+    window.removeEventListener("storage", onChange)
   }
 }
 
@@ -228,14 +236,15 @@ export function DoorScanner({
   const deviceSlotJson = useSyncExternalStore(
     subscribeScannerDeviceSlot,
     () => JSON.stringify(readScannerDeviceSlot(eventId, gateId)),
-    () => JSON.stringify({ index: 0, count: 1 }),
+    () => "null",
   )
   const deviceSlot = JSON.parse(deviceSlotJson) as {
     index: number
     count: number
-  }
-  const deviceSlotIndex = deviceSlot.index
-  const deviceSlotCount = deviceSlot.count
+  } | null
+  const deviceSlotConfigured = deviceSlot != null
+  const deviceSlotIndex = deviceSlot?.index ?? SCANNER_DEVICE_SLOT_SETUP_DRAFT.index
+  const deviceSlotCount = deviceSlot?.count ?? SCANNER_DEVICE_SLOT_SETUP_DRAFT.count
   const torchAvailable = sessionActive && !isTotemMode && detectedTorch
 
   useEffect(() => {
@@ -698,6 +707,11 @@ export function DoorScanner({
         return
       }
 
+      if (!deviceSlotConfigured || !deviceSlot) {
+        showOverlay({ kind: "invalid" })
+        return
+      }
+
       const leaseCount = await countAdmissionLeases(ticket.id)
       const decision = decideOfflineAdmission({
         status: ticket.status,
@@ -705,8 +719,8 @@ export function DoorScanner({
         maxAdmissions: ticket.max_admissions ?? 1,
         groupId: ticket.group_id,
         ticketId: ticket.id,
-        deviceSlotIndex,
-        deviceSlotCount,
+        deviceSlotIndex: deviceSlot.index,
+        deviceSlotCount: deviceSlot.count,
         online: navigator.onLine,
         hasLivePeers: hasLiveLeasePeers(),
         localLeaseCount: leaseCount,
@@ -759,8 +773,8 @@ export function DoorScanner({
     },
     [
       gateId,
-      deviceSlotCount,
-      deviceSlotIndex,
+      deviceSlot,
+      deviceSlotConfigured,
       manifestMeta,
       refreshQueueCount,
       showAlreadyUsed,
@@ -906,6 +920,14 @@ export function DoorScanner({
 
   async function startControl() {
     if (!eventId || !gateId || isStarting) return
+    const committed = writeScannerDeviceSlot(eventId, gateId, {
+      index: deviceSlotIndex,
+      count: deviceSlotCount,
+    })
+    if (!committed) {
+      setLoadError(SCANNER_DEVICE_UNCONFIGURED_MESSAGE)
+      return
+    }
     setIsStarting(true)
     setLoadError(null)
     requestDoorAssetCache()
@@ -1059,6 +1081,19 @@ export function DoorScanner({
     }, 800)
     return () => window.clearInterval(timer)
   }, [sessionActive, isTotemMode])
+
+  if (sessionActive && !deviceSlotConfigured) {
+    return (
+      <DoorScannerUnconfigured
+        onReset={() => {
+          stopLeaseGossip()
+          setSessionActive(false)
+          setCameraError(null)
+          setTorchOn(false)
+        }}
+      />
+    )
+  }
 
   if (!sessionActive) {
     return (

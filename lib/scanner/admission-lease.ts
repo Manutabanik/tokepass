@@ -6,6 +6,19 @@
 
 export const SCANNER_DEVICE_ID_KEY = "tokepass.scanner.device_id"
 export const SCANNER_SLOT_KEY_PREFIX = "tokepass.scanner.slot"
+export const SCANNER_DEVICE_SLOT_MAX = 8
+export const SCANNER_DEVICE_SLOT_EVENT = "tokepass-scanner-device-slot"
+
+/** Solo para el formulario de setup. Nunca usar como fallback de admisión. */
+export const SCANNER_DEVICE_SLOT_SETUP_DRAFT = { index: 0, count: 1 } as const
+
+export const SCANNER_DEVICE_UNCONFIGURED_MESSAGE =
+  "DISPOSITIVO NO CONFIGURADO. Vuelva a realizar el setup de turno"
+
+export type ScannerDeviceSlot = {
+  index: number
+  count: number
+}
 
 export type OfflineAdmissionAction =
   | "admit"
@@ -52,7 +65,8 @@ export function isGroupAdmissionTicket(ticket: {
 }
 
 export function ticketDeviceSlot(ticketId: string, slotCount: number): number {
-  const count = Math.max(1, Math.floor(Number(slotCount) || 1))
+  const count = Math.floor(Number(slotCount))
+  if (!Number.isFinite(count) || count < 1) return -1
   let hash = 0x811c9dc5
   for (let i = 0; i < ticketId.length; i += 1) {
     hash ^= ticketId.charCodeAt(i)
@@ -61,15 +75,34 @@ export function ticketDeviceSlot(ticketId: string, slotCount: number): number {
   return (hash >>> 0) % count
 }
 
+export function isValidScannerDeviceSlot(
+  slot: { index?: unknown; count?: unknown } | null | undefined,
+): slot is ScannerDeviceSlot {
+  const count = Math.floor(Number(slot?.count))
+  const index = Math.floor(Number(slot?.index))
+  return (
+    Number.isFinite(count) &&
+    Number.isFinite(index) &&
+    count >= 1 &&
+    count <= SCANNER_DEVICE_SLOT_MAX &&
+    index >= 0 &&
+    index < count
+  )
+}
+
+/**
+ * Partición estable por ticketId. Sin count válido no pertenece a ninguna pistola.
+ * count === 1 (config explícita de una sola pistola) cubre todos los tickets.
+ */
 export function ticketBelongsToDeviceSlot(
   ticketId: string,
   slotIndex: number,
   slotCount: number,
 ): boolean {
-  const count = Math.max(1, Math.floor(Number(slotCount) || 1))
-  if (count <= 1) return true
-  const index = Math.min(count - 1, Math.max(0, Math.floor(Number(slotIndex) || 0)))
-  return ticketDeviceSlot(ticketId, count) === index
+  if (!isValidScannerDeviceSlot({ index: slotIndex, count: slotCount })) {
+    return false
+  }
+  return ticketDeviceSlot(ticketId, slotCount) === Math.floor(Number(slotIndex))
 }
 
 export function decideOfflineAdmission(input: {
@@ -166,42 +199,71 @@ export function readScannerDeviceId(): string {
   }
 }
 
+export function parseScannerDeviceSlot(
+  raw: string | null | undefined,
+): ScannerDeviceSlot | null {
+  if (!raw?.trim()) return null
+  try {
+    const parsed = JSON.parse(raw) as { index?: unknown; count?: unknown }
+    const slot = {
+      index: Math.floor(Number(parsed.index)),
+      count: Math.floor(Number(parsed.count)),
+    }
+    return isValidScannerDeviceSlot(slot) ? slot : null
+  } catch {
+    return null
+  }
+}
+
+function readPersistedSlotRaw(eventId: string, gateId: string): string | null {
+  const key = scannerSlotStorageKey(eventId, gateId)
+  try {
+    const local = window.localStorage.getItem(key)
+    if (local) return local
+  } catch {
+    // quota / private mode
+  }
+  try {
+    const session = window.sessionStorage.getItem(key)
+    if (!session) return null
+    try {
+      window.localStorage.setItem(key, session)
+      window.sessionStorage.removeItem(key)
+    } catch {
+      // migrate best-effort; still use the session value this read
+    }
+    return session
+  } catch {
+    return null
+  }
+}
+
+/** `null` si no hay setup persistido. No inventa count=1. */
 export function readScannerDeviceSlot(
   eventId: string,
   gateId: string,
-): { index: number; count: number } {
-  const fallback = { index: 0, count: 1 }
-  if (typeof window === "undefined" || !eventId || !gateId) return fallback
-  try {
-    const raw = window.sessionStorage.getItem(
-      scannerSlotStorageKey(eventId, gateId),
-    )
-    if (!raw) return fallback
-    const parsed = JSON.parse(raw) as { index?: unknown; count?: unknown }
-    const count = Math.min(8, Math.max(1, Math.floor(Number(parsed.count) || 1)))
-    const index = Math.min(count - 1, Math.max(0, Math.floor(Number(parsed.index) || 0)))
-    return { index, count }
-  } catch {
-    return fallback
-  }
+): ScannerDeviceSlot | null {
+  if (typeof window === "undefined" || !eventId || !gateId) return null
+  return parseScannerDeviceSlot(readPersistedSlotRaw(eventId, gateId))
 }
 
 export function writeScannerDeviceSlot(
   eventId: string,
   gateId: string,
   slot: { index: number; count: number },
-): void {
-  if (typeof window === "undefined" || !eventId || !gateId) return
-  const count = Math.min(8, Math.max(1, Math.floor(Number(slot.count) || 1)))
-  const index = Math.min(count - 1, Math.max(0, Math.floor(Number(slot.index) || 0)))
+): ScannerDeviceSlot | null {
+  if (typeof window === "undefined" || !eventId || !gateId) return null
+  const parsed = parseScannerDeviceSlot(JSON.stringify(slot))
+  if (!parsed) return null
   try {
-    window.sessionStorage.setItem(
+    window.localStorage.setItem(
       scannerSlotStorageKey(eventId, gateId),
-      JSON.stringify({ index, count }),
+      JSON.stringify(parsed),
     )
-    window.dispatchEvent(new Event("tokepass-scanner-device-slot"))
+    window.dispatchEvent(new Event(SCANNER_DEVICE_SLOT_EVENT))
+    return parsed
   } catch {
-    // sessionStorage opcional
+    return null
   }
 }
 
