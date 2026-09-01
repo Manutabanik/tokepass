@@ -25,6 +25,7 @@ import {
   snapToGrid,
   translateElements,
   zoomTowardCursor,
+  viewBoxPointToWorld,
   expandViewBoxToContainer,
   fitViewportToWorldBox,
   fitWorldInViewBox,
@@ -307,6 +308,12 @@ describe("venue-transform", () => {
     assert.equal(tight.side, "bottom")
     const roomy = rotationHandleAnchor({ x: 20, y: 80, width: 40, height: 24 }, 1)
     assert.equal(roomy.side, "top")
+  })
+
+  it("maps viewBox units to world only when the scene CTM is missing", () => {
+    const world = viewBoxPointToWorld({ x: 100, y: 80 }, { x: 10, y: 20 }, 2)
+    assert.equal(world.x, 45)
+    assert.equal(world.y, 30)
   })
 
   it("keeps the world point under the cursor stable when zooming", () => {

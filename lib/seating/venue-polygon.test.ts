@@ -6,6 +6,7 @@ import {
   canvasPointToPercent,
   isCloseToFirstVertex,
   normalizePolygonToPercent,
+  polygonFromCanvas,
   polygonLooksLikePixels,
   polygonToCanvas,
   percentPointToCanvas,
@@ -81,6 +82,39 @@ describe("parametric zone polygons", () => {
     ])
     assert.equal(points[2]?.x, 90)
     assert.equal(percentPointToCanvas(points[0]!).x, 80)
+  })
+
+  it("converts a canvas draft once, including viewBox overflow", () => {
+    const closed = normalizePolygonToPercent(
+      polygonFromCanvas([
+        { x: 80, y: 56 },
+        { x: 801, y: 56 },
+        { x: 801, y: 280 },
+      ]),
+    )
+    assert.equal(closed[0]?.x, 10)
+    assert.equal(closed[0]?.y, 10)
+    assert.equal(closed[1]!.x > 100 && closed[1]!.x < 101, true)
+    assert.deepEqual(normalizePolygonToPercent(closed), closed)
+    const zone = createVenueZone(0, closed)
+    assert.equal(zone.polygon[1]?.x, closed[1]?.x)
+  })
+
+  it("does not treat overflow percents as pixels on parse", () => {
+    const map = parseVenueMap({
+      zones: [
+        {
+          id: "overflow",
+          name: "Zona 1",
+          polygon: [
+            { x: 10, y: 10 },
+            { x: 110.2, y: 10 },
+            { x: 110.2, y: 40 },
+          ],
+        },
+      ],
+    })
+    assert.equal(map.zones[0]?.polygon[1]?.x, 110.2)
   })
 
   it("snaps the last click to the first vertex to close the zone", () => {

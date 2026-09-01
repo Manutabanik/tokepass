@@ -198,6 +198,8 @@ import {
   handlePoint,
   liveScaleAxes,
   liveTransformToSvg,
+  clientPointToSvgUser,
+  viewBoxPointToWorld,
   normalizeDeg,
   pointsToBounds,
   rectAabb,
@@ -231,7 +233,7 @@ import {
   createVenueZone,
 } from "@/lib/seating/adaptive-seating"
 import {
-  canvasPointToPercent,
+  polygonFromCanvas,
   isCloseToFirstVertex,
   transformPercentPolygon,
   translatePercentPolygon,
@@ -623,8 +625,9 @@ export function InteractiveVenueMapEditor({
     recorded?: boolean
   } | null>(null)
   const transformDrag = useRef<TransformDrag | null>(null)
-  const liveGroupRef = useRef<SVGGElement>(null)
+  const sceneGroupRef = useRef<SVGGElement>(null)
   const liveTransformRef = useRef<LiveTransform | null>(null)
+  const [liveTransform, setLiveTransform] = useState<LiveTransform | null>(null)
   const [transformingKind, setTransformingKind] = useState<
     "move" | "scale" | "rotate" | null
   >(null)
@@ -1025,21 +1028,9 @@ export function InteractiveVenueMapEditor({
     zoom,
   ])
 
-  useLayoutEffect(() => {
-    const node = liveGroupRef.current
-    if (!node) return
-    const svg = liveTransformToSvg(liveTransformRef.current)
-    if (svg) node.setAttribute("transform", svg)
-    else node.removeAttribute("transform")
-  })
-
   function paintLive(next: LiveTransform | null) {
     liveTransformRef.current = next
-    const node = liveGroupRef.current
-    if (!node) return
-    const svg = liveTransformToSvg(next)
-    if (svg) node.setAttribute("transform", svg)
-    else node.removeAttribute("transform")
+    setLiveTransform(next)
   }
 
   function capturePointer(event: React.PointerEvent) {
@@ -1706,39 +1697,43 @@ export function InteractiveVenueMapEditor({
   function pointerToSvg(event: { clientX: number; clientY: number }) {
     const svg = svgRef.current
     if (!svg) return { x: 0, y: 0 }
-    const point = svg.createSVGPoint()
-    point.x = event.clientX
-    point.y = event.clientY
-    const ctm = svg.getScreenCTM()
-    if (!ctm) return { x: 0, y: 0 }
-    const mapped = point.matrixTransform(ctm.inverse())
-    const z = zoomRef.current
-    const p = panRef.current
-    return {
-      x: (mapped.x - p.x) / z,
-      y: (mapped.y - p.y) / z,
-    }
+    const scene = sceneGroupRef.current
+    const sceneMapped = clientPointToSvgUser(
+      svg,
+      scene?.getScreenCTM() ?? null,
+      event.clientX,
+      event.clientY,
+    )
+    if (scene && sceneMapped) return sceneMapped
+    const viewBox = clientPointToSvgUser(
+      svg,
+      svg.getScreenCTM(),
+      event.clientX,
+      event.clientY,
+    )
+    if (!viewBox) return { x: 0, y: 0 }
+    return viewBoxPointToWorld(viewBox, panRef.current, zoomRef.current)
   }
 
   function clientToViewBox(clientX: number, clientY: number) {
     const svg = svgRef.current
     if (!svg) return { x: CANVAS.width / 2, y: CANVAS.height / 2 }
-    const point = svg.createSVGPoint()
-    point.x = clientX
-    point.y = clientY
-    const ctm = svg.getScreenCTM()
-    if (!ctm) return { x: CANVAS.width / 2, y: CANVAS.height / 2 }
-    const mapped = point.matrixTransform(ctm.inverse())
-    return { x: mapped.x, y: mapped.y }
+    return (
+      clientPointToSvgUser(svg, svg.getScreenCTM(), clientX, clientY) ?? {
+        x: CANVAS.width / 2,
+        y: CANVAS.height / 2,
+      }
+    )
   }
 
   function beginCanvasPan(event: React.PointerEvent) {
     event.preventDefault()
     capturePointer(event)
+    const start = clientToViewBox(event.clientX, event.clientY)
     elementDrag.current = {
       kind: "pan",
-      startX: event.clientX,
-      startY: event.clientY,
+      startX: start.x,
+      startY: start.y,
       origX: panRef.current.x,
       origY: panRef.current.y,
     }
@@ -2115,7 +2110,7 @@ export function InteractiveVenueMapEditor({
     const current = mapRef.current
     const created = createVenueZone(
       ensureZones(current).length,
-      points.map(canvasPointToPercent),
+      polygonFromCanvas(points),
     )
     commit({ ...current, zones: [...ensureZones(current), created] })
     setPolygonDraft([])
@@ -3196,9 +3191,10 @@ export function InteractiveVenueMapEditor({
     }
     const moving = elementDrag.current
     if (moving?.kind === "pan") {
+      const cursor = clientToViewBox(sample.clientX, sample.clientY)
       const nextPan = {
-        x: moving.origX + (sample.clientX - moving.startX),
-        y: moving.origY + (sample.clientY - moving.startY),
+        x: moving.origX + (cursor.x - moving.startX),
+        y: moving.origY + (cursor.y - moving.startY),
       }
       panRef.current = nextPan
       setPan(nextPan)
@@ -3907,6 +3903,7 @@ export function InteractiveVenueMapEditor({
     : tool === "polygon"
       ? "polygon"
       : "select"
+  const objectHitsEnabled = tool !== "polygon"
 
   const hasPropertiesTarget =
     Boolean(liveSelection) ||
@@ -4085,19 +4082,11 @@ export function InteractiveVenueMapEditor({
               const raw = event.dataTransfer.getData("application/x-tokepass-venue")
               if (!raw) return
               const next = JSON.parse(raw) as PalettePlacement
-              const svg = svgRef.current
-              if (!svg) return
-              const point = svg.createSVGPoint()
-              point.x = event.clientX
-              point.y = event.clientY
-              const ctm = svg.getScreenCTM()
-              if (!ctm) return
-              const mapped = point.matrixTransform(ctm.inverse())
               placeAt(
-                {
-                  x: (mapped.x - panRef.current.x) / zoomRef.current,
-                  y: (mapped.y - panRef.current.y) / zoomRef.current,
-                },
+                pointerToSvg({
+                  clientX: event.clientX,
+                  clientY: event.clientY,
+                }),
                 next,
               )
             } catch {
@@ -4134,7 +4123,10 @@ export function InteractiveVenueMapEditor({
             onPointerLeave={onPointerLeave}
             onPointerCancel={onPointerUp}
           >
-            <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
+            <g
+              ref={sceneGroupRef}
+              transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}
+            >
               <rect
                 x={svgViewBox.x}
                 y={svgViewBox.y}
@@ -4186,19 +4178,24 @@ export function InteractiveVenueMapEditor({
                     aisle={aisle}
                     selected={false}
                     dimmed={Boolean(activeZoneId)}
+                    hitDisabled={!objectHitsEnabled}
                     onContextMenu={(event) => openObjectMenu(event, { kind: "aisle", id: aisle.id })}
-                    onPointerDown={(event) => {
-                      if (activeZoneId) return
-                      if (wantsCanvasPan(event)) return
-                      event.stopPropagation()
-                      if (event.button !== 0) return
-                      setIsolationId(null)
-                      setHandPan(false)
-                      setPlacement(null)
-                      setTool("select")
-                      setSelection({ kind: "aisle", id: aisle.id })
-                      beginElementDrag("aisle", event, aisle.x, aisle.y, aisle.id)
-                    }}
+                    onPointerDown={
+                      objectHitsEnabled
+                        ? (event) => {
+                            if (activeZoneId) return
+                            if (wantsCanvasPan(event)) return
+                            event.stopPropagation()
+                            if (event.button !== 0) return
+                            setIsolationId(null)
+                            setHandPan(false)
+                            setPlacement(null)
+                            setTool("select")
+                            setSelection({ kind: "aisle", id: aisle.id })
+                            beginElementDrag("aisle", event, aisle.x, aisle.y, aisle.id)
+                          }
+                        : undefined
+                    }
                   />
                 ))}
               {map.stage && selection?.kind !== "stage" ? (
@@ -4206,21 +4203,26 @@ export function InteractiveVenueMapEditor({
                   stage={map.stage}
                   selected={false}
                   dimmed={Boolean(activeZoneId)}
+                  hitDisabled={!objectHitsEnabled}
                   onContextMenu={(event) => openObjectMenu(event, { kind: "stage" })}
-                  onPointerDown={(event) => {
-                    if (activeZoneId) return
-                    if (wantsCanvasPan(event)) return
-                    event.stopPropagation()
-                    if (event.button !== 0) return
-                    setIsolationId(null)
-                    setHandPan(false)
-                    setPlacement(null)
-                    setTool("select")
-                    setSelection({ kind: "stage" })
-                    if (map.stage) {
-                      beginElementDrag("stage", event, map.stage.x, map.stage.y)
-                    }
-                  }}
+                  onPointerDown={
+                    objectHitsEnabled
+                      ? (event) => {
+                          if (activeZoneId) return
+                          if (wantsCanvasPan(event)) return
+                          event.stopPropagation()
+                          if (event.button !== 0) return
+                          setIsolationId(null)
+                          setHandPan(false)
+                          setPlacement(null)
+                          setTool("select")
+                          setSelection({ kind: "stage" })
+                          if (map.stage) {
+                            beginElementDrag("stage", event, map.stage.x, map.stage.y)
+                          }
+                        }
+                      : undefined
+                  }
                 />
               ) : null}
               {(renderMap.sectors ?? []).map((sector) => (
@@ -4248,7 +4250,9 @@ export function InteractiveVenueMapEditor({
                         className={
                           outsideIsolation
                             ? "pointer-events-none opacity-30 grayscale"
-                            : undefined
+                            : !objectHitsEnabled
+                              ? "pointer-events-none"
+                              : undefined
                         }
                       >
                       <SectorSeatNode
@@ -4259,40 +4263,52 @@ export function InteractiveVenueMapEditor({
                         onContextMenu={(event) =>
                           openObjectMenu(event, { kind: "sector", id: sector.id })
                         }
-                        onPointerDown={(event) => {
-                          blurCanvasTypingTarget()
-                          if (wantsCanvasPan(event)) return
-                          isolateCanvasPointer(event, { preventGhostClick: true })
-                          if (event.button !== 0) return
-                          if (
-                            event.detail >= 2 ||
-                            seatEditModeRef.current ||
-                            event.shiftKey
-                          ) {
-                            elementDrag.current = null
-                            setIsPanning(false)
-                            cancelLiveTransform()
-                            const current = selectionRef.current
-                            const nextIds =
-                              event.shiftKey && current?.kind === "seats"
-                                ? [...new Set([...current.ids, key])]
-                                : [key]
-                            enterSeatEdit(nextIds)
-                            return
-                          }
-                          setIsolationId(null)
-                          setSelection({ kind: "sector", id: sector.id })
-                          requestMobileProperties()
-                        }}
-                        onDoubleClick={(event) => {
-                          isolateCanvasPointer(event)
-                          event.preventDefault()
-                          beginSeatEditFromPointer([key], event.shiftKey)
-                        }}
-                        onClick={(event) => {
-                          isolateCanvasPointer(event)
-                          event.preventDefault()
-                        }}
+                        onPointerDown={
+                          objectHitsEnabled
+                            ? (event) => {
+                                blurCanvasTypingTarget()
+                                if (wantsCanvasPan(event)) return
+                                isolateCanvasPointer(event, { preventGhostClick: true })
+                                if (event.button !== 0) return
+                                if (
+                                  event.detail >= 2 ||
+                                  seatEditModeRef.current ||
+                                  event.shiftKey
+                                ) {
+                                  elementDrag.current = null
+                                  setIsPanning(false)
+                                  cancelLiveTransform()
+                                  const current = selectionRef.current
+                                  const nextIds =
+                                    event.shiftKey && current?.kind === "seats"
+                                      ? [...new Set([...current.ids, key])]
+                                      : [key]
+                                  enterSeatEdit(nextIds)
+                                  return
+                                }
+                                setIsolationId(null)
+                                setSelection({ kind: "sector", id: sector.id })
+                                requestMobileProperties()
+                              }
+                            : undefined
+                        }
+                        onDoubleClick={
+                          objectHitsEnabled
+                            ? (event) => {
+                                isolateCanvasPointer(event)
+                                event.preventDefault()
+                                beginSeatEditFromPointer([key], event.shiftKey)
+                              }
+                            : undefined
+                        }
+                        onClick={
+                          objectHitsEnabled
+                            ? (event) => {
+                                isolateCanvasPointer(event)
+                                event.preventDefault()
+                              }
+                            : undefined
+                        }
                       />
                       </g>
                     )
@@ -4304,23 +4320,32 @@ export function InteractiveVenueMapEditor({
                   (item) => !selectedIdSet.has(item.id),
                 )}
                 selectedIds={[]}
+                interactive={objectHitsEnabled}
                 showSeats={(renderMap.elements?.length ?? 0) < 220}
                 zoom={zoom}
                 popSelected={false}
                 isolationDimIds={isolationDimElementIds}
-                onElementPointerDown={onMapElementPointerDown}
+                onElementPointerDown={
+                  objectHitsEnabled ? onMapElementPointerDown : undefined
+                }
                 onElementPointerEnter={onMapElementPointerEnter}
                 onElementPointerLeave={onMapElementPointerLeave}
                 onElementContextMenu={(event, element) =>
                   openObjectMenu(event, { kind: "element", id: element.id })
                 }
-                onSeatPointerDown={onMapSeatPointerDown}
-                onElementDoubleClick={onMapElementDoubleClick}
-                onSeatDoubleClick={onMapSeatDoubleClick}
+                onSeatPointerDown={
+                  objectHitsEnabled ? onMapSeatPointerDown : undefined
+                }
+                onElementDoubleClick={
+                  objectHitsEnabled ? onMapElementDoubleClick : undefined
+                }
+                onSeatDoubleClick={
+                  objectHitsEnabled ? onMapSeatDoubleClick : undefined
+                }
                 selectedSeatIds={selectedRawSeatIds}
               />
               </g>
-              <g ref={liveGroupRef}>
+              <g transform={liveTransformToSvg(liveTransform)}>
                 {selectedAisle ? (
                   <VenueAisleNode
                     aisle={selectedAisle}
@@ -4329,13 +4354,18 @@ export function InteractiveVenueMapEditor({
                     onContextMenu={(event) =>
                       openObjectMenu(event, { kind: "aisle", id: selectedAisle.id })
                     }
-                    onPointerDown={(event) => {
-                      if (activeZoneId) return
-                      if (wantsCanvasPan(event)) return
-                      event.stopPropagation()
-                      if (event.button !== 0) return
-                      beginGroupMove([], event)
-                    }}
+                    hitDisabled={!objectHitsEnabled}
+                    onPointerDown={
+                      objectHitsEnabled
+                        ? (event) => {
+                            if (activeZoneId) return
+                            if (wantsCanvasPan(event)) return
+                            event.stopPropagation()
+                            if (event.button !== 0) return
+                            beginGroupMove([], event)
+                          }
+                        : undefined
+                    }
                   />
                 ) : null}
                 {selectedStage ? (
@@ -4343,14 +4373,19 @@ export function InteractiveVenueMapEditor({
                     stage={selectedStage}
                     selected
                     dimmed={Boolean(activeZoneId)}
+                    hitDisabled={!objectHitsEnabled}
                     onContextMenu={(event) => openObjectMenu(event, { kind: "stage" })}
-                    onPointerDown={(event) => {
-                      if (activeZoneId) return
-                      if (wantsCanvasPan(event)) return
-                      event.stopPropagation()
-                      if (event.button !== 0) return
-                      beginGroupMove([], event)
-                    }}
+                    onPointerDown={
+                      objectHitsEnabled
+                        ? (event) => {
+                            if (activeZoneId) return
+                            if (wantsCanvasPan(event)) return
+                            event.stopPropagation()
+                            if (event.button !== 0) return
+                            beginGroupMove([], event)
+                          }
+                        : undefined
+                    }
                   />
                 ) : null}
                 {renderMap.sectors.flatMap((sector) =>
@@ -4377,7 +4412,9 @@ export function InteractiveVenueMapEditor({
                         className={
                           outsideIsolation
                             ? "pointer-events-none opacity-30 grayscale"
-                            : undefined
+                            : !objectHitsEnabled
+                              ? "pointer-events-none"
+                              : undefined
                         }
                       >
                       <SectorSeatNode
@@ -4388,40 +4425,54 @@ export function InteractiveVenueMapEditor({
                         onContextMenu={(event) =>
                           openObjectMenu(event, { kind: "sector", id: sector.id })
                         }
-                        onPointerDown={(event) => {
-                          blurCanvasTypingTarget()
-                          if (wantsCanvasPan(event)) return
-                          isolateCanvasPointer(event, { preventGhostClick: true })
-                          if (event.button !== 0) return
-                          if (
-                            event.detail >= 2 ||
-                            seatEditModeRef.current ||
-                            event.shiftKey
-                          ) {
-                            elementDrag.current = null
-                            setIsPanning(false)
-                            cancelLiveTransform()
-                            const current = selectionRef.current
-                            const nextIds =
-                              event.shiftKey && current?.kind === "seats"
-                                ? [...new Set([...current.ids, key])]
-                                : [key]
-                            enterSeatEdit(nextIds)
-                            return
-                          }
-                          setIsolationId(null)
-                          setSelection({ kind: "sector", id: sector.id })
-                          requestMobileProperties()
-                        }}
-                        onDoubleClick={(event) => {
-                          isolateCanvasPointer(event)
-                          event.preventDefault()
-                          beginSeatEditFromPointer([key], event.shiftKey)
-                        }}
-                        onClick={(event) => {
-                          isolateCanvasPointer(event)
-                          event.preventDefault()
-                        }}
+                        onPointerDown={
+                          objectHitsEnabled
+                            ? (event) => {
+                                blurCanvasTypingTarget()
+                                if (wantsCanvasPan(event)) return
+                                isolateCanvasPointer(event, {
+                                  preventGhostClick: true,
+                                })
+                                if (event.button !== 0) return
+                                if (
+                                  event.detail >= 2 ||
+                                  seatEditModeRef.current ||
+                                  event.shiftKey
+                                ) {
+                                  elementDrag.current = null
+                                  setIsPanning(false)
+                                  cancelLiveTransform()
+                                  const current = selectionRef.current
+                                  const nextIds =
+                                    event.shiftKey && current?.kind === "seats"
+                                      ? [...new Set([...current.ids, key])]
+                                      : [key]
+                                  enterSeatEdit(nextIds)
+                                  return
+                                }
+                                setIsolationId(null)
+                                setSelection({ kind: "sector", id: sector.id })
+                                requestMobileProperties()
+                              }
+                            : undefined
+                        }
+                        onDoubleClick={
+                          objectHitsEnabled
+                            ? (event) => {
+                                isolateCanvasPointer(event)
+                                event.preventDefault()
+                                beginSeatEditFromPointer([key], event.shiftKey)
+                              }
+                            : undefined
+                        }
+                        onClick={
+                          objectHitsEnabled
+                            ? (event) => {
+                                isolateCanvasPointer(event)
+                                event.preventDefault()
+                              }
+                            : undefined
+                        }
                       />
                       </g>,
                     ]
@@ -4472,23 +4523,32 @@ export function InteractiveVenueMapEditor({
                       selectedIdSet.has(item.id),
                     )}
                     selectedIds={selectedElementIds}
+                    interactive={objectHitsEnabled}
                     showSeats={(renderMap.elements?.length ?? 0) < 220}
                     zoom={zoom}
                     popSelected={false}
                     isolationDimIds={isolationDimElementIds}
-                    onElementPointerDown={onMapElementPointerDown}
+                    onElementPointerDown={
+                      objectHitsEnabled ? onMapElementPointerDown : undefined
+                    }
                     onElementPointerEnter={onMapElementPointerEnter}
                     onElementPointerLeave={onMapElementPointerLeave}
                     onElementContextMenu={(event, element) =>
                       openObjectMenu(event, { kind: "element", id: element.id })
                     }
-                    onSeatPointerDown={onMapSeatPointerDown}
-                    onElementDoubleClick={onMapElementDoubleClick}
-                    onSeatDoubleClick={onMapSeatDoubleClick}
+                    onSeatPointerDown={
+                      objectHitsEnabled ? onMapSeatPointerDown : undefined
+                    }
+                    onElementDoubleClick={
+                      objectHitsEnabled ? onMapElementDoubleClick : undefined
+                    }
+                    onSeatDoubleClick={
+                      objectHitsEnabled ? onMapSeatDoubleClick : undefined
+                    }
                     selectedSeatIds={selectedRawSeatIds}
                   />
                 </g>
-                {transformBounds && !geometryLocked ? (
+                {transformBounds && !geometryLocked && objectHitsEnabled ? (
                   <SvgTransformBox
                     bounds={transformBounds}
                     zoom={zoom}
@@ -6088,21 +6148,30 @@ function VenueStageNode({
   stage,
   selected,
   dimmed,
+  hitDisabled,
   onContextMenu,
   onPointerDown,
 }: {
   stage: VenueMapStage
   selected: boolean
   dimmed?: boolean
+  hitDisabled?: boolean
   onContextMenu: (event: React.MouseEvent) => void
-  onPointerDown: (event: React.PointerEvent) => void
+  onPointerDown?: (event: React.PointerEvent) => void
 }) {
   const cx = stage.x + stage.width / 2
   const cy = stage.y + stage.height / 2
   const rotation = stage.rotation ?? 0
   return (
     <g
-      className={dimmed ? "pointer-events-none opacity-30 grayscale" : undefined}
+      className={
+        dimmed || hitDisabled
+          ? cn(
+              "pointer-events-none",
+              dimmed && "opacity-30 grayscale",
+            )
+          : undefined
+      }
       transform={rotation ? `rotate(${rotation} ${cx} ${cy})` : undefined}
       onContextMenu={onContextMenu}
       onPointerDown={onPointerDown}
@@ -6135,14 +6204,16 @@ function VenueAisleNode({
   aisle,
   selected,
   dimmed,
+  hitDisabled,
   onContextMenu,
   onPointerDown,
 }: {
   aisle: VenueMapAisle
   selected: boolean
   dimmed?: boolean
+  hitDisabled?: boolean
   onContextMenu: (event: React.MouseEvent) => void
-  onPointerDown: (event: React.PointerEvent) => void
+  onPointerDown?: (event: React.PointerEvent) => void
 }) {
   return (
     <rect
@@ -6155,6 +6226,7 @@ function VenueAisleNode({
         "fill-zinc-800/80 stroke-zinc-600",
         selected && "stroke-emerald-400",
         dimmed && "pointer-events-none opacity-30 grayscale",
+        hitDisabled && "pointer-events-none",
       )}
       strokeWidth={1.5}
       onContextMenu={onContextMenu}
@@ -6187,9 +6259,9 @@ function SectorSeatNode({
   selected: boolean
   zoom: number
   onContextMenu: (event: React.MouseEvent) => void
-  onPointerDown: (event: React.PointerEvent) => void
-  onDoubleClick: (event: React.MouseEvent) => void
-  onClick: (event: React.MouseEvent) => void
+  onPointerDown?: (event: React.PointerEvent) => void
+  onDoubleClick?: (event: React.MouseEvent) => void
+  onClick?: (event: React.MouseEvent) => void
 }) {
   return (
     <g

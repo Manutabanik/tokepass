@@ -1,3 +1,5 @@
+import { normalizePolygonToPercent } from "@/lib/seating/venue-polygon"
+
 export type VenueMapSeatStatus = "available" | "blocked" | "reserved"
 
 export type VenueMapSeat = {
@@ -347,18 +349,6 @@ function asNumber(value: unknown, fallback: number): number {
   return Number.isFinite(n) ? n : fallback
 }
 
-const MAP_CANVAS = { width: 800, height: 560 }
-
-function polygonToPercent(points: VenueMapPoint[]): VenueMapPoint[] {
-  if (!points.some((point) => point.x > 100.0001 || point.y > 100.0001)) {
-    return points
-  }
-  return points.map((point) => ({
-    x: Math.round((point.x / MAP_CANVAS.width) * 100000) / 1000,
-    y: Math.round((point.y / MAP_CANVAS.height) * 100000) / 1000,
-  }))
-}
-
 const VENUE_SHAPE_TYPES: VenueShapeType[] = [
   "theatre_seat",
   "round_table",
@@ -684,7 +674,7 @@ function parseVenueZone(raw: unknown, index = 0): VenueMapZone | null {
     name: String(item.name ?? "Zona").slice(0, 80),
     color: String(item.color ?? "#22d3ee"),
     price: Math.max(0, asNumber(item.price, 0)),
-    polygon: polygonToPercent(polygon),
+    polygon: normalizePolygonToPercent(polygon),
     layoutType,
     seatingType,
     sellMode: pricing.sellMode,

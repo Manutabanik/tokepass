@@ -179,6 +179,46 @@ export function liveTransformToSvg(live: LiveTransform | null): string | undefin
   return `rotate(${live.deg} ${live.cx} ${live.cy})`
 }
 
+type SvgPointHost = {
+  createSVGPoint: () => {
+    x: number
+    y: number
+    matrixTransform: (matrix: DOMMatrix) => { x: number; y: number }
+  }
+}
+
+/** Map a client (CSS) point through an element's screen CTM. No extra pan/zoom. */
+export function clientPointToSvgUser(
+  svg: SvgPointHost,
+  ctm: DOMMatrix | null | undefined,
+  clientX: number,
+  clientY: number,
+): { x: number; y: number } | null {
+  if (!ctm) return null
+  const point = svg.createSVGPoint()
+  point.x = clientX
+  point.y = clientY
+  const mapped = point.matrixTransform(ctm.inverse())
+  return { x: mapped.x, y: mapped.y }
+}
+
+/**
+ * Fallback only: viewBox user units → world, when the scene group's CTM
+ * is unavailable. Do not compose this with a CTM that already includes
+ * the scene `translate(pan) scale(zoom)`.
+ */
+export function viewBoxPointToWorld(
+  point: { x: number; y: number },
+  pan: { x: number; y: number },
+  zoom: number,
+): { x: number; y: number } {
+  const z = Number.isFinite(zoom) && zoom !== 0 ? zoom : 1
+  return {
+    x: (point.x - pan.x) / z,
+    y: (point.y - pan.y) / z,
+  }
+}
+
 export function applyLiveToRect(
   rect: BoundsRect,
   live: LiveTransform | null,

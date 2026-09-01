@@ -6,13 +6,23 @@ export const VENUE_MAP_CANVAS = { width: 800, height: 560 } as const
 
 const CLOSE_SNAP_PX = 14
 
+/**
+ * Percent space may overflow the 800×560 world (expanded viewBox padding).
+ * Only treat a vertex as canvas pixels when it cannot be a % overflow.
+ */
+export const VENUE_PERCENT_OVERFLOW_MAX = 140
+
 export function roundMapCoord(value: number, digits = 3): number {
   const factor = 10 ** digits
   return Math.round(value * factor) / factor
 }
 
 export function polygonLooksLikePixels(points: VenueMapPoint[]): boolean {
-  return points.some((point) => point.x > 100.0001 || point.y > 100.0001)
+  return points.some(
+    (point) =>
+      point.x > VENUE_PERCENT_OVERFLOW_MAX ||
+      point.y > VENUE_PERCENT_OVERFLOW_MAX,
+  )
 }
 
 export function canvasPointToPercent(point: VenueMapPoint): VenueMapPoint {
@@ -29,6 +39,11 @@ export function percentPointToCanvas(point: VenueMapPoint): VenueMapPoint {
   }
 }
 
+/** Always canvas → %. Never run the pixel heuristic (draft close path). */
+export function polygonFromCanvas(points: VenueMapPoint[]): VenueMapPoint[] {
+  return points.map(canvasPointToPercent)
+}
+
 export function normalizePolygonToPercent(
   points: VenueMapPoint[],
 ): VenueMapPoint[] {
@@ -39,7 +54,7 @@ export function normalizePolygonToPercent(
       y: roundMapCoord(point.y),
     }))
   }
-  return points.map(canvasPointToPercent)
+  return polygonFromCanvas(points)
 }
 
 export function polygonToCanvas(points: VenueMapPoint[]): VenueMapPoint[] {
