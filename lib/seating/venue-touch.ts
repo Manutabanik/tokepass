@@ -116,6 +116,28 @@ type IsolatablePointer = {
   }
 }
 
+/** Register touch gestures without blocking the main thread / scroll warnings. */
+export function attachPassiveTouchListeners(
+  el: EventTarget,
+  handlers: {
+    onTouchStart?: (event: TouchEvent) => void
+    onTouchMove?: (event: TouchEvent) => void
+  } = {},
+) {
+  const onTouchStart = (event: Event) => {
+    handlers.onTouchStart?.(event as TouchEvent)
+  }
+  const onTouchMove = (event: Event) => {
+    handlers.onTouchMove?.(event as TouchEvent)
+  }
+  el.addEventListener("touchstart", onTouchStart, { passive: true })
+  el.addEventListener("touchmove", onTouchMove, { passive: true })
+  return () => {
+    el.removeEventListener("touchstart", onTouchStart)
+    el.removeEventListener("touchmove", onTouchMove)
+  }
+}
+
 /** Keep a canvas hit from bubbling into deselect / sheet-dismiss handlers. */
 export function isolateCanvasPointer(
   event: IsolatablePointer,

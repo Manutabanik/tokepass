@@ -11,12 +11,9 @@ import {
   Group,
   Ungroup,
   ArrowLeft,
-  ChevronDown,
   CircleDot,
   Copy,
-  Eye,
   Info,
-  LayoutTemplate,
   Minus,
   PanelRightClose,
   PanelRightOpen,
@@ -24,7 +21,6 @@ import {
   Magnet,
   Redo2,
   Save,
-  Square,
   Trash2,
   Undo2,
   Wand2,
@@ -60,7 +56,9 @@ import { ConcentricRingGenerator } from "@/components/admin/concentric-ring-gene
 import { VenueCanvasContextMenu } from "@/components/admin/venue-canvas-context-menu"
 import { VenueComponentPalette, type PalettePlacement } from "@/components/admin/venue-component-palette"
 import { VenueStudioSidebar } from "@/components/admin/venue-studio-sidebar"
+import { VenueEditorToolsMenu } from "@/components/admin/venue-editor-tools-menu"
 import { VenueFloatingToolbar, type FloatingDrawTool } from "@/components/admin/venue-floating-toolbar"
+import { VenueStockLockBanner } from "@/components/admin/venue-stock-lock-banner"
 import {
   VenueLayerTree,
   type LayerTreeSelection,
@@ -99,18 +97,13 @@ import {
   type OrganizerVenueTemplate,
 } from "@/app/actions/venue-templates"
 import { Button } from "@/components/ui/button"
+import { blurActiveElement } from "@/lib/dom/blur-active-element"
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   Sheet,
   SheetContent,
@@ -254,6 +247,7 @@ import {
 } from "@/lib/seating/venue-transform"
 import {
   applyTwoFingerViewport,
+  attachPassiveTouchListeners,
   emptyCanvasDragAction,
   isolateCanvasPointer,
   isIntentionalSheetClose,
@@ -612,6 +606,7 @@ export function InteractiveVenueMapEditor({
   const [propertiesOpen, setPropertiesOpen] = useState(false)
   const [modesOpen, setModesOpen] = useState(false)
   const [lassoMode, setLassoMode] = useState(false)
+  const [stockLockNotice, setStockLockNotice] = useState<string | null>(null)
   const isDesktop = useIsDesktop()
   const compactChrome = !isDesktop
   const mapBusy = saving || explicitSaveStatus === "saving"
@@ -672,6 +667,12 @@ export function InteractiveVenueMapEditor({
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (!stockLockNotice) return
+    const timer = window.setTimeout(() => setStockLockNotice(null), 6000)
+    return () => window.clearTimeout(timer)
+  }, [stockLockNotice])
 
   useEffect(() => {
     const id = eventId?.trim()
@@ -1442,7 +1443,9 @@ export function InteractiveVenueMapEditor({
   }
 
   function refuseStockLocked() {
-    toast.error(EDITOR_STOCK_LOCK_MESSAGE)
+    blurActiveElement()
+    setStockLockNotice(EDITOR_STOCK_LOCK_MESSAGE)
+    toast.error(EDITOR_STOCK_LOCK_MESSAGE, { position: "bottom-center" })
   }
 
   function unlockedElementIds(ids: readonly string[]) {
@@ -1887,12 +1890,13 @@ export function InteractiveVenueMapEditor({
     blurCanvasTypingTarget()
     if (objectDragSuppressed(event.pointerId)) return
     if (wantsCanvasPan(event)) return
-    isolateCanvasPointer(event, { preventGhostClick: true })
-    if (event.button !== 0) return
     if (elementHasCommittedStock(element, occupancyRef.current)) {
+      isolateCanvasPointer(event)
       refuseStockLocked()
       return
     }
+    isolateCanvasPointer(event, { preventGhostClick: true })
+    if (event.button !== 0) return
     let target = element
     if (event.altKey) {
       const clone = cloneVenueElement(element)
@@ -3502,15 +3506,16 @@ export function InteractiveVenueMapEditor({
     if (!element?.id || !seatId) return
     blurCanvasTypingTarget()
     if (wantsCanvasPan(event)) return
-    isolateCanvasPointer(event, { preventGhostClick: true })
-    if (event.button !== 0) return
     if (
       layoutIdHasCommittedStock(occupancyRef.current, seatId, element.id) ||
       elementHasCommittedStock(element, occupancyRef.current)
     ) {
+      isolateCanvasPointer(event)
       refuseStockLocked()
       return
     }
+    isolateCanvasPointer(event, { preventGhostClick: true })
+    if (event.button !== 0) return
     const key = elementSeatKey(element.id, seatId)
     if (event.detail >= 2 || seatEditModeRef.current || event.shiftKey) {
       enterIsolation(element.id)
@@ -3802,7 +3807,7 @@ export function InteractiveVenueMapEditor({
       return
     }
     if (inventoryHitHasCommittedStock(hit)) {
-      isolateCanvasPointer(event, { preventGhostClick: true })
+      isolateCanvasPointer(event)
       refuseStockLocked()
       return
     }
@@ -4605,7 +4610,12 @@ export function InteractiveVenueMapEditor({
     el.addEventListener("wheel", onWheel, { passive: false })
     el.addEventListener("mousedown", preventMiddleScroll)
     el.addEventListener("auxclick", preventMiddleScroll)
+    const detachCanvasTouch = attachPassiveTouchListeners(el)
+    const svg = svgRef.current
+    const detachSvgTouch = svg ? attachPassiveTouchListeners(svg) : () => {}
     return () => {
+      detachCanvasTouch()
+      detachSvgTouch()
       el.removeEventListener("wheel", onWheel)
       el.removeEventListener("mousedown", preventMiddleScroll)
       el.removeEventListener("auxclick", preventMiddleScroll)
@@ -5438,57 +5448,24 @@ export function InteractiveVenueMapEditor({
             />
           ) : null}
           {!preview && !libraryOpen ? (
-            <div className="absolute top-4 right-4 z-40" data-editor-chrome>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-card/85 px-3 text-xs font-semibold text-foreground shadow-lg backdrop-blur-md hover:bg-card"
-                >
-                  Herramientas
-                  <ChevronDown className="size-3.5" aria-hidden="true" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-48">
-                  {geometryLocked ? null : (
-                    <>
-                      <DropdownMenuItem onClick={addStage}>
-                        <Square className="size-4" />
-                        Agregar escenario
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={addAisle}>
-                        <Minus className="size-4" />
-                        Agregar pasillo
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => setLibraryOpen(true)}
-                      >
-                        <LayoutTemplate className="size-4" />
-                        Plantillas
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setTemplateName(eventTitle || "Mi recinto")
-                      setSaveOpen(true)
-                    }}
-                    disabled={pendingTemplates}
-                  >
-                    <Save className="size-4" />
-                    Guardar como plantilla
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={openPreview}>
-                    <Eye className="size-4" />
-                    Vista previa del comprador
-                  </DropdownMenuItem>
-                  {geometryLocked ? null : (
-                    <DropdownMenuItem onClick={handleClearMap}>
-                      <Trash2 className="size-4" />
-                      Limpiar Mapa
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <VenueEditorToolsMenu
+              geometryLocked={geometryLocked}
+              pendingTemplates={pendingTemplates}
+              onAddStage={addStage}
+              onAddAisle={addAisle}
+              onOpenLibrary={() => setLibraryOpen(true)}
+              onSaveTemplate={() => {
+                setTemplateName(eventTitle || "Mi recinto")
+                setSaveOpen(true)
+              }}
+              onPreview={openPreview}
+              onClearMap={handleClearMap}
+            />
           ) : null}
+          <VenueStockLockBanner
+            message={stockLockNotice}
+            onDismiss={() => setStockLockNotice(null)}
+          />
           {isStudio && tool !== "polygon" ? (
             <VenueStudioHud
               map={map}
@@ -6641,10 +6618,10 @@ export function InteractiveVenueMapEditor({
               />
             </div>
           ) : null}
-          <Sheet open={toolsOpen} onOpenChange={setToolsOpen}>
+          <Sheet modal={false} open={toolsOpen} onOpenChange={setToolsOpen}>
             <SheetContent
               side="bottom"
-              overlayClassName="bg-black/20"
+              overlayClassName="pointer-events-none bg-black/20"
               className="h-auto max-h-[min(48dvh,calc(100dvh-6rem))] gap-0 p-0"
             >
               <div className="mx-auto mt-2 h-1.5 w-10 rounded-full bg-muted" />
@@ -6664,10 +6641,10 @@ export function InteractiveVenueMapEditor({
               </div>
             </SheetContent>
           </Sheet>
-          <Sheet open={modesOpen} onOpenChange={setModesOpen}>
+          <Sheet modal={false} open={modesOpen} onOpenChange={setModesOpen}>
             <SheetContent
               side="bottom"
-              overlayClassName="bg-black/20"
+              overlayClassName="pointer-events-none bg-black/20"
               className="h-auto max-h-[min(48dvh,calc(100dvh-6rem))] gap-0 p-0"
             >
               <div className="mx-auto mt-2 h-1.5 w-10 rounded-full bg-muted" />
@@ -6923,12 +6900,13 @@ function StudioInspectorFrame({
   return (
     <Sheet
       key="venue-mobile-properties"
+      modal={false}
       open={open}
       onOpenChange={onOpenChange}
     >
       <SheetContent
         side="bottom"
-        overlayClassName="bg-black/50"
+        overlayClassName="pointer-events-none bg-black/50"
         initialFocus={false}
         finalFocus={false}
         className="h-auto max-h-[min(48dvh,calc(100dvh-6rem))] gap-0 border-border bg-card p-0 text-card-foreground"

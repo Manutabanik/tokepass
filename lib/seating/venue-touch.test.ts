@@ -8,6 +8,7 @@ import {
   BUYER_TAP_SLOP_PX,
   buyerHitPaddingWorld,
   emptyCanvasDragAction,
+  attachPassiveTouchListeners,
   isolateCanvasPointer,
   isBuyerCleanTap,
   isIntentionalSheetClose,
@@ -96,6 +97,32 @@ describe("venue-touch", () => {
     assert.equal(hit / visual >= 3, true)
     const tight = transformHandleWorldSize(2.5, true)
     assert.equal(tight.hit / tight.visual >= 3, true)
+  })
+
+  it("attaches touchstart and touchmove as passive listeners", () => {
+    const calls: Array<{ type: string; passive?: boolean }> = []
+    const target = {
+      addEventListener(
+        type: string,
+        _handler: EventListenerOrEventListenerObject,
+        options?: boolean | AddEventListenerOptions,
+      ) {
+        calls.push({
+          type,
+          passive:
+            typeof options === "object" && options != null
+              ? options.passive
+              : undefined,
+        })
+      },
+      removeEventListener() {},
+    }
+    const dispose = attachPassiveTouchListeners(target)
+    assert.deepEqual(calls, [
+      { type: "touchstart", passive: true },
+      { type: "touchmove", passive: true },
+    ])
+    dispose()
   })
 
   it("stops canvas pointer bubbling and marks cancelBubble", () => {
