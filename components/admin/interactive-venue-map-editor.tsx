@@ -469,6 +469,29 @@ const STOCK_LOCKED_ELEMENT_PATCH_KEYS = [
   "sellMode",
 ] as const
 
+type ScreenCtmCache = {
+  at: number
+  svg: DOMMatrix | null
+  scene: DOMMatrix | null
+}
+
+function readScreenCtm(
+  cache: { current: ScreenCtmCache },
+  svg: SVGSVGElement | null,
+  scene: SVGGElement | null,
+): ScreenCtmCache {
+  const now = performance.now()
+  const cached = cache.current
+  if (now - cached.at < 16) return cached
+  const next = {
+    at: now,
+    svg: svg?.getScreenCTM() ?? null,
+    scene: scene?.getScreenCTM() ?? null,
+  }
+  cache.current = next
+  return next
+}
+
 function isEditorChromeTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return false
   return Boolean(
@@ -746,11 +769,11 @@ export function InteractiveVenueMapEditor({
   } | null>(null)
   const propertiesRef = useRef<HTMLElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
-  const screenCtmCache = useRef<{
-    at: number
-    svg: DOMMatrix | null
-    scene: DOMMatrix | null
-  }>({ at: -1, svg: null, scene: null })
+  const screenCtmCache = useRef<ScreenCtmCache>({
+    at: -1,
+    svg: null,
+    scene: null,
+  })
   const selectedVisualRef = useRef<SVGGElement>(null)
   const [measuredBounds, setMeasuredBounds] = useState<BoundsRect | null>(null)
   const [toolbarCss, setToolbarCss] = useState<{
@@ -2165,24 +2188,14 @@ export function InteractiveVenueMapEditor({
     commit(result.current, { skipHistory: true })
   }
 
-  function readScreenCtm() {
-    const now = performance.now()
-    const cached = screenCtmCache.current
-    if (now - cached.at < 16) return cached
-    const svg = svgRef.current
-    const next = {
-      at: now,
-      svg: svg?.getScreenCTM() ?? null,
-      scene: sceneGroupRef.current?.getScreenCTM() ?? null,
-    }
-    screenCtmCache.current = next
-    return next
-  }
-
   function pointerToSvg(event: { clientX: number; clientY: number }) {
     const svg = svgRef.current
     if (!svg) return { x: 0, y: 0 }
-    const ctm = readScreenCtm()
+    const ctm = readScreenCtm(
+      screenCtmCache,
+      svg,
+      sceneGroupRef.current,
+    )
     const sceneMapped = clientPointToSvgUser(
       svg,
       ctm.scene,
@@ -2204,7 +2217,12 @@ export function InteractiveVenueMapEditor({
     const svg = svgRef.current
     if (!svg) return { x: CANVAS.width / 2, y: CANVAS.height / 2 }
     return (
-      clientPointToSvgUser(svg, readScreenCtm().svg, clientX, clientY) ?? {
+      clientPointToSvgUser(
+        svg,
+        readScreenCtm(screenCtmCache, svg, sceneGroupRef.current).svg,
+        clientX,
+        clientY,
+      ) ?? {
         x: CANVAS.width / 2,
         y: CANVAS.height / 2,
       }
@@ -4695,12 +4713,21 @@ export function InteractiveVenueMapEditor({
         Number((zoomRef.current * factor).toFixed(3)),
       )
       if (nextZoom === zoomRef.current) return
+      const svg = svgRef.current
+      const cursor = svg
+        ? clientPointToSvgUser(
+            svg,
+            readScreenCtm(screenCtmCache, svg, sceneGroupRef.current).svg,
+            event.clientX,
+            event.clientY,
+          ) ?? { x: CANVAS.width / 2, y: CANVAS.height / 2 }
+        : { x: CANVAS.width / 2, y: CANVAS.height / 2 }
       applyViewportRef.current(
         zoomTowardCursor({
           pan: panRef.current,
           zoom: zoomRef.current,
           nextZoom,
-          cursor: clientToViewBox(event.clientX, event.clientY),
+          cursor,
         }),
       )
     }

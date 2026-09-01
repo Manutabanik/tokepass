@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef, type ReactNode } from "react"
 
-import { releaseHiddenFocusAncestor } from "@/lib/dom/blur-active-element"
+import { releaseTakeoverLock } from "@/lib/dom/blur-active-element"
 import { cn } from "@/lib/utils"
 
 export function AppTakeover({
@@ -17,18 +17,28 @@ export function AppTakeover({
   useLayoutEffect(() => {
     const node = rootRef.current
     if (!node) return
-
-    function release() {
-      releaseHiddenFocusAncestor(node)
-    }
-
-    release()
-    const observer = new MutationObserver(release)
+    let raf = 0
+    const observer = new MutationObserver(() => {
+      if (raf) return
+      raf = window.requestAnimationFrame(() => {
+        raf = 0
+        observer.disconnect()
+        releaseTakeoverLock(node)
+        observer.observe(node, {
+          attributes: true,
+          attributeFilter: ["aria-hidden", "inert", "data-base-ui-inert"],
+        })
+      })
+    })
+    releaseTakeoverLock(node)
     observer.observe(node, {
       attributes: true,
       attributeFilter: ["aria-hidden", "inert", "data-base-ui-inert"],
     })
-    return () => observer.disconnect()
+    return () => {
+      if (raf) window.cancelAnimationFrame(raf)
+      observer.disconnect()
+    }
   }, [])
 
   return (

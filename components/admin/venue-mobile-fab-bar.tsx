@@ -41,10 +41,12 @@ export function VenueMobileFabBar({
 }) {
   return (
     <div
+      data-editor-chrome
       className={cn(
         "pointer-events-auto flex max-w-[calc(100%-1.5rem)] items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900/95 p-1.5 text-zinc-100 backdrop-blur-md",
         className,
       )}
+      onPointerDown={(event) => event.stopPropagation()}
     >
       {showAdd ? (
         <Button

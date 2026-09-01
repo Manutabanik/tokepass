@@ -19,15 +19,35 @@ export function nodeHidesActiveDescendant(
   )
 }
 
+function nodeIsInertLocked(node: InertLikeNode) {
+  return (
+    node.getAttribute("aria-hidden") === "true" ||
+    node.hasAttribute("data-base-ui-inert") ||
+    node.hasAttribute("inert") ||
+    node.inert === true
+  )
+}
+
+function clearInertLock(node: InertLikeNode) {
+  node.removeAttribute("aria-hidden")
+  node.removeAttribute("data-base-ui-inert")
+  node.removeAttribute("inert")
+  node.inert = false
+}
+
 export function releaseHiddenFocusAncestorLike(
   node: InertLikeNode,
   active: unknown,
 ) {
   if (!nodeHidesActiveDescendant(node, active)) return false
-  node.removeAttribute("aria-hidden")
-  node.removeAttribute("data-base-ui-inert")
-  node.removeAttribute("inert")
-  node.inert = false
+  clearInertLock(node)
+  return true
+}
+
+/** Studio chrome must stay clickable even after a toast/menu blurs focus. */
+export function releaseTakeoverLockLike(node: InertLikeNode) {
+  if (!nodeIsInertLocked(node)) return false
+  clearInertLock(node)
   return true
 }
 
@@ -48,4 +68,9 @@ export function ancestorHidesFocusedDescendant(node: HTMLElement | null) {
 export function releaseHiddenFocusAncestor(node: HTMLElement | null) {
   if (!node || typeof document === "undefined") return false
   return releaseHiddenFocusAncestorLike(node, document.activeElement)
+}
+
+export function releaseTakeoverLock(node: HTMLElement | null) {
+  if (!node || typeof document === "undefined") return false
+  return releaseTakeoverLockLike(node)
 }

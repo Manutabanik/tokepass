@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import {
   nodeHidesActiveDescendant,
   releaseHiddenFocusAncestorLike,
+  releaseTakeoverLockLike,
   type InertLikeNode,
 } from "./blur-active-element"
 
@@ -61,5 +62,16 @@ describe("blur-active-element", () => {
     )
     assert.equal(releaseHiddenFocusAncestorLike(node, {}), false)
     assert.equal(node.getAttribute("aria-hidden"), "true")
+  })
+
+  it("always unlocks the studio takeover so the bottom bar stays clickable", () => {
+    const node = fakeNode(
+      { "aria-hidden": "true", "data-base-ui-inert": "" },
+      { containsActive: false, inert: true },
+    )
+    assert.equal(releaseTakeoverLockLike(node), true)
+    assert.equal(node.getAttribute("aria-hidden"), null)
+    assert.equal(node.hasAttribute("data-base-ui-inert"), false)
+    assert.equal(node.inert, false)
   })
 })
