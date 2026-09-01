@@ -124,6 +124,7 @@ export function AdaptiveSeatingFlow({
           hideChrome
           buyerChrome
           hideToolbar={compact}
+          hideZoomDock={!compact}
           zoomDockClassName={compact ? "hidden" : undefined}
           toolbarTitle={toolbarTitle}
           onCloseMap={onCloseMap}

@@ -6,6 +6,7 @@ import {
   hexToRgba,
   expandOccupancyToVenueMap,
   lookupOccupancyStatus,
+  occupancyFromMapSeatStatuses,
   occupancyFromSeatingUnits,
   resolveLiveVenueSeatStatus,
   seatingUnitsForComboDays,
@@ -56,6 +57,38 @@ describe("venue-map-occupancy", () => {
       }),
       "held",
     )
+  })
+
+  it("treats a reserved map seat as held when inventory is missing", () => {
+    assert.equal(
+      resolveLiveVenueSeatStatus({
+        mapStatus: "reserved",
+        selected: false,
+      }),
+      "held",
+    )
+  })
+
+  it("indexes reserved and locked map seats as unavailable", () => {
+    const occupancy = occupancyFromMapSeatStatuses({
+      elements: [
+        {
+          id: "mesa-lock",
+          isLocked: true,
+          seats: [
+            { id: "s-reserved", status: "reserved" },
+            { id: "s-locked", status: "locked" },
+            { id: "s-blocked", status: "blocked" },
+            { id: "s-open", status: "available" },
+          ],
+        },
+      ],
+    })
+    assert.equal(occupancy["mesa-lock"], "occupied")
+    assert.equal(occupancy["s-reserved"], "held")
+    assert.equal(occupancy["s-locked"], "occupied")
+    assert.equal(occupancy["s-blocked"], "occupied")
+    assert.equal(occupancy["s-open"], undefined)
   })
 
   it("indexes occupancy by layout item and seating unit id", () => {

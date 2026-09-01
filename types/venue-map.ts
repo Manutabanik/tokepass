@@ -374,7 +374,14 @@ const VENUE_SHAPE_TYPES: VenueShapeType[] = [
 
 function parseSeatStatus(value: unknown): VenueMapSeatStatus {
   if (value === "reserved") return "reserved"
-  if (value === "blocked" || value === "disabled" || value === "inactive") {
+  if (
+    value === "blocked" ||
+    value === "disabled" ||
+    value === "inactive" ||
+    value === "sold" ||
+    value === "locked" ||
+    value === "occupied"
+  ) {
     return "blocked"
   }
   return "available"

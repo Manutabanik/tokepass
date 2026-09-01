@@ -60,6 +60,7 @@ import {
   expandOccupancyToVenueMap,
   hexToRgba,
   lookupOccupancyStatus,
+  occupancyFromMapSeatStatuses,
   resolveLiveVenueSeatStatus,
   type LiveVenueSeatStatus,
 } from "@/lib/seating/venue-map-occupancy"
@@ -135,6 +136,7 @@ import {
   mapClickTargetFromZone,
 } from "@/lib/seating/map-click-target"
 import { resolveEffectiveSeatingType } from "@/lib/seating/seating-type"
+import { semanticMapLabelScale } from "@/lib/seating/venue-element-geometry"
 import {
   beginBuyerTap,
   buyerHitPaddingWorld,
@@ -332,7 +334,11 @@ export function InteractiveSeatingCanvas({
   const occupancy = useMemo(
     () =>
       expandOccupancyToVenueMap(
-        mergeInventoryOccupancy(occupancyBySeatId, liveOccupancy),
+        mergeInventoryOccupancy(
+          occupancyFromMapSeatStatuses(map),
+          occupancyBySeatId,
+          liveOccupancy,
+        ),
         map,
       ),
     [liveOccupancy, map, occupancyBySeatId],
@@ -553,9 +559,12 @@ export function InteractiveSeatingCanvas({
 
   useEffect(() => {
     if (!canPaintInventory) return
-    paintBuyerMapSold(svgRef.current, soldIdsFromOccupancy(occupancy))
+    paintBuyerMapSold(
+      svgRef.current,
+      soldIdsFromOccupancy(occupancy).filter((id) => !heldSet.has(id)),
+    )
     syncSelectionPaint()
-  }, [canPaintInventory, occupancy, mapScheduleId, syncSelectionPaint])
+  }, [canPaintInventory, heldSet, occupancy, mapScheduleId, syncSelectionPaint])
 
   const armSelectionQuiet = useCallback(() => {
     selectionQuietRef.current = true
@@ -1567,7 +1576,8 @@ export function InteractiveSeatingCanvas({
               y={-19}
               textAnchor="middle"
               dominantBaseline="central"
-              className="pointer-events-none fill-violet-700 text-[11px] font-bold tracking-[0.28em] dark:fill-violet-200"
+              fontSize={11 * semanticMapLabelScale(zoom)}
+              className="pointer-events-none fill-violet-700 font-bold tracking-[0.28em] dark:fill-violet-200"
             >
               {stageLabel}
             </text>
@@ -1600,7 +1610,8 @@ export function InteractiveSeatingCanvas({
                 y={label.y}
                 textAnchor="middle"
                 fill={label.color}
-                className="pointer-events-none text-[13px] font-black tracking-[0.22em]"
+                fontSize={13 * semanticMapLabelScale(zoom)}
+                className="pointer-events-none font-black tracking-[0.22em]"
               >
                 {label.text}
               </text>
@@ -1623,6 +1634,7 @@ export function InteractiveSeatingCanvas({
               lodMode={lodEnabled ? viewMode : null}
               focusedZoneId={focusedZoneId}
               buyerOccupancy={buyerOccupancy}
+              zoom={zoom}
               onSelect={
                 readOnly || !canPaintInventory
                   ? undefined
@@ -1684,7 +1696,8 @@ export function InteractiveSeatingCanvas({
               })
               const label = `${seat.sectorName} · Fila ${seat.row} · ${seat.number} — ${formatCurrency(price)}`
               const heldByOther = live === "held"
-              const taken = live === "occupied" || live === "blocked"
+              const taken =
+                live === "occupied" || live === "blocked" || heldByOther
               return (
                 <g
                   key={seat.id}
@@ -1697,7 +1710,7 @@ export function InteractiveSeatingCanvas({
                   )}
                   style={{
                     opacity: taken && !buyerOccupancy ? 0.3 : heldByOther ? 0.5 : 1,
-                    pointerEvents: readOnly || taken ? "none" : "auto",
+                    pointerEvents: readOnly || taken || heldByOther ? "none" : "auto",
                   }}
                 >
                   <circle
@@ -1737,7 +1750,7 @@ export function InteractiveSeatingCanvas({
                       held={heldByOther}
                       buyerOccupancy={buyerOccupancy}
                       label={String(seat.number)}
-                      showLabel={zoom >= 1.35}
+                      showLabel={zoom >= 0.85}
                     />
                   </g>
                 </g>
@@ -1770,7 +1783,12 @@ export function InteractiveSeatingCanvas({
           onConfirm={confirmPlacePreview}
         />
       ) : null}
-      {buyerChrome && !readOnly && canPaintInventory && !hideZoomDock ? (
+      {buyerChrome &&
+      !readOnly &&
+      canPaintInventory &&
+      !hideZoomDock &&
+      hideToolbar &&
+      !showModalActionFooter ? (
         <BuyerMapZoomDock
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
@@ -2214,7 +2232,7 @@ function MapModalActionFooter({
     : "Volver al resumen"
 
   return (
-    <div className="absolute bottom-0 left-0 z-10 flex w-full justify-center border-t border-border bg-background/80 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-lg">
+    <div className="absolute bottom-0 left-0 z-40 flex w-full justify-center border-t border-border bg-background/80 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-lg">
       <button
         type="button"
         onClick={onClose}

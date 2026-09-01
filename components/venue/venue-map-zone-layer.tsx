@@ -3,6 +3,7 @@
 import { useId, useRef } from "react"
 
 import { BUYER_SEAT_FILL } from "@/lib/seating/buyer-seat-fill"
+import { semanticMapLabelScale } from "@/lib/seating/venue-element-geometry"
 import {
   beginBuyerTap,
   isBuyerCleanTap,
@@ -42,6 +43,7 @@ export function VenueMapZoneLayer({
   highlightedIds = [],
   emphasizeSelected = true,
   buyerOccupancy = false,
+  zoom = 1,
 }: {
   zones: VenueMapZone[]
   selectedId?: string | null
@@ -61,6 +63,7 @@ export function VenueMapZoneLayer({
   highlightedIds?: string[]
   emphasizeSelected?: boolean
   buyerOccupancy?: boolean
+  zoom?: number
 }) {
   const glowId = useId().replace(/:/g, "")
   const press = useRef<BuyerTapSession | null>(null)
@@ -304,10 +307,8 @@ export function VenueMapZoneLayer({
               x={center.x}
               y={center.y}
               textAnchor="middle"
-              className={cn(
-                "pointer-events-none fill-white font-bold",
-                lodSolid || selected ? "text-[14px]" : "text-[12px]",
-              )}
+              fontSize={(lodSolid || selected ? 14 : 12) * semanticMapLabelScale(zoom)}
+              className="pointer-events-none fill-white font-bold"
             >
               {zone.name}
             </text>

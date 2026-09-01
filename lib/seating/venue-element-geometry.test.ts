@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import {
   compactVenueElementLabel,
+  semanticMapLabelScale,
   createVenueElement,
   explodeVenueSectorToChairs,
   rebuildElementSeats,
@@ -39,10 +40,15 @@ describe("venue-element-geometry", () => {
     assert.equal(table.width, VENUE_SHAPE.roundTableRadius * 2)
   })
 
-  it("compacts mesa labels below 1.2x zoom", () => {
-    assert.equal(compactVenueElementLabel("Mesa 01", 1), "1")
-    assert.equal(compactVenueElementLabel("Tablón 09", 1.19), "9")
-    assert.equal(compactVenueElementLabel("Mesa 01", 1.2), "Mesa 01")
+  it("keeps descriptive mesa labels at overview zoom", () => {
+    assert.equal(compactVenueElementLabel("Mesa 01", 0.5), "Mesa 01")
+    assert.equal(compactVenueElementLabel("Tablón 09", 1), "Tablón 09")
+    assert.equal(compactVenueElementLabel("Mesa 01", 2), "1")
+  })
+
+  it("scales labels up when the camera is zoomed out", () => {
+    assert.ok(semanticMapLabelScale(0.5) > semanticMapLabelScale(1))
+    assert.equal(semanticMapLabelScale(1), 1)
   })
 
   it("serializes round tables as numbered seats for B2C", () => {
@@ -125,6 +131,30 @@ describe("venue-element-geometry", () => {
     })
     assert.equal(map.elements[0]?.label, "Silla de Ruedas")
     assert.equal(map.elements[0]?.labelLocked, true)
+  })
+
+  it("maps sold and locked seat statuses to blocked", () => {
+    const map = parseVenueMap({
+      version: 1,
+      sectors: [],
+      elements: [
+        {
+          id: "mesa-1",
+          type: "round_table",
+          label: "Mesa 1",
+          x: 10,
+          y: 10,
+          seats: [
+            { id: "s-sold", number: 1, status: "sold" },
+            { id: "s-locked", number: 2, status: "locked" },
+            { id: "s-reserved", number: 3, status: "reserved" },
+          ],
+        },
+      ],
+    })
+    assert.equal(map.elements[0]?.seats[0]?.status, "blocked")
+    assert.equal(map.elements[0]?.seats[1]?.status, "blocked")
+    assert.equal(map.elements[0]?.seats[2]?.status, "reserved")
   })
 
   it("preserves a locked position through parse", () => {

@@ -7,6 +7,8 @@ import { isVenueMapElementSoldOut } from "@/lib/seating/map-inventory-hydration"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import {
   compactVenueElementLabel,
+  MAP_LABEL_MIN_ZOOM,
+  semanticMapLabelScale,
   resolveVenueShapeType,
 } from "@/lib/seating/venue-element-geometry"
 import { isolateCanvasPointer } from "@/lib/seating/venue-touch"
@@ -263,7 +265,8 @@ const VenueElementShape = memo(function VenueElementShape({
             y={element.y - 4}
             textAnchor="middle"
             fill={element.color}
-            className="pointer-events-none text-[11px] font-bold"
+            fontSize={11 * semanticMapLabelScale(zoom)}
+            className="pointer-events-none font-bold"
           >
             {labelText}
           </text>
@@ -271,7 +274,8 @@ const VenueElementShape = memo(function VenueElementShape({
             x={element.x}
             y={element.y + 12}
             textAnchor="middle"
-            className="pointer-events-none fill-zinc-400 text-[10px]"
+            fontSize={10 * semanticMapLabelScale(zoom)}
+            className="pointer-events-none fill-zinc-400"
           >
             Cupo {element.capacity}
           </text>
@@ -286,7 +290,7 @@ const VenueElementShape = memo(function VenueElementShape({
           y={element.y}
           textAnchor="middle"
           dominantBaseline="central"
-          fontSize={zoom >= 1.2 ? 8 : 7}
+          fontSize={8 * semanticMapLabelScale(zoom)}
           fill={selected ? "#09090B" : "#ffffff"}
           fontWeight={selected ? 900 : 700}
           className="pointer-events-none select-none"
@@ -396,8 +400,8 @@ export function VenueMapElementLayer({
     selectedSeats.size > 0
   const dense = elements.length >= 220
   const veryDense = elements.length >= 800
-  const renderLabels = !veryDense && zoom >= 0.8
-  const renderChairs = showSeats && (!dense || zoom >= 1.15)
+  const renderLabels = !veryDense && zoom >= MAP_LABEL_MIN_ZOOM
+  const renderChairs = showSeats && (!dense || zoom >= 0.7)
   const ordered = preserveOrder
     ? elements
     : [...elements].sort((left, right) => {

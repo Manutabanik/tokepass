@@ -3,7 +3,7 @@ import {
   type CartIdentityLine,
 } from "@/lib/checkout/cart-item-identity"
 import { BUYER_SEAT_FILL } from "@/lib/seating/buyer-seat-fill"
-import { isSoldInventoryStatus } from "@/lib/seating/inventory-seat-state"
+import { isBuyerUnavailableStatus } from "@/lib/seating/buyer-seat-fill"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { storefrontItemMatchesSchedule } from "@/lib/checkout/seat-hold-day"
 import type {
@@ -175,7 +175,7 @@ export function soldIdsFromOccupancy(
 ): string[] {
   const ids: string[] = []
   for (const [id, status] of Object.entries(occupancy)) {
-    if (isSoldInventoryStatus(status)) ids.push(id)
+    if (isBuyerUnavailableStatus(status)) ids.push(id)
   }
   return ids
 }

@@ -8,17 +8,32 @@ export const BUYER_SEAT_FILL = {
 
 export const BUYER_SOLD_OPACITY = 0.4
 
-export type BuyerSeatPaintStatus = SeatStatus | "sold" | "selected"
+export type BuyerSeatPaintStatus =
+  | SeatStatus
+  | "sold"
+  | "selected"
+  | "reserved"
+  | "locked"
+
+export function isBuyerUnavailableStatus(
+  status: BuyerSeatPaintStatus | "reserved" | "locked" | null | undefined,
+): boolean {
+  return (
+    status === "sold" ||
+    status === "occupied" ||
+    status === "blocked" ||
+    status === "held" ||
+    status === "reserved" ||
+    status === "locked"
+  )
+}
 
 export function buyerSeatPaint(status: BuyerSeatPaintStatus): {
   fillColor: string
   opacity: number
 } {
-  if (status === "sold" || status === "occupied" || status === "blocked") {
+  if (isBuyerUnavailableStatus(status)) {
     return { fillColor: BUYER_SEAT_FILL.sold, opacity: BUYER_SOLD_OPACITY }
-  }
-  if (status === "held") {
-    return { fillColor: BUYER_SEAT_FILL.held, opacity: 0.85 }
   }
   return { fillColor: BUYER_SEAT_FILL.available, opacity: 1 }
 }

@@ -18,8 +18,10 @@ describe("buyerSeatPaint", () => {
     assert.equal(BUYER_SOLD_OPACITY, 0.4)
   })
 
-  it("paints foreign holds amber and available seats orange", () => {
-    assert.equal(buyerSeatPaint("held").fillColor, "#F59E0B")
+  it("paints reserved, held and locked seats gray like sold", () => {
+    assert.deepEqual(buyerSeatPaint("held"), buyerSeatPaint("sold"))
+    assert.deepEqual(buyerSeatPaint("reserved"), buyerSeatPaint("sold"))
+    assert.deepEqual(buyerSeatPaint("locked"), buyerSeatPaint("sold"))
     assert.equal(buyerSeatPaint("available").fillColor, "#EAB308")
   })
 })

@@ -38,8 +38,16 @@ export function resolveVenueShapeType(element: VenueMapElement): VenueShapeType 
   return element.shapeType ?? defaultVenueShapeType(element)
 }
 
+export const MAP_LABEL_MIN_ZOOM = 0.35
+
+/** Grow labels as the camera pulls back so "Pista" / "Mesa 1" stay readable. */
+export function semanticMapLabelScale(zoom: number): number {
+  const safe = Math.max(MAP_LABEL_MIN_ZOOM, Number(zoom) || 1)
+  return Math.min(2.6, Math.max(1, 1 / safe))
+}
+
 export function compactVenueElementLabel(label: string, zoom: number): string {
-  if (zoom >= 1.2) return label
+  if (zoom < 2) return label
   const match = /(\d+)\s*$/.exec(label)
   if (!match) return label
   return String(Number(match[1]))

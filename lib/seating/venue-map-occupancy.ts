@@ -25,7 +25,7 @@ export function resolveLiveVenueSeatStatus(input: {
   }
   if (input.selected || input.held) return "selected"
   if (input.occupancy === "occupied") return "occupied"
-  if (input.occupancy === "held") return "held"
+  if (input.occupancy === "held" || input.mapStatus === "reserved") return "held"
   return "available"
 }
 
@@ -132,6 +132,51 @@ export function seatingUnitsForOccupancyDay<
     }
     return true
   })
+}
+
+/** Draft/map JSON statuses the live inventory may not have indexed yet. */
+export function occupancyFromMapSeatStatuses(map?: {
+  elements?: ReadonlyArray<{
+    id?: string | null
+    isLocked?: boolean | null
+    seats?: ReadonlyArray<{
+      id?: string | null
+      status?: string | null
+    }>
+  }> | null
+  sectors?: ReadonlyArray<{
+    seats?: ReadonlyArray<{
+      id?: string | null
+      status?: string | null
+    }>
+  }> | null
+} | null): Record<string, SeatStatus> {
+  const occupancy: Record<string, SeatStatus> = {}
+  function mark(id: string | null | undefined, status: SeatStatus) {
+    const key = id?.trim()
+    if (key) occupancy[key] = status
+  }
+  function fromSeatStatus(status: string | null | undefined): SeatStatus | null {
+    if (status === "blocked" || status === "sold" || status === "locked") {
+      return "occupied"
+    }
+    if (status === "reserved") return "held"
+    return null
+  }
+  for (const element of map?.elements ?? []) {
+    if (element.isLocked) mark(element.id, "occupied")
+    for (const seat of element.seats ?? []) {
+      const next = fromSeatStatus(seat.status)
+      if (next) mark(seat.id, next)
+    }
+  }
+  for (const sector of map?.sectors ?? []) {
+    for (const seat of sector.seats ?? []) {
+      const next = fromSeatStatus(seat.status)
+      if (next) mark(seat.id, next)
+    }
+  }
+  return occupancy
 }
 
 export function lookupOccupancyStatus(

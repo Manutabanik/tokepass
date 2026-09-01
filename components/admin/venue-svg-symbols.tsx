@@ -119,7 +119,14 @@ function seatState(
   if (live === "occupied" || live === "blocked" || live === "held") {
     return live
   }
-  if (seat.status === "blocked") return "blocked"
+  if (
+    seat.status === "blocked" ||
+    seat.status === "sold" ||
+    seat.status === "locked"
+  ) {
+    return "blocked"
+  }
+  if (seat.status === "reserved") return "held"
   return "available"
 }
 
@@ -138,8 +145,9 @@ function fillFor(
   buyerOccupancy = false,
 ) {
   if (buyerOccupancy) {
-    if (state === "held") return BUYER_SEAT_FILL.held
-    if (state === "occupied" || state === "blocked") return BUYER_SEAT_FILL.sold
+    if (state === "held" || state === "occupied" || state === "blocked") {
+      return BUYER_SEAT_FILL.sold
+    }
     return color || BUYER_SEAT_FILL.available
   }
   if (state === "held") return BUYER_SEAT_FILL.held
@@ -155,9 +163,10 @@ function strokeFor(
   buyerOccupancy = false,
 ) {
   if (buyerOccupancy) {
-    if (state === "held") return "#c2410c"
     if (selected || state === "selected") return "#10b981"
-    if (state === "occupied" || state === "blocked") return BUYER_SEAT_FILL.sold
+    if (state === "held" || state === "occupied" || state === "blocked") {
+      return "#374151"
+    }
     return color || BUYER_SEAT_FILL.available
   }
   if (state === "held") return "#c2410c"
@@ -175,7 +184,7 @@ function occupancyOpacity(
   if (state === "occupied" || state === "blocked") {
     return buyerOccupancy ? BUYER_SOLD_OPACITY : occupiedFallback
   }
-  if (state === "held") return 0.5
+  if (state === "held") return buyerOccupancy ? BUYER_SOLD_OPACITY : 0.5
   return buyerOccupancy ? 1 : availableFallback
 }
 
@@ -189,20 +198,15 @@ function tableSurfaceProps(
   buyerOccupancy = false,
 ) {
   if (buyerOccupancy && !selected) {
-    if (state === "occupied" || state === "blocked") {
+    if (
+      state === "occupied" ||
+      state === "blocked" ||
+      state === "held"
+    ) {
       return {
         fill: BUYER_SEAT_FILL.sold,
         fillOpacity: BUYER_SOLD_OPACITY,
-        stroke: BUYER_SEAT_FILL.sold,
-        strokeWidth: 1.4,
-        className: undefined,
-      }
-    }
-    if (state === "held") {
-      return {
-        fill: BUYER_SEAT_FILL.held,
-        fillOpacity: 0.55,
-        stroke: "#c2410c",
+        stroke: "#374151",
         strokeWidth: 1.4,
         className: undefined,
       }
@@ -352,7 +356,8 @@ export function RoundTableSymbol({
         const state = seat
           ? seatState(seat, occupancyBySeatId, selectedSeatIds, parentIds)
           : tableState
-        const locked = state === "occupied" || state === "blocked"
+        const locked =
+          state === "occupied" || state === "blocked" || state === "held"
         return (
           <g key={seat?.id ?? `chair-${index}`}>
             {expandedChairHit(
@@ -449,7 +454,8 @@ export function LongTableSymbol({
       const state = seat
         ? seatState(seat, occupancyBySeatId, selectedSeatIds, parentIds)
         : tableState
-      const locked = state === "occupied" || state === "blocked"
+      const locked =
+        state === "occupied" || state === "blocked" || state === "held"
       return (
         <g key={seat?.id ?? `side-${y}-${index}`}>
           {expandedChairHit(
@@ -618,7 +624,8 @@ export function VipBoxSymbol({
         const x = cx - (cols - 1) * 8 + col * 16
         const y = cy - 10 + row * 18
         const state = seatState(seat, occupancyBySeatId, selectedSet, parentIds)
-        const locked = state === "occupied" || state === "blocked"
+        const locked =
+          state === "occupied" || state === "blocked" || state === "held"
         return (
           <g key={seat.id}>
             {expandedChairHit(
@@ -945,7 +952,7 @@ export function VenueElementSymbol({
       subtype={element.subtype}
       roundedCorner={rx ?? 8}
       label={label}
-      showLabel={showLabels && zoom >= 0.8}
+      showLabel={showLabels && zoom >= 0.35}
     />
   )
 }
