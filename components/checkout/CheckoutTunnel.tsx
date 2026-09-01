@@ -1373,7 +1373,6 @@ export function CheckoutTunnel({
     mergedSeatingUnits,
     soldTicketOccupancy,
     scheduleDayCount,
-    seatingInventoryReady,
     selectedDateId,
   ])
 
