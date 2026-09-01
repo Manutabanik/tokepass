@@ -4,7 +4,7 @@ import { LoaderCircle, LogOut, Monitor, RefreshCw, Smartphone } from "lucide-rea
 import type { CSSProperties, SelectHTMLAttributes } from "react"
 
 import { endDoorGuestSession } from "@/app/actions/door-access"
-import type { ScannerEventOption } from "@/lib/scanner/scanner-catalog-types"
+import type { ScannerEventOption } from "@/app/actions/scanner"
 import { AppTakeover } from "@/components/ui/app-takeover"
 import { Button } from "@/components/ui/button"
 import type { ScannerAccessMode } from "@/lib/scanner/access-mode"
