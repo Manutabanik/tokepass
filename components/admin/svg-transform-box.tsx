@@ -73,9 +73,21 @@ export function SvgTransformBox({
         width={box.width}
         height={box.height}
         fill="transparent"
+        pointerEvents="none"
+      />
+      {children}
+      <rect
+        x={box.x}
+        y={box.y}
+        width={box.width}
+        height={box.height}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={Math.max(stroke * 10, 12 / z)}
+        pointerEvents={locked ? "none" : "stroke"}
         className={
           locked
-            ? "cursor-not-allowed"
+            ? undefined
             : grabbing
               ? "cursor-grabbing"
               : "cursor-grab"
@@ -86,7 +98,6 @@ export function SvgTransformBox({
           onMoveStart(event)
         }}
       />
-      {children}
       <rect
         x={box.x}
         y={box.y}

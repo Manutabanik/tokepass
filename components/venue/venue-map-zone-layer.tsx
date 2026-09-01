@@ -37,6 +37,7 @@ export function VenueMapZoneLayer({
   onDoubleClick,
   onVertexPointerDown,
   editVertices = false,
+  fillHits = true,
   selectOnPointerUp = false,
   shouldCommitTap,
   unavailableIds = [],
@@ -63,6 +64,7 @@ export function VenueMapZoneLayer({
     index: number,
   ) => void
   editVertices?: boolean
+  fillHits?: boolean
   selectOnPointerUp?: boolean
   shouldCommitTap?: (event: React.PointerEvent) => boolean
   unavailableIds?: string[]
@@ -300,7 +302,11 @@ export function VenueMapZoneLayer({
               strokeWidth={lodSolid ? 2 : selected ? 3 : 2}
               strokeLinejoin="round"
               pointerEvents={
-                revealFocused || soldOut ? "none" : "auto"
+                revealFocused || soldOut
+                  ? "none"
+                  : fillHits
+                    ? "auto"
+                    : "visibleStroke"
               }
               filter={
                 soldOut || revealFocused || lodSolid
@@ -315,6 +321,17 @@ export function VenueMapZoneLayer({
                     : "cursor-pointer hover:[fill-opacity:0.82]"),
               )}
             />
+            {!fillHits && zoneInteractive && !soldOut && !revealFocused ? (
+              <polygon
+                data-zone-id={zone.id}
+                points={points}
+                fill="none"
+                stroke="transparent"
+                strokeWidth={14}
+                strokeLinejoin="round"
+                pointerEvents="stroke"
+              />
+            ) : null}
             {revealFocused ? null : (
             <text
               x={center.x}

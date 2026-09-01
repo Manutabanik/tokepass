@@ -26,6 +26,7 @@ import {
   translateElements,
   zoomTowardCursor,
   viewBoxPointToWorld,
+  panToKeepWorldAtViewCenter,
   clientDeltaToViewBox,
   clientPointInContainer,
   expandViewBoxToContainer,
@@ -328,6 +329,20 @@ describe("venue-transform", () => {
     const world = viewBoxPointToWorld({ x: 100, y: 80 }, { x: 10, y: 20 }, 2)
     assert.equal(world.x, 45)
     assert.equal(world.y, 30)
+  })
+
+  it("reancla el centro del viewBox al mismo punto del mundo", () => {
+    const world = { x: 400, y: 280 }
+    const zoom = 1.5
+    const nextBox = { x: -200, y: -40, width: 1200, height: 640 }
+    const pan = panToKeepWorldAtViewCenter(world, nextBox, zoom)
+    const center = {
+      x: nextBox.x + nextBox.width / 2,
+      y: nextBox.y + nextBox.height / 2,
+    }
+    const mapped = viewBoxPointToWorld(center, pan, zoom)
+    assert.equal(Math.abs(mapped.x - world.x) < 1e-9, true)
+    assert.equal(Math.abs(mapped.y - world.y) < 1e-9, true)
   })
 
   it("keeps the world point under the cursor stable when zooming", () => {

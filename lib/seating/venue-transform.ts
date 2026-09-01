@@ -219,6 +219,19 @@ export function viewBoxPointToWorld(
   }
 }
 
+/** Keep a world point at the center of the next viewBox after a resize. */
+export function panToKeepWorldAtViewCenter(
+  world: { x: number; y: number },
+  nextViewBox: { x: number; y: number; width: number; height: number },
+  zoom: number,
+): { x: number; y: number } {
+  const z = Number.isFinite(zoom) && zoom !== 0 ? zoom : 1
+  return {
+    x: nextViewBox.x + nextViewBox.width / 2 - world.x * z,
+    y: nextViewBox.y + nextViewBox.height / 2 - world.y * z,
+  }
+}
+
 /** CSS-pixel drag → viewBox units via the SVG screen CTM scale (not camera zoom). */
 export function clientDeltaToViewBox(
   ctm: Pick<DOMMatrix, "a" | "d"> | null | undefined,

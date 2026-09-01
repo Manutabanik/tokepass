@@ -238,6 +238,7 @@ import {
   clientPointInContainer,
   svgUserToClient,
   viewBoxPointToWorld,
+  panToKeepWorldAtViewCenter,
   normalizeDeg,
   pointsToBounds,
   rectAabb,
@@ -283,6 +284,10 @@ import {
   magneticSnapActive,
   snapPointToGrid,
 } from "@/lib/seating/venue-grid-snap"
+import {
+  clampPercentPolygon,
+  clampWorldPoint,
+} from "@/lib/seating/venue-world-clamp"
 import {
   applyVenueMapBackgroundPatch,
   type VenueMapBackgroundPatch,
@@ -1331,7 +1336,7 @@ export function InteractiveVenueMapEditor({
       paintLive(null)
       commit({
         ...current,
-        stage: applyLiveToStage(current.stage, snapped),
+        stage: clampWorldPoint(applyLiveToStage(current.stage, snapped)),
       })
       clearLiveUi()
       return
@@ -1341,7 +1346,9 @@ export function InteractiveVenueMapEditor({
       commit({
         ...current,
         aisles: current.aisles.map((aisle) =>
-          aisle.id === drag.aisleId ? applyLiveToAisle(aisle, snapped) : aisle,
+          aisle.id === drag.aisleId
+            ? clampWorldPoint(applyLiveToAisle(aisle, snapped))
+            : aisle,
         ),
       })
       clearLiveUi()
@@ -1353,7 +1360,12 @@ export function InteractiveVenueMapEditor({
         ...current,
         zones: ensureZones(current).map((zone) =>
           zone.id === drag.zoneId
-            ? { ...zone, polygon: transformPercentPolygon(zone.polygon, snapped) }
+            ? {
+                ...zone,
+                polygon: clampPercentPolygon(
+                  transformPercentPolygon(zone.polygon, snapped),
+                ),
+              }
             : zone,
         ),
       })
@@ -1369,7 +1381,7 @@ export function InteractiveVenueMapEditor({
           ...sector,
           seats: sector.seats.map((seat) =>
             keys.has(seatKey(sector.id, seat.id))
-              ? applyLiveToSeats([seat], snapped)[0]!
+              ? clampWorldPoint(applyLiveToSeats([seat], snapped)[0]!)
               : seat,
           ),
         })),
@@ -1377,7 +1389,7 @@ export function InteractiveVenueMapEditor({
           ...item,
           seats: item.seats.map((seat) =>
             keys.has(elementSeatKey(item.id, seat.id))
-              ? applyLiveToSeats([seat], snapped)[0]!
+              ? clampWorldPoint(applyLiveToSeats([seat], snapped)[0]!)
               : seat,
           ),
         })),
@@ -1389,7 +1401,7 @@ export function InteractiveVenueMapEditor({
     const baked = bakeLiveTransform(
       ensureElements(current).filter((item) => selected.has(item.id)),
       snapped,
-    )
+    ).map((item) => clampWorldPoint(item))
     const byId = new Map(baked.map((item) => [item.id, item]))
     paintLive(null)
     commit({
@@ -2247,7 +2259,7 @@ export function InteractiveVenueMapEditor({
       pushHistory()
       dragState.recorded = true
     }
-    const snapped = snapPointToGrid(point, snapActive(shiftKey))
+    const snapped = clampWorldPoint(snapPointToGrid(point, snapActive(shiftKey)))
     const current = mapRef.current
     commit(
       {
@@ -2332,13 +2344,47 @@ export function InteractiveVenueMapEditor({
     )
   }
 
+  function editorGestureIsActive() {
+    return (
+      pointerFrame.current != null ||
+      transformDrag.current != null ||
+      elementDrag.current != null ||
+      vertexDrag.current != null ||
+      pinchRef.current != null ||
+      drag.current != null ||
+      liveTransformRef.current != null
+    )
+  }
+
   function abortTransientGestures() {
+    const revertInProgress =
+      Boolean(elementDrag.current?.recorded) ||
+      Boolean(vertexDrag.current?.recorded)
     cancelLiveTransform()
     drag.current = null
     marqueeRef.current = null
     setMarquee(null)
     elementDrag.current = null
+    vertexDrag.current = null
+    pinchRef.current = null
+    pendingPointer.current = null
+    if (pointerFrame.current != null) {
+      window.cancelAnimationFrame(pointerFrame.current)
+      pointerFrame.current = null
+    }
     setIsPanning(false)
+    if (!revertInProgress) return
+    const result = takeVenueMapUndo(
+      undoStack.current,
+      redoStack.current,
+      mapRef.current,
+    )
+    if (!result) return
+    undoStack.current = result.past
+    redoStack.current = []
+    setUndoCount(result.past.length)
+    setRedoCount(0)
+    commit(result.current, { skipHistory: true })
   }
 
   function snapshotPinch() {
@@ -2600,7 +2646,7 @@ export function InteractiveVenueMapEditor({
     const current = mapRef.current
     const created = createVenueZone(
       ensureZones(current).length,
-      polygonFromCanvas(points),
+      clampPercentPolygon(polygonFromCanvas(points)),
     )
     closingPolygonPointerId.current =
       source?.pointerId ?? closingPolygonPointerId.current
@@ -2639,7 +2685,9 @@ export function InteractiveVenueMapEditor({
   ) {
     if (workModeRef.current !== "architecture") return
     if (!nextPlacement) return
-    point = snapPointToGrid(point, snapActive(options?.shiftKey ?? false))
+    point = clampWorldPoint(
+      snapPointToGrid(point, snapActive(options?.shiftKey ?? false)),
+    )
     if (nextPlacement.kind === "zone_polygon") {
       setTool("polygon")
       setPlacement(nextPlacement)
@@ -3734,7 +3782,9 @@ export function InteractiveVenueMapEditor({
         }
         return
       }
-      const next = snapPointToGrid(raw, snapActive(event.shiftKey))
+      const next = clampWorldPoint(
+        snapPointToGrid(raw, snapActive(event.shiftKey)),
+      )
       setPolygonDraft((current) => [...current, next])
       return
     }
@@ -3962,8 +4012,12 @@ export function InteractiveVenueMapEditor({
         point.y - moving.startY,
         snapActive(sample.shiftKey),
       )
-      const nx = Math.round(moving.origX + delta.dx)
-      const ny = Math.round(moving.origY + delta.dy)
+      const next = clampWorldPoint({
+        x: Math.round(moving.origX + delta.dx),
+        y: Math.round(moving.origY + delta.dy),
+      })
+      const nx = next.x
+      const ny = next.y
       if (moving.kind === "stage" && current.stage) {
         commit({ ...current, stage: { ...current.stage, x: nx, y: ny } }, { skipHistory: true })
       } else if (moving.kind === "label" && moving.id) {
@@ -4587,15 +4641,36 @@ export function InteractiveVenueMapEditor({
       const node = canvasRef.current
       if (!node) return
       const rect = node.getBoundingClientRect()
-      setSvgViewBox(
-        expandViewBoxToContainer({
-          containerWidth: rect.width,
-          containerHeight: rect.height,
-          worldWidth: CANVAS.width,
-          worldHeight: CANVAS.height,
-          padding: VENUE_VIEW_PADDING,
-        }),
+      if (rect.width < 2 || rect.height < 2) return
+      if (editorGestureIsActive()) {
+        abortTransientGestures()
+      }
+      const nextBox = expandViewBoxToContainer({
+        containerWidth: rect.width,
+        containerHeight: rect.height,
+        worldWidth: CANVAS.width,
+        worldHeight: CANVAS.height,
+        padding: VENUE_VIEW_PADDING,
+      })
+      const prevBox = svgViewBoxRef.current
+      const worldCenter = viewBoxPointToWorld(
+        {
+          x: prevBox.x + prevBox.width / 2,
+          y: prevBox.y + prevBox.height / 2,
+        },
+        panRef.current,
+        zoomRef.current,
       )
+      applyViewport({
+        zoom: zoomRef.current,
+        pan: panToKeepWorldAtViewCenter(
+          worldCenter,
+          nextBox,
+          zoomRef.current,
+        ),
+      })
+      svgViewBoxRef.current = nextBox
+      setSvgViewBox(nextBox)
     }
     syncViewBox()
     const observer = new ResizeObserver(syncViewBox)
@@ -5051,6 +5126,7 @@ export function InteractiveVenueMapEditor({
                 draft={polygonDraft}
                 cursor={null}
                 zoom={zoom}
+                fillHits={false}
                 onSelect={
                   tool === "polygon"
                     ? undefined
@@ -5221,6 +5297,7 @@ export function InteractiveVenueMapEditor({
                     selectedId={selectedZone.id}
                     emphasizeSelected={false}
                     focusedZoneId={activeZoneId}
+                    fillHits={false}
                     onSelect={
                       tool === "polygon"
                         ? undefined
