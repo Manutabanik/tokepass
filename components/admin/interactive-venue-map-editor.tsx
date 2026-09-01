@@ -139,10 +139,14 @@ import {
 import {
   applyLocalStockLocks,
   EDITOR_STOCK_LOCK_MESSAGE,
+  EDITOR_TEST_STOCK_MESSAGE,
   elementHasCommittedStock,
+  elementHasEditorTestPaint,
   elementIdsHaveCommittedStock,
   layoutIdHasCommittedStock,
   seatKeysHaveCommittedStock,
+  seatingUnitsForEditorLock,
+  seatingUnitsForEditorTestPaint,
 } from "@/lib/seating/editor-stock-lock"
 import { hydrateVenueMapOccupancy } from "@/lib/seating/map-inventory-hydration"
 import type { VenueMapSeatingUnitRef } from "@/lib/seating/map-inventory-hydration"
@@ -468,7 +472,7 @@ function isEditorChromeTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return false
   return Boolean(
     target.closest(
-      "[data-editor-chrome], [role='toolbar'], [data-slot='dropdown-menu-trigger'], [data-slot='dropdown-menu-content']",
+      "[data-editor-chrome], [role='toolbar'], [data-slot='dropdown-menu-trigger'], [data-slot='dropdown-menu-content'], [data-slot='sheet-content']",
     ),
   )
 }
@@ -508,14 +512,23 @@ export function InteractiveVenueMapEditor({
     parseVenueMap(value ?? emptyVenueMap()),
   )
   const [seatingUnits, setSeatingUnits] = useState<VenueMapSeatingUnitRef[]>([])
+  const [eventStatus, setEventStatus] = useState<string | null>(null)
   const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null)
   const occupancyBySeatId = useMemo(
     () =>
       hydrateVenueMapOccupancy(map, {
-        seatingUnits,
+        seatingUnits: seatingUnitsForEditorLock(seatingUnits, eventStatus),
         lockUnknownLayoutIds: false,
       }),
-    [map, seatingUnits],
+    [eventStatus, map, seatingUnits],
+  )
+  const testOccupancyBySeatId = useMemo(
+    () =>
+      hydrateVenueMapOccupancy(map, {
+        seatingUnits: seatingUnitsForEditorTestPaint(seatingUnits, eventStatus),
+        lockUnknownLayoutIds: false,
+      }),
+    [eventStatus, map, seatingUnits],
   )
   const occupancyRef = useRef<Record<string, SeatStatus>>({})
   const loadedUpdatedAtRef = useRef<string | null>(null)
@@ -628,6 +641,7 @@ export function InteractiveVenueMapEditor({
             return
           }
           setSeatingUnits(inventory.seatingUnits)
+          setEventStatus(inventory.eventStatus)
           setLoadedUpdatedAt(inventory.updatedAt)
           loadedUpdatedAtRef.current = inventory.updatedAt
         }
@@ -644,6 +658,7 @@ export function InteractiveVenueMapEditor({
         const refreshed = await loadVenueMapEditorInventory(eventId)
         if (refreshed.success) {
           setSeatingUnits(refreshed.seatingUnits)
+          setEventStatus(refreshed.eventStatus)
           setLoadedUpdatedAt(refreshed.updatedAt)
           loadedUpdatedAtRef.current = refreshed.updatedAt
         } else {
@@ -681,6 +696,7 @@ export function InteractiveVenueMapEditor({
     void loadVenueMapEditorInventory(id).then((result) => {
       if (cancelled || !result.success) return
       setSeatingUnits(result.seatingUnits)
+      setEventStatus(result.eventStatus)
       setLoadedUpdatedAt(result.updatedAt)
       loadedUpdatedAtRef.current = result.updatedAt
     })
@@ -701,6 +717,11 @@ export function InteractiveVenueMapEditor({
   } | null>(null)
   const propertiesRef = useRef<HTMLElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
+  const screenCtmCache = useRef<{
+    at: number
+    svg: DOMMatrix | null
+    scene: DOMMatrix | null
+  }>({ at: -1, svg: null, scene: null })
   const selectedVisualRef = useRef<SVGGElement>(null)
   const [measuredBounds, setMeasuredBounds] = useState<BoundsRect | null>(null)
   const [toolbarCss, setToolbarCss] = useState<{
@@ -834,6 +855,40 @@ export function InteractiveVenueMapEditor({
     setIsolationId(null)
     setSelection(null)
   }, [occupancyBySeatId])
+  const testToastKeyRef = useRef<string>("")
+  useEffect(() => {
+    const current = liveSelection
+    if (!current) {
+      testToastKeyRef.current = ""
+      return
+    }
+    if (Object.keys(testOccupancyBySeatId).length === 0) return
+    const ids =
+      current.kind === "elements" || current.kind === "seats"
+        ? current.ids
+        : current.kind === "element"
+          ? [current.id]
+          : []
+    if (ids.length === 0) return
+    const painted =
+      current.kind === "seats"
+        ? seatKeysHaveCommittedStock(ids, testOccupancyBySeatId)
+        : ids.some((id) => {
+            const element = map.elements?.find((item) => item.id === id)
+            return element
+              ? elementHasEditorTestPaint(
+                  element,
+                  testOccupancyBySeatId,
+                  occupancyBySeatId,
+                )
+              : layoutIdHasCommittedStock(testOccupancyBySeatId, id)
+          })
+    if (!painted) return
+    const key = `${current.kind}:${ids.join(",")}`
+    if (testToastKeyRef.current === key) return
+    testToastKeyRef.current = key
+    toast.info(EDITOR_TEST_STOCK_MESSAGE, { id: "editor-test-stock" })
+  }, [liveSelection, map.elements, occupancyBySeatId, testOccupancyBySeatId])
   const [scaleHandle, setScaleHandle] = useState<ResizeHandle | null>(null)
   const compactChromeRef = useRef(compactChrome)
   const lassoModeRef = useRef(lassoMode)
@@ -1444,8 +1499,10 @@ export function InteractiveVenueMapEditor({
 
   function refuseStockLocked() {
     blurActiveElement()
-    setStockLockNotice(EDITOR_STOCK_LOCK_MESSAGE)
-    toast.error(EDITOR_STOCK_LOCK_MESSAGE, { position: "bottom-center" })
+    toast.info(EDITOR_STOCK_LOCK_MESSAGE, { id: "editor-stock-lock" })
+    setStockLockNotice((current) =>
+      current === EDITOR_STOCK_LOCK_MESSAGE ? current : EDITOR_STOCK_LOCK_MESSAGE,
+    )
   }
 
   function unlockedElementIds(ids: readonly string[]) {
@@ -1747,8 +1804,8 @@ export function InteractiveVenueMapEditor({
       window.clearTimeout(hoverClearTimer.current)
       hoverClearTimer.current = null
     }
-    const groupId = element.groupId?.trim()
-    setHoveredGroupId(groupId || null)
+    const groupId = element.groupId?.trim() || null
+    setHoveredGroupId((current) => (current === groupId ? current : groupId))
   }
 
   function onMapElementPointerLeave() {
@@ -2079,20 +2136,34 @@ export function InteractiveVenueMapEditor({
     commit(result.current, { skipHistory: true })
   }
 
+  function readScreenCtm() {
+    const now = performance.now()
+    const cached = screenCtmCache.current
+    if (now - cached.at < 16) return cached
+    const svg = svgRef.current
+    const next = {
+      at: now,
+      svg: svg?.getScreenCTM() ?? null,
+      scene: sceneGroupRef.current?.getScreenCTM() ?? null,
+    }
+    screenCtmCache.current = next
+    return next
+  }
+
   function pointerToSvg(event: { clientX: number; clientY: number }) {
     const svg = svgRef.current
     if (!svg) return { x: 0, y: 0 }
-    const scene = sceneGroupRef.current
+    const ctm = readScreenCtm()
     const sceneMapped = clientPointToSvgUser(
       svg,
-      scene?.getScreenCTM() ?? null,
+      ctm.scene,
       event.clientX,
       event.clientY,
     )
-    if (scene && sceneMapped) return sceneMapped
+    if (ctm.scene && sceneMapped) return sceneMapped
     const viewBox = clientPointToSvgUser(
       svg,
-      svg.getScreenCTM(),
+      ctm.svg,
       event.clientX,
       event.clientY,
     )
@@ -2104,7 +2175,7 @@ export function InteractiveVenueMapEditor({
     const svg = svgRef.current
     if (!svg) return { x: CANVAS.width / 2, y: CANVAS.height / 2 }
     return (
-      clientPointToSvgUser(svg, svg.getScreenCTM(), clientX, clientY) ?? {
+      clientPointToSvgUser(svg, readScreenCtm().svg, clientX, clientY) ?? {
         x: CANVAS.width / 2,
         y: CANVAS.height / 2,
       }
@@ -3893,7 +3964,7 @@ export function InteractiveVenueMapEditor({
   }
 
   function handleInventoryPointerOver(event: React.PointerEvent<SVGSVGElement>) {
-    const hit = inventoryHitFromEvent(event.nativeEvent)
+    const hit = inventoryHitFromNode(event.target)
     if (hit?.kind !== "element" && hit?.kind !== "element-seat") return
     const element = ensureElements(mapRef.current).find(
       (item) => item.id === hit.elementId,
@@ -4889,14 +4960,14 @@ export function InteractiveVenueMapEditor({
         type="button"
         variant={magneticSnap ? "secondary" : "ghost"}
         size="sm"
-        title="Atracción Magnética (Shift invierte)"
-        aria-label="Atracción Magnética"
+        title="Alinear a la grilla: al mover una mesa, se pega a las líneas del plano. Shift invierte el imán en ese gesto."
+        aria-label="Alinear a la grilla"
         aria-pressed={magneticSnap}
         onClick={() => setMagneticSnap((value) => !value)}
         className="h-8 px-2"
       >
         <Magnet className="size-3.5" />
-        <span className="hidden xl:inline">Atracción Magnética</span>
+        <span className="hidden xl:inline">Alinear a la grilla</span>
       </Button>
     </div>
   ) : null
@@ -5206,6 +5277,7 @@ export function InteractiveVenueMapEditor({
                 hitsEnabled={objectHitsEnabled}
                 activeZone={activeZone}
                 occupancyBySeatId={occupancyBySeatId}
+                testOccupancyBySeatId={testOccupancyBySeatId}
               />
               <VenueMapElementLayer
                 elements={unselectedElements}
@@ -5218,6 +5290,7 @@ export function InteractiveVenueMapEditor({
                 isolationDimIds={isolationDimElementIds}
                 selectedSeatIds={selectedRawSeatIds}
                 occupancyBySeatId={occupancyBySeatId}
+                testOccupancyBySeatId={testOccupancyBySeatId}
                 allowSoldHits
               />
               </g>
@@ -5274,6 +5347,7 @@ export function InteractiveVenueMapEditor({
                   hitsEnabled={objectHitsEnabled}
                   activeZone={activeZone}
                   occupancyBySeatId={occupancyBySeatId}
+                  testOccupancyBySeatId={testOccupancyBySeatId}
                 />
                 {selectedZone ? (
                   <VenueMapZoneLayer
@@ -5330,6 +5404,7 @@ export function InteractiveVenueMapEditor({
                     isolationDimIds={isolationDimElementIds}
                     selectedSeatIds={selectedRawSeatIds}
                     occupancyBySeatId={occupancyBySeatId}
+                    testOccupancyBySeatId={testOccupancyBySeatId}
                     allowSoldHits
                   />
                 </g>
@@ -6602,7 +6677,11 @@ export function InteractiveVenueMapEditor({
       {compactChrome ? (
         <>
           {!mobileSheetOpen ? (
-            <div className="absolute bottom-4 left-1/2 z-10 flex w-[calc(100%-1.5rem)] -translate-x-1/2 justify-center overflow-x-auto pb-[env(safe-area-inset-bottom)] hide-scrollbar">
+            <div
+              data-editor-chrome
+              className="pointer-events-auto absolute bottom-4 left-1/2 z-[130] flex w-[calc(100%-1.5rem)] -translate-x-1/2 justify-center overflow-x-auto pb-[env(safe-area-inset-bottom)] hide-scrollbar"
+              onPointerDown={(event) => event.stopPropagation()}
+            >
               <VenueMobileFabBar
                 showAdd={workMode === "architecture"}
                 showProperties={hasPropertiesTarget}

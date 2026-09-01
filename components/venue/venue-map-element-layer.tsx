@@ -3,6 +3,7 @@
 import { memo, useMemo } from "react"
 
 import { VenueElementSymbol } from "@/components/admin/venue-svg-symbols"
+import { elementHasEditorTestPaint } from "@/lib/seating/editor-stock-lock"
 import { isVenueMapElementSoldOut } from "@/lib/seating/map-inventory-hydration"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import {
@@ -41,6 +42,7 @@ const VenueElementShape = memo(function VenueElementShape({
   popSelected = true,
   buyerOccupancy = false,
   soldOut = false,
+  testOccupied = false,
   delegateEvents = false,
   allowSoldHits = false,
 }: {
@@ -99,6 +101,7 @@ const VenueElementShape = memo(function VenueElementShape({
   popSelected?: boolean
   buyerOccupancy?: boolean
   soldOut?: boolean
+  testOccupied?: boolean
   delegateEvents?: boolean
   allowSoldHits?: boolean
 }) {
@@ -130,6 +133,7 @@ const VenueElementShape = memo(function VenueElementShape({
       data-inventory="element"
       data-element-id={element.id}
       data-locked={soldOut ? "1" : undefined}
+      data-test-stock={testOccupied && !soldOut ? "1" : undefined}
       transform={transform}
       opacity={opacity}
       className={
@@ -264,6 +268,46 @@ const VenueElementShape = memo(function VenueElementShape({
           buyerOccupancy={buyerOccupancy}
         />
       </g>
+      {testOccupied && !soldOut ? (
+        <>
+          {shape === "round_table" ? (
+            <circle
+              cx={element.x}
+              cy={element.y}
+              r={padR + 4}
+              fill="none"
+              stroke="#f59e0b"
+              strokeWidth={1.6}
+              strokeDasharray="5 3"
+              pointerEvents="none"
+            />
+          ) : (
+            <rect
+              x={element.x - padW / 2 - 3}
+              y={element.y - padH / 2 - 3}
+              width={padW + 6}
+              height={padH + 6}
+              fill="none"
+              stroke="#f59e0b"
+              strokeWidth={1.6}
+              strokeDasharray="5 3"
+              rx={4}
+              pointerEvents="none"
+            />
+          )}
+          <text
+            x={element.x}
+            y={element.y - padH / 2 - 8}
+            textAnchor="middle"
+            fontSize={7 * semanticMapLabelScale(zoom)}
+            fill="#f59e0b"
+            fontWeight={800}
+            className="pointer-events-none select-none"
+          >
+            TEST
+          </text>
+        </>
+      ) : null}
       {element.type === "standing_zone" && showLabels ? (
         <>
           <text
@@ -313,6 +357,7 @@ export const VenueMapElementLayer = memo(function VenueMapElementLayer({
   selectedIds = [],
   selectedSeatIds,
   occupancyBySeatId = {},
+  testOccupancyBySeatId = {},
   onElementPointerDown,
   onElementPointerUp,
   onElementPointerEnter,
@@ -342,6 +387,7 @@ export const VenueMapElementLayer = memo(function VenueMapElementLayer({
   selectedIds?: string[]
   selectedSeatIds?: string[]
   occupancyBySeatId?: Record<string, SeatStatus>
+  testOccupancyBySeatId?: Record<string, SeatStatus>
   onElementPointerDown?: (
     event: React.PointerEvent,
     element: VenueMapElement,
@@ -435,6 +481,11 @@ export const VenueMapElementLayer = memo(function VenueMapElementLayer({
         const soldOut =
           isVenueMapElementSoldOut(element, occupancyBySeatId) ||
           element.isLocked === true
+        const testOccupied = elementHasEditorTestPaint(
+          element,
+          testOccupancyBySeatId,
+          occupancyBySeatId,
+        )
         if (!visible) return null
         return (
           <g
@@ -450,6 +501,7 @@ export const VenueMapElementLayer = memo(function VenueMapElementLayer({
               occupancyBySeatId={occupancyBySeatId}
               selectedSeatIds={selectedSeats}
               soldOut={soldOut}
+              testOccupied={testOccupied}
               onElementPointerDown={
                 visible && interactive ? onElementPointerDown : undefined
               }

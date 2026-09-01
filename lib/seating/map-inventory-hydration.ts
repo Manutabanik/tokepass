@@ -200,6 +200,7 @@ export type VenueMapSeatingUnitRef = {
   sold?: boolean
   soldOrderId?: string | null
   eventDateId?: string | null
+  isTest?: boolean
 }
 
 export type VenueMapLiveInventory = {

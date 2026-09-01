@@ -9,6 +9,63 @@ import type {
 export const EDITOR_STOCK_LOCK_MESSAGE =
   "Este lugar tiene stock vendido, reservado o bloqueado y no se puede editar."
 
+export const EDITOR_TEST_STOCK_MESSAGE =
+  "Esta mesa tiene una compra de prueba o el evento está en borrador. Podés editarla con normalidad."
+
+export function eventStatusAllowsEditorStockLock(
+  status: string | null | undefined,
+) {
+  return status === "published"
+}
+
+export function seatingUnitHasCommittedSale(unit: {
+  status?: string | null
+  sold?: boolean | null
+}) {
+  return (
+    unit.status === "sold" ||
+    unit.status === "reserved" ||
+    unit.sold === true
+  )
+}
+
+export function seatingUnitLocksEditor(
+  unit: { status?: string | null; sold?: boolean | null; isTest?: boolean },
+  eventStatus?: string | null,
+) {
+  return (
+    seatingUnitHasCommittedSale(unit) &&
+    !unit.isTest &&
+    eventStatusAllowsEditorStockLock(eventStatus)
+  )
+}
+
+export function seatingUnitsForEditorLock<
+  T extends { status?: string | null; sold?: boolean | null; isTest?: boolean },
+>(units: readonly T[], eventStatus?: string | null) {
+  if (!eventStatusAllowsEditorStockLock(eventStatus)) return []
+  return units.filter((unit) => seatingUnitLocksEditor(unit, eventStatus))
+}
+
+export function seatingUnitsForEditorTestPaint<
+  T extends { status?: string | null; sold?: boolean | null; isTest?: boolean },
+>(units: readonly T[], eventStatus?: string | null) {
+  return units.filter(
+    (unit) =>
+      seatingUnitHasCommittedSale(unit) &&
+      (unit.isTest === true || !eventStatusAllowsEditorStockLock(eventStatus)),
+  )
+}
+
+export function elementHasEditorTestPaint(
+  element: Pick<VenueMapElement, "id" | "seats" | "sellMode">,
+  testOccupancy: Record<string, SeatStatus> | null | undefined,
+  lockOccupancy?: Record<string, SeatStatus> | null,
+): boolean {
+  if (elementHasCommittedStock(element, lockOccupancy)) return false
+  return elementHasCommittedStock(element, testOccupancy)
+}
+
 export function isCommittedEditorStock(
   status: SeatStatus | string | null | undefined,
 ): boolean {

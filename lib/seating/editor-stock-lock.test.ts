@@ -6,10 +6,15 @@ import { emptyVenueMap } from "@/types/venue-map"
 import {
   applyLocalStockLocks,
   elementHasCommittedStock,
+  elementHasEditorTestPaint,
   elementIdsHaveCommittedStock,
+  eventStatusAllowsEditorStockLock,
   isCommittedEditorStock,
   layoutIdHasCommittedStock,
   seatKeysHaveCommittedStock,
+  seatingUnitLocksEditor,
+  seatingUnitsForEditorLock,
+  seatingUnitsForEditorTestPaint,
 } from "./editor-stock-lock"
 
 function table(id = "mesa-1") {
@@ -80,6 +85,62 @@ describe("editor-stock-lock", () => {
     )
     assert.equal(
       layoutIdHasCommittedStock({ "s-4": "available" }, "s-4"),
+      false,
+    )
+  })
+
+  it("no bloquea ventas de prueba ni eventos que no están publicados", () => {
+    assert.equal(eventStatusAllowsEditorStockLock("published"), true)
+    assert.equal(eventStatusAllowsEditorStockLock("draft"), false)
+    assert.equal(
+      seatingUnitLocksEditor({ status: "sold", isTest: true }, "published"),
+      false,
+    )
+    assert.equal(
+      seatingUnitLocksEditor({ status: "sold", isTest: false }, "draft"),
+      false,
+    )
+    assert.equal(
+      seatingUnitLocksEditor({ status: "reserved", isTest: false }, "published"),
+      true,
+    )
+    const units = [
+      { layoutItemId: "mesa-1", status: "sold", isTest: true },
+      { layoutItemId: "mesa-2", status: "sold", isTest: false },
+    ]
+    assert.deepEqual(
+      seatingUnitsForEditorLock(units, "published").map((unit) => unit.layoutItemId),
+      ["mesa-2"],
+    )
+    assert.deepEqual(
+      seatingUnitsForEditorTestPaint(units, "published").map(
+        (unit) => unit.layoutItemId,
+      ),
+      ["mesa-1"],
+    )
+    assert.deepEqual(
+      seatingUnitsForEditorTestPaint(units, "draft").map((unit) => unit.layoutItemId),
+      ["mesa-1", "mesa-2"],
+    )
+    assert.deepEqual(seatingUnitsForEditorLock(units, "draft"), [])
+  })
+
+  it("pinta ocupación de prueba sin tratarla como bloqueo real", () => {
+    const element = table()
+    assert.equal(
+      elementHasEditorTestPaint(
+        element,
+        { "mesa-1": "occupied" },
+        {},
+      ),
+      true,
+    )
+    assert.equal(
+      elementHasEditorTestPaint(
+        element,
+        { "mesa-1": "occupied" },
+        { "mesa-1": "occupied" },
+      ),
       false,
     )
   })

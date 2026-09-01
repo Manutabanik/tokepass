@@ -33,6 +33,7 @@ import {
   eventTimestampsMatch,
   VENUE_MAP_STALE_WRITE_ERROR,
 } from "@/lib/events/venue-map-optimistic-lock"
+import { seatingUnitsForEditorLock } from "@/lib/seating/editor-stock-lock"
 import { hydrateVenueMapOccupancy } from "@/lib/seating/map-inventory-hydration"
 import type { VenueMapSeatingUnitRef } from "@/lib/seating/map-inventory-hydration"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
@@ -1092,12 +1093,77 @@ export async function updateEventCommercialSettings(
   return { success: true, recalculatedTiers }
 }
 
+async function resolveEditorTestLayoutIds(
+  admin: ReturnType<typeof createAdminClient>,
+  eventId: string,
+  units: Array<{
+    id: string
+    layout_item_id: string | null
+    sold_order_id: string | null
+    reserved_order_id?: string | null
+  }>,
+) {
+  const testIds = new Set<string>()
+  const { data: tickets } = await admin
+    .from("tickets")
+    .select("seating_unit_id, seat_id")
+    .eq("event_id", eventId)
+    .eq("is_test", true)
+    .limit(20000)
+  for (const ticket of tickets ?? []) {
+    if (ticket.seating_unit_id?.trim()) testIds.add(ticket.seating_unit_id.trim())
+    if (ticket.seat_id?.trim()) testIds.add(ticket.seat_id.trim())
+  }
+  const orderIds = [
+    ...new Set(
+      units.flatMap((unit) =>
+        [unit.sold_order_id, unit.reserved_order_id]
+          .map((id) => id?.trim())
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ),
+  ]
+  const testOrders = new Set<string>()
+  const ORDER_ID_CHUNK = 200
+  for (let i = 0; i < orderIds.length; i += ORDER_ID_CHUNK) {
+    const { data: orders } = await admin
+      .from("orders")
+      .select("id, is_test, environment")
+      .in("id", orderIds.slice(i, i + ORDER_ID_CHUNK))
+    for (const order of orders ?? []) {
+      if (order.is_test || order.environment === "test") {
+        testOrders.add(order.id)
+      }
+    }
+  }
+  if (testOrders.size > 0) {
+    for (const unit of units) {
+      if (
+        (unit.sold_order_id && testOrders.has(unit.sold_order_id)) ||
+        (unit.reserved_order_id && testOrders.has(unit.reserved_order_id))
+      ) {
+        testIds.add(unit.id)
+        if (unit.layout_item_id?.trim()) testIds.add(unit.layout_item_id.trim())
+      }
+    }
+  }
+  for (const unit of units) {
+    const layoutId = unit.layout_item_id?.trim()
+    if (testIds.has(unit.id) || (layoutId && testIds.has(layoutId))) {
+      testIds.add(unit.id)
+      if (layoutId) testIds.add(layoutId)
+    }
+  }
+  return testIds
+}
+
 export async function loadVenueMapEditorInventory(
   eventId: string,
 ): Promise<
   | {
       success: true
       updatedAt: string
+      eventStatus: string
       occupancyBySeatId: Record<string, SeatStatus>
       seatingUnits: VenueMapSeatingUnitRef[]
     }
@@ -1126,7 +1192,7 @@ export async function loadVenueMapEditorInventory(
 
   const { data: event, error: eventError } = await reader
     .from("events")
-    .select("id, organizer_id, updated_at")
+    .select("id, organizer_id, updated_at, status")
     .eq("id", id)
     .maybeSingle()
   if (eventError) return { success: false, error: formatSupabaseError(eventError) }
@@ -1139,12 +1205,13 @@ export async function loadVenueMapEditorInventory(
   const { data: units, error: unitsError } = await admin
     .from("event_seating_units")
     .select(
-      "id, layout_item_id, status, reserved_until, sold_order_id, event_date_id",
+      "id, layout_item_id, status, reserved_until, sold_order_id, reserved_order_id, event_date_id",
     )
     .eq("event_id", id)
     .limit(20000)
   if (unitsError) return { success: false, error: formatSupabaseError(unitsError) }
 
+  const testIds = await resolveEditorTestLayoutIds(admin, id, units ?? [])
   const seatingUnits: VenueMapSeatingUnitRef[] = (units ?? []).flatMap((row) => {
     const layoutItemId = row.layout_item_id?.trim()
     if (!layoutItemId) return []
@@ -1157,6 +1224,7 @@ export async function loadVenueMapEditorInventory(
         soldOrderId: row.sold_order_id,
         eventDateId: row.event_date_id,
         sold: Boolean(row.sold_order_id) || row.status === "sold",
+        isTest: testIds.has(row.id) || testIds.has(layoutItemId),
       },
     ]
   })
@@ -1164,9 +1232,10 @@ export async function loadVenueMapEditorInventory(
   return {
     success: true,
     updatedAt: event.updated_at ?? new Date().toISOString(),
+    eventStatus: event.status ?? "draft",
     seatingUnits,
     occupancyBySeatId: hydrateVenueMapOccupancy(null, {
-      seatingUnits,
+      seatingUnits: seatingUnitsForEditorLock(seatingUnits, event.status),
       lockUnknownLayoutIds: false,
     }),
   }
