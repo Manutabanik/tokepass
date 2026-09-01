@@ -219,6 +219,42 @@ export function viewBoxPointToWorld(
   }
 }
 
+/** CSS-pixel drag → viewBox units via the SVG screen CTM scale (not camera zoom). */
+export function clientDeltaToViewBox(
+  ctm: Pick<DOMMatrix, "a" | "d"> | null | undefined,
+  dx: number,
+  dy: number,
+): { x: number; y: number } {
+  const sx = ctm && Number.isFinite(ctm.a) && ctm.a !== 0 ? ctm.a : 1
+  const sy = ctm && Number.isFinite(ctm.d) && ctm.d !== 0 ? ctm.d : 1
+  return { x: dx / sx, y: dy / sy }
+}
+
+/** World / viewBox user units → screen (client) pixels. */
+export function svgUserToClient(
+  svg: SvgPointHost,
+  ctm: DOMMatrix | null | undefined,
+  x: number,
+  y: number,
+): { x: number; y: number } | null {
+  if (!ctm) return null
+  const point = svg.createSVGPoint()
+  point.x = x
+  point.y = y
+  const mapped = point.matrixTransform(ctm)
+  return { x: mapped.x, y: mapped.y }
+}
+
+export function clientPointInContainer(
+  screen: { x: number; y: number },
+  container: { left: number; top: number },
+): { x: number; y: number } {
+  return {
+    x: screen.x - container.left,
+    y: screen.y - container.top,
+  }
+}
+
 export function applyLiveToRect(
   rect: BoundsRect,
   live: LiveTransform | null,

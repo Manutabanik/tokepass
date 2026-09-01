@@ -199,6 +199,9 @@ import {
   liveScaleAxes,
   liveTransformToSvg,
   clientPointToSvgUser,
+  clientDeltaToViewBox,
+  clientPointInContainer,
+  svgUserToClient,
   viewBoxPointToWorld,
   normalizeDeg,
   pointsToBounds,
@@ -395,6 +398,7 @@ type SelectedSeatEntry = {
 }
 
 const CANVAS = VENUE_MAP_CANVAS
+const POLYGON_CLOSE_DRAG_GUARD_MS = 400
 const ZONE_COLORS = ["#f97316", "#ec4899", "#f59e0b", "#10b981", "#6366f1", "#06b6d4"]
 
 function newId(prefix: string) {
@@ -568,6 +572,11 @@ export function InteractiveVenueMapEditor({
   const canvasRef = useRef<HTMLDivElement>(null)
   const selectedVisualRef = useRef<SVGGElement>(null)
   const [measuredBounds, setMeasuredBounds] = useState<BoundsRect | null>(null)
+  const [toolbarCss, setToolbarCss] = useState<{
+    x: number
+    y: number
+    placement: "above" | "below"
+  } | null>(null)
   const spaceHeld = useRef(false)
   const shiftHeld = useRef(false)
   const [spacePan, setSpacePan] = useState(false)
@@ -635,6 +644,8 @@ export function InteractiveVenueMapEditor({
   const compactChromeRef = useRef(compactChrome)
   const lassoModeRef = useRef(lassoMode)
   const pinchRef = useRef<PinchOrigin | null>(null)
+  const suppressObjectDragUntil = useRef(0)
+  const closingPolygonPointerId = useRef<number | null>(null)
   const pointersRef = useRef(new Map<number, { x: number; y: number }>())
   const isSelectingRef = useRef(false)
   const pendingMobileProperties = useRef(false)
@@ -974,6 +985,10 @@ export function InteractiveVenueMapEditor({
       return
     }
     const fallback = selectionBounds(selectedElements)
+    if (transformingKind || liveTransform) {
+      setMeasuredBounds((current) => current ?? fallback)
+      return
+    }
     const node = selectedVisualRef.current
     let next = fallback
     if (node && node.isConnected) {
@@ -1020,11 +1035,13 @@ export function InteractiveVenueMapEditor({
   }, [
     map.elements,
     handPan,
+    liveTransform,
     preview,
     selectedElementIds,
     selectedElements,
     selection?.kind,
     tool,
+    transformingKind,
     zoom,
   ])
 
@@ -1187,11 +1204,23 @@ export function InteractiveVenueMapEditor({
     return {}
   }
 
+  function objectDragSuppressed(pointerId?: number) {
+    if (
+      pointerId != null &&
+      closingPolygonPointerId.current != null &&
+      pointerId === closingPolygonPointerId.current
+    ) {
+      return true
+    }
+    return nowMs() < suppressObjectDragUntil.current
+  }
+
   function beginGroupMove(
     ids: string[],
     event: React.PointerEvent,
     zoneId?: string,
   ) {
+    if (objectDragSuppressed(event.pointerId)) return
     const seatIds = selectedSeatEntries.map((item) => item.key)
     const extras = zoneId ? { zoneId } : transformTargetFromSelection()
     const usingSeats =
@@ -1522,6 +1551,7 @@ export function InteractiveVenueMapEditor({
   ) {
     if (!element?.id) return
     blurCanvasTypingTarget()
+    if (objectDragSuppressed(event.pointerId)) return
     if (wantsCanvasPan(event)) return
     isolateCanvasPointer(event, { preventGhostClick: true })
     if (event.button !== 0) return
@@ -1729,11 +1759,10 @@ export function InteractiveVenueMapEditor({
   function beginCanvasPan(event: React.PointerEvent) {
     event.preventDefault()
     capturePointer(event)
-    const start = clientToViewBox(event.clientX, event.clientY)
     elementDrag.current = {
       kind: "pan",
-      startX: start.x,
-      startY: start.y,
+      startX: event.clientX,
+      startY: event.clientY,
       origX: panRef.current.x,
       origY: panRef.current.y,
     }
@@ -2101,7 +2130,7 @@ export function InteractiveVenueMapEditor({
     }, { skipHistory })
   }
 
-  function closePolygonDraft() {
+  function closePolygonDraft(source?: { pointerId?: number }) {
     const points = polygonDraftRef.current
     if (points.length < 3) {
       toast.error("Trazá al menos 3 puntos para cerrar la zona.")
@@ -2112,6 +2141,13 @@ export function InteractiveVenueMapEditor({
       ensureZones(current).length,
       polygonFromCanvas(points),
     )
+    closingPolygonPointerId.current =
+      source?.pointerId ?? closingPolygonPointerId.current
+    suppressObjectDragUntil.current = nowMs() + POLYGON_CLOSE_DRAG_GUARD_MS
+    transformDrag.current = null
+    elementDrag.current = null
+    paintLive(null)
+    setTransformingKind(null)
     commit({ ...current, zones: [...ensureZones(current), created] })
     setPolygonDraft([])
     setPolygonCursor(null)
@@ -3056,6 +3092,7 @@ export function InteractiveVenueMapEditor({
     if (!zone?.id) return
     blurCanvasTypingTarget()
     if (preview) return
+    if (objectDragSuppressed(event.pointerId)) return
     if (wantsCanvasPan(event)) return
     isolateCanvasPointer(event, { preventGhostClick: true })
     if (event.button !== 0) return
@@ -3100,11 +3137,13 @@ export function InteractiveVenueMapEditor({
         y: Math.round(point.y * 10) / 10,
       }
       if (isCloseToFirstVertex(polygonDraft, next)) {
-        closePolygonDraft()
+        closePolygonDraft({ pointerId: event.pointerId })
         return
       }
       if (event.detail >= 2) {
-        if (polygonDraft.length >= 3) closePolygonDraft()
+        if (polygonDraft.length >= 3) {
+          closePolygonDraft({ pointerId: event.pointerId })
+        }
         return
       }
       setPolygonDraft((current) => [...current, next])
@@ -3191,10 +3230,14 @@ export function InteractiveVenueMapEditor({
     }
     const moving = elementDrag.current
     if (moving?.kind === "pan") {
-      const cursor = clientToViewBox(sample.clientX, sample.clientY)
+      const delta = clientDeltaToViewBox(
+        svgRef.current?.getScreenCTM(),
+        sample.clientX - moving.startX,
+        sample.clientY - moving.startY,
+      )
       const nextPan = {
-        x: moving.origX + (cursor.x - moving.startX),
-        y: moving.origY + (cursor.y - moving.startY),
+        x: moving.origX + delta.x,
+        y: moving.origY + delta.y,
       }
       panRef.current = nextPan
       setPan(nextPan)
@@ -3382,6 +3425,9 @@ export function InteractiveVenueMapEditor({
   }
 
   function onPointerUp(event: React.PointerEvent<SVGSVGElement>) {
+    if (closingPolygonPointerId.current === event.pointerId) {
+      closingPolygonPointerId.current = null
+    }
     if (pinchRef.current) return
     finishPointerGesture(event.shiftKey)
   }
@@ -3925,26 +3971,55 @@ export function InteractiveVenueMapEditor({
     !transformingKind &&
     !preview &&
     tool === "select"
-  const toolbarWorld =
-    showSelectionToolbar && transformBounds
-      ? {
-          x: transformBounds.x + transformBounds.width / 2,
-          y: transformBounds.y,
-          bottom: transformBounds.y + transformBounds.height,
-        }
-      : null
-  const toolbarTopCss = toolbarWorld
-    ? { x: toolbarWorld.x * zoom + pan.x, y: toolbarWorld.y * zoom + pan.y }
-    : null
-  const toolbarPlacement =
-    toolbarTopCss && toolbarTopCss.y < 52 ? "below" : "above"
-  const toolbarCss =
-    toolbarPlacement === "below" && toolbarWorld
-      ? {
-          x: toolbarWorld.x * zoom + pan.x,
-          y: toolbarWorld.bottom * zoom + pan.y,
-        }
-      : toolbarTopCss
+  useLayoutEffect(() => {
+    if (!showSelectionToolbar || !transformBounds) {
+      setToolbarCss((current) => (current ? null : current))
+      return
+    }
+    const svg = svgRef.current
+    const scene = sceneGroupRef.current
+    const canvas = canvasRef.current
+    if (!svg || !scene || !canvas) {
+      setToolbarCss((current) => (current ? null : current))
+      return
+    }
+    const ctm = scene.getScreenCTM()
+    const rect = canvas.getBoundingClientRect()
+    const midX = transformBounds.x + transformBounds.width / 2
+    const topScreen = svgUserToClient(svg, ctm, midX, transformBounds.y)
+    const bottomScreen = svgUserToClient(
+      svg,
+      ctm,
+      midX,
+      transformBounds.y + transformBounds.height,
+    )
+    if (!topScreen || !bottomScreen) {
+      setToolbarCss((current) => (current ? null : current))
+      return
+    }
+    const top = clientPointInContainer(topScreen, rect)
+    const bottom = clientPointInContainer(bottomScreen, rect)
+    const placement = top.y < 52 ? ("below" as const) : ("above" as const)
+    const next = placement === "below" ? bottom : top
+    setToolbarCss((current) => {
+      if (
+        current &&
+        current.placement === placement &&
+        Math.abs(current.x - next.x) < 0.5 &&
+        Math.abs(current.y - next.y) < 0.5
+      ) {
+        return current
+      }
+      return { x: next.x, y: next.y, placement }
+    })
+  }, [
+    liveTransform,
+    pan,
+    showSelectionToolbar,
+    svgViewBox,
+    transformBounds,
+    zoom,
+  ])
 
   const saveChangesButton = onSave ? (
     <Button
@@ -4776,7 +4851,7 @@ export function InteractiveVenueMapEditor({
             <VenueSelectionToolbar
               x={toolbarCss.x}
               y={toolbarCss.y}
-              placement={toolbarPlacement}
+              placement={toolbarCss.placement}
               locked={selectionLocked}
               fullyLocked={selectionFullyLocked}
               canGroup={selectedElementIds.length > 1}

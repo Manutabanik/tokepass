@@ -26,6 +26,8 @@ import {
   translateElements,
   zoomTowardCursor,
   viewBoxPointToWorld,
+  clientDeltaToViewBox,
+  clientPointInContainer,
   expandViewBoxToContainer,
   fitViewportToWorldBox,
   fitWorldInViewBox,
@@ -308,6 +310,18 @@ describe("venue-transform", () => {
     assert.equal(tight.side, "bottom")
     const roomy = rotationHandleAnchor({ x: 20, y: 80, width: 40, height: 24 }, 1)
     assert.equal(roomy.side, "top")
+  })
+
+  it("converts a CSS pan delta through the SVG screen scale", () => {
+    const delta = clientDeltaToViewBox({ a: 2, d: 2 } as DOMMatrix, 40, -20)
+    assert.equal(delta.x, 20)
+    assert.equal(delta.y, -10)
+  })
+
+  it("places a screen point relative to the canvas container", () => {
+    const local = clientPointInContainer({ x: 420, y: 180 }, { left: 100, top: 40 })
+    assert.equal(local.x, 320)
+    assert.equal(local.y, 140)
   })
 
   it("maps viewBox units to world only when the scene CTM is missing", () => {
