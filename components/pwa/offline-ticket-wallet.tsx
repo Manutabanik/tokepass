@@ -116,7 +116,7 @@ export function OfflineTicketWallet({
   const hasDisplayTickets = displayTickets.length > 0
 
   return (
-    <div className="space-y-4">
+    <div className="w-full overflow-hidden space-y-4">
       {showOfflineBanner ? (
         <div
           role="status"

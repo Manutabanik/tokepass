@@ -56,6 +56,8 @@ export type OfflineEventData = {
   orderCreatedAt?: string | null
   ticketType?: "standard" | "combo" | "extra"
   tierType?: string | null
+  groupId?: string | null
+  groupSlot?: number | null
 }
 
 export type OfflineTicketRecord = {
@@ -335,6 +337,8 @@ export function ticketToOfflineRecord(
       orderCreatedAt: ticket.orderCreatedAt,
       ticketType: ticket.ticketType,
       tierType: ticket.tierType,
+      groupId: ticket.groupId ?? null,
+      groupSlot: ticket.groupSlot ?? null,
     },
     status: ticket.status,
     qr_code: ticket.qrCode,
@@ -398,6 +402,8 @@ export function offlineRecordToTicket(record: OfflineTicketRecord): MyTicket {
     ),
     activeResaleListingId: record.event_data.activeResaleListingId ?? null,
     pendingTransfer: record.event_data.pendingTransfer ?? null,
+    groupId: record.event_data.groupId ?? null,
+    groupSlot: record.event_data.groupSlot ?? null,
     visualStatus: resolveTicketVisualStatus({
       pendingTransfer: record.event_data.pendingTransfer ?? null,
       activeResaleListingId: record.event_data.activeResaleListingId ?? null,

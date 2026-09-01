@@ -103,6 +103,10 @@ export type MyTicket = {
     id: string
     receiverEmail: string
   } | null
+  /** Bloque de mesa/combo (`tickets.group_id`). */
+  groupId?: string | null
+  /** Lugar dentro del bloque (`tickets.group_slot`). */
+  groupSlot?: number | null
 }
 
 type TicketRow = {
@@ -119,6 +123,8 @@ type TicketRow = {
   max_admissions: number
   admissions_used: number
   is_test?: boolean | null
+  group_id?: string | null
+  group_slot?: number | null
   event_seating_units: {
     label: string
     sector_name: string
@@ -275,7 +281,7 @@ async function loadMyTickets(options?: {
     "name, bonus_reward, day_id, price",
   )
   const ticketSelectWithDelivery =
-    `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, issuance_channel, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, delivery_mode, access_link, venues(name)), orders(status, created_at)`
+    `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, issuance_channel, max_admissions, admissions_used, is_test, group_id, group_slot, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbed}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, delivery_mode, access_link, venues(name)), orders(status, created_at)`
   const ticketSelectLegacy =
     `id, status, order_id, event_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, issuance_channel, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ${tierEmbedLegacy}, events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, venues(name)), orders(status, created_at)`
 
@@ -457,6 +463,11 @@ async function loadMyTickets(options?: {
         : ticket.orders
       )?.created_at ?? null,
       isTest: Boolean(ticket.is_test),
+      groupId: ticket.group_id?.trim() || null,
+      groupSlot:
+        typeof ticket.group_slot === "number" && Number.isFinite(ticket.group_slot)
+          ? Math.floor(ticket.group_slot)
+          : null,
       tierPrice: Number(ticket.ticket_tiers?.price ?? 0),
       isSponsoredByTokePass: Boolean(event.is_sponsored_by_tokepass),
       activeResaleListingId: null,

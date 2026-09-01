@@ -24,6 +24,7 @@ export function LivingTicketQR({
   size = 208,
   variant = "card",
   compact = false,
+  notice,
 }: {
   ticketId: string
   totpSecret?: string
@@ -31,6 +32,7 @@ export function LivingTicketQR({
   size?: number
   variant?: "card" | "scan"
   compact?: boolean
+  notice?: string
 }) {
   const secret = totpSecret?.trim() ?? ""
   const hasSecret = Boolean(secret)
@@ -177,8 +179,8 @@ export function LivingTicketQR({
         ) : (
           <p className="flex items-start justify-center gap-1.5 text-xs font-semibold leading-4 text-red-400">
             <ShieldAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-            Este código se actualiza automáticamente. No hagas capturas de
-            pantalla.
+            {notice ??
+              "El código se actualiza automáticamente. Capturas de pantalla no válidas"}
           </p>
         )}
       </div>

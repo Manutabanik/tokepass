@@ -18,7 +18,7 @@ import {
   LivingCheckoutExtraCard,
   LivingStoreCard,
 } from "@/components/public/living-store-card"
-import { LivingTicketCard } from "@/components/public/living-ticket-card"
+import { WalletAccessBlockCard } from "@/components/account/wallet-access-block"
 import { Button } from "@/components/ui/button"
 import {
   Accordion,
@@ -29,8 +29,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatEventDay, formatEventTime } from "@/lib/format"
 import {
+  groupWalletAccessBlocks,
   groupWalletTicketsByEventOrders,
-  ticketOrdinalInGroup,
   walletPurchaseHeading,
   type WalletOrderBucket,
 } from "@/lib/ticket-wallet"
@@ -107,11 +107,7 @@ function EmptyState({
 
 function OrderTicketList({
   tickets,
-  userId,
   offline,
-  appleWalletEnabled,
-  googleWalletEnabled,
-  showQr,
 }: {
   tickets: MyTicket[]
   userId: string
@@ -120,20 +116,12 @@ function OrderTicketList({
   googleWalletEnabled: boolean
   showQr: boolean
 }) {
+  const blocks = groupWalletAccessBlocks(tickets)
   return (
-    <ul className="space-y-2">
-      {tickets.map((ticket) => (
-        <li key={ticket.id}>
-          <LivingTicketCard
-            ticket={ticket}
-            userId={userId}
-            showQr={showQr && !ticket.pendingTransfer}
-            offline={offline}
-            appleWalletEnabled={appleWalletEnabled}
-            googleWalletEnabled={googleWalletEnabled}
-            variant="compact"
-            sequenceLabel={ticketOrdinalInGroup(tickets, ticket).label}
-          />
+    <ul className="w-full space-y-2 overflow-hidden">
+      {blocks.map((block) => (
+        <li key={block.id} className="w-full overflow-hidden">
+          <WalletAccessBlockCard block={block} offline={offline} />
         </li>
       ))}
     </ul>
@@ -243,7 +231,7 @@ function EventGroupHeader({
   showEventLink?: boolean
 }) {
   return (
-    <div className="flex w-full flex-wrap items-center gap-3">
+    <div className="flex w-full min-w-0 flex-wrap items-center gap-3 overflow-hidden">
       <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-muted ring-1 ring-border">
         {flyerUrl ? (
           <Image
@@ -263,7 +251,7 @@ function EventGroupHeader({
         <h3 className="truncate text-lg font-bold tracking-tight text-foreground">
           {title}
         </h3>
-        <p className="mt-0.5 text-sm text-muted-foreground">
+        <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
           {formatEventDay(date)} · {formatEventTime(date)}
           {location ? ` · ${location}` : null}
         </p>
@@ -330,7 +318,7 @@ function ExtrasUpsellCard({
 }
 
 const tabTriggerClass =
-  "h-10 min-w-[7.5rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-medium text-muted-foreground transition-all hover:bg-muted/80 hover:text-foreground data-active:border-border data-active:bg-background data-active:text-foreground data-active:shadow-sm sm:min-w-0 sm:px-4 sm:text-sm"
+  "h-10 w-full min-w-0 items-center justify-center gap-1 rounded-xl px-2 text-[11px] font-medium text-muted-foreground transition-all hover:bg-muted/80 hover:text-foreground data-active:border-border data-active:bg-background data-active:text-foreground data-active:shadow-sm sm:px-4 sm:text-sm"
 
 const tabCountClass =
   "rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-foreground ring-1 ring-inset ring-border"
@@ -398,11 +386,11 @@ export function TicketWallet({
   }, [upcomingGroups, extraGroups, storeOffers])
 
   return (
-    <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full gap-6">
-      <div className="-mx-1 overflow-x-auto whitespace-nowrap px-1 pb-1 scrollbar-none md:mx-0 md:overflow-visible md:whitespace-normal">
+    <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full overflow-hidden gap-6">
+      <div className="w-full overflow-hidden pb-1">
         <TabsList
           aria-label="Secciones de la billetera"
-          className="inline-flex w-max min-w-full flex-nowrap items-stretch justify-start gap-1 whitespace-nowrap rounded-2xl border border-border bg-muted/40 p-1.5 shadow-lg shadow-black/10 backdrop-blur-md group-data-horizontal/tabs:h-auto sm:w-fit sm:min-w-0 sm:self-start md:flex-wrap md:justify-start lg:justify-start"
+          className="grid h-auto w-full grid-cols-3 items-stretch gap-1 rounded-2xl border border-border bg-muted/40 p-1.5 shadow-lg shadow-black/10 backdrop-blur-md"
         >
           <TabsTrigger value="upcoming" className={tabTriggerClass}>
             <Ticket className="hidden size-3.5 sm:block" aria-hidden="true" />
@@ -436,7 +424,7 @@ export function TicketWallet({
               <AccordionItem
                 key={group.eventId}
                 value={group.eventId}
-                className="overflow-hidden rounded-3xl border border-border/80 bg-card/80 shadow-lg shadow-black/10 backdrop-blur-md not-last:border-b-0"
+                className="w-full overflow-hidden rounded-3xl border border-border/80 bg-card/80 shadow-lg shadow-black/10 backdrop-blur-md not-last:border-b-0"
               >
                 <AccordionTrigger className="px-4 py-4 hover:no-underline sm:px-5">
                   <EventGroupHeader

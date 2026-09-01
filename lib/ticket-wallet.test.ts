@@ -2,11 +2,14 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  groupWalletAccessBlocks,
   groupWalletTicketsByEventOrders,
   ticketAdmissionTitle,
   ticketExactSeatLabel,
   ticketOrdinalInGroup,
   ticketOrdinalLabel,
+  walletAccessBlockTitle,
+  walletChildPlaceLabel,
   walletOrderKey,
   walletPurchaseHeading,
 } from "@/lib/ticket-wallet"
@@ -172,5 +175,108 @@ describe("wallet order grouping", () => {
       }),
       "Compra del 1 de agosto · TP-ABCD1234 · 4 entradas",
     )
+  })
+})
+
+describe("wallet access blocks", () => {
+  const base = {
+    tierName: "Mesa VIP",
+    maxAdmissions: 1,
+    createdAt: "2026-08-01T10:00:00.000Z",
+    seatingLayoutType: "table_combo" as const,
+  }
+
+  it("groups table seats from the same purchase into one parent", () => {
+    const blocks = groupWalletAccessBlocks([
+      {
+        ...base,
+        id: "a",
+        orderId: "ord-1",
+        seatingLabel: "Mesa 05",
+        groupSlot: 1,
+      },
+      {
+        ...base,
+        id: "b",
+        orderId: "ord-1",
+        seatingLabel: "Mesa 05",
+        groupSlot: 2,
+      },
+    ])
+    assert.equal(blocks.length, 1)
+    assert.equal(blocks[0]?.kind, "group")
+    assert.equal(blocks[0]?.accessCount, 2)
+    assert.equal(blocks[0]?.title, "Mesa VIP 05 - 2 Accesos")
+    assert.equal(walletChildPlaceLabel(blocks[0]!.tickets[0]!, 0, 2), "Lugar 1")
+  })
+
+  it("groups a 2x1 combo by order and tier", () => {
+    const blocks = groupWalletAccessBlocks([
+      {
+        id: "a",
+        orderId: "ord-1",
+        tierName: "Promo 2x1",
+        ticketType: "combo",
+        maxAdmissions: 1,
+        createdAt: "2026-08-01T10:00:00.000Z",
+      },
+      {
+        id: "b",
+        orderId: "ord-1",
+        tierName: "Promo 2x1",
+        ticketType: "combo",
+        maxAdmissions: 1,
+        createdAt: "2026-08-01T10:00:01.000Z",
+      },
+    ])
+    assert.equal(blocks.length, 1)
+    assert.equal(blocks[0]?.kind, "group")
+    assert.equal(walletAccessBlockTitle(blocks[0]!.tickets), "Promo 2x1 - 2 Accesos")
+  })
+
+  it("keeps two general tickets from the same cart as singles", () => {
+    const blocks = groupWalletAccessBlocks([
+      {
+        id: "a",
+        orderId: "ord-1",
+        tierName: "General",
+        ticketType: "standard",
+        maxAdmissions: 1,
+        createdAt: "2026-08-01T10:00:00.000Z",
+      },
+      {
+        id: "b",
+        orderId: "ord-1",
+        tierName: "General",
+        ticketType: "standard",
+        maxAdmissions: 1,
+        createdAt: "2026-08-01T10:00:01.000Z",
+      },
+    ])
+    assert.equal(blocks.length, 2)
+    assert.equal(blocks.every((block) => block.kind === "single"), true)
+  })
+
+  it("uses group_id even when seats have different labels", () => {
+    const blocks = groupWalletAccessBlocks([
+      {
+        id: "a",
+        groupId: "g-1",
+        tierName: "Combo",
+        maxAdmissions: 1,
+        createdAt: "2026-08-01T10:00:00.000Z",
+        seatingLabel: "Pase A",
+      },
+      {
+        id: "b",
+        groupId: "g-1",
+        tierName: "Combo",
+        maxAdmissions: 1,
+        createdAt: "2026-08-01T10:00:01.000Z",
+        seatingLabel: "Pase B",
+      },
+    ])
+    assert.equal(blocks.length, 1)
+    assert.equal(blocks[0]?.id, "gid:g-1")
   })
 })

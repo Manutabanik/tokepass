@@ -203,3 +203,122 @@ export function groupWalletTicketsByEventOrders<T extends WalletGroupableTicket>
       new Date(left.eventDate).getTime() - new Date(right.eventDate).getTime(),
   )
 }
+
+export type WalletBlockableTicket = TicketSeatSource & {
+  id: string
+  orderId?: string | null
+  groupId?: string | null
+  groupSlot?: number | null
+  tierName: string
+  ticketType?: string | null
+  tierType?: string | null
+  maxAdmissions: number
+  createdAt: string
+}
+
+export type WalletAccessBlock<T> = {
+  id: string
+  kind: "group" | "single"
+  title: string
+  accessCount: number
+  tickets: T[]
+}
+
+export function walletAccessBlockKey(ticket: WalletBlockableTicket): string {
+  const groupId = ticket.groupId?.trim()
+  if (groupId) return `gid:${groupId}`
+
+  const order = ticket.orderId?.trim() || `ticket:${ticket.id}`
+  if (ticket.seatingLayoutType === "table_combo") {
+    const place = ticket.seatingLabel?.trim()
+    if (place) {
+      return `table:${order}:${place.toLocaleUpperCase("es-AR")}`
+    }
+  }
+
+  const comboLike =
+    ticket.ticketType === "combo" ||
+    ticket.tierType === "bundle" ||
+    ticket.maxAdmissions > 1
+  if (comboLike) {
+    return `combo:${order}:${ticket.tierName.trim().toLocaleUpperCase("es-AR")}`
+  }
+
+  return `single:${ticket.id}`
+}
+
+export function walletAccessCount(tickets: WalletBlockableTicket[]): number {
+  const fromTickets = tickets.length
+  const fromAdmit = tickets.reduce(
+    (max, ticket) => Math.max(max, Math.floor(ticket.maxAdmissions) || 1),
+    1,
+  )
+  return Math.max(fromTickets, fromAdmit)
+}
+
+export function walletAccessBlockTitle(
+  tickets: WalletBlockableTicket[],
+): string {
+  const first = tickets[0]
+  if (!first) return "Entrada"
+  const count = walletAccessCount(tickets)
+  const accesses = count === 1 ? "1 Acceso" : `${count} Accesos`
+  const seat = ticketExactSeatLabel(first)
+  const tier = first.tierName.trim() || "Entrada"
+  if (seat) {
+    const mesaNumber = seat.replace(/^mesa\s+/i, "").trim()
+    if (/^mesa\b/i.test(seat) && mesaNumber && mesaNumber !== seat) {
+      return `${tier} ${mesaNumber} - ${accesses}`
+    }
+    if (tier && !sameSeatText(seat, tier) && !includesLoose(seat, tier)) {
+      return `${tier} ${seat} - ${accesses}`
+    }
+    return `${seat} - ${accesses}`
+  }
+  return `${tier} - ${accesses}`
+}
+
+export function walletChildPlaceLabel(
+  ticket: WalletBlockableTicket,
+  index: number,
+  total: number,
+): string {
+  const slot = Math.max(0, Math.floor(ticket.groupSlot ?? 0))
+  if (slot > 0) return `Lugar ${slot}`
+  if (ticket.seatingLayoutType === "numbered_seat") {
+    const seat = ticketExactSeatLabel(ticket)
+    if (seat) return seat
+  }
+  if (total <= 1) return ticket.tierName.trim() || "Entrada"
+  return `Lugar ${index + 1}`
+}
+
+export function groupWalletAccessBlocks<T extends WalletBlockableTicket>(
+  tickets: T[],
+): WalletAccessBlock<T>[] {
+  const buckets = new Map<string, T[]>()
+  for (const ticket of tickets) {
+    const key = walletAccessBlockKey(ticket)
+    const list = buckets.get(key)
+    if (list) list.push(ticket)
+    else buckets.set(key, [ticket])
+  }
+
+  return [...buckets.entries()]
+    .map(([id, items]) => {
+      const sorted = items.slice().sort((left, right) => {
+        const slot = (left.groupSlot ?? 0) - (right.groupSlot ?? 0)
+        if (slot !== 0) return slot
+        const time = left.createdAt.localeCompare(right.createdAt)
+        return time !== 0 ? time : left.id.localeCompare(right.id)
+      })
+      return {
+        id,
+        kind: sorted.length > 1 ? ("group" as const) : ("single" as const),
+        title: walletAccessBlockTitle(sorted),
+        accessCount: walletAccessCount(sorted),
+        tickets: sorted,
+      }
+    })
+    .sort((left, right) => left.title.localeCompare(right.title, "es"))
+}

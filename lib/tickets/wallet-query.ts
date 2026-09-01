@@ -17,7 +17,7 @@ export function isMissingTicketWalletColumnError(
   message: string | null | undefined,
 ): boolean {
   if (!message) return false
-  return /delivery_mode|access_link|schema cache|PGRST204|42703|bonus_reward|day_id|social_share_image_url|is_sponsored_by_tokepass|ends_at|checkout_message|issuance_channel|ticket_type|tier_type/i.test(
+  return /delivery_mode|access_link|schema cache|PGRST204|42703|bonus_reward|day_id|social_share_image_url|is_sponsored_by_tokepass|ends_at|checkout_message|issuance_channel|ticket_type|tier_type|group_id|group_slot/i.test(
     message,
   )
 }

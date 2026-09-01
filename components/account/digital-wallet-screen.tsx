@@ -83,8 +83,8 @@ export async function DigitalWalletScreen({
   const validCount = countActiveTickets(initialTickets)
 
   return (
-    <section className="space-y-8">
-      <header>
+    <section className="w-full overflow-hidden space-y-8">
+      <header className="min-w-0">
         <p className="mb-3 inline-block rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 font-mono text-xs uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400">
           Mis entradas
         </p>
