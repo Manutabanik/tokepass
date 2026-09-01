@@ -118,7 +118,8 @@ const VenueElementShape = memo(function VenueElementShape({
     element.type !== "vip_chair" &&
     element.type !== "infrastructure"
   const shape = resolveVenueShapeType(element)
-  const liveHit = interactive && hitPadding > 0
+  const acceptHits = interactive && (!soldOut || allowSoldHits)
+  const liveHit = acceptHits && hitPadding > 0
   const padW = Math.max(8, element.width || 12)
   const padH = Math.max(8, element.height || 12)
   const padR = Math.max(8, Math.min(padW, padH) / 2)
@@ -146,12 +147,12 @@ const VenueElementShape = memo(function VenueElementShape({
             : undefined
       }
       onPointerDown={
-        !delegateEvents && interactive && !soldOut && !selectOnPointerUp
+        !delegateEvents && acceptHits && !selectOnPointerUp
           ? (event) => onElementPointerDown?.(event, element)
           : undefined
       }
       onPointerUp={
-        !delegateEvents && interactive && selectOnPointerUp
+        !delegateEvents && acceptHits && selectOnPointerUp
           ? (event) => {
               isolateCanvasPointer(event)
               onElementPointerUp?.(event, element)
@@ -159,7 +160,7 @@ const VenueElementShape = memo(function VenueElementShape({
           : undefined
       }
       onClick={
-        !delegateEvents && interactive && !soldOut
+        !delegateEvents && acceptHits
           ? (event) => {
               isolateCanvasPointer(event)
               event.preventDefault()
@@ -167,22 +168,22 @@ const VenueElementShape = memo(function VenueElementShape({
           : undefined
       }
       onMouseEnter={
-        !delegateEvents && interactive && !soldOut
+        !delegateEvents && acceptHits
           ? (event) => onElementPointerEnter?.(event, element)
           : undefined
       }
       onMouseLeave={
-        !delegateEvents && interactive && !soldOut
+        !delegateEvents && acceptHits
           ? (event) => onElementPointerLeave?.(event, element)
           : undefined
       }
       onContextMenu={
-        !delegateEvents && interactive && !soldOut
+        !delegateEvents && acceptHits
           ? (event) => onElementContextMenu?.(event, element)
           : undefined
       }
       onDoubleClick={
-        !delegateEvents && interactive && !soldOut
+        !delegateEvents && acceptHits
           ? (event) => {
               isolateCanvasPointer(event)
               event.preventDefault()

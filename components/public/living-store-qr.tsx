@@ -9,7 +9,6 @@ import {
   STORE_QR_ROTATION_MS,
   encodeLivingStorePayload,
   storeQrRemainingMs,
-  storeTimestampBlock,
 } from "@/lib/store/living-store-payload"
 import { cn } from "@/lib/utils"
 
@@ -26,37 +25,18 @@ export function LivingStoreQR({
 }) {
   const secret = token.trim()
   const isScan = variant === "scan"
-  const [payload, setPayload] = useState(() =>
-    secret ? encodeLivingStorePayload(secret) : "",
-  )
-  const [remainingSeconds, setRemainingSeconds] = useState(() =>
-    Math.ceil(storeQrRemainingMs() / 1000),
-  )
-  const [progress, setProgress] = useState(() => {
-    const remaining = storeQrRemainingMs()
-    return ((STORE_QR_ROTATION_MS - remaining) / STORE_QR_ROTATION_MS) * 100
-  })
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  const remaining = storeQrRemainingMs(nowMs)
+  const remainingSeconds = Math.ceil(remaining / 1000)
+  const progress =
+    ((STORE_QR_ROTATION_MS - remaining) / STORE_QR_ROTATION_MS) * 100
+  const payload = secret ? encodeLivingStorePayload(secret, nowMs) : ""
 
   useEffect(() => {
-    if (!secret) {
-      setPayload("")
-      return
-    }
-
-    let lastBlock = storeTimestampBlock()
-    setPayload(encodeLivingStorePayload(secret))
-
+    if (!secret) return
     const intervalId = window.setInterval(() => {
-      const remaining = storeQrRemainingMs()
-      setRemainingSeconds(Math.ceil(remaining / 1000))
-      setProgress(((STORE_QR_ROTATION_MS - remaining) / STORE_QR_ROTATION_MS) * 100)
-      const current = storeTimestampBlock()
-      if (current !== lastBlock) {
-        lastBlock = current
-        setPayload(encodeLivingStorePayload(secret))
-      }
+      setNowMs(Date.now())
     }, 250)
-
     return () => window.clearInterval(intervalId)
   }, [secret])
 

@@ -228,7 +228,6 @@ import {
   clampVenueZoom,
   elementAabb,
   expandViewBoxToContainer,
-  fitViewportToWorldBox,
   flipSelectedElements,
   handlePoint,
   liveScaleAxes,
@@ -718,6 +717,12 @@ export function InteractiveVenueMapEditor({
     () => pruneVenueMapSelection(selection, map),
     [map, selection],
   )
+  const vertexEditActiveId =
+    tool === "select" &&
+    liveSelection?.kind === "zone" &&
+    liveSelection.id === vertexEditZoneId
+      ? vertexEditZoneId
+      : null
   const previewRef = useRef(preview)
   useLayoutEffect(() => {
     isolationIdRef.current = isolationId
@@ -736,7 +741,7 @@ export function InteractiveVenueMapEditor({
     occupancyRef.current = occupancyBySeatId
     loadedUpdatedAtRef.current = loadedUpdatedAt
     magneticSnapRef.current = magneticSnap
-    vertexEditZoneIdRef.current = vertexEditZoneId
+    vertexEditZoneIdRef.current = vertexEditActiveId
   }, [
     isolationId,
     activeZoneId,
@@ -754,7 +759,7 @@ export function InteractiveVenueMapEditor({
     occupancyBySeatId,
     loadedUpdatedAt,
     magneticSnap,
-    vertexEditZoneId,
+    vertexEditActiveId,
   ])
   const panRef = useRef(pan)
   const zoomRef = useRef(zoom)
@@ -828,16 +833,6 @@ export function InteractiveVenueMapEditor({
     setIsolationId(null)
     setSelection(null)
   }, [occupancyBySeatId])
-  useEffect(() => {
-    if (!vertexEditZoneId) return
-    if (tool !== "select") {
-      setVertexEditZoneId(null)
-      return
-    }
-    if (liveSelection?.kind !== "zone" || liveSelection.id !== vertexEditZoneId) {
-      setVertexEditZoneId(null)
-    }
-  }, [liveSelection, tool, vertexEditZoneId])
   const [scaleHandle, setScaleHandle] = useState<ResizeHandle | null>(null)
   const compactChromeRef = useRef(compactChrome)
   const lassoModeRef = useRef(lassoMode)
@@ -2278,30 +2273,6 @@ export function InteractiveVenueMapEditor({
         ),
       },
       { skipHistory: true },
-    )
-  }
-
-  function enterZoneIsolation(zone: VenueMapZone) {
-    if (preview) return
-    if (toolRef.current === "polygon") return
-    abortTransientGestures()
-    if (!activeZoneIdRef.current) {
-      overviewViewportRef.current = {
-        pan: { ...panRef.current },
-        zoom: zoomRef.current,
-      }
-    }
-    setIsolationId(null)
-    setSeatEditMode(false)
-    setActiveZoneId(zone.id)
-    setSelection({ kind: "zone", id: zone.id })
-    const box = zoneCanvasAabb(zone)
-    if (!box) return
-    animateViewport(
-      fitViewportToWorldBox({
-        box,
-        viewBox: svgViewBoxRef.current,
-      }),
     )
   }
 
@@ -4602,6 +4573,13 @@ export function InteractiveVenueMapEditor({
     }
   }, [])
 
+  const applyViewportRef = useRef(applyViewport)
+  const abortTransientGesturesRef = useRef(abortTransientGestures)
+  useLayoutEffect(() => {
+    applyViewportRef.current = applyViewport
+    abortTransientGesturesRef.current = abortTransientGestures
+  })
+
   useEffect(() => {
     const el = canvasRef.current
     if (!el) return
@@ -4612,7 +4590,7 @@ export function InteractiveVenueMapEditor({
         Number((zoomRef.current * factor).toFixed(3)),
       )
       if (nextZoom === zoomRef.current) return
-      applyViewport(
+      applyViewportRef.current(
         zoomTowardCursor({
           pan: panRef.current,
           zoom: zoomRef.current,
@@ -4643,7 +4621,7 @@ export function InteractiveVenueMapEditor({
       const rect = node.getBoundingClientRect()
       if (rect.width < 2 || rect.height < 2) return
       if (editorGestureIsActive()) {
-        abortTransientGestures()
+        abortTransientGesturesRef.current()
       }
       const nextBox = expandViewBoxToContainer({
         containerWidth: rect.width,
@@ -4661,7 +4639,7 @@ export function InteractiveVenueMapEditor({
         panRef.current,
         zoomRef.current,
       )
-      applyViewport({
+      applyViewportRef.current({
         zoom: zoomRef.current,
         pan: panToKeepWorldAtViewCenter(
           worldCenter,
@@ -4821,14 +4799,12 @@ export function InteractiveVenueMapEditor({
     tool === "select"
   useLayoutEffect(() => {
     if (!showSelectionToolbar || !transformBounds) {
-      setToolbarCss((current) => (current ? null : current))
       return
     }
     const svg = svgRef.current
     const scene = sceneGroupRef.current
     const canvas = canvasRef.current
     if (!svg || !scene || !canvas) {
-      setToolbarCss((current) => (current ? null : current))
       return
     }
     const ctm = scene.getScreenCTM()
@@ -4842,24 +4818,26 @@ export function InteractiveVenueMapEditor({
       transformBounds.y + transformBounds.height,
     )
     if (!topScreen || !bottomScreen) {
-      setToolbarCss((current) => (current ? null : current))
       return
     }
     const top = clientPointInContainer(topScreen, rect)
     const bottom = clientPointInContainer(bottomScreen, rect)
     const placement = top.y < 52 ? ("below" as const) : ("above" as const)
     const next = placement === "below" ? bottom : top
-    setToolbarCss((current) => {
-      if (
-        current &&
-        current.placement === placement &&
-        Math.abs(current.x - next.x) < 0.5 &&
-        Math.abs(current.y - next.y) < 0.5
-      ) {
-        return current
-      }
-      return { x: next.x, y: next.y, placement }
+    const frame = window.requestAnimationFrame(() => {
+      setToolbarCss((current) => {
+        if (
+          current &&
+          current.placement === placement &&
+          Math.abs(current.x - next.x) < 0.5 &&
+          Math.abs(current.y - next.y) < 0.5
+        ) {
+          return current
+        }
+        return { x: next.x, y: next.y, placement }
+      })
     })
+    return () => window.cancelAnimationFrame(frame)
   }, [
     liveTransform,
     pan,
@@ -5132,7 +5110,7 @@ export function InteractiveVenueMapEditor({
                     ? undefined
                     : (zone) => {
                         setIsolationId(null)
-                        if (vertexEditZoneId && vertexEditZoneId !== zone.id) {
+                        if (vertexEditActiveId && vertexEditActiveId !== zone.id) {
                           exitZoneVertexEdit()
                         }
                         setSelection({ kind: "zone", id: zone.id })
@@ -5315,7 +5293,7 @@ export function InteractiveVenueMapEditor({
                           }
                     }
                     zoom={zoom}
-                    editVertices={vertexEditZoneId === selectedZone.id}
+                    editVertices={vertexEditActiveId === selectedZone.id}
                     onVertexPointerDown={beginVertexDrag}
                     onDoubleClick={
                       tool === "polygon"
@@ -5348,7 +5326,7 @@ export function InteractiveVenueMapEditor({
                 {transformBounds &&
                 !geometryLocked &&
                 objectHitsEnabled &&
-                !vertexEditZoneId ? (
+                !vertexEditActiveId ? (
                   <SvgTransformBox
                     bounds={transformBounds}
                     zoom={zoom}
@@ -5821,7 +5799,7 @@ export function InteractiveVenueMapEditor({
                   type="button"
                   size="sm"
                   className="mt-3"
-                  onClick={closePolygonDraft}
+                  onClick={() => closePolygonDraft()}
                 >
                   <Send className="size-4" />
                   Cerrar zona ({polygonDraft.length} puntos)
@@ -5834,10 +5812,10 @@ export function InteractiveVenueMapEditor({
             <div className="space-y-3">
               <Button
                 type="button"
-                variant={vertexEditZoneId === selectedZone.id ? "secondary" : "outline"}
+                variant={vertexEditActiveId === selectedZone.id ? "secondary" : "outline"}
                 className="w-full"
                 onClick={() => {
-                  if (vertexEditZoneId === selectedZone.id) {
+                  if (vertexEditActiveId === selectedZone.id) {
                     exitZoneVertexEdit()
                     return
                   }
@@ -5845,11 +5823,11 @@ export function InteractiveVenueMapEditor({
                 }}
               >
                 <CircleDot className="size-4" />
-                {vertexEditZoneId === selectedZone.id
+                {vertexEditActiveId === selectedZone.id
                   ? "Listo con los nodos"
                   : "Editar nodos"}
               </Button>
-              {vertexEditZoneId === selectedZone.id ? (
+              {vertexEditActiveId === selectedZone.id ? (
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   Arrastrá cada círculo para mover ese vértice. El resto de la
                   zona no se transforma.

@@ -125,11 +125,7 @@ function seatState(
   if (live === "occupied" || live === "blocked" || live === "held") {
     return live
   }
-  if (
-    seat.status === "blocked" ||
-    seat.status === "sold" ||
-    seat.status === "locked"
-  ) {
+  if (seat.status === "blocked") {
     return "blocked"
   }
   if (seat.status === "reserved") return "held"
@@ -415,7 +411,7 @@ export function RoundTableSymbol({
               onSeatDoubleClick,
               onSeatPointerUp,
               locked,
-              parentIds[0],
+              parentIds[0] ?? undefined,
             )}
             <circle
               cx={x}
@@ -431,7 +427,7 @@ export function RoundTableSymbol({
                 onSeatDoubleClick,
                 locked,
                 onSeatPointerUp,
-                parentIds[0],
+                parentIds[0] ?? undefined,
               )}
             />
           </g>
@@ -515,7 +511,7 @@ export function LongTableSymbol({
             onSeatDoubleClick,
             onSeatPointerUp,
             locked,
-            parentIds[0],
+            parentIds[0] ?? undefined,
           )}
           <circle
             cx={x}
@@ -531,7 +527,7 @@ export function LongTableSymbol({
               onSeatDoubleClick,
               locked,
               onSeatPointerUp,
-              parentIds[0],
+              parentIds[0] ?? undefined,
             )}
           />
         </g>
@@ -687,7 +683,7 @@ export function VipBoxSymbol({
               onSeatDoubleClick,
               onSeatPointerUp,
               locked,
-              parentIds[0],
+              parentIds[0] ?? undefined,
             )}
             <circle
               cx={x}
@@ -703,7 +699,7 @@ export function VipBoxSymbol({
                 onSeatDoubleClick,
                 locked,
                 onSeatPointerUp,
-                parentIds[0],
+                parentIds[0] ?? undefined,
               )}
             />
           </g>

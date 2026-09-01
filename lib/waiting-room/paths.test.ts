@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  isAuthRefreshBypassPath,
   isNextServerActionRequest,
   isOrganizerEventPreviewPath,
   isWaitingRoomBypassPath,
@@ -26,6 +27,11 @@ describe("waiting-room paths", () => {
     assert.equal(isOrganizerEventPreviewPath("/events/preview/abc"), true)
     assert.equal(resolveProtectedEventKey("/events/preview/abc"), null)
     assert.equal(resolveProtectedEventKey("/events/preview"), null)
+  })
+
+  it("does not refresh the session on the OAuth callback (keeps the PKCE verifier)", () => {
+    assert.equal(isAuthRefreshBypassPath("/auth/callback"), true)
+    assert.equal(isAuthRefreshBypassPath("/login"), false)
   })
 
   it("does not gate the virtual queue or status API", () => {

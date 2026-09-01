@@ -27,6 +27,9 @@ export function isWaitingRoomBypassPath(pathname: string): boolean {
 }
 
 export function isAuthRefreshBypassPath(pathname: string): boolean {
+  if (pathname === "/auth/callback" || pathname.startsWith("/auth/callback/")) {
+    return true
+  }
   return isWaitingRoomBypassPath(pathname)
 }
 

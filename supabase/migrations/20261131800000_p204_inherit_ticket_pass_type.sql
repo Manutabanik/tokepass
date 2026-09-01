@@ -63,10 +63,10 @@ begin
   end if;
 
   new.ticket_type := public.resolve_ticket_pass_type(
-    v_tier.tier_type,
-    v_tier.ticket_type,
-    v_tier.category,
-    v_tier.name
+    v_tier.tier_type::text,
+    v_tier.ticket_type::text,
+    v_tier.category::text,
+    v_tier.name::text
   );
   return new;
 end;
@@ -79,18 +79,18 @@ for each row
 execute function public.inherit_ticket_pass_type();
 
 update public.tickets as t
-set ticket_type = public.resolve_ticket_pass_type(
-  tt.tier_type,
-  tt.ticket_type,
-  tt.category,
-  tt.name
-)
-from public.ticket_tiers as tt
-where t.tier_id = tt.id
+set ticket_type = resolved.pass_type
+from (
+  select
+    tt.id,
+    public.resolve_ticket_pass_type(
+      tt.tier_type::text,
+      tt.ticket_type::text,
+      tt.category::text,
+      tt.name::text
+    ) as pass_type
+  from public.ticket_tiers as tt
+) as resolved
+where t.tier_id = resolved.id
   and coalesce(t.ticket_type, 'admission') = 'admission'
-  and public.resolve_ticket_pass_type(
-    tt.tier_type,
-    tt.ticket_type,
-    tt.category,
-    tt.name
-  ) is distinct from 'admission';
+  and resolved.pass_type is distinct from 'admission';

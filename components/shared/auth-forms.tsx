@@ -133,7 +133,11 @@ export function AuthForms({
   const [email, setEmail] = useState("")
   const [otpCode, setOtpCode] = useState("")
   const [magicState, magicAction] = useActionState(
-    signInWithMagicLink,
+    async (previous: AuthActionState, formData: FormData) => {
+      const result = await signInWithMagicLink(previous, formData)
+      if (result.success) setIsOtpSent(true)
+      return result
+    },
     initialState,
   )
   const [otpState, otpAction] = useActionState(verifyEmailOtp, initialState)
@@ -143,10 +147,6 @@ export function AuthForms({
       : (initialError ?? null)
   const safeNext =
     nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : null
-
-  useEffect(() => {
-    if (magicState.success) setIsOtpSent(true)
-  }, [magicState.success])
 
   return (
     <div className="relative z-10 w-full max-w-md rounded-3xl border border-border bg-card/95 p-8 text-card-foreground shadow-2xl shadow-zinc-200/60 backdrop-blur-xl dark:shadow-black/40 sm:p-10">
