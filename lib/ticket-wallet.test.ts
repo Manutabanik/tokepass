@@ -11,6 +11,7 @@ import {
   walletAccessBlockExpandLabel,
   walletAccessBlockTitle,
   walletChildPlaceLabel,
+  walletQrModalTitle,
   walletOrderKey,
   walletPurchaseHeading,
 } from "@/lib/ticket-wallet"
@@ -378,5 +379,27 @@ describe("wallet access blocks", () => {
       "Ver los 8 lugares de esta mesa",
     )
     assert.equal(walletAccessBlockExpandLabel(8, true), "Ocultar lugares")
+  })
+
+  it("titles the QR modal with table and place", () => {
+    assert.equal(
+      walletQrModalTitle(
+        {
+          seatingLabel: "Tablón 08",
+          seatingLayoutType: "table_combo",
+          groupSlot: 3,
+          tierName: "Grada Amarilla",
+        },
+        "Silla 3",
+      ),
+      "Tablón 08 - Lugar 3",
+    )
+    assert.equal(
+      walletQrModalTitle(
+        { tierName: "General", seatingLayoutType: null },
+        "General",
+      ),
+      "General",
+    )
   })
 })

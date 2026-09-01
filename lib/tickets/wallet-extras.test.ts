@@ -2,10 +2,12 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  groupWalletExtraUnits,
   inferCheckoutExtraCategory,
   isWalletCheckoutExtra,
   walletAdmissionTickets,
   walletCheckoutExtras,
+  walletExtraBundleTitle,
 } from "./wallet-extras"
 
 describe("wallet extras routing", () => {
@@ -48,5 +50,60 @@ describe("wallet extras routing", () => {
     assert.equal(inferCheckoutExtraCategory("Cerveza IPA"), "drinks")
     assert.equal(inferCheckoutExtraCategory("Estacionamiento VIP"), "parking")
     assert.equal(inferCheckoutExtraCategory("Meet & Greet"), "upgrades")
+  })
+})
+
+describe("wallet extra bundles", () => {
+  it("titles a consolidated extra with the quantity", () => {
+    assert.equal(walletExtraBundleTitle("Estacionamiento", 2), "Estacionamiento (x2)")
+    assert.equal(
+      walletExtraBundleTitle("Consumición de Barra", 101),
+      "Consumición de Barra (x101)",
+    )
+    assert.equal(walletExtraBundleTitle("Cerveza", 1), "Cerveza")
+  })
+
+  it("groups identical extras from the same order", () => {
+    const bundles = groupWalletExtraUnits([
+      {
+        id: "a",
+        orderId: "ord-1",
+        productKey: "item:parking",
+        title: "Estacionamiento",
+      },
+      {
+        id: "b",
+        orderId: "ord-1",
+        productKey: "item:parking",
+        title: "Estacionamiento",
+      },
+      {
+        id: "c",
+        orderId: "ord-1",
+        productKey: "item:beer",
+        title: "Cerveza",
+      },
+      {
+        id: "d",
+        orderId: "ord-2",
+        productKey: "item:parking",
+        title: "Estacionamiento",
+      },
+    ])
+    assert.equal(bundles.length, 3)
+    const parking = bundles.find((bundle) => bundle.count === 2)
+    assert.equal(parking?.title, "Estacionamiento (x2)")
+    assert.deepEqual(
+      parking?.items.map((item) => item.id),
+      ["a", "b"],
+    )
+  })
+
+  it("does not merge extras without an order id", () => {
+    const bundles = groupWalletExtraUnits([
+      { id: "a", orderId: null, productKey: "item:beer", title: "Cerveza" },
+      { id: "b", orderId: null, productKey: "item:beer", title: "Cerveza" },
+    ])
+    assert.equal(bundles.length, 2)
   })
 })

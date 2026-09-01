@@ -4,19 +4,16 @@ import { LoaderCircle, QrCode, Send, Tag, Undo2 } from "lucide-react"
 import { useState } from "react"
 
 import type { MyTicket } from "@/app/actions/tickets"
-import { LivingTicketQR } from "@/components/public/living-ticket-qr"
+import { QrScanLightbox } from "@/components/public/qr-scan-lightbox"
 import { ResaleConfirmDialog } from "@/components/public/resale-confirm-dialog"
-import { StaticSignedQR } from "@/components/public/static-signed-qr"
 import { TransferShareConfirmDialog } from "@/components/public/transfer-share-confirm-dialog"
 import { useTicketResaleVisual } from "@/components/public/use-ticket-resale-visual"
 import { useTicketTransferVisual } from "@/components/public/use-ticket-transfer-visual"
 import { Button } from "@/components/ui/button"
 import { isOnlineDelivery } from "@/lib/events/delivery-mode"
 import { formatEventDay } from "@/lib/format"
+import { walletQrModalTitle } from "@/lib/ticket-wallet"
 import { cn } from "@/lib/utils"
-
-const QR_NOTICE =
-  "El código se actualiza automáticamente. Capturas de pantalla no válidas"
 
 function canShowTicketQr(ticket: MyTicket, visualStatus: string): boolean {
   return (
@@ -90,42 +87,6 @@ export function WalletPassCard({
         </p>
       </div>
 
-      {qrOpen && canShowQr ? (
-        <div className="relative overflow-hidden bg-zinc-950 px-4 py-5">
-          <div className="relative mx-auto w-full max-w-[220px]">
-            {isStatic ? (
-              <StaticSignedQR
-                ticketId={ticket.id}
-                totpSecret={totpSecret}
-                size={200}
-              />
-            ) : (
-              <LivingTicketQR
-                ticketId={ticket.id}
-                totpSecret={totpSecret}
-                size={200}
-                notice={QR_NOTICE}
-              />
-            )}
-            {ticket.isTest ? (
-              <div
-                className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
-                aria-hidden="true"
-              >
-                <div className="-rotate-12 w-[160%] bg-red-600/70 py-2 text-center text-[11px] font-black uppercase tracking-[0.18em] text-white">
-                  MODO PRUEBA - SIN VALIDEZ
-                </div>
-              </div>
-            ) : null}
-          </div>
-          {isStatic ? (
-            <p className="mt-3 text-center text-xs font-medium text-zinc-300">
-              {QR_NOTICE}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
       <div className="flex w-full flex-col items-stretch gap-2 p-4 pt-0">
         {alreadySent ? (
           <Button
@@ -151,11 +112,11 @@ export function WalletPassCard({
             <Button
               type="button"
               disabled={!canShowQr}
-              onClick={() => setQrOpen((open) => !open)}
+              onClick={() => setQrOpen(true)}
               className="h-12 w-full justify-center rounded-xl bg-emerald-600 text-white hover:bg-emerald-500"
             >
               <QrCode className="size-4" aria-hidden="true" />
-              {qrOpen ? "Ocultar QR" : "Mostrar QR"}
+              Mostrar QR
             </Button>
             <Button
               type="button"
@@ -202,6 +163,19 @@ export function WalletPassCard({
         )}
       </div>
 
+      {canShowQr ? (
+        <QrScanLightbox
+          open={qrOpen}
+          onOpenChange={setQrOpen}
+          isStatic={isStatic}
+          ticketId={ticket.id}
+          totpSecret={totpSecret}
+          title={walletQrModalTitle(ticket, placeLabel)}
+          holderName={ticket.holderName}
+          holderDni={ticket.holderDni}
+          isTest={ticket.isTest}
+        />
+      ) : null}
       <TransferShareConfirmDialog
         open={transferConfirmOpen}
         onOpenChange={setTransferConfirmOpen}

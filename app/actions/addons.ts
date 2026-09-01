@@ -47,11 +47,13 @@ export type MyStoreRedemption = {
   qrCodeToken: string
   status: "pending" | "valid" | "redeemed" | "cancelled"
   redeemedAt: string | null
+  itemId: string | null
   itemName: string
   itemDescription: string | null
   itemPrice: number
   itemImageUrl: string | null
   itemCategory: EventItemCategory
+  orderId: string | null
   eventId: string
   eventTitle: string
   eventDate: string
@@ -189,10 +191,13 @@ export async function getMyStoreRedemptions(): Promise<MyStoreRedemption[]> {
     .select(
       `
       id,
+      order_id,
+      item_id,
       qr_code_token,
       status,
       redeemed_at,
       event_items (
+        id,
         name,
         description,
         price,
@@ -218,10 +223,13 @@ export async function getMyStoreRedemptions(): Promise<MyStoreRedemption[]> {
 
   type Row = {
     id: string
+    order_id?: string | null
+    item_id?: string | null
     qr_code_token: string
     status: MyStoreRedemption["status"]
     redeemed_at: string | null
     event_items: {
+      id?: string | null
       name: string
       description: string | null
       price: number
@@ -250,6 +258,8 @@ export async function getMyStoreRedemptions(): Promise<MyStoreRedemption[]> {
         qrCodeToken: row.qr_code_token,
         status: row.status,
         redeemedAt: row.redeemed_at,
+        itemId: row.item_id?.trim() || item.id?.trim() || null,
+        orderId: row.order_id?.trim() || null,
         itemName: item.name,
         itemDescription: item.description,
         itemPrice: Number(item.price),

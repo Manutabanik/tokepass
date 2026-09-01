@@ -1,6 +1,6 @@
 "use client"
 
-import { Maximize2, X } from "lucide-react"
+import { Maximize2, Radio, X } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { LivingStoreQR } from "@/components/public/living-store-qr"
@@ -17,6 +17,30 @@ import {
 import { ticketBackupCode } from "@/lib/ticket-print"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 
+function CloseQrButton({
+  className,
+}: {
+  className?: string
+}) {
+  return (
+    <DialogClose
+      render={
+        <Button
+          type="button"
+          variant="outline"
+          className={cn(
+            "pointer-events-auto h-11 gap-2 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white",
+            className,
+          )}
+        />
+      }
+    >
+      <X className="size-4" aria-hidden="true" />
+      Cerrar
+    </DialogClose>
+  )
+}
+
 export function QrScanLightbox({
   open,
   onOpenChange,
@@ -27,6 +51,8 @@ export function QrScanLightbox({
   holderDni,
   caption = "Acercá este código al escáner de ingreso",
   kind = "door",
+  title,
+  isTest = false,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -37,9 +63,14 @@ export function QrScanLightbox({
   holderDni?: string | null
   caption?: string
   kind?: "door" | "store"
+  title?: string
+  isTest?: boolean
 }) {
   const isStore = kind === "store"
-  const backup = isStore ? null : ticketBackupCode(ticketId)
+  const living = !isStatic
+  const backup = ticketBackupCode(ticketId)
+  const heading =
+    title?.trim() || (isStore ? "Canje" : "Código de ingreso")
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -48,28 +79,29 @@ export function QrScanLightbox({
         overlayClassName="z-[100] bg-zinc-950/96 backdrop-blur-xl"
         className="pointer-events-none fixed inset-0 top-0 left-0 isolate z-[110] flex h-dvh max-h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col items-center justify-center overflow-y-auto overscroll-contain rounded-none bg-transparent p-4 text-zinc-950 shadow-none ring-0 sm:max-w-none sm:p-6"
       >
-        <DialogClose
-          render={
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="pointer-events-auto absolute top-3 right-3 z-10 rounded-full text-white hover:bg-white/10 hover:text-white"
-            />
-          }
-        >
-          <X className="size-5" aria-hidden="true" />
-          <span className="sr-only">Cerrar</span>
-        </DialogClose>
+        <div className="pointer-events-auto relative z-[110] flex w-full max-w-md flex-col py-6">
+          <header className="mb-4 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              {living ? (
+                <p className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                  <Radio className="size-3.5" aria-hidden="true" />
+                  Living QR
+                </p>
+              ) : (
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
+                  QR estático
+                </p>
+              )}
+              <DialogTitle className="text-left text-lg font-bold leading-snug text-white">
+                {heading}
+              </DialogTitle>
+              <DialogDescription className="sr-only">{caption}</DialogDescription>
+            </div>
+            <CloseQrButton className="shrink-0" />
+          </header>
 
-        <DialogTitle className="sr-only">
-          {isStore ? "Código de canje" : "Código de ingreso"}
-        </DialogTitle>
-        <DialogDescription className="sr-only">{caption}</DialogDescription>
-
-        <div className="pointer-events-auto relative z-[110] flex w-full max-w-md flex-col items-center justify-center py-8">
           <div
-            className="flex w-full flex-col items-center bg-white p-6 rounded-xl shadow-2xl text-zinc-950"
+            className="relative flex w-full flex-col items-center rounded-2xl bg-white p-5 text-zinc-950 shadow-2xl"
             style={{ colorScheme: "light" }}
           >
             <div className="size-[min(20rem,calc(100vw-5rem))] bg-white">
@@ -97,11 +129,9 @@ export function QrScanLightbox({
                 />
               )}
             </div>
-            {backup ? (
-              <p className="mt-5 font-mono text-sm font-semibold tracking-[0.22em] text-zinc-800">
-                {backup}
-              </p>
-            ) : null}
+            <p className="mt-4 font-mono text-sm font-semibold tracking-[0.22em] text-zinc-800">
+              {backup}
+            </p>
             {holderName ? (
               <p className="mt-3 text-center text-base font-bold text-zinc-950">
                 {holderName}
@@ -112,10 +142,18 @@ export function QrScanLightbox({
                 DNI {holderDni}
               </p>
             ) : null}
+            {isTest ? (
+              <p className="mt-3 w-full rounded-xl bg-red-600/90 px-3 py-2 text-center text-[11px] font-black uppercase tracking-[0.16em] text-white">
+                Modo prueba · sin validez
+              </p>
+            ) : null}
           </div>
-          <p className="mt-5 max-w-xs text-center text-sm font-semibold text-white">
+
+          <p className="mt-4 max-w-xs self-center text-center text-sm font-semibold text-white">
             {caption}
           </p>
+
+          <CloseQrButton className="mt-5 w-full justify-center" />
         </div>
       </DialogContent>
     </Dialog>

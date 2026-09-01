@@ -44,3 +44,48 @@ export function inferCheckoutExtraCategory(name: string): EventItemCategory {
   }
   return "upgrades"
 }
+
+export type WalletExtraGroupable = {
+  id: string
+  orderId?: string | null
+  productKey: string
+  title: string
+}
+
+export type WalletExtraBundle<T extends WalletExtraGroupable = WalletExtraGroupable> = {
+  id: string
+  title: string
+  count: number
+  items: T[]
+}
+
+export function walletExtraBundleKey(unit: WalletExtraGroupable): string {
+  const product = unit.productKey.trim() || `unit:${unit.id}`
+  const order = unit.orderId?.trim()
+  return order ? `ord:${order}:${product}` : `unit:${unit.id}`
+}
+
+export function walletExtraBundleTitle(name: string, count: number): string {
+  const label = name.trim() || "Extra"
+  if (count <= 1) return label
+  return `${label} (x${count})`
+}
+
+export function groupWalletExtraUnits<T extends WalletExtraGroupable>(
+  units: readonly T[],
+): WalletExtraBundle<T>[] {
+  const buckets = new Map<string, T[]>()
+  for (const unit of units) {
+    const key = walletExtraBundleKey(unit)
+    const list = buckets.get(key)
+    if (list) list.push(unit)
+    else buckets.set(key, [unit])
+  }
+
+  return [...buckets.entries()].map(([id, items]) => ({
+    id,
+    title: walletExtraBundleTitle(items[0]?.title ?? "Extra", items.length),
+    count: items.length,
+    items,
+  }))
+}

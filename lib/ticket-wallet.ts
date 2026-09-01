@@ -329,6 +329,23 @@ export function walletAccessBlockExpandLabel(
   return `Ver los ${count} lugares de esta mesa`
 }
 
+export function walletQrModalTitle(
+  ticket: TicketSeatSource & {
+    groupSlot?: number | null
+    tierName?: string | null
+  },
+  placeLabel?: string,
+): string {
+  const table = ticket.seatingLabel?.trim() || ""
+  const slot = Math.max(0, Math.floor(ticket.groupSlot ?? 0))
+  if (/^(mesa|tabl[oó]n)\b/i.test(table) && slot > 0) {
+    return `${table} - Lugar ${slot}`
+  }
+  const labeled = placeLabel?.trim()
+  if (labeled) return labeled
+  return ticketExactSeatLabel(ticket) || ticket.tierName?.trim() || "Entrada"
+}
+
 export function walletChildPlaceLabel(
   ticket: WalletBlockableTicket,
   index: number,

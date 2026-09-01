@@ -14,11 +14,11 @@ import { useMemo } from "react"
 import type { EventItem, MyStoreRedemption } from "@/app/actions/addons"
 import type { MyTicket } from "@/app/actions/tickets"
 import { EventStoreUpsell } from "@/components/public/event-store-upsell"
-import {
-  LivingCheckoutExtraCard,
-  LivingStoreCard,
-} from "@/components/public/living-store-card"
 import { WalletAccessBlockCard } from "@/components/account/wallet-access-block"
+import {
+  groupWalletExtraDisplayUnits,
+  WalletExtrasBundleCard,
+} from "@/components/account/wallet-extras-group"
 import { Button } from "@/components/ui/button"
 import {
   Accordion,
@@ -496,12 +496,12 @@ export function TicketWallet({
                       : `${group.redemptions.length + group.checkoutExtras.length} extras`
                   }
                 />
-                <div className="grid gap-4 md:grid-cols-2 md:items-start lg:grid-cols-3">
-                  {group.checkoutExtras.map((ticket) => (
-                    <LivingCheckoutExtraCard key={ticket.id} ticket={ticket} />
-                  ))}
-                  {group.redemptions.map((item) => (
-                    <LivingStoreCard key={item.id} redemption={item} />
+                <div className="mt-4 space-y-4">
+                  {groupWalletExtraDisplayUnits(
+                    group.checkoutExtras,
+                    group.redemptions,
+                  ).map((bundle) => (
+                    <WalletExtrasBundleCard key={bundle.id} bundle={bundle} />
                   ))}
                 </div>
               </section>

@@ -230,8 +230,10 @@ export function LivingTicketCard({
           isStatic={isStatic}
           ticketId={ticket.id}
           totpSecret={totpSecret}
+          title={sector}
           holderName={ticket.holderName}
           holderDni={ticket.holderDni}
+          isTest={ticket.isTest}
         />
       ) : null}
       <TransferShareConfirmDialog

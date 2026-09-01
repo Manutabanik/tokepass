@@ -17,7 +17,7 @@ import {
 import { inferCheckoutExtraCategory } from "@/lib/tickets/wallet-extras"
 import { cn } from "@/lib/utils"
 
-function ExtraConsumableCard({
+export function ExtraConsumableCard({
   category,
   title,
   eventTitle,
@@ -125,6 +125,7 @@ function ExtraConsumableCard({
                 isStatic={false}
                 ticketId={qr.token}
                 totpSecret=""
+                title={`Canje: ${title}`}
                 caption="Acercá este código al escáner de canje"
               />
             ) : (
@@ -135,6 +136,7 @@ function ExtraConsumableCard({
                 isStatic={qr.isStatic}
                 ticketId={qr.ticketId}
                 totpSecret={qr.totpSecret}
+                title={`Canje: ${title}`}
                 caption="Acercá este código al escáner de canje"
               />
             )}
