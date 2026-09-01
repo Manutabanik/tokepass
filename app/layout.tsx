@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
 
+import { WalletDeviceBootstrap } from "@/components/auth/wallet-device-bootstrap";
 import { CheckoutHoldGuard } from "@/components/checkout/checkout-hold-guard";
 import { NavigationProgressBar } from "@/components/navigation/navigation-progress-bar";
 import { ThemeProvider } from "@/components/providers/theme-provider";
@@ -103,6 +104,7 @@ export default async function RootLayout({
           nonce={nonce}
         >
           <NavigationProgressBar />
+          <WalletDeviceBootstrap />
           <Suspense fallback={null}>
             <ReferralCapture />
           </Suspense>

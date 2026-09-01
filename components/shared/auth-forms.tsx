@@ -11,6 +11,7 @@ import {
   signInWithMagicLink,
   type AuthActionState,
 } from "@/app/actions/auth"
+import { WalletDeviceField } from "@/components/auth/wallet-device-field"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -141,6 +142,7 @@ export function AuthForms({
 
       <form action={signInWithGoogle}>
         {safeNext ? <input type="hidden" name="next" value={safeNext} /> : null}
+        <WalletDeviceField />
         <GoogleSubmitButton />
       </form>
 
@@ -154,6 +156,7 @@ export function AuthForms({
 
       <form action={magicAction}>
         {safeNext ? <input type="hidden" name="next" value={safeNext} /> : null}
+        <WalletDeviceField />
         <div className="mb-6 space-y-4">
           <div>
             <label

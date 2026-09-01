@@ -7,6 +7,7 @@ import {
 } from "@/app/actions/addons"
 import { getMyTickets } from "@/app/actions/tickets"
 import type { StoreOfferBlock } from "@/components/public/ticket-wallet"
+import { WalletDeviceMismatchLogout } from "@/components/auth/wallet-device-mismatch-logout"
 import { OfflineTicketWallet } from "@/components/pwa/offline-ticket-wallet"
 import { loginUrlWithNext } from "@/lib/auth/post-login"
 import { countActiveTickets } from "@/lib/ticket-schedule"
@@ -34,6 +35,9 @@ export async function DigitalWalletScreen({
   } catch (error) {
     if (walletFriendlyLoadError(error) === "auth_required") {
       redirect(loginUrlWithNext(loginNext))
+    }
+    if (walletFriendlyLoadError(error) === "wallet_device_mismatch") {
+      return <WalletDeviceMismatchLogout nextPath={loginNext} />
     }
     loadError = null
   }

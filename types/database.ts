@@ -155,6 +155,8 @@ export type Profile = {
   organizer_approval_status: OrganizerApprovalStatus
   risk_tier: OrganizerRiskTier
   guarantee_status: OrganizerGuaranteeStatus
+  /** UUID del dispositivo que inició sesión por última vez (Living QR). */
+  active_device_id: string | null
   created_at: string
   updated_at: string
 }
@@ -1298,6 +1300,7 @@ type ProfileInsert = Omit<
   | "organizer_approval_status"
   | "risk_tier"
   | "guarantee_status"
+  | "active_device_id"
 > & {
   role?: UserRole
   service_charge_rate?: number
@@ -1308,6 +1311,7 @@ type ProfileInsert = Omit<
   organizer_approval_status?: OrganizerApprovalStatus
   risk_tier?: OrganizerRiskTier
   guarantee_status?: OrganizerGuaranteeStatus
+  active_device_id?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -4543,6 +4547,14 @@ export type Database = {
       claim_pending_ticket_transfers: {
         Args: { p_user_id: string }
         Returns: number
+      }
+      claim_active_wallet_device: {
+        Args: { p_device_id: string }
+        Returns: Json
+      }
+      assert_active_wallet_device: {
+        Args: { p_device_id: string }
+        Returns: Json
       }
       create_pos_sale_tx: {
         Args: {

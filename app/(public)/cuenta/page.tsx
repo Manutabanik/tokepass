@@ -13,6 +13,8 @@ import Link from "next/link"
 
 import { getMyAccountProfile } from "@/app/actions/account"
 import { getMyTickets } from "@/app/actions/tickets"
+import { WalletDeviceMismatchLogout } from "@/components/auth/wallet-device-mismatch-logout"
+import { isWalletDeviceMismatchError } from "@/lib/auth/wallet-device"
 import { OnboardingBanner } from "@/components/account/onboarding-banner"
 import { SignOutButton } from "@/components/shared/sign-out-button"
 import { formatEventDay, formatEventTime, getInitials } from "@/lib/format"
@@ -25,10 +27,15 @@ export const metadata: Metadata = {
 }
 
 export default async function CuentaHomePage() {
-  const [profile, tickets] = await Promise.all([
-    getMyAccountProfile(),
-    getMyTickets().catch(() => []),
-  ])
+  const profile = await getMyAccountProfile()
+  let tickets: Awaited<ReturnType<typeof getMyTickets>> = []
+  try {
+    tickets = await getMyTickets()
+  } catch (error) {
+    if (isWalletDeviceMismatchError(error)) {
+      return <WalletDeviceMismatchLogout nextPath="/cuenta" />
+    }
+  }
 
   const { upcoming, past } = splitTicketsBySchedule(tickets)
   const validCount = upcoming.length

@@ -7,6 +7,7 @@ import { useFormStatus } from "react-dom"
 import { toast } from "sonner"
 
 import { signInWithEmail, type AuthActionState } from "@/app/actions/auth"
+import { WalletDeviceField } from "@/components/auth/wallet-device-field"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { Button } from "@/components/ui/button"
 import {
@@ -77,6 +78,7 @@ export function OrganizerAuthForm({
         <form action={loginAction} className="space-y-4">
           <input type="hidden" name="loginSource" value="organizer" />
           {safeNext ? <input type="hidden" name="next" value={safeNext} /> : null}
+          <WalletDeviceField />
 
           <div className="grid gap-2">
             <Label htmlFor="organizer-email">Email profesional</Label>

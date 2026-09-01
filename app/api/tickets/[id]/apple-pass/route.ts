@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 
 import { getMyTicketById } from "@/app/actions/buyer-orders"
+import { isWalletDeviceMismatchError } from "@/lib/auth/wallet-device"
 import { HAS_APPLE_WALLET_KEYS } from "@/lib/wallet-cache"
 import { buildApplePkpass } from "@/lib/wallet/apple-pkpass"
 import {
@@ -80,6 +81,14 @@ export async function GET(
     }
     if (error instanceof Error && error.message === "auth_required") {
       return jsonError(401, "auth_required", "Iniciá sesión para descargar el pase.", id)
+    }
+    if (isWalletDeviceMismatchError(error)) {
+      return jsonError(
+        403,
+        "wallet_device_mismatch",
+        "Sesión iniciada en otro dispositivo",
+        id,
+      )
     }
     console.error("[apple-pass]", error)
     return jsonError(

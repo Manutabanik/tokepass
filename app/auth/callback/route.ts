@@ -7,6 +7,13 @@ import {
   resolveAuthCallbackDestination,
   safeInternalNextPath,
 } from "@/lib/auth/post-login"
+import {
+  createWalletDeviceId,
+  normalizeWalletDeviceId,
+  resolveIncomingWalletDeviceId,
+  WALLET_DEVICE_COOKIE,
+  walletDeviceCookieOptions,
+} from "@/lib/auth/wallet-device"
 import { logger } from "@/lib/logger"
 import type { UserRole } from "@/types/database"
 import type { Database } from "@/types/database"
@@ -112,6 +119,30 @@ export async function GET(request: NextRequest) {
           message: "fresh_profile_lookup_failed",
           userId: user.id,
           error: profileError,
+        })
+      }
+
+      const cookieDeviceId = normalizeWalletDeviceId(
+        request.cookies.get(WALLET_DEVICE_COOKIE)?.value,
+      )
+      const deviceId =
+        resolveIncomingWalletDeviceId(null, cookieDeviceId) ??
+        createWalletDeviceId()
+      cookieJar.cookies.set(
+        WALLET_DEVICE_COOKIE,
+        deviceId,
+        walletDeviceCookieOptions(),
+      )
+      const { error: claimError } = await supabase.rpc(
+        "claim_active_wallet_device",
+        { p_device_id: deviceId },
+      )
+      if (claimError) {
+        logger.error({
+          context: "auth/callback",
+          message: "wallet_device_claim_failed",
+          userId: user.id,
+          error: claimError,
         })
       }
 

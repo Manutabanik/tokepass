@@ -29,6 +29,13 @@ export function walletFriendlyLoadError(
   if (!(error instanceof Error)) return null
   if (error.message === "auth_required") return "auth_required"
   if (
+    error.name === "WalletDeviceMismatchError" ||
+    error.message === "Sesión iniciada en otro dispositivo" ||
+    error.message === "wallet_device_mismatch"
+  ) {
+    return "wallet_device_mismatch"
+  }
+  if (
     isAmbiguousTicketRelationshipError(error.message) ||
     isMissingTicketWalletColumnError(error.message) ||
     /PGRST|embed|schema cache|42703|Could not/i.test(error.message)

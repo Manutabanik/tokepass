@@ -1,6 +1,7 @@
 import "server-only"
 
 import type { NormalizedCheckoutBuyer } from "@/lib/checkout-buyer"
+import { bindWalletDeviceForCurrentUser } from "@/lib/auth/wallet-device-server"
 import { logger } from "@/lib/logger"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
@@ -148,6 +149,7 @@ export async function resolveInvisibleCheckoutBuyer(
       return { ok: true, userId: created.user.id, signedIn: false }
     }
 
+    await bindWalletDeviceForCurrentUser()
     return { ok: true, userId: created.user.id, signedIn: true }
   } catch (error) {
     logger.error({

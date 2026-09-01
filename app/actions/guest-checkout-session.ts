@@ -1,5 +1,6 @@
 "use server"
 
+import { bindWalletDeviceForCurrentUser } from "@/lib/auth/wallet-device-server"
 import { buildCheckoutGuestAuthInput } from "@/lib/checkout/guest-credentials"
 import { logger } from "@/lib/logger"
 import { getRequestIp } from "@/lib/request-ip"
@@ -51,6 +52,7 @@ export async function ensureGuestCheckoutSessionAction(): Promise<boolean> {
       return false
     }
 
+    await bindWalletDeviceForCurrentUser()
     return true
   } catch (error) {
     logger.error({

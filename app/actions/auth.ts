@@ -4,6 +4,11 @@ import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 
 import {
+  WALLET_DEVICE_FORM_FIELD,
+  WALLET_DEVICE_MISMATCH_MESSAGE,
+} from "@/lib/auth/wallet-device"
+import { bindWalletDeviceForCurrentUser } from "@/lib/auth/wallet-device-server"
+import {
   getFreshLoginProfile,
   postLoginDestination,
   safeInternalNextPath,
@@ -84,6 +89,12 @@ function mapAuthErrorMessage(message: string): string {
     return "No pudimos enviar el enlace. Revisá el email e intentá de nuevo."
   }
   return message
+}
+
+async function bindWalletDeviceFromForm(formData?: FormData): Promise<void> {
+  await bindWalletDeviceForCurrentUser(
+    formData?.get(WALLET_DEVICE_FORM_FIELD),
+  )
 }
 
 function readCredentials(formData: FormData) {
@@ -193,6 +204,7 @@ export async function signUpWithEmail(
   }
 
   if (data.session) {
+    await bindWalletDeviceFromForm(formData)
     redirect(credentials.next || "/")
   }
 
@@ -355,6 +367,7 @@ export async function signUpOrganizerAccount(
   }
 
   if (data.session) {
+    await bindWalletDeviceFromForm(formData)
     redirect(credentials.next || "/admin")
   }
 
@@ -491,9 +504,11 @@ export async function signInWithEmail(
         success: null,
       }
     }
+    await bindWalletDeviceFromForm(formData)
     redirect(credentials.next || "/admin")
   }
 
+  await bindWalletDeviceFromForm(formData)
   const fallback = postLoginDestination(profile?.role)
   redirect(credentials.next || fallback)
 }
@@ -569,4 +584,16 @@ export async function signOut(): Promise<void> {
   const supabase = await createClient()
   await supabase.auth.signOut()
   redirect("/")
+}
+
+export async function signOutDueToWalletDeviceMismatch(
+  nextPath?: string,
+): Promise<void> {
+  const supabase = await createClient()
+  await supabase.auth.signOut()
+  const loginUrl = new URL("/login", "http://localhost")
+  loginUrl.searchParams.set("error", WALLET_DEVICE_MISMATCH_MESSAGE)
+  const next = safeInternalNextPath(nextPath)
+  if (next) loginUrl.searchParams.set("next", next)
+  redirect(`${loginUrl.pathname}${loginUrl.search}`)
 }

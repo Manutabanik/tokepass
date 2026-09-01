@@ -28,6 +28,15 @@ import {
 } from "@/lib/tickets/wallet-query"
 import { shouldKeepOwnedWalletTicket } from "@/lib/tickets/wallet-visibility"
 import { normalizeIssuanceChannel } from "@/lib/tickets/static-tps-policy"
+import {
+  isWalletDeviceMismatchError,
+  resolveIncomingWalletDeviceId,
+  WalletDeviceMismatchError,
+} from "@/lib/auth/wallet-device"
+import {
+  isWalletDeviceAssertOk,
+  readWalletDeviceIdFromCookies,
+} from "@/lib/auth/wallet-device-server"
 
 export type MyTicket = {
   id: string
@@ -165,18 +174,55 @@ async function hydrateOwnedTicketEvents(
 export async function getMyTickets(options?: {
   orderId?: string
   ticketId?: string
+  deviceId?: string
 }): Promise<MyTicket[]> {
   try {
     return await loadMyTickets(options)
   } catch (error) {
+    if (isWalletDeviceMismatchError(error)) throw error
     console.error("[getMyTickets]", error)
     return []
   }
 }
 
+function isMissingWalletDeviceRpcError(
+  message: string | null | undefined,
+): boolean {
+  if (!message) return false
+  return /assert_active_wallet_device|claim_active_wallet_device|PGRST202|42883|Could not find the function/i.test(
+    message,
+  )
+}
+
+async function assertWalletDeviceMayReceiveTotp(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  submittedDeviceId?: string,
+): Promise<"ok" | "deny_secret"> {
+  const cookieId = await readWalletDeviceIdFromCookies()
+  const incoming = resolveIncomingWalletDeviceId(submittedDeviceId, cookieId)
+  if (!incoming) {
+    throw new WalletDeviceMismatchError()
+  }
+
+  const { data, error } = await supabase.rpc("assert_active_wallet_device", {
+    p_device_id: incoming,
+  })
+  if (error) {
+    if (isMissingWalletDeviceRpcError(error.message)) {
+      return "deny_secret"
+    }
+    throw new WalletDeviceMismatchError()
+  }
+  if (!isWalletDeviceAssertOk(data)) {
+    throw new WalletDeviceMismatchError()
+  }
+  return "ok"
+}
+
 async function loadMyTickets(options?: {
   orderId?: string
   ticketId?: string
+  deviceId?: string
 }): Promise<MyTicket[]> {
   const supabase = await createClient()
   const {
@@ -187,6 +233,11 @@ async function loadMyTickets(options?: {
   if (authError || !user) {
     return []
   }
+
+  const deviceAccess = await assertWalletDeviceMayReceiveTotp(
+    supabase,
+    options?.deviceId,
+  )
 
   await supabase.rpc("claim_pending_ticket_transfers", {
     p_user_id: user.id,
@@ -337,7 +388,7 @@ async function loadMyTickets(options?: {
       id: ticket.id,
       status: ticket.status,
       qrCode: ticket.qr_code,
-      totpSecret: ticket.totp_secret,
+      totpSecret: deviceAccess === "ok" ? ticket.totp_secret : "",
       deliveryMode: parseDeliveryMode(event.delivery_mode),
       accessLink: event.access_link?.trim() || null,
       transferCount: ticket.transfer_count ?? 0,

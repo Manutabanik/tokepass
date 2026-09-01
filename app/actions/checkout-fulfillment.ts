@@ -4,6 +4,7 @@ import { unstable_noStore as noStore } from "next/cache"
 
 import { getGuestOrderWallet } from "@/app/actions/guest-ticket-access"
 import { getMyTickets, type MyTicket } from "@/app/actions/tickets"
+import { isWalletDeviceMismatchError } from "@/lib/auth/wallet-device"
 import { resolveOrderHoldExpiresAt } from "@/lib/checkout-hold"
 import { hasCheckoutFulfillmentCookie } from "@/lib/checkout/fulfillment-cookie"
 import {
@@ -244,7 +245,10 @@ async function loadFulfillmentTickets(input: {
   if (input.sessionUserId && input.sessionUserId === input.buyerId) {
     try {
       return await getMyTickets({ orderId: input.orderId })
-    } catch {
+    } catch (error) {
+      if (isWalletDeviceMismatchError(error)) {
+        return []
+      }
       // Guest resume after a dropped session: fall through to guest_token wallet.
     }
   }
