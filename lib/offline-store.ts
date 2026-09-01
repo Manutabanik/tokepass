@@ -294,7 +294,7 @@ export function ticketToOfflineRecord(
     totp_secret:
       ticket.pendingTransfer || ticket.activeResaleListingId
         ? ""
-        : ticket.totpSecret || ticket.id,
+        : ticket.totpSecret?.trim() || "",
     event_data: {
       eventId: ticket.eventId,
       eventTitle: ticket.eventTitle,

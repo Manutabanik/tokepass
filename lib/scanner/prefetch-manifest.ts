@@ -15,6 +15,8 @@ export type PrefetchedDoorManifest = {
   }>
   eventDate?: string | null
   server_timestamp?: number
+  slotIndex?: number
+  slotCount?: number
 }
 
 type ManifestFetcher = (eventId: string) => Promise<PrefetchedDoorManifest>

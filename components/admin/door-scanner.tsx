@@ -309,7 +309,12 @@ export function DoorScanner({
         ...new Set(queue.map((item) => item.event_id).filter(Boolean)),
       ]
       for (const id of eventIds) {
-        const meta = await downloadEventManifest(id, fetchEventTicketManifest)
+        if (!deviceSlotConfigured || !deviceSlot) continue
+        const meta = await downloadEventManifest(
+          id,
+          fetchEventTicketManifest,
+          deviceSlot,
+        )
         if (id === eventId) setManifestMeta(meta)
       }
 
@@ -344,7 +349,13 @@ export function DoorScanner({
     } finally {
       setIsSyncing(false)
     }
-  }, [eventId, isSyncing, refreshQueueCount])
+  }, [
+    deviceSlot,
+    deviceSlotConfigured,
+    eventId,
+    isSyncing,
+    refreshQueueCount,
+  ])
 
   const loadEvents = useCallback(async () => {
     if (guestEvent) {
@@ -943,6 +954,7 @@ export function DoorScanner({
         const meta = await downloadEventManifest(
           eventId,
           fetchEventTicketManifest,
+          committed,
         )
         setManifestMeta(meta)
       } else {
@@ -1034,10 +1046,10 @@ export function DoorScanner({
     let cancelled = false
 
     async function pullAdmissions() {
-      if (!navigator.onLine) return
+      if (!navigator.onLine || !deviceSlotConfigured || !deviceSlot) return
       try {
         const [snap, blacklistRes] = await Promise.all([
-          fetchEventAdmissionSnapshot(eventId),
+          fetchEventAdmissionSnapshot(eventId, deviceSlot),
           fetch(
             `/api/scanner/blacklist?eventId=${encodeURIComponent(eventId)}`,
             { cache: "no-store", credentials: "same-origin" },
@@ -1068,7 +1080,7 @@ export function DoorScanner({
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [sessionActive, eventId])
+  }, [sessionActive, eventId, deviceSlot, deviceSlotConfigured])
 
   useEffect(() => {
     if (!sessionActive || isTotemMode) return

@@ -10,6 +10,8 @@
  * un telefono de puerta comprometido podria firmar cualquier ticket.
  */
 
+export const MISSING_TOTP_SECRET_ERROR = "Missing TOTP Secret"
+
 export const LIVING_QR_PERIOD_MS = 15_000
 /** ±3 bloques de 15s = ±45s de clock drift en puerta. */
 export const LIVING_QR_GRACE_BLOCKS = 3
@@ -92,16 +94,24 @@ export function timingSafeEqualHex(left: string, right: string): boolean {
   return diff === 0
 }
 
+export function requireTotpSecret(
+  totpSecret: string | null | undefined,
+): string {
+  const secret = (totpSecret ?? "").trim()
+  if (!secret) {
+    throw new Error(MISSING_TOTP_SECRET_ERROR)
+  }
+  return secret
+}
+
 /** MAC Living QR: 32 hex (128 bits). verify acepta tambien 16 hex legacy. */
 export async function livingQrMac(
   totpSecret: string,
   ticketId: string,
   windowIndex: number,
 ): Promise<string> {
-  const full = await hmacSha256Hex(
-    totpSecret.trim(),
-    `${ticketId.trim()}:${windowIndex}`,
-  )
+  const secret = requireTotpSecret(totpSecret)
+  const full = await hmacSha256Hex(secret, `${ticketId.trim()}:${windowIndex}`)
   return full.slice(0, LIVING_QR_MAC_HEX_LEN)
 }
 
@@ -118,10 +128,9 @@ export async function verifyLivingQrMac(
   ) {
     return false
   }
-  const full = await hmacSha256Hex(
-    totpSecret.trim(),
-    `${ticketId.trim()}:${windowIndex}`,
-  )
+  const secret = (totpSecret ?? "").trim()
+  if (!secret) return false
+  const full = await hmacSha256Hex(secret, `${ticketId.trim()}:${windowIndex}`)
   return timingSafeEqualHex(full.slice(0, presented.length), presented)
 }
 
@@ -134,10 +143,10 @@ export async function generateStaticQrPayload(
   totpSecret: string,
 ): Promise<string> {
   const id = ticketId.trim()
-  const secret = totpSecret.trim()
-  if (!id || !secret) {
+  if (!id) {
     throw new Error("ticketId/totp_secret vacíos")
   }
+  const secret = requireTotpSecret(totpSecret)
   const mac = (await hmacSha256Hex(secret, staticQrMessage(id))).slice(
     0,
     LIVING_QR_MAC_HEX_LEN,
@@ -151,8 +160,7 @@ export function signedDoorQrOrFallback(
 ): string {
   const id = ticketId.trim()
   const secret = (totpSecret ?? "").trim()
-  if (!id) return ""
-  if (!secret) return id
+  if (!id || !secret) return ""
   return generateStaticQrPayloadSync(id, secret)
 }
 
@@ -162,10 +170,10 @@ export function generateStaticQrPayloadSync(
   totpSecret: string,
 ): string {
   const id = ticketId.trim()
-  const secret = totpSecret.trim()
-  if (!id || !secret) {
+  if (!id) {
     throw new Error("ticketId/totp_secret vacíos")
   }
+  const secret = requireTotpSecret(totpSecret)
   // HMAC sincrono: WebCrypto es async y este helper corre en POS/wallet (Node).
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { createHmac } = require("node:crypto") as typeof import("crypto")
@@ -183,10 +191,9 @@ export async function verifyStaticQrMac(
 ): Promise<boolean> {
   const presented = mac.trim().toLowerCase()
   if (presented.length !== LIVING_QR_MAC_HEX_LEN) return false
-  const full = await hmacSha256Hex(
-    totpSecret.trim(),
-    staticQrMessage(ticketId),
-  )
+  const secret = (totpSecret ?? "").trim()
+  if (!secret) return false
+  const full = await hmacSha256Hex(secret, staticQrMessage(ticketId))
   return timingSafeEqualHex(full.slice(0, LIVING_QR_MAC_HEX_LEN), presented)
 }
 
@@ -199,10 +206,10 @@ export async function generateLivingQrPayload(
   nowMs: number = Date.now(),
 ): Promise<string> {
   const id = ticketId.trim()
-  const secret = totpSecret.trim()
-  if (!id || !secret) {
+  if (!id) {
     throw new Error("ticketId/totp_secret vacíos")
   }
+  const secret = requireTotpSecret(totpSecret)
 
   const windowIndex = getTotpWindow(nowMs)
   const mac = await livingQrMac(secret, id, windowIndex)

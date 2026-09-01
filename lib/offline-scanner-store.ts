@@ -10,6 +10,9 @@
 import {
   type AdmissionLeaseRecord,
   buildAdmissionLeaseHash,
+  isValidScannerDeviceSlot,
+  SCANNER_DEVICE_UNCONFIGURED_MESSAGE,
+  type ScannerDeviceSlot,
 } from "@/lib/scanner/admission-lease"
 import { deviceClockOffsetMs } from "@/lib/totp-offline"
 import {
@@ -93,6 +96,8 @@ export type ScannerManifestMeta = {
   eventDate?: string | null
   /** Date.now() del dispositivo menos server_timestamp al descargar. */
   clockOffsetMs?: number
+  slotIndex?: number
+  slotCount?: number
 }
 
 export type SyncQueueItem = {
@@ -407,6 +412,8 @@ export async function saveEventManifest(input: {
   scheduleDays?: ScannerManifestMeta["scheduleDays"]
   eventDate?: string | null
   clockOffsetMs?: number
+  slotIndex?: number
+  slotCount?: number
 }): Promise<ScannerManifestMeta> {
   const sealed = await Promise.all(input.tickets.map((ticket) => sealTicket(ticket)))
   const hash = await hashManifest(sealed)
@@ -423,6 +430,8 @@ export async function saveEventManifest(input: {
     clockOffsetMs: Number.isFinite(Number(input.clockOffsetMs))
       ? Number(input.clockOffsetMs)
       : 0,
+    slotIndex: input.slotIndex,
+    slotCount: input.slotCount,
   }
 
   const db = await openDb()
@@ -701,7 +710,10 @@ export async function getManifestTicketsByGroup(
  */
 export async function downloadEventManifest(
   eventId: string,
-  fetcher: (eventId: string) => Promise<{
+  fetcher: (
+    eventId: string,
+    deviceSlot: ScannerDeviceSlot,
+  ) => Promise<{
     eventId: string
     eventTitle: string
     eventStatus?: string
@@ -712,9 +724,20 @@ export async function downloadEventManifest(
     eventDate?: string | null
     server_timestamp?: number
   }>,
+  deviceSlot: ScannerDeviceSlot,
 ): Promise<ScannerManifestMeta> {
+  if (!isValidScannerDeviceSlot(deviceSlot)) {
+    throw new Error(SCANNER_DEVICE_UNCONFIGURED_MESSAGE)
+  }
   const receivedAt = Date.now()
-  const payload = peekPrefetchedManifest(eventId) ?? (await fetcher(eventId))
+  const prefetched = peekPrefetchedManifest(eventId)
+  const prefetchMatchesSlot =
+    prefetched != null &&
+    prefetched.slotIndex === deviceSlot.index &&
+    prefetched.slotCount === deviceSlot.count
+  const payload = prefetchMatchesSlot
+    ? prefetched
+    : await fetcher(eventId, deviceSlot)
   const clockOffsetMs = deviceClockOffsetMs(
     Number(payload.server_timestamp),
     receivedAt,
@@ -752,6 +775,8 @@ export async function downloadEventManifest(
     scheduleDays: payload.scheduleDays,
     eventDate: payload.eventDate,
     clockOffsetMs,
+    slotIndex: deviceSlot.index,
+    slotCount: deviceSlot.count,
   })
   clearPrefetchedManifest(eventId)
   return meta

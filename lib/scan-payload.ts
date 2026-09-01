@@ -234,6 +234,7 @@ export async function assertLivingMac(
   totpSecret: string,
   resolved: Extract<ResolvedScan, { mode: "v2" }>,
 ): Promise<boolean> {
+  if (!totpSecret?.trim()) return false
   return verifyLivingQrMac(
     totpSecret,
     resolved.ticketId,
@@ -246,6 +247,7 @@ export async function assertStaticMac(
   totpSecret: string,
   resolved: Extract<ResolvedScan, { mode: "tps" }>,
 ): Promise<boolean> {
+  if (!totpSecret?.trim()) return false
   return verifyStaticQrMac(totpSecret, resolved.ticketId, resolved.mac)
 }
 

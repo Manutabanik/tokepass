@@ -36,7 +36,36 @@ import {
   type ScannerGate,
 } from "@/lib/scanner/gate"
 import { ScannerSetupError } from "@/lib/scanner/scanner-setup-error"
+import {
+  filterTicketIdsForDeviceSlot,
+  isValidScannerDeviceSlot,
+  SCANNER_DEVICE_UNCONFIGURED_MESSAGE,
+  type ScannerDeviceSlot,
+} from "@/lib/scanner/admission-lease"
 import type { QrType, TicketStatus } from "@/types/database"
+
+const MANIFEST_ID_CHUNK = 200
+const MANIFEST_TICKET_SELECT =
+  "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, ticket_type, issuance_channel, holder_name, holder_dni, holder_email, group_id, group_slot, batch_id, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers!tickets_tier_id_fkey(name, price, seating_sector_id, day_id), orders!tickets_order_id_fkey(payment_method)"
+const MANIFEST_TICKET_SELECT_LEGACY =
+  "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, ticket_type, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers!tickets_tier_id_fkey(name, price, seating_sector_id, day_id), orders!tickets_order_id_fkey(payment_method)"
+
+function requireScannerDeviceSlot(
+  slot: { index?: unknown; count?: unknown } | null | undefined,
+): ScannerDeviceSlot {
+  if (!isValidScannerDeviceSlot(slot)) {
+    throw new Error(SCANNER_DEVICE_UNCONFIGURED_MESSAGE)
+  }
+  return slot
+}
+
+function chunkIds(ids: string[], size = MANIFEST_ID_CHUNK): string[][] {
+  const chunks: string[][] = []
+  for (let i = 0; i < ids.length; i += size) {
+    chunks.push(ids.slice(i, i + size))
+  }
+  return chunks
+}
 
 const TICKET_SCAN_SELECT =
   "id, status, event_id, order_id, totp_secret, scanned_at, validated_by, holder_name, holder_dni, max_admissions, admissions_used, is_test, is_dynamic_qr, ticket_type, issuance_channel, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers!tickets_tier_id_fkey(name, price, time_limit, bonus_reward, day_id, seating_sector_id), events(id, title, organizer_id, qr_type, date, schedule_days, status), orders!tickets_order_id_fkey(payment_method)"
@@ -448,7 +477,14 @@ export async function scanAndValidateTicket(
 
     if (ticket) {
       const preview = ticket as TicketScanRow
-      const secret = preview.totp_secret || preview.id
+      const secret = preview.totp_secret?.trim() ?? ""
+      if (!secret) {
+        return {
+          success: false,
+          status: "invalid_payload",
+          message: "Missing TOTP Secret",
+        }
+      }
       const ok =
         resolved.mode === "v2"
           ? await assertLivingMac(secret, resolved)
@@ -866,13 +902,15 @@ export type EventTicketManifestPayload = {
   }>
 }
 
-/** Manifiesto completo de tickets válidos/usados para IndexedDB del escáner. */
+/** Manifiesto de la gatera: solo tickets del deviceSlot. Sin slot no baja nada. */
 export async function fetchEventTicketManifest(
   eventId: string,
+  deviceSlot: { index: number; count: number },
 ): Promise<EventTicketManifestPayload> {
   if (!eventId) {
     throw new Error("eventId requerido")
   }
+  const slot = requireScannerDeviceSlot(deviceSlot)
 
   const access = await resolveScannerActor(eventId)
   if (!access.ok) {
@@ -895,33 +933,43 @@ export async function fetchEventTicketManifest(
     throw new Error("Evento no encontrado")
   }
 
-  let data:
-    | Array<Record<string, unknown>>
-    | null = null
-
-  const withHolder = await supabase
+  const { data: idRows, error: idError } = await supabase
     .from("tickets")
-    .select(
-      "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, ticket_type, issuance_channel, holder_name, holder_dni, holder_email, group_id, group_slot, batch_id, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers!tickets_tier_id_fkey(name, price, seating_sector_id, day_id), orders!tickets_order_id_fkey(payment_method)",
-    )
+    .select("id")
     .eq("event_id", eventId)
     .in("status", ["valid", "used", "scanned"])
 
-  if (withHolder.error) {
-    const fallback = await supabase
-      .from("tickets")
-      .select(
-        "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, ticket_type, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers!tickets_tier_id_fkey(name, price, seating_sector_id, day_id), orders!tickets_order_id_fkey(payment_method)",
-      )
-      .eq("event_id", eventId)
-      .in("status", ["valid", "used", "scanned"])
+  if (idError) {
+    throw new Error(idError.message)
+  }
 
-    if (fallback.error) {
-      throw new Error(fallback.error.message)
+  const slotIds = filterTicketIdsForDeviceSlot(
+    (idRows ?? []).map((row) => String(row.id)),
+    slot,
+  )
+
+  let data: Array<Record<string, unknown>> = []
+  for (const chunk of chunkIds(slotIds)) {
+    const withHolder = await supabase
+      .from("tickets")
+      .select(MANIFEST_TICKET_SELECT)
+      .eq("event_id", eventId)
+      .in("id", chunk)
+
+    if (withHolder.error) {
+      const fallback = await supabase
+        .from("tickets")
+        .select(MANIFEST_TICKET_SELECT_LEGACY)
+        .eq("event_id", eventId)
+        .in("id", chunk)
+
+      if (fallback.error) {
+        throw new Error(fallback.error.message)
+      }
+      data = data.concat((fallback.data ?? []) as Array<Record<string, unknown>>)
+    } else {
+      data = data.concat((withHolder.data ?? []) as Array<Record<string, unknown>>)
     }
-    data = fallback.data as Array<Record<string, unknown>> | null
-  } else {
-    data = withHolder.data as Array<Record<string, unknown>> | null
   }
 
   type Row = {
@@ -1086,11 +1134,13 @@ export async function fetchEventTicketManifest(
     }
   })
 
-  const hashSource = tickets
-    .map(
+  const hashSource = [
+    `slot:${slot.index}/${slot.count}`,
+    ...tickets.map(
       (t) =>
         `${t.id}:${t.status}:${t.totp_secret}:${t.is_test ? 1 : 0}:${t.is_sandbox ? 1 : 0}:${t.pending_transfer ? 1 : 0}:${t.listed_for_resale ? 1 : 0}:${t.day_id ?? ""}:${t.issuance_channel ?? ""}`,
-    )
+    ),
+  ]
     .sort()
     .join("|")
 
@@ -1125,6 +1175,7 @@ export type EventAdmissionSnapshotRow = {
  */
 export async function fetchEventAdmissionSnapshot(
   eventId: string,
+  deviceSlot: { index: number; count: number },
 ): Promise<{
   eventId: string
   server_timestamp: number
@@ -1133,6 +1184,7 @@ export async function fetchEventAdmissionSnapshot(
   if (!eventId) {
     throw new Error("eventId requerido")
   }
+  const slot = requireScannerDeviceSlot(deviceSlot)
 
   const access = await resolveScannerActor(eventId)
   if (!access.ok) {
@@ -1145,17 +1197,42 @@ export async function fetchEventAdmissionSnapshot(
 
   const supabase = access.db
 
-  const { data, error } = await supabase
+  const { data: idRows, error: idError } = await supabase
     .from("tickets")
-    .select("id, status, admissions_used, scanned_at, totp_secret")
+    .select("id")
     .eq("event_id", eventId)
     .in("status", ["valid", "used", "scanned", "transferred"])
 
-  if (error) {
-    throw new Error(error.message)
+  if (idError) {
+    throw new Error(idError.message)
   }
 
-  const rows = data ?? []
+  const slotIds = filterTicketIdsForDeviceSlot(
+    (idRows ?? []).map((row) => String(row.id)),
+    slot,
+  )
+  if (slotIds.length === 0) {
+    return { eventId, server_timestamp: Date.now(), tickets: [] }
+  }
+
+  const rows: Array<{
+    id: string
+    status: string
+    admissions_used: number | null
+    scanned_at: string | null
+    totp_secret: string | null
+  }> = []
+  for (const chunk of chunkIds(slotIds)) {
+    const { data, error } = await supabase
+      .from("tickets")
+      .select("id, status, admissions_used, scanned_at, totp_secret")
+      .eq("event_id", eventId)
+      .in("id", chunk)
+    if (error) {
+      throw new Error(error.message)
+    }
+    rows.push(...(data ?? []))
+  }
   const ticketIds = rows.map((row) => String(row.id))
   const pendingTransferIds = new Set<string>()
   const listedForResaleIds = new Set<string>()

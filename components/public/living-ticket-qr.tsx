@@ -32,7 +32,8 @@ export function LivingTicketQR({
   variant?: "card" | "scan"
   compact?: boolean
 }) {
-  const secret = totpSecret || ticketId
+  const secret = totpSecret?.trim() ?? ""
+  const hasSecret = Boolean(secret)
   const isScan = variant === "scan"
   const [token, setToken] = useState("")
   const [progress, setProgress] = useState(() => getTotpWindowProgress())
@@ -45,11 +46,16 @@ export function LivingTicketQR({
     let lastWindow = getTotpWindow()
 
     async function refreshToken() {
+      if (!secret) {
+        if (!cancelled) setToken("")
+        return
+      }
       try {
         const next = await generateLivingQrPayload(ticketId, secret)
         if (!cancelled) setToken(next)
       } catch (error) {
         console.warn("[living-qr] generate failed", error)
+        if (!cancelled) setToken("")
       }
     }
 
@@ -101,7 +107,14 @@ export function LivingTicketQR({
           )}
           style={isScan ? { colorScheme: "light" } : undefined}
         >
-          {token ? (
+          {!hasSecret ? (
+            <div
+              role="alert"
+              className="grid h-full w-full place-items-center rounded-[inherit] bg-zinc-100 px-4 text-center text-sm font-semibold text-red-600"
+            >
+              Missing TOTP Secret
+            </div>
+          ) : token ? (
             <div className="relative h-full w-full overflow-hidden rounded-[inherit] bg-white">
               <QRCodeSVG
                 value={token}

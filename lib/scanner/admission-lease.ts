@@ -105,6 +105,17 @@ export function ticketBelongsToDeviceSlot(
   return ticketDeviceSlot(ticketId, slotCount) === Math.floor(Number(slotIndex))
 }
 
+/** IDs que esta pistola puede persistir. Sin slot válido no baja ninguno. */
+export function filterTicketIdsForDeviceSlot(
+  ticketIds: readonly string[],
+  slot: { index: number; count: number } | null | undefined,
+): string[] {
+  if (!isValidScannerDeviceSlot(slot)) return []
+  return ticketIds.filter((id) =>
+    ticketBelongsToDeviceSlot(id, slot.index, slot.count),
+  )
+}
+
 export function decideOfflineAdmission(input: {
   status: string
   admissionsUsed: number

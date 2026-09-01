@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import {
   buildAdmissionLeaseHash,
   decideOfflineAdmission,
+  filterTicketIdsForDeviceSlot,
   isGroupAdmissionTicket,
   parseScannerDeviceSlot,
   ticketBelongsToDeviceSlot,
@@ -21,6 +22,24 @@ describe("offline admission lease", () => {
     assert.equal(ticketBelongsToDeviceSlot(ticketId, 0, 0), false)
     assert.equal(ticketBelongsToDeviceSlot(ticketId, 0, Number.NaN), false)
     assert.equal(ticketDeviceSlot(ticketId, 0), -1)
+  })
+
+  it("keeps only ticket ids that belong to the configured pistol slot", () => {
+    const ids = [
+      "9dfcc6ca-8d97-4d9c-951d-ffabc21e6210",
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    ]
+    const count = 4
+    const index = ticketDeviceSlot(ids[0]!, count)
+    const filtered = filterTicketIdsForDeviceSlot(ids, { index, count })
+    assert.equal(
+      filtered.every((id) => ticketBelongsToDeviceSlot(id, index, count)),
+      true,
+    )
+    assert.equal(filtered.includes(ids[0]!), true)
+    assert.deepEqual(filterTicketIdsForDeviceSlot(ids, null), [])
+    assert.deepEqual(filterTicketIdsForDeviceSlot(ids, { index: 0, count: 0 }), [])
   })
 
   it("does not invent a one-pistol slot from missing storage", () => {

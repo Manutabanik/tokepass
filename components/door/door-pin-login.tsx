@@ -6,11 +6,9 @@ import { useRouter } from "next/navigation"
 import { KeyRound, LoaderCircle } from "lucide-react"
 
 import { redeemDoorAccessPin } from "@/app/actions/door-access"
-import { fetchEventTicketManifest } from "@/app/actions/scanner"
 import { BRAND_MARK_SRC } from "@/components/shared/brand-logo"
 import { Button } from "@/components/ui/button"
 import { requestDoorAssetCache } from "@/lib/pwa/door-cache"
-import { prefetchDoorManifest } from "@/lib/scanner/prefetch-manifest"
 
 export function DoorPinLogin() {
   const router = useRouter()
@@ -33,10 +31,6 @@ export function DoorPinLogin() {
         return
       }
       requestDoorAssetCache()
-      void prefetchDoorManifest(
-        result.eventId,
-        fetchEventTicketManifest,
-      ).catch(() => {})
       router.replace("/puerta/escanear")
       router.refresh()
     })
