@@ -2,7 +2,7 @@ import { parseScannerServerTimestamp } from "@/lib/scanner/server-clock"
 
 type RpcClient = {
   rpc: (
-    fn: string,
+    fn: "scanner_server_time",
     args?: Record<string, never>,
   ) => PromiseLike<{ data: unknown; error: unknown }>
 }

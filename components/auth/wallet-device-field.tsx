@@ -1,18 +1,19 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useSyncExternalStore } from "react"
 
 import {
-  readOrCreateWalletDeviceId,
+  readWalletDeviceIdSnapshot,
+  subscribeWalletDeviceId,
   WALLET_DEVICE_FORM_FIELD,
 } from "@/lib/auth/wallet-device"
 
 export function WalletDeviceField() {
-  const [deviceId, setDeviceId] = useState("")
-
-  useEffect(() => {
-    setDeviceId(readOrCreateWalletDeviceId())
-  }, [])
+  const deviceId = useSyncExternalStore(
+    subscribeWalletDeviceId,
+    readWalletDeviceIdSnapshot,
+    () => "",
+  )
 
   return (
     <input type="hidden" name={WALLET_DEVICE_FORM_FIELD} value={deviceId} />

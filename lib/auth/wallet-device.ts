@@ -103,6 +103,25 @@ export function persistWalletDeviceId(id: string): void {
   document.cookie = `${WALLET_DEVICE_COOKIE}=${normalized}; Path=${attrs.path}; Max-Age=${attrs.maxAge}; SameSite=Lax${secure}`
 }
 
+let clientWalletDeviceId: string | null = null
+
+export function subscribeWalletDeviceId(onStoreChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {}
+  const onChange = () => {
+    clientWalletDeviceId = null
+    onStoreChange()
+  }
+  window.addEventListener("storage", onChange)
+  return () => window.removeEventListener("storage", onChange)
+}
+
+export function readWalletDeviceIdSnapshot(): string {
+  if (typeof window === "undefined") return ""
+  if (clientWalletDeviceId) return clientWalletDeviceId
+  clientWalletDeviceId = readOrCreateWalletDeviceId()
+  return clientWalletDeviceId
+}
+
 /** Cookie primero: después del login el server ya escribió el id reclamado. */
 export function readOrCreateWalletDeviceId(): string {
   if (typeof window === "undefined") {

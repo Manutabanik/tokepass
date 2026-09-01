@@ -1242,6 +1242,13 @@ export function CheckoutTunnel({
   const seatingInventoryReady = !hasInteractiveMap || seatingInventoryFetched
 
   const availableExtras = extraTickets.filter((tier) => tier.available > 0)
+  const visibleExtras = useMemo(
+    () =>
+      availableExtras.filter((tier) =>
+        ticketVisibleOnCheckoutDay(tier, selectedDateId, scheduleDays),
+      ),
+    [availableExtras, scheduleDays, selectedDateId],
+  )
 
   const daySelectedItems = selectedItems.filter((item) =>
     itemMatchesActiveDay(item),
@@ -1766,9 +1773,7 @@ export function CheckoutTunnel({
       if (!tierId || mapTierIds.has(tierId)) continue
       const tier = displayTiers.find((item) => item.id === tierId)
       if (!tier || !isQuantityCheckoutTier(tier)) continue
-      const undated =
-        extraTickets.some((item) => item.id === tierId) ||
-        isUndatedCheckoutOffer(tier)
+      const undated = isUndatedCheckoutOffer(tier)
       const stamp = generalQuantityScheduleStamp({
         selectedDateId: undated ? null : parsed?.scheduleId,
         scheduleDays,
@@ -1796,7 +1801,6 @@ export function CheckoutTunnel({
     return [...seatLines, ...ticketLines]
   }, [
     displayTiers,
-    extraTickets,
     liveSelectedItems,
     mapTierIds,
     resolveItemTierId,
@@ -1942,24 +1946,19 @@ export function CheckoutTunnel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId])
 
-  function quantityStampForTier(
-    tier: TicketSelectorTier | undefined,
-    tierId: string,
-  ) {
+  function quantityStampForTier(tier: TicketSelectorTier | undefined) {
     return generalQuantityScheduleStamp({
       selectedDateId,
       scheduleDays,
       tier,
-      undated:
-        extraTickets.some((item) => item.id === tierId) ||
-        isUndatedCheckoutOffer(tier),
+      undated: isUndatedCheckoutOffer(tier),
     })
   }
 
   function updateQuantity(tierId: string, next: number, max: number) {
     if (purchaseLocked) return
     const tier = displayTiers.find((item) => item.id === tierId)
-    const stamp = quantityStampForTier(tier, tierId)
+    const stamp = quantityStampForTier(tier)
     const currentQty = quantityForPublicTier(
       useCheckoutStore.getState().quantities,
       { id: tierId, ...(tier ?? {}) },
@@ -2047,7 +2046,7 @@ export function CheckoutTunnel({
         ),
       },
     }))
-    const stamp = quantityStampForTier(current, info.tierId)
+    const stamp = quantityStampForTier(current)
     const currentQty = quantityForPublicTier(
       useCheckoutStore.getState().quantities,
       { id: info.tierId, ...(current ?? {}) },
@@ -3426,10 +3425,24 @@ export function CheckoutTunnel({
     )
   }
 
-  const hasSelectedExtras = availableExtras.some(
-    (extra) =>
-      quantityForPublicTier(storeQuantities, extra, { undated: true }) > 0,
-  )
+  const hasSelectedExtras = availableExtras.some((extra) => {
+    if (
+      quantityForPublicTier(storeQuantities, extra, { undated: true }) > 0
+    ) {
+      return true
+    }
+    const days =
+      checkoutDateCards.length > 0
+        ? checkoutDateCards.map((card) => card.dateId)
+        : [selectedDateId]
+    return days.some(
+      (dateId) =>
+        quantityForPublicTier(storeQuantities, extra, {
+          selectedDateId: dateId,
+          scheduleDays,
+        }) > 0,
+    )
+  })
   const stepTitle =
     visibleStep === "tickets"
       ? "Elegí tu entrada"
@@ -3597,10 +3610,15 @@ export function CheckoutTunnel({
               transition={{ duration: 0.28, ease: "easeInOut" }}
             >
               <CheckoutUpsellStep
-                extras={availableExtras}
+                extras={visibleExtras}
                 quantities={storeQuantities}
                 isPending={controlsLocked}
                 onQuantityChange={updateQuantity}
+                dateCards={checkoutDateCards}
+                selectedDateId={selectedDateId}
+                onSelectedDateIdChange={handleSelectedDateIdChange}
+                scheduleDays={scheduleDays}
+                hasAnyExtras={availableExtras.length > 0}
               />
             </motion.div>
           ) : visibleStep === "details" ? (

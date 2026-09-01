@@ -429,17 +429,8 @@ export function DoorScanner({
   ])
 
   const loadEvents = useCallback(async () => {
-    if (guestEvent) {
-      setEvents([guestEvent])
-      setEventId(guestEvent.id)
-      setEventsLoading(false)
-      setCatalogStale(false)
-      setLoadError(null)
-      return
-    }
+    if (guestEvent) return
 
-    setEventsLoading(true)
-    setLoadError(null)
     try {
       const cached = await getScannerEventsCache()
       if (cached) {
@@ -489,8 +480,11 @@ export function DoorScanner({
   }, [guestEvent])
 
   useEffect(() => {
-    void loadEvents()
+    const timer = window.setTimeout(() => {
+      void loadEvents()
+    }, 0)
     return () => {
+      window.clearTimeout(timer)
       if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current)
     }
   }, [loadEvents])
@@ -507,11 +501,11 @@ export function DoorScanner({
     setGatesEventId(eventId)
     setGates([])
     setGateId("")
+    setGatesLoading(Boolean(eventId))
   }
 
   const loadGates = useCallback(async (id: string) => {
     if (!id) return
-    setGatesLoading(true)
     const stored =
       typeof window !== "undefined"
         ? window.sessionStorage.getItem(`tokepass.scanner.gate.${id}`)
