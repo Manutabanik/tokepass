@@ -203,6 +203,10 @@ import {
   type BuiltinVenueTemplateId,
 } from "@/lib/constants/venue-templates"
 import {
+  adoptElementsIntoZone,
+  resolveDropZoneId,
+} from "@/lib/seating/adopt-elements-into-zone"
+import {
   applyVenuePriceGroupPatch,
   matchPriceGroupFromSelection,
   type VenuePriceGroup,
@@ -1420,6 +1424,25 @@ export function InteractiveVenueMapEditor({
     )
   }
 
+  function adoptDroppedElements(
+    nextMap: InteractiveVenueMap,
+    elementIds: readonly string[],
+    preferredZoneId?: string | null,
+  ): InteractiveVenueMap {
+    if (elementIds.length === 0) return nextMap
+    const selected = (nextMap.elements ?? []).filter((item) =>
+      elementIds.includes(item.id),
+    )
+    const zoneId = resolveDropZoneId(
+      selected,
+      nextMap.zones,
+      preferredZoneId ?? hoveredZoneIdRef.current,
+    )
+    return zoneId
+      ? adoptElementsIntoZone(nextMap, zoneId, elementIds)
+      : nextMap
+  }
+
   function commitLiveTransform(snap = false) {
     const live = liveTransformRef.current
     const drag = transformDrag.current
@@ -1517,12 +1540,17 @@ export function InteractiveVenueMapEditor({
       snapped,
     ).map((item) => clampWorldPoint(item))
     const byId = new Map(baked.map((item) => [item.id, item]))
+    const nextMap = adoptDroppedElements(
+      {
+        ...current,
+        elements: ensureElements(current).map((item) => byId.get(item.id) ?? item),
+      },
+      drag.ids,
+    )
     paintLive(null)
-    commit({
-      ...current,
-      elements: ensureElements(current).map((item) => byId.get(item.id) ?? item),
-    })
+    commit(nextMap)
     clearLiveUi()
+    clearHoveredDropZone()
   }
 
   function cancelLiveTransform() {
@@ -2846,7 +2874,18 @@ export function InteractiveVenueMapEditor({
           : undefined,
       ),
     )
-    commit({ ...current, elements: [...ensureElements(current), created] })
+    const dropZoneId =
+      hoveredZoneIdRef.current ||
+      zoneIdContainingCanvasPoint(point, current.zones ?? []) ||
+      created.zoneId ||
+      null
+    commit(
+      adoptDroppedElements(
+        { ...current, elements: [...ensureElements(current), created] },
+        [created.id],
+        dropZoneId,
+      ),
+    )
     setSelection({ kind: "element", id: created.id })
     setInspectorCollapsed(false)
     setPlacement(null)
@@ -4280,7 +4319,6 @@ export function InteractiveVenueMapEditor({
       applyPointerMove(pendingPointer.current)
       pendingPointer.current = null
     }
-    clearHoveredDropZone()
     if (transformDrag.current) {
       const live = liveTransformRef.current
       const wasTap = !live || isIdentityLive(live)
@@ -4301,6 +4339,7 @@ export function InteractiveVenueMapEditor({
       } else {
         pendingMobileProperties.current = false
       }
+      clearHoveredDropZone()
       return
     }
     const boxMarquee = marqueeRef.current
@@ -4378,6 +4417,7 @@ export function InteractiveVenueMapEditor({
     } else {
       pendingMobileProperties.current = false
     }
+    clearHoveredDropZone()
   }
 
   function onPointerUp(event: React.PointerEvent<SVGSVGElement>) {
