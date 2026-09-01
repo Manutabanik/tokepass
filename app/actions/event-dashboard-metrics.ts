@@ -10,6 +10,8 @@ import { createClient } from "@/lib/supabase/server"
 
 const EMPTY: EventDashboardMetrics = {
   ticketsSold: 0,
+  webSold: 0,
+  paperIssued: 0,
   revenue: 0,
   capacity: 0,
   available: 0,
@@ -59,7 +61,7 @@ export async function getEventDashboardMetrics(
     reader
       .from("tickets")
       .select(
-        "order_id, status, is_test, orders!tickets_order_id_fkey(id, status, total_amount, is_test, environment, payment_method)",
+        "order_id, status, is_test, issuance_channel, orders!tickets_order_id_fkey(id, status, total_amount, is_test, environment, payment_method)",
       )
       .eq("event_id", clean)
       .eq("is_test", false),
@@ -114,6 +116,7 @@ export async function getEventDashboardMetrics(
       order_id: row.order_id,
       status: row.status,
       is_test: Boolean(row.is_test),
+      issuance_channel: row.issuance_channel ?? "online",
     }
   })
 

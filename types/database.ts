@@ -529,9 +529,15 @@ export type TicketTier = {
   /** Comisión unitaria TokePass absorbida en `price`. */
   platform_fee: number
   capacity: number
+  /** Cupo de venta digital (web/POS/cortesía). Alineado a capacity. */
+  digital_capacity: number
+  /** Cupo de papel (`batch_print`). Independiente del cupo digital. */
+  physical_capacity: number
   /** Cupo total del SKU; se mantiene alineado a capacity. */
   total_capacity: number
   sold: number
+  /** Unidades de papel emitidas. No incrementa `sold`. */
+  physical_issued: number
   time_limit: string | null
   bonus_reward: string | null
   zone_id: string | null
@@ -1483,6 +1489,9 @@ type TicketTierInsert = Omit<
   | "min_purchase_limit"
   | "max_purchase_limit"
   | "total_capacity"
+  | "digital_capacity"
+  | "physical_capacity"
+  | "physical_issued"
   | "is_free"
   | "is_active"
   | "created_at"
@@ -1490,6 +1499,9 @@ type TicketTierInsert = Omit<
 > & {
   id?: string
   sold?: number
+  digital_capacity?: number
+  physical_capacity?: number
+  physical_issued?: number
   total_capacity?: number
   description?: string | null
   highlight_badge?: TicketTier["highlight_badge"]

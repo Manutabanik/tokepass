@@ -92,7 +92,8 @@ export default async function ManageEventPage({
 
   const metrics = await getEventDashboardMetrics(id)
   const capacity = metrics.capacity
-  const sold = metrics.ticketsSold
+  const webSold = metrics.webSold
+  const paperIssued = metrics.paperIssued
   const recaudacion = metrics.revenue
 
   const dressCards = [
@@ -221,13 +222,20 @@ export default async function ManageEventPage({
         reviewNote={event.review_note}
       />
 
-      <section className="grid gap-3 sm:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-2xl border border-border bg-card p-5">
           <Ticket className="size-5 text-emerald-600 dark:text-emerald-200" aria-hidden="true" />
           <p className="mt-4 text-3xl font-black text-foreground">
-            {formatNumber(sold)}
+            {formatNumber(webSold)}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">Entradas Vendidas</p>
+          <p className="mt-1 text-sm text-muted-foreground">Vendidos Web</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <Printer className="size-5 text-amber-600 dark:text-amber-200" aria-hidden="true" />
+          <p className="mt-4 text-3xl font-black text-foreground">
+            {formatNumber(paperIssued)}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">Impresos (Papel)</p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-5">
           <Wallet className="size-5 text-sky-500 dark:text-sky-300" aria-hidden="true" />
@@ -239,10 +247,10 @@ export default async function ManageEventPage({
         <div className="rounded-2xl border border-border bg-card p-5">
           <Users className="size-5 text-violet-500 dark:text-violet-300" aria-hidden="true" />
           <p className="mt-4 text-3xl font-black text-foreground">
-            {formatNumber(Math.max(0, capacity - sold))}
+            {formatNumber(metrics.available)}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Disponibles de {formatNumber(capacity)}
+            Disponibles web de {formatNumber(capacity)}
           </p>
         </div>
       </section>

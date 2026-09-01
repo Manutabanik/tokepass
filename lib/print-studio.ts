@@ -78,6 +78,16 @@ export function printChannelUsesCommercialStock(channel: string): boolean {
   return channel !== "accreditation"
 }
 
+/** Cortesía: consume `capacity` / `sold` (cupo digital). */
+export function printChannelUsesDigitalStock(channel: string): boolean {
+  return channel === "complimentary"
+}
+
+/** Imprenta: consume `physical_capacity` / `physical_issued`. */
+export function printChannelUsesPhysicalStock(channel: string): boolean {
+  return channel === "batch_print"
+}
+
 export const SCREEN_DPI = 96
 export const MM_PER_INCH = 25.4
 export const MM_TO_PX_96DPI = SCREEN_DPI / MM_PER_INCH

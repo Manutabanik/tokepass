@@ -24,6 +24,9 @@ export type ComplimentaryTierOption = {
   available: number
   capacity: number
   sold: number
+  digitalCapacity: number
+  physicalCapacity: number
+  physicalIssued: number
 }
 
 export type ComplimentaryBatchResult =
@@ -85,6 +88,7 @@ const COMPLIMENTARY_EXTRAS_ERROR =
   "Los extras no se emiten como cortesía. Elegí una entrada."
 
 const COMPLIMENTARY_TIER_SELECTS = [
+  "id, name, price, capacity, sold, admit_count, ticket_type, tier_type, category, digital_capacity, physical_capacity, physical_issued",
   "id, name, price, capacity, sold, admit_count, ticket_type, tier_type, category",
   "id, name, price, capacity, sold, admit_count, tier_type, category",
   "id, name, price, capacity, sold, admit_count",
@@ -101,6 +105,9 @@ async function loadComplimentaryTierRows(
     capacity: number
     sold: number
     admit_count?: number | null
+    digital_capacity?: number | null
+    physical_capacity?: number | null
+    physical_issued?: number | null
     ticket_type?: string | null
     tier_type?: string | null
     category?: string | null
@@ -193,6 +200,9 @@ export async function getComplimentaryTiers(
       admitCount: Math.max(1, Number(tier.admit_count ?? 1)),
       capacity: Number(tier.capacity),
       sold: Number(tier.sold),
+      digitalCapacity: Number(tier.digital_capacity ?? tier.capacity),
+      physicalCapacity: Number(tier.physical_capacity ?? 0),
+      physicalIssued: Number(tier.physical_issued ?? 0),
       available: Math.max(0, Number(tier.capacity) - Number(tier.sold)),
     }))
 }

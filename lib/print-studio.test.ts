@@ -18,6 +18,8 @@ import {
   printBatchNeedsGuests,
   printBatchStatusLabel,
   printChannelUsesCommercialStock,
+  printChannelUsesDigitalStock,
+  printChannelUsesPhysicalStock,
   screenPxToMm,
 } from "./print-studio"
 
@@ -142,5 +144,9 @@ describe("print batch labels", () => {
     assert.equal(printChannelUsesCommercialStock("accreditation"), false)
     assert.equal(printChannelUsesCommercialStock("batch_print"), true)
     assert.equal(printChannelUsesCommercialStock("complimentary"), true)
+    assert.equal(printChannelUsesDigitalStock("batch_print"), false)
+    assert.equal(printChannelUsesDigitalStock("complimentary"), true)
+    assert.equal(printChannelUsesPhysicalStock("batch_print"), true)
+    assert.equal(printChannelUsesPhysicalStock("complimentary"), false)
   })
 })

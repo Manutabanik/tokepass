@@ -37,11 +37,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { physicalRemaining } from "@/lib/inventory/channel-stock"
 import {
   ACCREDITATION_ROLES,
   formatPrintSerialLabel,
   parseAccreditationCsv,
   PRINT_BATCH_MAX_TICKETS,
+  printChannelUsesPhysicalStock,
   printTemplateMediumLabel,
   type PrintBatchChannel,
 } from "@/lib/print-studio"
@@ -100,6 +102,8 @@ export function NewBatchModal({
 
   const maxStep = channel === "accreditation" ? 4 : 3
   const selectedTier = tiers.find((tier) => tier.id === tierId) ?? null
+  const usesPaperStock = printChannelUsesPhysicalStock(channel)
+  const paperLeft = selectedTier ? physicalRemaining(selectedTier) : 0
   const startNum = Math.max(1, Math.floor(Number(seqStart) || 1))
   const countNum = Math.max(0, Math.floor(Number(count) || 0))
   const guestRows = guests.filter((guest) => guest.nombre.trim())
@@ -111,7 +115,7 @@ export function NewBatchModal({
   const channelHint = useMemo(() => {
     if (channel === "accreditation") return "Staff, prensa y técnica. QR estático TPS."
     if (channel === "complimentary") return "Cortesías impresas. Consumen el tope de free del evento."
-    return "Entradas físicas para boletería o venta offline."
+    return "Entradas físicas para boletería o venta offline. No consumen el cupo web."
   }, [channel])
 
   function resetForm() {
@@ -300,15 +304,28 @@ export function NewBatchModal({
                   <SelectContent>
                     {tiers.map((tier) => (
                       <SelectItem key={tier.id} value={tier.id}>
-                        {tier.name} · {tier.available} disponibles
+                        {usesPaperStock
+                          ? `${tier.name} · ${tier.physicalIssued} impresos`
+                          : `${tier.name} · ${tier.available} disponibles`}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedTier ? (
+                {selectedTier && usesPaperStock ? (
                   <p className="text-xs text-muted-foreground">
-                    Cupo {selectedTier.sold}/{selectedTier.capacity}. El lote consume
-                    inventario de esta tarifa.
+                    Papel {selectedTier.physicalIssued}/
+                    {selectedTier.physicalCapacity}. Este lote inyecta cupo de
+                    papel y no toca el cupo web ({selectedTier.sold}/
+                    {selectedTier.digitalCapacity || selectedTier.capacity}{" "}
+                    vendidos).
+                    {paperLeft > 0
+                      ? ` Quedan ${paperLeft} de papel ya inyectados.`
+                      : " Si pedís más, se inyecta stock de papel."}
+                  </p>
+                ) : selectedTier ? (
+                  <p className="text-xs text-muted-foreground">
+                    Cupo web {selectedTier.sold}/{selectedTier.capacity}. El lote
+                    de cortesía consume el cupo digital, no el de papel.
                   </p>
                 ) : (
                   <p className="text-xs text-destructive">

@@ -1,4 +1,8 @@
 import { isProductionPaidOrder } from "@/lib/finance/organizer-ledger"
+import {
+  classifyIssuanceForDashboard,
+  issuanceUsesDigitalStock,
+} from "@/lib/inventory/channel-stock"
 
 const EXCLUDED_TICKET_STATUSES = new Set([
   "pending_payment",
@@ -8,6 +12,8 @@ const EXCLUDED_TICKET_STATUSES = new Set([
 
 export type EventDashboardMetrics = {
   ticketsSold: number
+  webSold: number
+  paperIssued: number
   revenue: number
   capacity: number
   available: number
@@ -19,6 +25,8 @@ export type EventDashboardTicketRow = {
   status?: string | null
   is_test?: boolean | null
   isTest?: boolean | null
+  issuance_channel?: string | null
+  issuanceChannel?: string | null
 }
 
 export type EventDashboardOrderRow = {
@@ -55,14 +63,20 @@ export function computeEventDashboardMetrics(input: {
   )
   const productionOrders = new Map<string, EventDashboardOrderRow>()
 
-  let ticketsSold = 0
+  let webSold = 0
+  let paperIssued = 0
+  let digitalOccupied = 0
   for (const ticket of input.tickets) {
     if (!isProductionTicket(ticket)) continue
     const orderId = ticketOrderId(ticket)
     if (!orderId) continue
     const order = ordersById.get(orderId)
     if (!order || !isProductionPaidOrder(order)) continue
-    ticketsSold += 1
+    const channel = ticket.issuanceChannel ?? ticket.issuance_channel
+    const bucket = classifyIssuanceForDashboard(channel)
+    if (bucket === "web") webSold += 1
+    if (bucket === "paper") paperIssued += 1
+    if (issuanceUsesDigitalStock(channel)) digitalOccupied += 1
     productionOrders.set(orderId, order)
   }
 
@@ -72,10 +86,12 @@ export function computeEventDashboardMetrics(input: {
   }, 0)
 
   return {
-    ticketsSold,
+    ticketsSold: webSold,
+    webSold,
+    paperIssued,
     revenue,
     capacity,
-    available: Math.max(0, capacity - ticketsSold),
+    available: Math.max(0, capacity - digitalOccupied),
   }
 }
 
@@ -85,13 +101,24 @@ export function eventDashboardMetricsFromRpc(
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null
   const row = raw as Record<string, unknown>
   const ticketsSold = Number(row.tickets_sold ?? row.ticketsSold)
+  const webSold = Number(row.web_sold ?? row.webSold ?? ticketsSold)
+  const paperIssued = Number(row.paper_issued ?? row.paperIssued ?? 0)
   const revenue = Number(row.revenue)
   const capacity = Number(row.capacity)
+  const availableRaw = Number(row.available)
   if (![ticketsSold, revenue, capacity].every(Number.isFinite)) return null
+  const web = Number.isFinite(webSold) ? Math.max(0, Math.trunc(webSold)) : 0
+  const paper = Number.isFinite(paperIssued)
+    ? Math.max(0, Math.trunc(paperIssued))
+    : 0
   return {
     ticketsSold: Math.max(0, Math.trunc(ticketsSold)),
+    webSold: web,
+    paperIssued: paper,
     revenue,
     capacity: Math.max(0, Math.trunc(capacity)),
-    available: Math.max(0, Math.trunc(capacity) - Math.trunc(ticketsSold)),
+    available: Number.isFinite(availableRaw)
+      ? Math.max(0, Math.trunc(availableRaw))
+      : Math.max(0, Math.trunc(capacity) - web),
   }
 }

@@ -4,6 +4,7 @@ import {
   DollarSign,
   Landmark,
   Plus,
+  Printer,
   Sparkles,
   Ticket,
   Wallet,
@@ -78,13 +79,19 @@ export default async function AdminDashboardPage() {
       icon: Wallet,
     },
     {
-      label: "Entradas vendidas",
-      value: String(metrics.ticketsSold),
+      label: "Vendidos Web",
+      value: String(metrics.webSold),
       helper:
         metrics.activeEvents > 0
-          ? `${metrics.activeEvents} evento${metrics.activeEvents === 1 ? "" : "s"} activo${metrics.activeEvents === 1 ? "" : "s"}`
-          : "Tickets de órdenes pagadas",
+          ? `${metrics.activeEvents} evento${metrics.activeEvents === 1 ? "" : "s"} activo${metrics.activeEvents === 1 ? "" : "s"} · venta digital`
+          : "Compras online y boletería POS",
       icon: Ticket,
+    },
+    {
+      label: "Impresos (Papel)",
+      value: String(metrics.paperIssued),
+      helper: "Lotes de imprenta. No consumen el cupo web.",
+      icon: Printer,
     },
   ] as const
 
@@ -106,7 +113,7 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
-      <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {kpis.map(({ label, value, helper, icon: Icon }) => (
           <Card
             key={label}

@@ -21,6 +21,8 @@ export type RecentSale = {
 export type DashboardMetrics = OrganizerPaidLedger & {
   totalRevenue: number
   ticketsSold: number
+  webSold: number
+  paperIssued: number
   activeEvents: number
   recentSales: RecentSale[]
 }
@@ -31,6 +33,8 @@ type RpcMetrics = {
   organizer_net_payout?: number | string | null
   total_revenue?: number | string | null
   tickets_sold?: number | string | null
+  web_sold?: number | string | null
+  paper_issued?: number | string | null
   active_events?: number | string | null
   recent_sales?: Array<{
     id?: string
@@ -75,6 +79,11 @@ function normalizeMetrics(raw: unknown): DashboardMetrics {
     ...ledger,
     totalRevenue: ledger.grossRevenue,
     ticketsSold: Math.max(0, Math.trunc(toNumber(data.tickets_sold))),
+    webSold: Math.max(
+      0,
+      Math.trunc(toNumber(data.web_sold ?? data.tickets_sold)),
+    ),
+    paperIssued: Math.max(0, Math.trunc(toNumber(data.paper_issued))),
     activeEvents: Math.max(0, Math.trunc(toNumber(data.active_events))),
     recentSales: normalizeRecentSales(data.recent_sales),
   }
@@ -86,6 +95,8 @@ const EMPTY_METRICS: DashboardMetrics = {
   organizerNetPayout: 0,
   totalRevenue: 0,
   ticketsSold: 0,
+  webSold: 0,
+  paperIssued: 0,
   activeEvents: 0,
   recentSales: [],
 }
