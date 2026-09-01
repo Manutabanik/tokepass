@@ -7,21 +7,38 @@ export const VENUE_MAP_CANVAS = { width: 800, height: 560 } as const
 const CLOSE_SNAP_PX = 14
 
 /**
- * Percent space may overflow the 800×560 world (expanded viewBox padding).
- * Only treat a vertex as canvas pixels when it cannot be a % overflow.
+ * Percent space may overflow 100% (expanded viewBox). This is a documentation
+ * bound only — overflowing a vertex past 140 must never trigger pixel reconversion.
  */
 export const VENUE_PERCENT_OVERFLOW_MAX = 140
+
+/**
+ * Unmarked legacy polygons are canvas pixels only when a vertex cannot be a
+ * percent overflow of the 800×560 world.
+ */
+export const VENUE_PIXEL_SPACE_MIN = 200
+
+export type VenuePolygonSpace = "percent" | "pixels"
+
+export function parsePolygonSpace(value: unknown): VenuePolygonSpace | undefined {
+  if (value === "percent" || value === "pixels") return value
+  return undefined
+}
 
 export function roundMapCoord(value: number, digits = 3): number {
   const factor = 10 ** digits
   return Math.round(value * factor) / factor
 }
 
-export function polygonLooksLikePixels(points: VenueMapPoint[]): boolean {
+export function polygonLooksLikePixels(
+  points: VenueMapPoint[],
+  space?: VenuePolygonSpace | null,
+): boolean {
+  if (space === "percent") return false
+  if (space === "pixels") return true
   return points.some(
     (point) =>
-      point.x > VENUE_PERCENT_OVERFLOW_MAX ||
-      point.y > VENUE_PERCENT_OVERFLOW_MAX,
+      point.x > VENUE_PIXEL_SPACE_MIN || point.y > VENUE_PIXEL_SPACE_MIN,
   )
 }
 
@@ -44,22 +61,34 @@ export function polygonFromCanvas(points: VenueMapPoint[]): VenueMapPoint[] {
   return points.map(canvasPointToPercent)
 }
 
+function keepPercentPolygon(points: VenueMapPoint[]): VenueMapPoint[] {
+  return points.map((point) => ({
+    x: roundMapCoord(point.x),
+    y: roundMapCoord(point.y),
+  }))
+}
+
+/**
+ * Round percent vertices. Never remultiply/redivide when the polygon is already
+ * percent (explicit mark, or unmarked overflow still inside percent space).
+ */
 export function normalizePolygonToPercent(
   points: VenueMapPoint[],
+  space?: VenuePolygonSpace | null,
 ): VenueMapPoint[] {
   if (points.length === 0) return points
-  if (!polygonLooksLikePixels(points)) {
-    return points.map((point) => ({
-      x: roundMapCoord(point.x),
-      y: roundMapCoord(point.y),
-    }))
+  if (space === "percent" || !polygonLooksLikePixels(points, space)) {
+    return keepPercentPolygon(points)
   }
   return polygonFromCanvas(points)
 }
 
-export function polygonToCanvas(points: VenueMapPoint[]): VenueMapPoint[] {
+export function polygonToCanvas(
+  points: VenueMapPoint[],
+  space?: VenuePolygonSpace | null,
+): VenueMapPoint[] {
   if (points.length === 0) return points
-  if (polygonLooksLikePixels(points)) return points
+  if (polygonLooksLikePixels(points, space)) return points
   return points.map(percentPointToCanvas)
 }
 

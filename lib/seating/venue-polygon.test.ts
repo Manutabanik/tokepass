@@ -8,6 +8,7 @@ import {
   normalizePolygonToPercent,
   polygonFromCanvas,
   polygonLooksLikePixels,
+  VENUE_PERCENT_OVERFLOW_MAX,
   polygonToCanvas,
   percentPointToCanvas,
   popPolygonDraft,
@@ -117,6 +118,46 @@ describe("parametric zone polygons", () => {
       ],
     })
     assert.equal(map.zones[0]?.polygon[1]?.x, 110.2)
+  })
+
+  it("does not reconvert a percent polygon when a vertex overflows 140", () => {
+    const points = [
+      { x: 10, y: 10 },
+      { x: 145, y: 10 },
+      { x: 145, y: 40 },
+    ]
+    assert.equal(points[1]!.x > VENUE_PERCENT_OVERFLOW_MAX, true)
+    assert.equal(polygonLooksLikePixels(points), false)
+    const normalized = normalizePolygonToPercent(points)
+    assert.equal(normalized[1]?.x, 145)
+    assert.deepEqual(normalizePolygonToPercent(normalized), normalized)
+    const map = parseVenueMap({
+      zones: [{ id: "overflow-140", name: "Zona", polygon: points }],
+    })
+    assert.equal(map.zones[0]?.polygon[1]?.x, 145)
+    assert.equal(map.zones[0]?.polygonSpace, "percent")
+  })
+
+  it("never remultiplies a polygon marked as percent, even past canvas scale", () => {
+    const points = [
+      { x: 10, y: 10 },
+      { x: 400, y: 10 },
+      { x: 400, y: 40 },
+    ]
+    assert.equal(polygonLooksLikePixels(points, "percent"), false)
+    const normalized = normalizePolygonToPercent(points, "percent")
+    assert.equal(normalized[1]?.x, 400)
+    const map = parseVenueMap({
+      zones: [
+        {
+          id: "marked",
+          name: "Zona",
+          polygon: points,
+          polygonSpace: "percent",
+        },
+      ],
+    })
+    assert.equal(map.zones[0]?.polygon[1]?.x, 400)
   })
 
   it("snaps the last click to the first vertex to close the zone", () => {

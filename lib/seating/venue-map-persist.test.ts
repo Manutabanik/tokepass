@@ -135,6 +135,32 @@ describe("venue-map persist", () => {
     assert.equal(persisted.elements[0]?.seats[0]?.price, 5000)
   })
 
+  it("does not persist sold or occupied as blocked map geometry", () => {
+    const persisted = parseVenueMap({
+      version: 1,
+      sectors: [
+        {
+          seats: [
+            { id: "sold-1", row: "A", number: 1, x: 10, y: 10, status: "sold" },
+            {
+              id: "occ-1",
+              row: "A",
+              number: 2,
+              x: 20,
+              y: 10,
+              status: "occupied",
+            },
+          ],
+        },
+      ],
+    })
+    const roundtrip = parseVenueMap(serializeVenueMap(persisted))
+    assert.equal(persisted.sectors[0]?.seats[0]?.status, "available")
+    assert.equal(persisted.sectors[0]?.seats[1]?.status, "available")
+    assert.equal(roundtrip.sectors[0]?.seats[0]?.status, "available")
+    assert.equal(roundtrip.sectors[0]?.seats[1]?.status, "available")
+  })
+
   it("persiste zoneId de asientos y mesas y acepta aliases", () => {
     const map = emptyVenueMap()
     map.elements = [

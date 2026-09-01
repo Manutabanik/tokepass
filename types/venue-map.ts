@@ -1,4 +1,8 @@
-import { normalizePolygonToPercent } from "@/lib/seating/venue-polygon"
+import {
+  normalizePolygonToPercent,
+  parsePolygonSpace,
+  type VenuePolygonSpace,
+} from "@/lib/seating/venue-polygon"
 
 export type VenueMapSeatStatus = "available" | "blocked" | "reserved"
 
@@ -275,6 +279,8 @@ export type VenueMapZone = {
   color: string
   price: number
   polygon: VenueMapPoint[]
+  /** When set, parse/normalize must never remultiply these vertices. */
+  polygonSpace?: VenuePolygonSpace
   layoutType: VenueZoneLayoutType
   /** GENERAL = aforo del polígono. RESERVED = mesas/sillas hijas. */
   seatingType?: SeatingType
@@ -363,17 +369,13 @@ const VENUE_SHAPE_TYPES: VenueShapeType[] = [
 ]
 
 function parseSeatStatus(value: unknown): VenueMapSeatStatus {
-  if (value === "reserved") return "reserved"
-  if (
-    value === "blocked" ||
-    value === "disabled" ||
-    value === "inactive" ||
-    value === "sold" ||
-    value === "locked" ||
-    value === "occupied"
-  ) {
+  // Inventory occupancy (sold / reserved / available) lives on
+  // event_seating_units. Map JSON only records editor geometry locks.
+  if (value === "blocked" || value === "disabled" || value === "inactive") {
     return "blocked"
   }
+  if (value === "locked") return "blocked"
+  if (value === "reserved") return "reserved"
   return "available"
 }
 
@@ -674,7 +676,11 @@ function parseVenueZone(raw: unknown, index = 0): VenueMapZone | null {
     name: String(item.name ?? "Zona").slice(0, 80),
     color: String(item.color ?? "#22d3ee"),
     price: Math.max(0, asNumber(item.price, 0)),
-    polygon: normalizePolygonToPercent(polygon),
+    polygon: normalizePolygonToPercent(
+      polygon,
+      parsePolygonSpace(item.polygonSpace ?? item.polygon_space ?? item.space),
+    ),
+    polygonSpace: "percent",
     layoutType,
     seatingType,
     sellMode: pricing.sellMode,
@@ -937,7 +943,11 @@ export function serializeVenueMap(map: InteractiveVenueMap): InteractiveVenueMap
       seats: [] as VenueMapElement["seats"],
     }
   })
+  const zones = (map.zones ?? []).map((zone) => ({
+    ...zone,
+    polygonSpace: "percent" as const,
+  }))
   return JSON.parse(
-    JSON.stringify({ ...map, elements }),
+    JSON.stringify({ ...map, elements, zones }),
   ) as InteractiveVenueMap
 }

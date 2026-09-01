@@ -133,7 +133,7 @@ describe("venue-element-geometry", () => {
     assert.equal(map.elements[0]?.labelLocked, true)
   })
 
-  it("maps sold and locked seat statuses to blocked", () => {
+  it("does not rewrite inventory occupancy onto map geometry", () => {
     const map = parseVenueMap({
       version: 1,
       sectors: [],
@@ -146,15 +146,17 @@ describe("venue-element-geometry", () => {
           y: 10,
           seats: [
             { id: "s-sold", number: 1, status: "sold" },
-            { id: "s-locked", number: 2, status: "locked" },
-            { id: "s-reserved", number: 3, status: "reserved" },
+            { id: "s-occupied", number: 2, status: "occupied" },
+            { id: "s-locked", number: 3, status: "locked" },
+            { id: "s-reserved", number: 4, status: "reserved" },
           ],
         },
       ],
     })
-    assert.equal(map.elements[0]?.seats[0]?.status, "blocked")
-    assert.equal(map.elements[0]?.seats[1]?.status, "blocked")
-    assert.equal(map.elements[0]?.seats[2]?.status, "reserved")
+    assert.equal(map.elements[0]?.seats[0]?.status, "available")
+    assert.equal(map.elements[0]?.seats[1]?.status, "available")
+    assert.equal(map.elements[0]?.seats[2]?.status, "blocked")
+    assert.equal(map.elements[0]?.seats[3]?.status, "reserved")
   })
 
   it("preserves a locked position through parse", () => {
