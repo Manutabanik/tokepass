@@ -88,6 +88,7 @@ import { VenueStudioHud } from "@/components/admin/venue-studio-hud"
 import { VenueTemplateLibrary } from "@/components/admin/venue-template-selector"
 import {
   loadVenueMapEditorInventory,
+  purgeVenueMapEditorTestPurchases,
   saveVenueMapOnly,
 } from "@/app/actions/events"
 import {
@@ -620,12 +621,49 @@ export function InteractiveVenueMapEditor({
   const [modesOpen, setModesOpen] = useState(false)
   const [lassoMode, setLassoMode] = useState(false)
   const [stockLockNotice, setStockLockNotice] = useState<string | null>(null)
+  const [purgingTestPurchases, setPurgingTestPurchases] = useState(false)
   const isDesktop = useIsDesktop()
   const compactChrome = !isDesktop
   const mapBusy = saving || explicitSaveStatus === "saving"
   const hasUnsavedChanges = isCanvasDirty || polygonDraft.length > 0
   const hasUnsavedMapWork = hasUnsavedChanges
   useUnsavedChanges(hasUnsavedChanges)
+
+  function applyEditorInventory(inventory: {
+    seatingUnits: VenueMapSeatingUnitRef[]
+    eventStatus: string
+    updatedAt: string
+  }) {
+    setSeatingUnits(inventory.seatingUnits)
+    setEventStatus(inventory.eventStatus)
+    setLoadedUpdatedAt(inventory.updatedAt)
+    loadedUpdatedAtRef.current = inventory.updatedAt
+  }
+
+  async function handlePurgeTestPurchases() {
+    const id = eventId?.trim()
+    if (!id) return false
+    setPurgingTestPurchases(true)
+    try {
+      const result = await purgeVenueMapEditorTestPurchases(id)
+      if (!result.success) {
+        toast.error(result.error)
+        return false
+      }
+      applyEditorInventory(result)
+      toast.success(
+        result.unitsReleased > 0 || result.ticketsPurged > 0
+          ? `Se liberaron ${result.unitsReleased} mesas y se quitaron ${result.ticketsPurged} tickets de prueba.`
+          : "No había compras de prueba para limpiar.",
+      )
+      return true
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+      return false
+    } finally {
+      setPurgingTestPurchases(false)
+    }
+  }
 
   async function persistEditorMap() {
     if (!onSave && !eventId) return
@@ -640,10 +678,7 @@ export function InteractiveVenueMapEditor({
             toast.error(inventory.error)
             return
           }
-          setSeatingUnits(inventory.seatingUnits)
-          setEventStatus(inventory.eventStatus)
-          setLoadedUpdatedAt(inventory.updatedAt)
-          loadedUpdatedAtRef.current = inventory.updatedAt
+          applyEditorInventory(inventory)
         }
         const saved = await saveVenueMapOnly(
           eventId,
@@ -657,10 +692,7 @@ export function InteractiveVenueMapEditor({
         }
         const refreshed = await loadVenueMapEditorInventory(eventId)
         if (refreshed.success) {
-          setSeatingUnits(refreshed.seatingUnits)
-          setEventStatus(refreshed.eventStatus)
-          setLoadedUpdatedAt(refreshed.updatedAt)
-          loadedUpdatedAtRef.current = refreshed.updatedAt
+          applyEditorInventory(refreshed)
         } else {
           setLoadedUpdatedAt(saved.updatedAt)
           loadedUpdatedAtRef.current = saved.updatedAt
@@ -695,10 +727,7 @@ export function InteractiveVenueMapEditor({
     let cancelled = false
     void loadVenueMapEditorInventory(id).then((result) => {
       if (cancelled || !result.success) return
-      setSeatingUnits(result.seatingUnits)
-      setEventStatus(result.eventStatus)
-      setLoadedUpdatedAt(result.updatedAt)
-      loadedUpdatedAtRef.current = result.updatedAt
+      applyEditorInventory(result)
     })
     return () => {
       cancelled = true
@@ -5535,6 +5564,9 @@ export function InteractiveVenueMapEditor({
               }}
               onPreview={openPreview}
               onClearMap={handleClearMap}
+              canPurgeTestPurchases={Boolean(eventId?.trim())}
+              purgingTestPurchases={purgingTestPurchases}
+              onPurgeTestPurchases={handlePurgeTestPurchases}
             />
           ) : null}
           <VenueStockLockBanner

@@ -34,6 +34,11 @@ import {
   VENUE_MAP_STALE_WRITE_ERROR,
 } from "@/lib/events/venue-map-optimistic-lock"
 import { seatingUnitsForEditorLock } from "@/lib/seating/editor-stock-lock"
+import {
+  editorTestTicketIdsToDelete,
+  editorTestUnitIdsToRelease,
+  isEditorTestOrder,
+} from "@/lib/seating/editor-test-purge"
 import { hydrateVenueMapOccupancy } from "@/lib/seating/map-inventory-hydration"
 import type { VenueMapSeatingUnitRef } from "@/lib/seating/map-inventory-hydration"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
@@ -1238,6 +1243,194 @@ export async function loadVenueMapEditorInventory(
       seatingUnits: seatingUnitsForEditorLock(seatingUnits, event.status),
       lockUnknownLayoutIds: false,
     }),
+  }
+}
+
+const EDITOR_PURGE_CHUNK = 200
+
+async function chunkedIds<T>(
+  ids: string[],
+  run: (slice: string[]) => Promise<T>,
+) {
+  const results: T[] = []
+  for (let i = 0; i < ids.length; i += EDITOR_PURGE_CHUNK) {
+    results.push(await run(ids.slice(i, i + EDITOR_PURGE_CHUNK)))
+  }
+  return results
+}
+
+async function releaseEditorTestOccupancy(
+  admin: ReturnType<typeof createAdminClient>,
+  eventId: string,
+  eventStatus: string,
+) {
+  const { data: units, error: unitsError } = await admin
+    .from("event_seating_units")
+    .select("id, status, sold_order_id, reserved_order_id")
+    .eq("event_id", eventId)
+    .in("status", ["sold", "reserved"])
+    .limit(20000)
+  if (unitsError) throw unitsError
+
+  const orderIds = [
+    ...new Set(
+      (units ?? []).flatMap((unit) =>
+        [unit.sold_order_id, unit.reserved_order_id]
+          .map((id) => id?.trim())
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ),
+  ]
+  const testOrderIds = new Set<string>()
+  await chunkedIds(orderIds, async (slice) => {
+    const { data: orders } = await admin
+      .from("orders")
+      .select("id, is_test, environment")
+      .in("id", slice)
+    for (const order of orders ?? []) {
+      if (isEditorTestOrder(order)) testOrderIds.add(order.id)
+    }
+  })
+
+  const { data: tickets, error: ticketsError } = await admin
+    .from("tickets")
+    .select("id, is_test, order_id, seating_unit_id, seat_id")
+    .eq("event_id", eventId)
+    .limit(20000)
+  if (ticketsError) throw ticketsError
+
+  for (const ticket of tickets ?? []) {
+    if (ticket.is_test && ticket.order_id?.trim()) {
+      testOrderIds.add(ticket.order_id.trim())
+    }
+  }
+
+  const ticketIds = editorTestTicketIdsToDelete(
+    (tickets ?? []).map((ticket) => ({
+      id: ticket.id,
+      isTest: ticket.is_test,
+      orderId: ticket.order_id,
+      seatingUnitId: ticket.seating_unit_id,
+      seatId: ticket.seat_id,
+    })),
+    testOrderIds,
+    eventStatus,
+  )
+  if (ticketIds.length > 0) {
+    const deletes = await chunkedIds(ticketIds, async (slice) =>
+      admin.from("tickets").delete().in("id", slice),
+    )
+    const failed = deletes.find((result) => result.error)
+    if (failed?.error) throw failed.error
+  }
+
+  const unitIds = editorTestUnitIdsToRelease(
+    (units ?? []).map((unit) => ({
+      id: unit.id,
+      status: unit.status,
+      soldOrderId: unit.sold_order_id,
+      reservedOrderId: unit.reserved_order_id,
+    })),
+    testOrderIds,
+    eventStatus,
+  )
+  if (unitIds.length > 0) {
+    const updates = await chunkedIds(unitIds, async (slice) =>
+      admin
+        .from("event_seating_units")
+        .update({
+          status: "available",
+          reserved_by: null,
+          reserved_order_id: null,
+          reserved_until: null,
+          sold_order_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("event_id", eventId)
+        .in("id", slice),
+    )
+    const failed = updates.find((result) => result.error)
+    if (failed?.error) throw failed.error
+  }
+
+  return {
+    ticketsPurged: ticketIds.length,
+    unitsReleased: unitIds.length,
+  }
+}
+
+export async function purgeVenueMapEditorTestPurchases(
+  eventId: string,
+): Promise<
+  | {
+      success: true
+      ticketsPurged: number
+      unitsReleased: number
+      updatedAt: string
+      eventStatus: string
+      occupancyBySeatId: Record<string, SeatStatus>
+      seatingUnits: VenueMapSeatingUnitRef[]
+    }
+  | { success: false; error: string }
+> {
+  const id = eventId.trim()
+  if (!id) return { success: false, error: "Evento inválido." }
+
+  let supabase: Awaited<ReturnType<typeof createClient>>
+  let userId: string
+  try {
+    const session = await requireAuthenticatedUser()
+    supabase = session.supabase
+    userId = session.user.id
+  } catch {
+    return { success: false, error: "Debes iniciar sesión para editar el mapa." }
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle()
+  const isSuperAdmin = isPlatformOwnerRole(profile?.role)
+  const reader = isSuperAdmin ? createAdminClient() : supabase
+
+  const { data: event, error: eventError } = await reader
+    .from("events")
+    .select("id, organizer_id, status")
+    .eq("id", id)
+    .maybeSingle()
+  if (eventError) return { success: false, error: formatSupabaseError(eventError) }
+  if (!event) return { success: false, error: "Evento no encontrado." }
+  if (!isSuperAdmin && event.organizer_id !== userId) {
+    return { success: false, error: "No tenés permiso para editar este evento." }
+  }
+
+  try {
+    const sandbox = await purgeSandboxInventoryForEvent(id)
+    const leftover = await releaseEditorTestOccupancy(
+      createAdminClient(),
+      id,
+      event.status ?? "draft",
+    )
+    const inventory = await loadVenueMapEditorInventory(id)
+    if (!inventory.success) return inventory
+    return {
+      success: true,
+      ticketsPurged: sandbox.ticketsPurged + leftover.ticketsPurged,
+      unitsReleased: leftover.unitsReleased,
+      updatedAt: inventory.updatedAt,
+      eventStatus: inventory.eventStatus,
+      occupancyBySeatId: inventory.occupancyBySeatId,
+      seatingUnits: inventory.seatingUnits,
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : formatSupabaseError(error),
+    }
   }
 }
 

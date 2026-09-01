@@ -4,20 +4,36 @@ import { useState, type PointerEvent } from "react"
 import {
   ChevronDown,
   Eye,
+  FlaskConical,
   LayoutTemplate,
+  LoaderCircle,
   Minus,
   Save,
   Square,
   Trash2,
 } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { blurActiveElement } from "@/lib/dom/blur-active-element"
+import {
+  EDITOR_PURGE_TEST_CONFIRM,
+  EDITOR_PURGE_TEST_LABEL,
+} from "@/lib/seating/editor-test-purge"
 import { cn } from "@/lib/utils"
 
 function stopCanvas(event: PointerEvent<HTMLElement>) {
@@ -33,6 +49,9 @@ export function VenueEditorToolsMenu({
   onSaveTemplate,
   onPreview,
   onClearMap,
+  canPurgeTestPurchases = false,
+  purgingTestPurchases = false,
+  onPurgeTestPurchases,
   className,
 }: {
   geometryLocked: boolean
@@ -43,9 +62,13 @@ export function VenueEditorToolsMenu({
   onSaveTemplate: () => void
   onPreview: () => void
   onClearMap: () => void
+  canPurgeTestPurchases?: boolean
+  purgingTestPurchases?: boolean
+  onPurgeTestPurchases?: () => Promise<boolean> | boolean
   className?: string
 }) {
   const [open, setOpen] = useState(false)
+  const [confirmPurge, setConfirmPurge] = useState(false)
 
   return (
     <div
@@ -98,8 +121,73 @@ export function VenueEditorToolsMenu({
               Limpiar Mapa
             </DropdownMenuItem>
           )}
+          {canPurgeTestPurchases ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={purgingTestPurchases}
+                onClick={() => {
+                  blurActiveElement()
+                  setConfirmPurge(true)
+                }}
+              >
+                <FlaskConical className="size-4" />
+                {EDITOR_PURGE_TEST_LABEL}
+              </DropdownMenuItem>
+            </>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
+      {canPurgeTestPurchases ? (
+        <Dialog
+          modal={false}
+          open={confirmPurge}
+          onOpenChange={(next) => {
+            if (purgingTestPurchases) return
+            if (next) blurActiveElement()
+            setConfirmPurge(next)
+          }}
+        >
+          <DialogContent
+            className="z-[220] border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+            overlayClassName="z-[210] bg-black/40 backdrop-blur-[2px]"
+          >
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FlaskConical className="size-4 text-amber-600" aria-hidden="true" />
+                Purgar compras de prueba
+              </DialogTitle>
+              <DialogDescription>{EDITOR_PURGE_TEST_CONFIRM}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="sm:flex-row">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={purgingTestPurchases}
+                onClick={() => setConfirmPurge(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                disabled={purgingTestPurchases}
+                onClick={() => {
+                  void Promise.resolve(onPurgeTestPurchases?.()).then((ok) => {
+                    if (ok !== false) setConfirmPurge(false)
+                  })
+                }}
+              >
+                {purgingTestPurchases ? (
+                  <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <FlaskConical className="size-4" aria-hidden="true" />
+                )}
+                Liberar mesas
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </div>
   )
 }
