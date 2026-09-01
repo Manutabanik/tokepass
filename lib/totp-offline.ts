@@ -13,8 +13,11 @@
 export const MISSING_TOTP_SECRET_ERROR = "Missing TOTP Secret"
 
 export const LIVING_QR_PERIOD_MS = 15_000
-/** ±3 bloques de 15s = ±45s de clock drift en puerta. */
-export const LIVING_QR_GRACE_BLOCKS = 3
+/** ±1 bloque de 15s. Vida útil máxima del QR en pantalla: 30s (periodo + 1 gracia). */
+export const LIVING_QR_GRACE_BLOCKS = 1
+/** Periodo actual + 1 bloque de gracia. No puede superar 30s. */
+export const LIVING_QR_MAX_LIFETIME_MS =
+  LIVING_QR_PERIOD_MS * (1 + LIVING_QR_GRACE_BLOCKS)
 
 export function deviceClockOffsetMs(
   serverTimestampMs: number,

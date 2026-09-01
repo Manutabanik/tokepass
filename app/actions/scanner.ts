@@ -17,13 +17,14 @@ import { isTerminalOfflineSyncConflict } from "@/lib/scanner/offline-sync-confli
 import { SCAN_REPLAY_HTTP_STATUS } from "@/lib/scanner/scan-replay"
 import { isScannerBlacklistTicketStatus } from "@/lib/scanner/ticket-blacklist"
 import { resolveScannerActor } from "@/lib/scanner/resolve-scanner-access"
+import { readScannerServerTimeMs } from "@/lib/scanner/read-server-time"
 import { hashTotpSecretSha256 } from "@/lib/scanner/totp-secret-hash"
 import {
   isTicketValidForNow,
   parseScheduleDays,
 } from "@/lib/event-schedule"
 import { logger } from "@/lib/logger"
-import { createAdminClient } from "@/lib/supabase/admin"
+import { createAdminClient, tryCreateAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import {
   ALL_SCANNER_GATE_ID,
@@ -409,6 +410,17 @@ export async function getScannerGates(
   return [...gates.values()]
 }
 
+/** Hora de pared de Postgres para alinear el reloj del celular del guardia. */
+export async function fetchScannerServerTime(): Promise<number> {
+  try {
+    const admin = tryCreateAdminClient()
+    if (admin) return await readScannerServerTimeMs(admin)
+    return await readScannerServerTimeMs(await createClient())
+  } catch {
+    return Date.now()
+  }
+}
+
 export async function scanAndValidateTicket(
   base64Payload: string,
   eventId: string,
@@ -453,7 +465,8 @@ export async function scanAndValidateTicket(
   const qrType: QrType =
     eventMeta.qr_type === "static" ? "static" : "dynamic"
 
-  const resolved = resolveScanSecret(base64Payload, qrType)
+  const nowMs = await readScannerServerTimeMs(supabase)
+  const resolved = resolveScanSecret(base64Payload, qrType, { nowMs })
   if (!resolved) {
     return {
       success: false,
@@ -1154,7 +1167,7 @@ export async function fetchEventTicketManifest(
     hash,
     eventDate: event.date ?? null,
     scheduleDays: parseScheduleDays(event.schedule_days),
-    server_timestamp: Date.now(),
+    server_timestamp: await readScannerServerTimeMs(supabase),
     tickets,
   }
 }
@@ -1212,7 +1225,11 @@ export async function fetchEventAdmissionSnapshot(
     slot,
   )
   if (slotIds.length === 0) {
-    return { eventId, server_timestamp: Date.now(), tickets: [] }
+    return {
+      eventId,
+      server_timestamp: await readScannerServerTimeMs(supabase),
+      tickets: [],
+    }
   }
 
   const rows: Array<{
@@ -1277,7 +1294,7 @@ export async function fetchEventAdmissionSnapshot(
 
   return {
     eventId,
-    server_timestamp: Date.now(),
+    server_timestamp: await readScannerServerTimeMs(supabase),
     tickets,
   }
 }

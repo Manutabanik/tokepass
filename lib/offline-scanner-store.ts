@@ -94,7 +94,7 @@ export type ScannerManifestMeta = {
     end_time: string
   }>
   eventDate?: string | null
-  /** Date.now() del dispositivo menos server_timestamp al descargar. */
+  /** Date.now() del dispositivo menos server_timestamp (DB) al sincronizar. */
   clockOffsetMs?: number
   slotIndex?: number
   slotCount?: number
@@ -456,6 +456,25 @@ export async function saveEventManifest(input: {
   db.close()
 
   return meta
+}
+
+export async function updateManifestClockOffset(
+  eventId: string,
+  clockOffsetMs: number,
+): Promise<ScannerManifestMeta | null> {
+  if (!eventId || !Number.isFinite(clockOffsetMs)) return null
+  const meta = await getManifestMeta(eventId)
+  if (!meta) return null
+  const next: ScannerManifestMeta = {
+    ...meta,
+    clockOffsetMs: Number(clockOffsetMs),
+  }
+  const db = await openDb()
+  const tx = db.transaction(MANIFESTS, "readwrite")
+  tx.objectStore(MANIFESTS).put(next)
+  await txDone(tx)
+  db.close()
+  return next
 }
 
 export async function getManifestMeta(

@@ -27,6 +27,7 @@ import { TotemRestOverlay } from "@/components/admin/totem-validator-view"
 import {
   fetchEventAdmissionSnapshot,
   fetchEventTicketManifest,
+  fetchScannerServerTime,
   syncOfflineScansBatch,
   type ScannerEventOption,
   type ScanTicketResult,
@@ -74,6 +75,7 @@ import {
   countAdmissionLeases,
   downloadEventManifest,
   getManifestMeta,
+  updateManifestClockOffset,
   getScannerVault,
   getSyncQueue,
   getSyncQueueCount,
@@ -119,6 +121,7 @@ import {
   resolveScanSecret,
 } from "@/lib/scan-payload"
 import { canAcceptStaticTpsAtDoor } from "@/lib/tickets/static-tps-policy"
+import { scannerClockOffsetFromSample } from "@/lib/scanner/server-clock"
 import { hashTotpSecretSha256 } from "@/lib/scanner/totp-secret-hash"
 import { serverAlignedNowMs } from "@/lib/totp-offline"
 import { cn } from "@/lib/utils"
@@ -217,6 +220,7 @@ export function DoorScanner({
   const [manifestMeta, setManifestMeta] = useState<ScannerManifestMeta | null>(
     null,
   )
+  const [clockOffsetMs, setClockOffsetMs] = useState<number | null>(null)
   const [queueCount, setQueueCount] = useState(0)
   const [isSyncing, setIsSyncing] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -289,11 +293,36 @@ export function DoorScanner({
       return
     }
     try {
-      setManifestMeta(await getManifestMeta(id))
+      const meta = await getManifestMeta(id)
+      setManifestMeta(meta)
+      if (meta && Number.isFinite(Number(meta.clockOffsetMs))) {
+        setClockOffsetMs(Number(meta.clockOffsetMs))
+      }
     } catch {
       setManifestMeta(null)
     }
   }, [])
+
+  const persistClockSample = useCallback(
+    async (serverTimestamp: unknown, receivedAt = Date.now()) => {
+      const offset = scannerClockOffsetFromSample(serverTimestamp, receivedAt)
+      if (offset == null) return
+      setClockOffsetMs(offset)
+      if (!eventId) return
+      try {
+        const next = await updateManifestClockOffset(eventId, offset)
+        if (next) setManifestMeta(next)
+      } catch {
+        // El offset en memoria ya alcanza para el siguiente scan.
+      }
+    },
+    [eventId],
+  )
+
+  const alignedNowMs = useCallback(
+    () => serverAlignedNowMs(clockOffsetMs ?? manifestMeta?.clockOffsetMs),
+    [clockOffsetMs, manifestMeta?.clockOffsetMs],
+  )
 
   const syncQueueToServer = useCallback(async () => {
     if (!navigator.onLine || isSyncing) return
@@ -315,7 +344,12 @@ export function DoorScanner({
           fetchEventTicketManifest,
           deviceSlot,
         )
-        if (id === eventId) setManifestMeta(meta)
+        if (id === eventId) {
+          setManifestMeta(meta)
+          if (Number.isFinite(Number(meta.clockOffsetMs))) {
+            setClockOffsetMs(Number(meta.clockOffsetMs))
+          }
+        }
       }
 
       const tickets = await Promise.all(
@@ -499,10 +533,22 @@ export function DoorScanner({
   useEffect(() => {
     function onOnline() {
       void syncQueueToServer()
+      const receivedAt = Date.now()
+      void fetchScannerServerTime().then((serverTs) =>
+        persistClockSample(serverTs, receivedAt),
+      )
     }
     window.addEventListener("online", onOnline)
     return () => window.removeEventListener("online", onOnline)
-  }, [syncQueueToServer])
+  }, [persistClockSample, syncQueueToServer])
+
+  useEffect(() => {
+    if (!sessionActive || !online) return
+    const receivedAt = Date.now()
+    void fetchScannerServerTime().then((serverTs) =>
+      persistClockSample(serverTs, receivedAt),
+    )
+  }, [online, persistClockSample, sessionActive])
 
   useEffect(() => {
     if (!(online && queueCount > 0)) return
@@ -680,7 +726,7 @@ export function DoorScanner({
         dayId: ticket.day_id,
         scheduleDays: manifestMeta?.scheduleDays,
         eventDate: manifestMeta?.eventDate,
-        now: new Date(serverAlignedNowMs(manifestMeta?.clockOffsetMs)),
+        now: new Date(alignedNowMs()),
       })
       if (!manifestGate.ok) {
         if (manifestGate.reason === "transfer_pending") {
@@ -783,6 +829,7 @@ export function DoorScanner({
       }
     },
     [
+      alignedNowMs,
       gateId,
       deviceSlot,
       deviceSlotConfigured,
@@ -839,7 +886,7 @@ export function DoorScanner({
           }
 
           const resolved = resolveScanSecret(raw, qrType, {
-            nowMs: serverAlignedNowMs(meta.clockOffsetMs),
+            nowMs: alignedNowMs(),
           })
           if (!resolved) {
             showOverlay({ kind: "invalid" })
@@ -909,6 +956,7 @@ export function DoorScanner({
       })()
     },
     [
+      alignedNowMs,
       applyServerResult,
       eventId,
       showOverlay,
@@ -957,6 +1005,9 @@ export function DoorScanner({
           committed,
         )
         setManifestMeta(meta)
+        if (Number.isFinite(Number(meta.clockOffsetMs))) {
+          setClockOffsetMs(Number(meta.clockOffsetMs))
+        }
       } else {
         const local = await getManifestMeta(eventId)
         if (!local) {
@@ -1056,6 +1107,7 @@ export function DoorScanner({
           ),
         ])
         if (cancelled) return
+        await persistClockSample(snap.server_timestamp)
         await applyAdmissionSnapshot(eventId, snap.tickets)
         if (blacklistRes.ok) {
           const raw: unknown = await blacklistRes.json()
@@ -1080,7 +1132,7 @@ export function DoorScanner({
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [sessionActive, eventId, deviceSlot, deviceSlotConfigured])
+  }, [sessionActive, eventId, deviceSlot, deviceSlotConfigured, persistClockSample])
 
   useEffect(() => {
     if (!sessionActive || isTotemMode) return

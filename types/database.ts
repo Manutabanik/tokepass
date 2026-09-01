@@ -3178,6 +3178,10 @@ export type Database = {
         Args: Record<string, never>
         Returns: number
       }
+      scanner_server_time: {
+        Args: Record<string, never>
+        Returns: number
+      }
       assert_buyer_not_denylisted: {
         Args: {
           p_holder_dni: string | null

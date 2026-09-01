@@ -18,20 +18,21 @@ import {
 } from "./totp-offline"
 
 describe("Living QR time window", () => {
-  it("accepts current window plus three grace blocks (±45s)", () => {
+  it("accepts current window plus one grace block (±15s)", () => {
     const current = getTotpWindow(1_725_000_000_000)
 
     assert.equal(isLivingWindowAccepted(current, current), true)
     assert.equal(isLivingWindowAccepted(current - 1, current), true)
-    assert.equal(isLivingWindowAccepted(current + 3, current), true)
-    assert.equal(isLivingWindowAccepted(current - 3, current), true)
+    assert.equal(isLivingWindowAccepted(current + 1, current), true)
   })
 
-  it("rejects windows beyond the ±45s grace", () => {
+  it("rejects windows beyond the ±15s grace", () => {
     const current = getTotpWindow(1_725_000_000_000)
 
-    assert.equal(isLivingWindowAccepted(current - 4, current), false)
-    assert.equal(isLivingWindowAccepted(current + 4, current), false)
+    assert.equal(isLivingWindowAccepted(current - 2, current), false)
+    assert.equal(isLivingWindowAccepted(current + 2, current), false)
+    assert.equal(isLivingWindowAccepted(current - 3, current), false)
+    assert.equal(isLivingWindowAccepted(current + 3, current), false)
   })
 
   it("creates an opaque v2 payload without embedding the secret", async () => {
