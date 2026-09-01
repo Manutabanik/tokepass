@@ -1,4 +1,4 @@
-import { Payment, PaymentRefund } from "mercadopago"
+import { Payment } from "mercadopago"
 import { createClient } from "@supabase/supabase-js"
 
 import { getBoostPlan, parseBoostExternalRef } from "@/lib/boost-plans"
@@ -11,6 +11,7 @@ import { withCircuit } from "@/lib/resilience/circuit-breaker"
 import { processPaidOrderNotification } from "@/lib/payments/core/confirm-order"
 import { revokeDisputedPaidOrder } from "@/lib/payments/core/revoke-disputed-order"
 import { isMercadoPagoChargebackTopic } from "@/lib/payments/mercadopago/parse-notification"
+import { refundExpiredPayment } from "@/lib/payments/mercadopago/refund-expired-payment"
 import { mercadoPagoRefundService } from "@/lib/mercadopago/refund-service"
 import { parseResaleExternalRef } from "@/lib/resale"
 import type { Database, Json } from "@/types/database"
@@ -520,14 +521,6 @@ async function activateResaleFromPayment(
   }
 
   return { ok: true as const, ignored: true }
-}
-
-async function refundExpiredPayment(mpPaymentId: string) {
-  const client = getMercadoPagoClient()
-  const refunds = new PaymentRefund(client)
-  await withCircuit("mercadopago", () =>
-    refunds.total({ payment_id: mpPaymentId }),
-  )
 }
 
 /**

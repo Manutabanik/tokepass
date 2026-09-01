@@ -1,7 +1,25 @@
 import { GA_CHECKOUT_HOLD_MS } from "@/lib/checkout-hold"
 
-/** Reconcile de huérfanos MP por tick (cron cada minuto, los más viejos primero). */
-export const RECONCILE_ORPHAN_BATCH_SIZE = 200
+/** Pending más viejos por tick (además del lote crítico de 2 minutos). */
+export const RECONCILE_ORPHAN_BATCH_SIZE = 800
+
+/** Holds en los últimos 2 minutos de vida: se buscan sí o sí para salvar el cobro. */
+export const RECONCILE_CRITICAL_HOLD_MS = 2 * 60 * 1000
+export const RECONCILE_CRITICAL_BATCH_SIZE = 400
+
+/** Expired recientes: reintento de refund si el tick anterior falló contra MP. */
+export const RECONCILE_EXPIRED_REFUND_BATCH_SIZE = 100
+export const RECONCILE_EXPIRED_LOOKBACK_MS = 12 * 60 * 60 * 1000
+
+/**
+ * Búsquedas MP en paralelo. 8 × ~lote/minuto queda bajo el tope típico de 1000 RPM.
+ */
+export const RECONCILE_MP_SEARCH_CONCURRENCY = 8
+
+export const RECONCILE_MAX_PER_TICK =
+  RECONCILE_CRITICAL_BATCH_SIZE +
+  RECONCILE_ORPHAN_BATCH_SIZE +
+  RECONCILE_EXPIRED_REFUND_BATCH_SIZE
 
 export function holdTtlCutoffIso(nowMs: number = Date.now()): string {
   return new Date(nowMs - GA_CHECKOUT_HOLD_MS).toISOString()

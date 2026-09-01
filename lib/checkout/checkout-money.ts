@@ -70,6 +70,35 @@ export function orderLedgerFromQuote(quote: CheckoutMoneyQuote): OrderMoneyLedge
 }
 
 /**
+ * El persist TS nunca puede bajar `total_amount` por debajo del piso SQL
+ * (`reserve_unified_cart_tx` deja all-in = subtotal).
+ */
+export function resolvePersistedFeeLedger(
+  current: OrderMoneyLedger,
+  quoted: OrderMoneyLedger,
+): OrderMoneyLedger {
+  if (moneyToCents(quoted.total_amount) < moneyToCents(current.total_amount)) {
+    return current
+  }
+  return quoted
+}
+
+/**
+ * Si el quote pide más que la fila persistida (absorb=false y persist falló),
+ * crear la preferencia MP cobraria de menos. Hay que abortar el checkout.
+ */
+export function checkoutPreferenceUndersellsQuote(input: {
+  databaseTotal: number
+  quotedCustomerTotal: number
+  promoApplied?: boolean
+}): boolean {
+  if (input.promoApplied) return false
+  return (
+    moneyToCents(input.quotedCustomerTotal) > moneyToCents(input.databaseTotal)
+  )
+}
+
+/**
  * El cliente no fija el cobro: solo se compara contra el quote del servidor.
  * Con cupón se saltea el total pre-promo; el total final se valida después.
  */

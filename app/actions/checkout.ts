@@ -67,9 +67,11 @@ import {
   isReusableCheckoutOrderStatus,
 } from "@/lib/checkout/idempotency"
 import {
+  checkoutPreferenceUndersellsQuote,
   clientCheckoutMoneyMatchesQuoted,
   orderLedgerFromQuote,
   quoteCheckoutMoney,
+  resolvePersistedFeeLedger,
   type CheckoutMoneyQuote,
 } from "@/lib/checkout/checkout-money"
 import {
@@ -1256,21 +1258,28 @@ async function loadEventServiceFeeRule(
 async function persistOrderFeeLedger(
   orderId: string,
   quote: CheckoutMoneyQuote,
-): Promise<void> {
+): Promise<boolean> {
   const admin = tryCreateAdminClient()
-  if (!admin) return
+  if (!admin) return false
   const { data: order } = await admin
     .from("orders")
     .select("service_charge, subtotal, total_amount")
     .eq("id", orderId)
     .maybeSingle()
-  if (!order) return
-  const ledger = orderLedgerFromQuote(quote)
+  if (!order) return false
+  const ledger = resolvePersistedFeeLedger(
+    {
+      subtotal: Number(order.subtotal ?? 0),
+      service_charge: Number(order.service_charge ?? 0),
+      total_amount: Number(order.total_amount ?? 0),
+    },
+    orderLedgerFromQuote(quote),
+  )
   const sameLedger =
     amountsMatch(Number(order.service_charge ?? 0), ledger.service_charge) &&
     amountsMatch(Number(order.subtotal ?? 0), ledger.subtotal) &&
     amountsMatch(Number(order.total_amount ?? 0), ledger.total_amount)
-  if (sameLedger) return
+  if (sameLedger) return true
   const { error } = await admin
     .from("orders")
     .update({
@@ -1286,7 +1295,9 @@ async function persistOrderFeeLedger(
       orderId,
       error: error.message,
     })
+    return false
   }
+  return true
 }
 
 async function quoteCheckoutFromDatabase(
@@ -4327,7 +4338,19 @@ export async function startCheckoutWithPayment(
       captchaScore,
     })
 
-    await persistOrderFeeLedger(orderId, quoted.quote)
+    const feeLedgerOk = await persistOrderFeeLedger(orderId, quoted.quote)
+    if (!feeLedgerOk) {
+      await cleanupPendingOrder(orderId)
+      logger.error({
+        context: "checkout/reservation",
+        message: "fee_ledger_persist_aborted",
+        orderId,
+      })
+      return {
+        success: false,
+        error: "No se pudo congelar el total de la orden.",
+      }
+    }
 
     const cleanPromoId = resumedPromoCodeId ? null : payload.promoCodeId
     if (cleanPromoId) {
@@ -4428,6 +4451,27 @@ export async function startCheckoutWithPayment(
         CHECKOUT_FEEDBACK_CODE.ERR_PRICE_CHANGED,
         CHECKOUT_PRICES_CHANGED_ERROR,
       )
+    }
+    if (
+      checkoutPreferenceUndersellsQuote({
+        databaseTotal: finalTotal,
+        quotedCustomerTotal: quoted.quote.customerTotal,
+        promoApplied: Boolean(cleanPromoId || resumedPromoCodeId),
+      })
+    ) {
+      await cleanupPendingOrder(orderId)
+      logger.error({
+        context: "checkout/reservation",
+        message: "preference_below_quoted_fee",
+        orderId,
+        eventId: payload.eventId,
+        databaseTotal: finalTotal,
+        quoted: quoted.quote.customerTotal,
+      })
+      return {
+        success: false,
+        error: "No se pudo congelar el total de la orden.",
+      }
     }
 
     let initPoint: string

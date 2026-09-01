@@ -29,7 +29,8 @@ function authorizeCron(request: NextRequest): boolean {
 
 /**
  * Libera stock de checkouts abandonados (barrido cada minuto).
- * Reconcile MP primero (aprueba cobros huérfanos), después TTL 15m.
+ * Reconcile MP primero (aprueba cobros huérfanos o reembolsa si needs_refund),
+ * después TTL 15m. Búsqueda MP en paralelo; holds en los últimos 2 min primero.
  * Lotes de 2000 + SKIP LOCKED, un RPC a la vez, para no pelear
  * locks con reserve_unified_cart_tx.
  */

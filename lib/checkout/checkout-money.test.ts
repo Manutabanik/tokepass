@@ -2,9 +2,11 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  checkoutPreferenceUndersellsQuote,
   clientCheckoutMoneyMatchesQuoted,
   orderLedgerFromQuote,
   quoteCheckoutMoney,
+  resolvePersistedFeeLedger,
 } from "./checkout-money"
 
 describe("quoteCheckoutMoney", () => {
@@ -93,6 +95,59 @@ describe("quoteCheckoutMoney", () => {
         },
         server,
       ),
+      false,
+    )
+  })
+
+  it("never writes a fee ledger below the SQL reserved total", () => {
+    const sqlAllIn = {
+      subtotal: 20000,
+      service_charge: 2400,
+      total_amount: 20000,
+    }
+    assert.deepEqual(
+      resolvePersistedFeeLedger(sqlAllIn, {
+        subtotal: 20000,
+        service_charge: 2400,
+        total_amount: 22400,
+      }),
+      {
+        subtotal: 20000,
+        service_charge: 2400,
+        total_amount: 22400,
+      },
+    )
+    assert.deepEqual(
+      resolvePersistedFeeLedger(sqlAllIn, {
+        subtotal: 18000,
+        service_charge: 0,
+        total_amount: 18000,
+      }),
+      sqlAllIn,
+    )
+  })
+
+  it("blocks a Mercado Pago preference that would charge less than the TS quote", () => {
+    assert.equal(
+      checkoutPreferenceUndersellsQuote({
+        databaseTotal: 20000,
+        quotedCustomerTotal: 22400,
+      }),
+      true,
+    )
+    assert.equal(
+      checkoutPreferenceUndersellsQuote({
+        databaseTotal: 22400,
+        quotedCustomerTotal: 22400,
+      }),
+      false,
+    )
+    assert.equal(
+      checkoutPreferenceUndersellsQuote({
+        databaseTotal: 18000,
+        quotedCustomerTotal: 22400,
+        promoApplied: true,
+      }),
       false,
     )
   })
