@@ -1363,7 +1363,7 @@ export function CheckoutTunnel({
       liveOccupancy,
       eventDateId: selectedDateId,
       scheduleDayCount,
-      lockUnknownLayoutIds: seatingInventoryReady && units.length > 0,
+      lockUnknownLayoutIds: false,
     })
   }, [
     dayTiers,

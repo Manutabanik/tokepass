@@ -1835,6 +1835,47 @@ function mapAvailabilityUnit(unit: {
   }
 }
 
+function mergeSeatingAvailabilityUnits(
+  primary: EventSeatingUnit[],
+  extra: EventSeatingUnit[],
+): EventSeatingUnit[] {
+  const byId = new Map<string, EventSeatingUnit>()
+  for (const unit of [...primary, ...extra]) {
+    if (Number(unit.capacityPerUnit) <= 0) continue
+    if (!unit.layoutItemId?.trim()) continue
+    if (!byId.has(unit.id)) byId.set(unit.id, unit)
+  }
+  return [...byId.values()]
+}
+
+async function loadSeatingUnitsFromInventory(
+  eventId: string,
+  eventDateId?: string | null,
+): Promise<EventSeatingUnit[]> {
+  const supabase = await createClient()
+  let query = supabase
+    .from("event_seating_units")
+    .select(
+      "id, tier_id, sector_id, sector_name, layout_item_id, label, row_id, row_number, row_label, color, layout_type, capacity_per_unit, status, reserved_until, event_date_id",
+    )
+    .eq("event_id", eventId)
+    .gt("capacity_per_unit", 0)
+    .limit(20000)
+  const dateId = asHoldEventDateId(eventDateId)
+  if (dateId) query = query.or(`event_date_id.eq.${dateId},event_date_id.is.null`)
+  const { data, error } = await query
+  if (error || !data) return []
+  return data
+    .filter((row) => row.layout_item_id?.trim())
+    .map((row) =>
+      mapAvailabilityUnit({
+        ...row,
+        layout_item_id: row.layout_item_id,
+        capacity_per_unit: Number(row.capacity_per_unit) || 1,
+      }),
+    )
+}
+
 async function scheduleDayCountForEvent(
   supabase: Awaited<ReturnType<typeof createClient>>,
   eventId: string,
@@ -1879,9 +1920,23 @@ export async function getEventSeatingUnitsForSector(
       error = retry.error
     }
 
-    if (error || !data) return []
+    if (error || !data) {
+      const fallback = (await loadSeatingUnitsFromInventory(cleanEvent, dateId)).filter(
+        (unit) => unit.sectorId === cleanSector,
+      )
+      return filterSeatingUnitsForRequestedDay(
+        fallback,
+        dateId,
+        scheduleDayCount,
+      )
+    }
     return filterSeatingUnitsForRequestedDay(
-      (data ?? []).map(mapAvailabilityUnit),
+      mergeSeatingAvailabilityUnits(
+        (data ?? []).map(mapAvailabilityUnit),
+        (await loadSeatingUnitsFromInventory(cleanEvent, dateId)).filter(
+          (unit) => unit.sectorId === cleanSector,
+        ),
+      ),
       dateId,
       scheduleDayCount,
     )
@@ -1919,9 +1974,19 @@ export async function getEventSeatingAvailability(
       error = retry.error
     }
 
-    if (error || !data) return []
+    if (error || !data) {
+      const fallback = await loadSeatingUnitsFromInventory(cleanEvent, dateId)
+      return filterSeatingUnitsForRequestedDay(
+        fallback,
+        dateId,
+        scheduleDayCount,
+      )
+    }
     return filterSeatingUnitsForRequestedDay(
-      (data ?? []).map(mapAvailabilityUnit),
+      mergeSeatingAvailabilityUnits(
+        (data ?? []).map(mapAvailabilityUnit),
+        await loadSeatingUnitsFromInventory(cleanEvent, dateId),
+      ),
       dateId,
       scheduleDayCount,
     )

@@ -6,6 +6,7 @@ import {
   consolidateEventTicketsForPersist,
   eventNeedsInteractiveCanvas,
   isMapBackedTicket,
+  layoutTypeForMapSectorId,
   migrateLegacyWizardStep,
   sectorUsesNumberedMap,
   syncMapBackedTickets,
@@ -1170,5 +1171,48 @@ describe("venue-map-pricing", () => {
     assert.equal(sectorTickets[1]?.dayId, "day-b")
     assert.equal(sectorTickets[0]?.price, 8000)
     assert.equal(sectorTickets[1]?.price, 8000)
+  })
+
+  it("treats a general zone with drawn tables as table_combo inventory", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "grada-amarilla",
+        name: "Grada Amarilla",
+        color: "#eab308",
+        price: 12000,
+        polygon: [],
+        layoutType: "general",
+        sellMode: "group",
+        rows: 0,
+        itemsPerRow: 0,
+        capacityPerUnit: 8,
+        capacity: 8,
+        labelPrefix: "T",
+      },
+    ]
+    map.elements = [
+      {
+        id: "mesa-08",
+        type: "long_table",
+        label: "Tablón 08",
+        category: "commercial",
+        x: 0,
+        y: 0,
+        width: 80,
+        height: 24,
+        rotation: 0,
+        price: 12000,
+        color: "#eab308",
+        opacity: 1,
+        chairCount: 8,
+        sellMode: "group",
+        capacity: 8,
+        groupId: "grada-amarilla",
+        zoneId: "grada-amarilla",
+        seats: [],
+      },
+    ]
+    assert.equal(layoutTypeForMapSectorId(map, "grada-amarilla"), "table_combo")
   })
 })

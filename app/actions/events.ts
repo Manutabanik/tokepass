@@ -45,6 +45,7 @@ import {
   venueMapHasInventory,
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
+import { reconcileMapSeatingUnitsAfterSave } from "@/lib/seating/reconcile-map-seating-units"
 import {
   applyMapCapacityToTickets,
   layoutTypeForMapSectorId,
@@ -1382,6 +1383,18 @@ export async function saveVenueMapOnly(
   const materializeError = await materializeEventSeatingUnits(mutationClient, id)
   if (materializeError) {
     return { success: false, error: materializeError }
+  }
+  const reconcileError = await reconcileMapSeatingUnitsAfterSave(
+    createAdminClient(),
+    id,
+    parsedMap,
+    {
+      venueId: eventRow?.venue_id ?? null,
+      scheduleDayIds,
+    },
+  )
+  if (reconcileError) {
+    return { success: false, error: reconcileError }
   }
   const capacitySyncError = await syncTicketCapacityFromSeatingUnits(
     mutationClient,

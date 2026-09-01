@@ -162,13 +162,13 @@ describe("venue-map-occupancy", () => {
     assert.equal(hexToRgba("#10b981", 0.2), "rgba(16, 185, 129, 0.2)")
   })
 
-  it("marks unpublished layout items occupied after a live fetch", () => {
+  it("does not occupy drawable places that have no reservation", () => {
     const occupancy = occupancyFromSeatingUnits(
       [{ layoutItemId: "a-1", status: "available" }],
       ["a-1", "a-2"],
     )
     assert.equal(occupancy["a-1"], "available")
-    assert.equal(occupancy["a-2"], "occupied")
+    assert.equal(occupancy["a-2"], undefined)
   })
 
   it("treats expired reserved units as available", () => {

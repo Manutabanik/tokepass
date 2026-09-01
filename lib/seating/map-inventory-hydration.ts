@@ -299,7 +299,7 @@ export function hydrateVenueMapOccupancy(
       dayScope.scheduleDayCount,
     ),
   )
-  const lockUnknown = inventory.lockUnknownLayoutIds ?? units.length > 0
+  const lockUnknown = inventory.lockUnknownLayoutIds === true
   const knownIds =
     lockUnknown && staticMap ? collectVenueMapInventoryIds(staticMap) : []
   return expandOccupancyToVenueMap(

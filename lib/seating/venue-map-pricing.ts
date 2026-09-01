@@ -23,6 +23,7 @@ import {
   healTicketsSeatingSectors,
   normalizeMapSectorLabel,
 } from "@/lib/seating/stabilize-venue-map-ids"
+import { reservedFurnitureLayoutType } from "@/lib/seating/reconcile-map-seating-units"
 import { parseVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
 
 export function priceGroupSectorId(group: VenuePriceGroup): string {
@@ -193,6 +194,8 @@ export function layoutTypeForMapSectorId(
   if (group) return layoutTypeFromGroup(group, map)
   const zone = (map.zones ?? []).find((item) => item.id === id)
   if (zone) {
+    const furniture = reservedFurnitureLayoutType(map, id)
+    if (furniture) return furniture
     if (resolveSeatingType(zone) === "GENERAL") return "general"
     if (zone.layoutType === "table_combo") return "table_combo"
     if (zone.layoutType === "numbered_seat") return "numbered_seat"
@@ -208,6 +211,8 @@ function layoutTypeFromGroup(
 ): EventFormValues["tickets"][number]["layoutType"] {
   if (group.match.kind === "zone") {
     const zoneId = group.match.id
+    const furniture = reservedFurnitureLayoutType(map, zoneId)
+    if (furniture) return furniture
     const zone = (map.zones ?? []).find((item) => item.id === zoneId)
     if (!zone || resolveSeatingType(zone) === "GENERAL") return "general"
     return zone.sellMode === "group" || zone.layoutType === "table_combo"

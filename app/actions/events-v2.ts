@@ -52,6 +52,7 @@ import {
   ticketsWithoutComboScheduleIds,
 } from "@/lib/events/sync-published-combo-items"
 import { isMissingSaleWindowSchema } from "@/lib/inventory/ticket-sale-window"
+import { reconcileMapSeatingUnitsAfterSave } from "@/lib/seating/reconcile-map-seating-units"
 import { venueMapToSeatingLayout } from "@/lib/seating/venue-map-geometry"
 import { eventPreviewPath } from "@/lib/events/editor-v2-ux"
 import { revalidatePublicEventCache } from "@/lib/events/revalidate-public-event"
@@ -1567,6 +1568,22 @@ async function unpackPublishEventV2Sequential(input: {
         seatingPersistUserMessage(materialized.error) ??
           formatSupabaseError(materialized.error),
       )
+    }
+    const { data: days } = await admin
+      .from("event_schedules")
+      .select("id")
+      .eq("event_id", input.eventId)
+    const reconcileError = await reconcileMapSeatingUnitsAfterSave(
+      admin,
+      input.eventId,
+      parseVenueMap(payload.venue_map),
+      {
+        venueId,
+        scheduleDayIds: (days ?? []).map((row) => row.id),
+      },
+    )
+    if (reconcileError) {
+      throw new Error(reconcileError)
     }
   }
   const eventPatch = {

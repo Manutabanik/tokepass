@@ -229,7 +229,7 @@ export function expandOccupancyToVenueMap(
   return next
 }
 
-/** After a live occupancy fetch, unknown ids are occupied — never optimistic-available. */
+/** Live units paint occupancy. Drawable ids without a reservation stay free. */
 export function occupancyFromSeatingUnits(
   units: Array<{
     id?: string | null
@@ -243,9 +243,7 @@ export function occupancyFromSeatingUnits(
   knownLayoutItemIds: Iterable<string> = [],
 ): Record<string, SeatStatus> {
   const occupancy: Record<string, SeatStatus> = {}
-  for (const id of knownLayoutItemIds) {
-    occupancy[id] = "occupied"
-  }
+  void knownLayoutItemIds
   for (const unit of units) {
     const status = inventoryStateToSeatStatus(
       resolveInventorySeatState({
