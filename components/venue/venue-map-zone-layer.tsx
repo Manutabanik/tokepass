@@ -45,6 +45,7 @@ export function VenueMapZoneLayer({
   lodMode = null,
   focusedZoneId = null,
   highlightedIds = [],
+  hoveredId = null,
   emphasizeSelected = true,
   buyerOccupancy = false,
   zoom = 1,
@@ -74,6 +75,7 @@ export function VenueMapZoneLayer({
   lodMode?: "macro" | "micro" | null
   focusedZoneId?: string | null
   highlightedIds?: string[]
+  hoveredId?: string | null
   emphasizeSelected?: boolean
   buyerOccupancy?: boolean
   zoom?: number
@@ -118,6 +120,7 @@ export function VenueMapZoneLayer({
         const selected =
           zone.id === selectedId || Boolean(selectedIds?.includes(zone.id))
         const highlighted = highlightedIds.includes(zone.id)
+        const dropTarget = hoveredId === zone.id
         const soldOut = unavailableIds.includes(zone.id)
         const interactive = Boolean(onSelect) && !soldOut
         const hasSelection =
@@ -185,6 +188,7 @@ export function VenueMapZoneLayer({
             data-zone-id={zone.id}
             data-lod-zone={zone.id}
             data-lod-focused={focusedZoneId === zone.id ? "true" : undefined}
+            data-drop-target={dropTarget ? "1" : undefined}
             transform={
               pop
                 ? `translate(${center.x} ${center.y}) scale(1.15) translate(${-center.x} ${-center.y})`
@@ -287,26 +291,32 @@ export function VenueMapZoneLayer({
                     ? buyerOccupancy
                       ? 0.3
                       : 0.45
-                    : lodSolid
-                      ? 0.3
-                      : selected
-                        ? 0.62
-                        : 0.28
+                    : dropTarget
+                      ? selected
+                        ? 0.78
+                        : 0.52
+                      : lodSolid
+                        ? 0.3
+                        : selected
+                          ? 0.62
+                          : 0.28
               }
               stroke={
-                soldOut
-                  ? buyerOccupancy
-                    ? BUYER_SEAT_FILL.sold
-                    : "#9ca3af"
-                  : lodSolid
-                    ? zone.color || "#67e8f9"
-                    : selected
-                      ? buyerOccupancy
-                        ? "#10b981"
-                        : "#ffffff"
-                      : zone.color || "#67e8f9"
+                dropTarget
+                  ? "#34d399"
+                  : soldOut
+                    ? buyerOccupancy
+                      ? BUYER_SEAT_FILL.sold
+                      : "#9ca3af"
+                    : lodSolid
+                      ? zone.color || "#67e8f9"
+                      : selected
+                        ? buyerOccupancy
+                          ? "#10b981"
+                          : "#ffffff"
+                        : zone.color || "#67e8f9"
               }
-              strokeWidth={lodSolid ? 2 : selected ? 3 : 2}
+              strokeWidth={dropTarget ? 4 : lodSolid ? 2 : selected ? 3 : 2}
               strokeLinejoin="round"
               pointerEvents={
                 passThroughFills || revealFocused || soldOut

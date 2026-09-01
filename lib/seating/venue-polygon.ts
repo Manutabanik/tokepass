@@ -189,6 +189,21 @@ export function isCanvasPointInZonePolygon(
   return isPointInPolygon(point, polygonToCanvas([...polygon], space))
 }
 
+export function zoneIdContainingCanvasPoint(
+  point: VenueMapPoint,
+  zones: readonly Pick<VenueMapZone, "id" | "polygon" | "polygonSpace">[],
+  skipId?: string | null,
+): string | null {
+  for (let i = zones.length - 1; i >= 0; i -= 1) {
+    const zone = zones[i]!
+    if (skipId && zone.id === skipId) continue
+    if (isCanvasPointInZonePolygon(point, zone.polygon, zone.polygonSpace)) {
+      return zone.id
+    }
+  }
+  return null
+}
+
 export function zoneIdFromEventTarget(target: EventTarget | null): string | null {
   if (typeof Element === "undefined" || !(target instanceof Element)) {
     return null

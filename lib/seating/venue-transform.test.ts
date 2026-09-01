@@ -10,6 +10,7 @@ import {
   alignElementsWithGap,
   alignSelectedToCenter,
   distributeSelectedHorizontally,
+  applyLiveTransformToPoint,
   applyMoveSnap,
   applyMoveSnapFromOrigin,
   applyRotateSnap,
@@ -448,5 +449,19 @@ describe("venue-transform", () => {
     assert.equal(next[0]!.rotation, 180)
     assert.equal(next[1]!.x, 80)
     assert.equal(next[1]!.rotation, 195)
+  })
+
+  it("aplica el transform live al centroide de la selección", () => {
+    assert.deepEqual(
+      applyLiveTransformToPoint({ x: 40, y: 20 }, { type: "move", dx: 10, dy: -4 }),
+      { x: 50, y: 16 },
+    )
+    assert.deepEqual(
+      applyLiveTransformToPoint(
+        { x: 20, y: 20 },
+        { type: "scale", ox: 10, oy: 10, scale: 2 },
+      ),
+      { x: 30, y: 30 },
+    )
   })
 })

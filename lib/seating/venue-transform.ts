@@ -169,6 +169,24 @@ export function selectionBounds(elements: VenueMapElement[]): BoundsRect | null 
   return box ? aabbToRect(box) : null
 }
 
+export function applyLiveTransformToPoint(
+  point: { x: number; y: number },
+  live: LiveTransform | null | undefined,
+): { x: number; y: number } {
+  if (!live) return point
+  if (live.type === "move") {
+    return { x: point.x + live.dx, y: point.y + live.dy }
+  }
+  if (live.type === "scale") {
+    const { sx, sy } = liveScaleAxes(live)
+    return {
+      x: live.ox + (point.x - live.ox) * sx,
+      y: live.oy + (point.y - live.oy) * sy,
+    }
+  }
+  return rotatePoint(point.x, point.y, live.cx, live.cy, live.deg)
+}
+
 export function liveTransformToSvg(live: LiveTransform | null): string | undefined {
   if (!live) return undefined
   if (live.type === "move") return `translate(${live.dx} ${live.dy})`

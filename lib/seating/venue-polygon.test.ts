@@ -7,6 +7,7 @@ import {
   isCanvasPointInZonePolygon,
   isCloseToFirstVertex,
   isPointInPolygon,
+  zoneIdContainingCanvasPoint,
   normalizePolygonToPercent,
   polygonFromCanvas,
   polygonLooksLikePixels,
@@ -263,5 +264,35 @@ describe("isPointInPolygon", () => {
     ]
     assert.equal(isCanvasPointInZonePolygon({ x: 200, y: 140 }, zone), true)
     assert.equal(isCanvasPointInZonePolygon({ x: 10, y: 10 }, zone), false)
+  })
+
+  it("elige la zona superior cuando el centroide cae en dos polígonos", () => {
+    const inner = {
+      id: "vip",
+      polygon: [
+        { x: 15, y: 15 },
+        { x: 35, y: 15 },
+        { x: 35, y: 35 },
+        { x: 15, y: 35 },
+      ],
+    }
+    const outer = {
+      id: "campo",
+      polygon: [
+        { x: 10, y: 10 },
+        { x: 40, y: 10 },
+        { x: 40, y: 40 },
+        { x: 10, y: 40 },
+      ],
+    }
+    assert.equal(
+      zoneIdContainingCanvasPoint({ x: 200, y: 140 }, [outer, inner]),
+      "vip",
+    )
+    assert.equal(
+      zoneIdContainingCanvasPoint({ x: 200, y: 140 }, [outer, inner], "vip"),
+      "campo",
+    )
+    assert.equal(zoneIdContainingCanvasPoint({ x: 10, y: 10 }, [outer]), null)
   })
 })

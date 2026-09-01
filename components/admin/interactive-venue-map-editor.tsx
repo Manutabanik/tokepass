@@ -217,6 +217,7 @@ import {
   applyLiveToAisle,
   applyLiveToSeats,
   applyLiveToStage,
+  applyLiveTransformToPoint,
   applyMoveSnap,
   applyMoveSnapFromOrigin,
   applyRotateSnap,
@@ -272,6 +273,7 @@ import {
 import {
   polygonFromCanvas,
   isCloseToFirstVertex,
+  zoneIdContainingCanvasPoint,
   popPolygonDraft,
   setPolygonVertexAtCanvas,
   transformPercentPolygon,
@@ -610,6 +612,9 @@ export function InteractiveVenueMapEditor({
   >(null)
   const [isCanvasDirty, setIsCanvasDirty] = useState(false)
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
+  const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null)
+  const hoveredZoneIdRef = useRef<string | null>(null)
+  const transformBoundsRef = useRef<BoundsRect | null>(null)
   const hoverClearTimer = useRef<number | null>(null)
   const [marquee, setMarquee] = useState<{
     x: number
@@ -1244,6 +1249,9 @@ export function InteractiveVenueMapEditor({
     selectedSeatBounds ??
     measuredBounds ??
     computedBounds
+  useLayoutEffect(() => {
+    transformBoundsRef.current = transformBounds
+  }, [transformBounds])
   const seatGizmoActive = selection?.kind === "seats"
   const geometryLocked = workMode === "pricing"
   const selectionLocked =
@@ -1653,6 +1661,7 @@ export function InteractiveVenueMapEditor({
     paintLive({ type: "move", dx: 0, dy: 0 })
     setTransformingKind("move")
     setSvgPassThrough(true)
+    syncDropZoneHover()
   }
 
   function beginScale(
@@ -2119,6 +2128,7 @@ export function InteractiveVenueMapEditor({
         paintLive(null)
         setTransformingKind(null)
         setSvgPassThrough(false)
+        clearHoveredDropZone()
         elementDrag.current = null
       }
     }
@@ -2141,6 +2151,7 @@ export function InteractiveVenueMapEditor({
     paintLive(null)
     setTransformingKind(null)
     setSvgPassThrough(false)
+    clearHoveredDropZone()
     elementDrag.current = null
   }
 
@@ -2468,6 +2479,7 @@ export function InteractiveVenueMapEditor({
     elementDrag.current = null
     vertexDrag.current = null
     setSvgPassThrough(false)
+    clearHoveredDropZone()
     pinchRef.current = null
     pendingPointer.current = null
     if (pointerFrame.current != null) {
@@ -4035,6 +4047,68 @@ export function InteractiveVenueMapEditor({
     onMapElementPointerLeave()
   }
 
+  function clearHoveredDropZone() {
+    setHoveredDropZone(null)
+  }
+
+  function setHoveredDropZone(next: string | null) {
+    if (hoveredZoneIdRef.current === next) return
+    hoveredZoneIdRef.current = next
+    setHoveredZoneId(next)
+  }
+
+  function dropSelectionCentroid() {
+    const bounds = transformBoundsRef.current
+    if (bounds && bounds.width + bounds.height > 0) {
+      return applyLiveTransformToPoint(boundsCenter(bounds), liveTransformRef.current)
+    }
+    const moving = elementDrag.current
+    if (moving?.kind === "element" && moving.id) {
+      const element = mapRef.current.elements.find((item) => item.id === moving.id)
+      return element
+        ? { x: element.x, y: element.y }
+        : { x: moving.origX, y: moving.origY }
+    }
+    if (moving?.kind === "sector" && moving.id) {
+      const sector = (mapRef.current.sectors ?? []).find(
+        (item) => item.id === moving.id,
+      )
+      return sector ? { x: sector.x, y: sector.y } : null
+    }
+    return null
+  }
+
+  function shouldTrackDropZone() {
+    if (vertexDrag.current) return false
+    const transforming = transformDrag.current
+    if (transforming) {
+      if (transforming.mode !== "move") return false
+      if (transforming.zoneId && transforming.ids.length === 0) return false
+      return true
+    }
+    const moving = elementDrag.current
+    return moving?.kind === "element" || moving?.kind === "sector"
+  }
+
+  function syncDropZoneHover() {
+    if (!shouldTrackDropZone()) {
+      setHoveredDropZone(null)
+      return
+    }
+    const centroid = dropSelectionCentroid()
+    if (!centroid) {
+      setHoveredDropZone(null)
+      return
+    }
+    setHoveredDropZone(
+      zoneIdContainingCanvasPoint(
+        centroid,
+        mapRef.current.zones ?? [],
+        transformDrag.current?.zoneId,
+      ),
+    )
+  }
+
   function applyPointerMove(sample: PointerSample) {
     if (pinchRef.current) return
     if (vertexDrag.current) {
@@ -4052,6 +4126,7 @@ export function InteractiveVenueMapEditor({
           snapActive(sample.shiftKey),
         )
         paintLive({ type: "move", dx: snapped.dx, dy: snapped.dy })
+        syncDropZoneHover()
         return
       }
       if (transforming.mode === "scale") {
@@ -4141,6 +4216,9 @@ export function InteractiveVenueMapEditor({
       } else if (moving.kind === "sector" && moving.id) {
         patchSector(moving.id, { x: nx, y: ny }, true)
       }
+      if (moving.kind === "element" || moving.kind === "sector") {
+        syncDropZoneHover()
+      }
       return
     }
     if (!drag.current) return
@@ -4202,6 +4280,7 @@ export function InteractiveVenueMapEditor({
       applyPointerMove(pendingPointer.current)
       pendingPointer.current = null
     }
+    clearHoveredDropZone()
     if (transformDrag.current) {
       const live = liveTransformRef.current
       const wasTap = !live || isIdentityLive(live)
@@ -5254,6 +5333,7 @@ export function InteractiveVenueMapEditor({
                 zoom={zoom}
                 fillHits={false}
                 passThroughFills={zoneFillsPermeable}
+                hoveredId={hoveredZoneId}
                 onSelect={
                   tool === "polygon"
                     ? undefined
@@ -5429,6 +5509,7 @@ export function InteractiveVenueMapEditor({
                     focusedZoneId={activeZoneId}
                     fillHits={false}
                     passThroughFills={zoneFillsPermeable}
+                    hoveredId={hoveredZoneId}
                     onSelect={
                       tool === "polygon"
                         ? undefined
