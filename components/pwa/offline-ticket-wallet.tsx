@@ -112,8 +112,8 @@ export function OfflineTicketWallet({
   )
 
   const showOfflineBanner = !online
-  const showEmptyError =
-    online && loadError && displayTickets.length === 0 && !cacheReady
+  const showLoadError = Boolean(online && loadError)
+  const hasDisplayTickets = displayTickets.length > 0
 
   return (
     <div className="space-y-4">
@@ -142,8 +142,24 @@ export function OfflineTicketWallet({
         </div>
       ) : null}
 
-      {showEmptyError ? (
-        <div className="rounded-3xl border border-red-500/20 bg-red-500/10 px-5 py-8 text-center text-sm text-red-200">
+      {showLoadError && hasDisplayTickets ? (
+        <div
+          role="alert"
+          className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+        >
+          {loadError}
+        </div>
+      ) : null}
+
+      {showLoadError && !hasDisplayTickets && !cacheReady ? (
+        <div className="rounded-3xl border border-border bg-muted/40 px-5 py-12 text-center text-sm text-muted-foreground">
+          Cargando billetera…
+        </div>
+      ) : showLoadError && !hasDisplayTickets ? (
+        <div
+          role="alert"
+          className="rounded-3xl border border-red-500/20 bg-red-500/10 px-5 py-8 text-center text-sm text-red-200"
+        >
           {loadError}
         </div>
       ) : (

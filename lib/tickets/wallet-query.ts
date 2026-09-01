@@ -22,25 +22,36 @@ export function isMissingTicketWalletColumnError(
   )
 }
 
+export const WALLET_LOAD_ERROR_MESSAGE =
+  "Tuvimos un problema al cargar tus pases. Por favor, recarga la página."
+
+export class WalletLoadError extends Error {
+  constructor(message = WALLET_LOAD_ERROR_MESSAGE) {
+    super(message)
+    this.name = "WalletLoadError"
+  }
+}
+
+export function isWalletLoadError(error: unknown): boolean {
+  return (
+    error instanceof WalletLoadError ||
+    (error instanceof Error && error.name === "WalletLoadError")
+  )
+}
+
 /** Never surface PostgREST / SQL text in Mis entradas. */
 export function walletFriendlyLoadError(
   error: unknown,
-): string | null {
-  if (!(error instanceof Error)) return null
-  if (error.message === "auth_required") return "auth_required"
-  if (
-    error.name === "WalletDeviceMismatchError" ||
-    error.message === "Sesión iniciada en otro dispositivo" ||
-    error.message === "wallet_device_mismatch"
-  ) {
-    return "wallet_device_mismatch"
+): string {
+  if (error instanceof Error) {
+    if (error.message === "auth_required") return "auth_required"
+    if (
+      error.name === "WalletDeviceMismatchError" ||
+      error.message === "Sesión iniciada en otro dispositivo" ||
+      error.message === "wallet_device_mismatch"
+    ) {
+      return "wallet_device_mismatch"
+    }
   }
-  if (
-    isAmbiguousTicketRelationshipError(error.message) ||
-    isMissingTicketWalletColumnError(error.message) ||
-    /PGRST|embed|schema cache|42703|Could not/i.test(error.message)
-  ) {
-    return null
-  }
-  return null
+  return WALLET_LOAD_ERROR_MESSAGE
 }

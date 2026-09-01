@@ -5,6 +5,7 @@ import {
   PROMO_TEMPLATE_2X1,
   PROMO_TEMPLATE_4X3,
   PROMO_TEMPLATE_SECOND_HALF,
+  bundleAdmitCountMismatchMessage,
   bundleSavings,
   inferBundleType,
   promotionalBundlePrice,
@@ -118,6 +119,42 @@ describe("flexible bundles", () => {
         stockSource: "own",
       }),
       null,
+    )
+  })
+
+  it("bloquea un 2x1 con admit_count distinto a la suma de ítems", () => {
+    assert.equal(
+      validateBundleDraft({
+        name: "2x1 General",
+        items: [{ tierId: "g", quantity: 2 }],
+        price: 10000,
+        capacity: 50,
+        admitCount: 1,
+      }),
+      bundleAdmitCountMismatchMessage(2, 1),
+    )
+    assert.equal(
+      validateBundleDraft({
+        name: "2x1 General",
+        items: [{ tierId: "g", quantity: 2 }],
+        price: 10000,
+        capacity: 50,
+        admitCount: 2,
+      }),
+      null,
+    )
+  })
+
+  it("no completa admit_count en silencio si el campo viene vacío", () => {
+    assert.equal(
+      validateBundleDraft({
+        name: "2x1 General",
+        items: [{ tierId: "g", quantity: 2 }],
+        price: 10000,
+        capacity: 50,
+        admitCount: 0,
+      }),
+      bundleAdmitCountMismatchMessage(2, 0),
     )
   })
 

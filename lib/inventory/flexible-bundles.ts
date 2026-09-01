@@ -270,6 +270,22 @@ export function bundleSavings(originalPrice: number, salePrice: number): {
   return { amount, percent }
 }
 
+export function bundleItemQuantitySum(
+  items: Array<{ quantity: number }>,
+): number {
+  return items.reduce(
+    (sum, item) => sum + Math.max(0, Math.floor(item.quantity) || 0),
+    0,
+  )
+}
+
+export function bundleAdmitCountMismatchMessage(
+  expected: number,
+  actual: number,
+): string {
+  return `Un combo debe emitir ${expected} accesos (la suma de las entradas incluidas). Ahora tiene ${actual}.`
+}
+
 export function validateBundleDraft(draft: {
   name: string
   items: BundleComponent[]
@@ -282,11 +298,11 @@ export function validateBundleDraft(draft: {
   if (draft.name.trim().length < 2) {
     return "Nombrá el combo o abono."
   }
-  const impliedAccesses = draft.items.reduce(
-    (sum, item) => sum + Math.max(0, Math.floor(item.quantity) || 0),
-    0,
-  )
-  const admitCount = Math.floor(Number(draft.admitCount) || impliedAccesses || 0)
+  const impliedAccesses = bundleItemQuantitySum(draft.items)
+  const admitCount = Math.floor(Number(draft.admitCount) || 0)
+  if (impliedAccesses > 0 && admitCount !== impliedAccesses) {
+    return bundleAdmitCountMismatchMessage(impliedAccesses, admitCount)
+  }
   if (admitCount < 1) {
     return "Indicá cuántos accesos otorga cada compra."
   }

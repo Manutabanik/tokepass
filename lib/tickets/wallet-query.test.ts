@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  WALLET_LOAD_ERROR_MESSAGE,
+  WalletLoadError,
   isAmbiguousTicketRelationshipError,
   isMissingTicketWalletColumnError,
   ticketsTierSelect,
@@ -69,13 +71,17 @@ describe("walletFriendlyLoadError", () => {
           "Could not embed because more than one relationship was found for 'tickets' and 'ticket_tiers'",
         ),
       ),
-      null,
+      WALLET_LOAD_ERROR_MESSAGE,
     )
     assert.equal(walletFriendlyLoadError(new Error("auth_required")), "auth_required")
     assert.equal(
       walletFriendlyLoadError(new Error("Sesión iniciada en otro dispositivo")),
       "wallet_device_mismatch",
     )
-    assert.equal(walletFriendlyLoadError(new Error("boom")), null)
+    assert.equal(walletFriendlyLoadError(new Error("boom")), WALLET_LOAD_ERROR_MESSAGE)
+    assert.equal(
+      walletFriendlyLoadError(new WalletLoadError()),
+      WALLET_LOAD_ERROR_MESSAGE,
+    )
   })
 })

@@ -13,6 +13,8 @@ import {
   eventFixedFee,
 } from "@/lib/pricing/event-fees"
 import {
+  bundleAdmitCountMismatchMessage,
+  bundleItemQuantitySum,
   inferBundleType,
   normalizePromoRule,
   parseBundleType,
@@ -270,6 +272,15 @@ export async function upsertTicketBundle(input: {
         })
       : null
 
+  const impliedAccesses = bundleItemQuantitySum(bundleItems)
+  const admitCount = Math.floor(Number(input.admitCount) || 0)
+  if (input.category === "bundle" && impliedAccesses > 0 && admitCount !== impliedAccesses) {
+    return {
+      success: false,
+      error: bundleAdmitCountMismatchMessage(impliedAccesses, admitCount),
+    }
+  }
+
   const payload = {
     event_id: input.eventId,
     name,
@@ -284,7 +295,7 @@ export async function upsertTicketBundle(input: {
     layout_type: "general" as const,
     admit_count: Math.max(
       1,
-      Math.min(50, Math.floor(Number(input.admitCount) || 1)),
+      Math.min(50, impliedAccesses > 0 ? impliedAccesses : admitCount || 1),
     ),
     tier_type: input.category === "bundle" ? ("bundle" as const) : ("general" as const),
     bundle_type: bundleType,

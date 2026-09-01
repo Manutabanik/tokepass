@@ -27,7 +27,9 @@ import {
   type TicketCommerceType,
 } from "@/lib/events/ticket-commerce-type"
 import {
+  WalletLoadError,
   isMissingTicketWalletColumnError,
+  isWalletLoadError,
   ticketsTierSelect,
 } from "@/lib/tickets/wallet-query"
 import { shouldKeepOwnedWalletTicket } from "@/lib/tickets/wallet-visibility"
@@ -190,8 +192,10 @@ export async function getMyTickets(options?: {
     return await loadMyTickets(options)
   } catch (error) {
     if (isWalletDeviceMismatchError(error)) throw error
+    if (error instanceof Error && error.message === "auth_required") throw error
+    if (isWalletLoadError(error)) throw error
     console.error("[getMyTickets]", error)
-    return []
+    throw new WalletLoadError()
   }
 }
 
@@ -241,7 +245,7 @@ async function loadMyTickets(options?: {
   } = await supabase.auth.getUser()
 
   if (authError || !user) {
-    return []
+    throw new Error("auth_required")
   }
 
   const deviceAccess = await assertWalletDeviceMayReceiveTotp(
@@ -320,7 +324,7 @@ async function loadMyTickets(options?: {
 
   if (error) {
     console.error("[getMyTickets]", error.message)
-    return []
+    throw new WalletLoadError()
   }
 
   type WalletRow = TicketRow & {

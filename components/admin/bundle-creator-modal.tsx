@@ -37,6 +37,7 @@ import {
   normalizePromoRule,
   promotionalBundlePrice,
   regularBundlePrice,
+  bundleItemQuantitySum,
   validateBundleDraft,
   type BundleComponent,
   type BundleStockSource,
@@ -150,6 +151,7 @@ export function BundleCreatorModal({
     rule,
   })
   const savings = bundleSavings(originalPrice, sale)
+  const impliedAccesses = bundleItemQuantitySum(items)
   const bundleType = inferBundleType({
     bundleType: rule.tipoDescuento === "X_POR_Y" ? "volume_discount" : undefined,
     items,
@@ -263,6 +265,12 @@ export function BundleCreatorModal({
                 placeholder="Ej: 4"
                 className="h-11"
               />
+              {impliedAccesses > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Debe coincidir con la suma de las entradas incluidas (
+                  {impliedAccesses}).
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="bundle-price">Precio total del combo</Label>

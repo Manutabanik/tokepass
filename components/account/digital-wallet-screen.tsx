@@ -25,21 +25,28 @@ export async function DigitalWalletScreen({
   let storeRedemptions: Awaited<ReturnType<typeof getMyStoreRedemptions>> = []
   let loadError: string | null = null
 
-  try {
-    const [tickets, redemptions] = await Promise.all([
-      getMyTickets(),
-      getMyStoreRedemptions(),
-    ])
-    initialTickets = tickets
-    storeRedemptions = redemptions
-  } catch (error) {
-    if (walletFriendlyLoadError(error) === "auth_required") {
+  const [ticketsResult, redemptionsResult] = await Promise.allSettled([
+    getMyTickets(),
+    getMyStoreRedemptions(),
+  ])
+
+  for (const result of [ticketsResult, redemptionsResult]) {
+    if (result.status === "fulfilled") continue
+    const friendly = walletFriendlyLoadError(result.reason)
+    if (friendly === "auth_required") {
       redirect(loginUrlWithNext(loginNext))
     }
-    if (walletFriendlyLoadError(error) === "wallet_device_mismatch") {
+    if (friendly === "wallet_device_mismatch") {
       return <WalletDeviceMismatchLogout nextPath={loginNext} />
     }
-    loadError = null
+    loadError = friendly
+  }
+
+  if (ticketsResult.status === "fulfilled") {
+    initialTickets = ticketsResult.value
+  }
+  if (redemptionsResult.status === "fulfilled") {
+    storeRedemptions = redemptionsResult.value
   }
 
   const walletFlags = getWalletUiFlags()

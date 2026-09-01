@@ -17,6 +17,7 @@ import {
 } from "@/lib/store/living-store-payload"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { WalletLoadError } from "@/lib/tickets/wallet-query"
 
 const MAX_STORE_IMAGE_BYTES = 5 * 1024 * 1024
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -212,7 +213,7 @@ export async function getMyStoreRedemptions(): Promise<MyStoreRedemption[]> {
     .order("created_at", { ascending: false })
 
   if (error) {
-    throw new Error(error.message || "No se pudieron cargar tus extras.")
+    throw new WalletLoadError()
   }
 
   type Row = {

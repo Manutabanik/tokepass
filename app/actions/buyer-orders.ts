@@ -1,6 +1,7 @@
 "use server"
 
 import { getMyTickets, type MyTicket } from "@/app/actions/tickets"
+import { isWalletDeviceMismatchError } from "@/lib/auth/wallet-device"
 import { tryCreateAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { OrderStatus, PaymentMethod } from "@/types/database"
@@ -9,8 +10,14 @@ export async function getMyTicketById(
   ticketId: string,
 ): Promise<MyTicket | null> {
   if (!ticketId) return null
-  const tickets = await getMyTickets({ ticketId })
-  return tickets[0] ?? null
+  try {
+    const tickets = await getMyTickets({ ticketId })
+    return tickets[0] ?? null
+  } catch (error) {
+    if (isWalletDeviceMismatchError(error)) throw error
+    if (error instanceof Error && error.message === "auth_required") throw error
+    return null
+  }
 }
 
 export type BuyerOrderRow = {
