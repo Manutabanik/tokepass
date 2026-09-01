@@ -1,23 +1,22 @@
 "use client"
 
-import { LoaderCircle, Tag, Users } from "lucide-react"
+import { ChevronDown, LoaderCircle, Tag, Users } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useState, useTransition } from "react"
+import { useId, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import { createResaleListingAction } from "@/app/actions/resale"
 import type { MyTicket } from "@/app/actions/tickets"
 import { WalletPassCard } from "@/components/account/wallet-pass-card"
 import { ResaleConfirmDialog } from "@/components/public/resale-confirm-dialog"
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
+import { formatEventDay } from "@/lib/format"
 import type { WalletAccessBlock } from "@/lib/ticket-wallet"
-import { walletChildPlaceLabel } from "@/lib/ticket-wallet"
+import {
+  ticketAdmissionTitle,
+  walletAccessBlockExpandLabel,
+  walletChildPlaceLabel,
+} from "@/lib/ticket-wallet"
 import { cn } from "@/lib/utils"
 
 function sellableTickets(tickets: MyTicket[], offline: boolean): MyTicket[] {
@@ -42,6 +41,8 @@ export function WalletAccessBlockCard({
   offline?: boolean
 }) {
   const router = useRouter()
+  const panelId = useId()
+  const [open, setOpen] = useState(false)
   const [resaleOpen, setResaleOpen] = useState(false)
   const [pending, startTransition] = useTransition()
   const eligible = sellableTickets(block.tickets, offline)
@@ -51,14 +52,15 @@ export function WalletAccessBlockCard({
       ? "Vender Mesa Completa"
       : "Vender combo"
   const totalValue = eligible.reduce((sum, ticket) => sum + ticket.tierPrice, 0)
+  const first = block.tickets[0]
 
   if (block.kind === "single") {
-    const ticket = block.tickets[0]
+    const ticket = first
     if (!ticket) return null
     return (
       <WalletPassCard
         ticket={ticket}
-        placeLabel={walletChildPlaceLabel(ticket, 0, 1)}
+        placeLabel={ticketAdmissionTitle(ticket, 0, 1)}
         offline={offline}
         canSell={canSellBlock}
         showQrInitially={false}
@@ -83,47 +85,71 @@ export function WalletAccessBlockCard({
   }
 
   return (
-    <Accordion className="w-full overflow-hidden rounded-2xl border border-border bg-card">
-      <AccordionItem value={block.id} className="border-0">
-        <div className="flex items-stretch gap-1">
-          <AccordionTrigger className="min-w-0 flex-1 items-center px-4 py-3 hover:no-underline">
-            <span className="flex min-w-0 flex-1 items-center gap-3">
-              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
-                <Users className="size-4" aria-hidden="true" />
-              </span>
-              <span className="min-w-0 text-left">
-                <span className="block truncate text-sm font-bold text-foreground">
-                  {block.title}
-                </span>
-                <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                  {block.accessCount}{" "}
-                  {block.accessCount === 1 ? "acceso" : "accesos"} · Tocá para
-                  ver cada lugar
-                </span>
-              </span>
-            </span>
-          </AccordionTrigger>
-        </div>
-        {canSellBlock ? (
-          <div className="px-4 pb-3">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending}
-              onClick={() => setResaleOpen(true)}
-              className="h-11 w-full rounded-xl"
-            >
-              {pending ? (
-                <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Tag className="size-4" aria-hidden="true" />
-              )}
-              {sellLabel}
-            </Button>
+    <article className="overflow-hidden rounded-2xl border border-emerald-500/25 bg-emerald-500/10 text-card-foreground shadow-sm">
+      <div className="space-y-3 px-4 pt-4 pb-3 sm:px-5">
+        <div className="flex items-start gap-3">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-emerald-500/20 text-emerald-800 dark:text-emerald-300">
+            <Users className="size-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-lg font-bold tracking-tight text-foreground">
+              {block.title}
+            </h3>
+            {first ? (
+              <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
+                {first.eventTitle}
+                {first.dayValidityLabel ? ` · ${first.dayValidityLabel}` : null}
+                {` · ${formatEventDay(first.eventDate)}`}
+              </p>
+            ) : null}
           </div>
+        </div>
+
+        {canSellBlock ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={() => setResaleOpen(true)}
+            className="h-11 w-full justify-center rounded-xl"
+          >
+            {pending ? (
+              <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Tag className="size-4" aria-hidden="true" />
+            )}
+            {sellLabel}
+          </Button>
         ) : null}
-        <AccordionContent className={cn("px-3 pb-3", "[&_p:not(:last-child)]:mb-0")}>
-          <ul className="space-y-2">
+
+        <Button
+          type="button"
+          variant="outline"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={() => setOpen((value) => !value)}
+          className="h-12 w-full justify-center rounded-xl border-emerald-500/30 bg-background/80 text-sm font-semibold"
+        >
+          <ChevronDown
+            className={cn(
+              "size-4 transition-transform duration-300",
+              open && "rotate-180",
+            )}
+            aria-hidden="true"
+          />
+          {walletAccessBlockExpandLabel(block.accessCount, open)}
+        </Button>
+      </div>
+
+      <div
+        id={panelId}
+        className={cn(
+          "grid transition-[grid-template-rows] duration-300 ease-out",
+          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <ul className="space-y-3 border-t border-emerald-500/15 px-3 pb-3 pt-3 sm:px-4">
             {block.tickets.map((ticket, index) => (
               <li key={ticket.id}>
                 <WalletPassCard
@@ -140,8 +166,9 @@ export function WalletAccessBlockCard({
               </li>
             ))}
           </ul>
-        </AccordionContent>
-      </AccordionItem>
+        </div>
+      </div>
+
       <ResaleConfirmDialog
         open={resaleOpen}
         onOpenChange={setResaleOpen}
@@ -153,6 +180,6 @@ export function WalletAccessBlockCard({
           sellBlock()
         }}
       />
-    </Accordion>
+    </article>
   )
 }

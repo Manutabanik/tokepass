@@ -80,10 +80,10 @@ export function WalletPassCard({
       )}
     >
       <div className="space-y-1 px-4 py-3">
-        <p className="truncate text-sm font-bold tracking-tight text-foreground">
+        <p className="text-lg font-bold tracking-tight text-foreground">
           {placeLabel}
         </p>
-        <p className="line-clamp-2 text-xs text-muted-foreground">
+        <p className="line-clamp-2 text-sm text-muted-foreground">
           {ticket.eventTitle}
           {ticket.dayValidityLabel ? ` · ${ticket.dayValidityLabel}` : null}
           {` · ${formatEventDay(ticket.eventDate)}`}
@@ -126,7 +126,7 @@ export function WalletPassCard({
         </div>
       ) : null}
 
-      <div className="flex w-full flex-col gap-2 p-4 pt-0">
+      <div className="flex w-full flex-col items-stretch gap-2 p-4 pt-0">
         {alreadySent ? (
           <Button
             type="button"
@@ -137,7 +137,7 @@ export function WalletPassCard({
               ticket.status === "transferred"
             }
             onClick={transfer.cancelSend}
-            className="h-12 w-full rounded-xl"
+            className="h-12 w-full justify-center rounded-xl"
           >
             {transfer.pending ? (
               <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
@@ -152,17 +152,16 @@ export function WalletPassCard({
               type="button"
               disabled={!canShowQr}
               onClick={() => setQrOpen((open) => !open)}
-              className="h-12 w-full rounded-xl bg-emerald-600 text-white hover:bg-emerald-500"
+              className="h-12 w-full justify-center rounded-xl bg-emerald-600 text-white hover:bg-emerald-500"
             >
               <QrCode className="size-4" aria-hidden="true" />
               {qrOpen ? "Ocultar QR" : "Mostrar QR"}
             </Button>
             <Button
               type="button"
-              variant="outline"
               disabled={!canTransfer}
               onClick={() => setTransferConfirmOpen(true)}
-              className="h-12 w-full rounded-xl border-border bg-background"
+              className="h-12 w-full justify-center rounded-xl border border-white/10 bg-zinc-900 text-white hover:bg-zinc-800"
             >
               {transfer.pending ? (
                 <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />

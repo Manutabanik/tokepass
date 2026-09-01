@@ -8,6 +8,7 @@ import {
   ticketExactSeatLabel,
   ticketOrdinalInGroup,
   ticketOrdinalLabel,
+  walletAccessBlockExpandLabel,
   walletAccessBlockTitle,
   walletChildPlaceLabel,
   walletOrderKey,
@@ -206,8 +207,8 @@ describe("wallet access blocks", () => {
     assert.equal(blocks.length, 1)
     assert.equal(blocks[0]?.kind, "group")
     assert.equal(blocks[0]?.accessCount, 2)
-    assert.equal(blocks[0]?.title, "Mesa VIP 05 - 2 Accesos")
-    assert.equal(walletChildPlaceLabel(blocks[0]!.tickets[0]!, 0, 2), "Lugar 1")
+    assert.equal(blocks[0]?.title, "Mesa VIP 05 (2 Accesos)")
+    assert.equal(walletChildPlaceLabel(blocks[0]!.tickets[0]!, 0, 2), "Silla 1")
   })
 
   it("groups a 2x1 combo by order and tier", () => {
@@ -231,7 +232,7 @@ describe("wallet access blocks", () => {
     ])
     assert.equal(blocks.length, 1)
     assert.equal(blocks[0]?.kind, "group")
-    assert.equal(walletAccessBlockTitle(blocks[0]!.tickets), "Promo 2x1 - 2 Accesos")
+    assert.equal(walletAccessBlockTitle(blocks[0]!.tickets), "Promo 2x1 (2 Accesos)")
   })
 
   it("keeps two general tickets from the same cart as singles", () => {
@@ -278,5 +279,104 @@ describe("wallet access blocks", () => {
     ])
     assert.equal(blocks.length, 1)
     assert.equal(blocks[0]?.id, "gid:g-1")
+  })
+
+  it("titles a tablón with sector, row and access count in parentheses", () => {
+    assert.equal(
+      walletAccessBlockTitle([
+        {
+          id: "a",
+          tierName: "Grada Amarilla",
+          maxAdmissions: 1,
+          createdAt: "2026-08-01T10:00:00.000Z",
+          seatingLayoutType: "table_combo",
+          seatingRowLabel: "1",
+          seatingLabel: "Tablón 08",
+          groupSlot: 1,
+        },
+        {
+          id: "b",
+          tierName: "Grada Amarilla",
+          maxAdmissions: 1,
+          createdAt: "2026-08-01T10:00:01.000Z",
+          seatingLayoutType: "table_combo",
+          seatingRowLabel: "1",
+          seatingLabel: "Tablón 08",
+          groupSlot: 2,
+        },
+      ]),
+      "Grada Amarilla Fila 1 - Tablón 08 (2 Accesos)",
+    )
+  })
+
+  it("groups numbered seats from the same purchase and row", () => {
+    const blocks = groupWalletAccessBlocks([
+      {
+        id: "a",
+        orderId: "ord-1",
+        tierName: "Platea",
+        maxAdmissions: 1,
+        createdAt: "2026-08-01T10:00:00.000Z",
+        seatingLayoutType: "numbered_seat",
+        seatingRowLabel: "3",
+        seatingLabel: "12",
+      },
+      {
+        id: "b",
+        orderId: "ord-1",
+        tierName: "Platea",
+        maxAdmissions: 1,
+        createdAt: "2026-08-01T10:00:01.000Z",
+        seatingLayoutType: "numbered_seat",
+        seatingRowLabel: "3",
+        seatingLabel: "13",
+      },
+    ])
+    assert.equal(blocks.length, 1)
+    assert.equal(blocks[0]?.kind, "group")
+    assert.equal(blocks[0]?.title, "Platea Fila 3 (2 Accesos)")
+    assert.equal(
+      walletChildPlaceLabel(blocks[0]!.tickets[0]!, 0, 2),
+      "Fila 3 - Asiento 12",
+    )
+  })
+
+  it("groups table chairs that share a row even if labels differ", () => {
+    const blocks = groupWalletAccessBlocks([
+      {
+        id: "a",
+        orderId: "ord-1",
+        tierName: "Grada Amarilla",
+        maxAdmissions: 1,
+        createdAt: "2026-08-01T10:00:00.000Z",
+        seatingLayoutType: "table_combo",
+        seatingRowLabel: "Tablón 08",
+        seatingLabel: "Silla 1",
+        groupSlot: 1,
+      },
+      {
+        id: "b",
+        orderId: "ord-1",
+        tierName: "Grada Amarilla",
+        maxAdmissions: 1,
+        createdAt: "2026-08-01T10:00:01.000Z",
+        seatingLayoutType: "table_combo",
+        seatingRowLabel: "Tablón 08",
+        seatingLabel: "Silla 2",
+        groupSlot: 2,
+      },
+    ])
+    assert.equal(blocks.length, 1)
+    assert.equal(blocks[0]?.kind, "group")
+    assert.equal(blocks[0]?.title, "Grada Amarilla Tablón 08 (2 Accesos)")
+    assert.equal(walletChildPlaceLabel(blocks[0]!.tickets[0]!, 0, 2), "Silla 1")
+  })
+
+  it("writes the explicit mesa expand label", () => {
+    assert.equal(
+      walletAccessBlockExpandLabel(8),
+      "Ver los 8 lugares de esta mesa",
+    )
+    assert.equal(walletAccessBlockExpandLabel(8, true), "Ocultar lugares")
   })
 })

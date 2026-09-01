@@ -118,9 +118,9 @@ function OrderTicketList({
 }) {
   const blocks = groupWalletAccessBlocks(tickets)
   return (
-    <ul className="w-full space-y-2 overflow-hidden">
+    <ul className="w-full space-y-3 overflow-visible">
       {blocks.map((block) => (
-        <li key={block.id} className="w-full overflow-hidden">
+        <li key={block.id} className="w-full">
           <WalletAccessBlockCard block={block} offline={offline} />
         </li>
       ))}
@@ -386,7 +386,7 @@ export function TicketWallet({
   }, [upcomingGroups, extraGroups, storeOffers])
 
   return (
-    <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full overflow-hidden gap-6">
+    <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full overflow-x-clip overflow-y-visible gap-6 pb-32">
       <div className="w-full overflow-hidden pb-1">
         <TabsList
           aria-label="Secciones de la billetera"
@@ -424,7 +424,7 @@ export function TicketWallet({
               <AccordionItem
                 key={group.eventId}
                 value={group.eventId}
-                className="w-full overflow-hidden rounded-3xl border border-border/80 bg-card/80 shadow-lg shadow-black/10 backdrop-blur-md not-last:border-b-0"
+                className="w-full overflow-visible rounded-3xl border border-border/80 bg-card/80 shadow-lg shadow-black/10 backdrop-blur-md not-last:border-b-0"
               >
                 <AccordionTrigger className="px-4 py-4 hover:no-underline sm:px-5">
                   <EventGroupHeader
@@ -441,7 +441,7 @@ export function TicketWallet({
                     showEventLink={false}
                   />
                 </AccordionTrigger>
-                <AccordionContent className="px-4 pb-5 sm:px-5">
+                <AccordionContent className="h-auto px-4 pb-5 sm:px-5">
                   <div className="mb-4 flex justify-end">
                     <Link
                       href={`/events/${group.eventId}`}

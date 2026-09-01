@@ -14,7 +14,9 @@ function includesLoose(haystack: string, needle: string): boolean {
 }
 
 function formatRowLabel(row: string): string {
-  return /^fila\b/i.test(row) ? row : `Fila ${row}`
+  if (/^fila\b/i.test(row)) return row
+  if (/^(mesa|tabl[oó]n|palco|box)\b/i.test(row)) return row
+  return `Fila ${row}`
 }
 
 /**
@@ -224,15 +226,29 @@ export type WalletAccessBlock<T> = {
   tickets: T[]
 }
 
+function isChairLikeLabel(value: string): boolean {
+  return /^(silla|butaca|asiento)(\s+\S+)?$/i.test(value.trim()) || /^\d+$/.test(value.trim())
+}
+
 export function walletAccessBlockKey(ticket: WalletBlockableTicket): string {
   const groupId = ticket.groupId?.trim()
   if (groupId) return `gid:${groupId}`
 
   const order = ticket.orderId?.trim() || `ticket:${ticket.id}`
   if (ticket.seatingLayoutType === "table_combo") {
-    const place = ticket.seatingLabel?.trim()
-    if (place) {
-      return `table:${order}:${place.toLocaleUpperCase("es-AR")}`
+    const place = ticket.seatingLabel?.trim() || ""
+    const row = ticket.seatingRowLabel?.trim() || ""
+    const tableId = isChairLikeLabel(place) ? row || place : place || row
+    if (tableId) {
+      return `table:${order}:${tableId.toLocaleUpperCase("es-AR")}`
+    }
+    return `table:${order}`
+  }
+
+  if (ticket.seatingLayoutType === "numbered_seat") {
+    const row = ticket.seatingRowLabel?.trim()
+    if (row) {
+      return `row:${order}:${ticket.tierName.trim().toLocaleUpperCase("es-AR")}:${row.toLocaleUpperCase("es-AR")}`
     }
   }
 
@@ -256,26 +272,61 @@ export function walletAccessCount(tickets: WalletBlockableTicket[]): number {
   return Math.max(fromTickets, fromAdmit)
 }
 
+function formatAccessCountLabel(count: number): string {
+  return count === 1 ? "1 Acceso" : `${count} Accesos`
+}
+
+function sharedTicketText(
+  tickets: WalletBlockableTicket[],
+  read: (ticket: WalletBlockableTicket) => string,
+): string {
+  const first = read(tickets[0]!).trim()
+  if (!first) return ""
+  return tickets.every((ticket) => sameSeatText(read(ticket), first)) ? first : ""
+}
+
 export function walletAccessBlockTitle(
   tickets: WalletBlockableTicket[],
 ): string {
   const first = tickets[0]
   if (!first) return "Entrada"
-  const count = walletAccessCount(tickets)
-  const accesses = count === 1 ? "1 Acceso" : `${count} Accesos`
-  const seat = ticketExactSeatLabel(first)
+  const accesses = formatAccessCountLabel(walletAccessCount(tickets))
   const tier = first.tierName.trim() || "Entrada"
-  if (seat) {
-    const mesaNumber = seat.replace(/^mesa\s+/i, "").trim()
-    if (/^mesa\b/i.test(seat) && mesaNumber && mesaNumber !== seat) {
-      return `${tier} ${mesaNumber} - ${accesses}`
+  const place = sharedTicketText(tickets, (ticket) => ticket.seatingLabel ?? "")
+  const rowRaw = sharedTicketText(tickets, (ticket) => ticket.seatingRowLabel ?? "")
+  const row = rowRaw ? formatRowLabel(rowRaw) : ""
+  const placeForParent =
+    place && tickets.length > 1 && isChairLikeLabel(place) ? "" : place
+
+  let core = tier
+  if (placeForParent && !sameSeatText(placeForParent, tier)) {
+    if (/^mesa\b/i.test(placeForParent)) {
+      const mesaNumber = placeForParent.replace(/^mesa\s+/i, "").trim()
+      const mesa =
+        mesaNumber && mesaNumber !== placeForParent
+          ? mesaNumber
+          : placeForParent
+      core = row ? `${tier} ${row} - Mesa ${mesa}` : `${tier} ${mesa}`
+    } else if (row && !includesLoose(placeForParent, row)) {
+      core = `${tier} ${row} - ${placeForParent}`
+    } else if (!includesLoose(placeForParent, tier)) {
+      core = `${tier} ${placeForParent}`
+    } else {
+      core = placeForParent
     }
-    if (tier && !sameSeatText(seat, tier) && !includesLoose(seat, tier)) {
-      return `${tier} ${seat} - ${accesses}`
-    }
-    return `${seat} - ${accesses}`
+  } else if (row) {
+    core = `${tier} ${row}`
   }
-  return `${tier} - ${accesses}`
+
+  return `${core} (${accesses})`
+}
+
+export function walletAccessBlockExpandLabel(
+  count: number,
+  expanded = false,
+): string {
+  if (expanded) return "Ocultar lugares"
+  return `Ver los ${count} lugares de esta mesa`
 }
 
 export function walletChildPlaceLabel(
@@ -284,13 +335,15 @@ export function walletChildPlaceLabel(
   total: number,
 ): string {
   const slot = Math.max(0, Math.floor(ticket.groupSlot ?? 0))
-  if (slot > 0) return `Lugar ${slot}`
+  if (slot > 0) return `Silla ${slot}`
   if (ticket.seatingLayoutType === "numbered_seat") {
     const seat = ticketExactSeatLabel(ticket)
     if (seat) return seat
   }
+  const place = ticket.seatingLabel?.trim() || ""
+  if (place && /^(silla|butaca|asiento)\b/i.test(place)) return place
   if (total <= 1) return ticket.tierName.trim() || "Entrada"
-  return `Lugar ${index + 1}`
+  return `Silla ${index + 1}`
 }
 
 export function groupWalletAccessBlocks<T extends WalletBlockableTicket>(
