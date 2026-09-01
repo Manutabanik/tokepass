@@ -4,7 +4,9 @@ import { describe, it } from "node:test"
 import { createVenueZone } from "./adaptive-seating"
 import {
   canvasPointToPercent,
+  isCanvasPointInZonePolygon,
   isCloseToFirstVertex,
+  isPointInPolygon,
   normalizePolygonToPercent,
   polygonFromCanvas,
   polygonLooksLikePixels,
@@ -215,5 +217,51 @@ describe("parametric zone polygons", () => {
     assert.equal(scaled[0]?.x, 10)
     assert.equal(scaled[1]?.x, 70)
     assert.equal(scaled[0]?.y, 10)
+  })
+})
+
+describe("isPointInPolygon", () => {
+  const square = [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 10, y: 10 },
+    { x: 0, y: 10 },
+  ]
+
+  it("usa raycasting even-odd sobre el mismo espacio", () => {
+    assert.equal(isPointInPolygon({ x: 5, y: 5 }, square), true)
+    assert.equal(isPointInPolygon({ x: 15, y: 5 }, square), false)
+    assert.equal(isPointInPolygon({ x: -1, y: 5 }, square), false)
+    assert.equal(isPointInPolygon({ x: 5, y: 5 }, square.slice(0, 2)), false)
+  })
+
+  it("cubre un polígono cóncavo y un anillo cerrado duplicado", () => {
+    const concave = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 4 },
+      { x: 4, y: 4 },
+      { x: 4, y: 6 },
+      { x: 10, y: 6 },
+      { x: 10, y: 10 },
+      { x: 0, y: 10 },
+    ]
+    assert.equal(isPointInPolygon({ x: 2, y: 5 }, concave), true)
+    assert.equal(isPointInPolygon({ x: 7, y: 5 }, concave), false)
+    assert.equal(
+      isPointInPolygon({ x: 5, y: 5 }, [...square, square[0]!]),
+      true,
+    )
+  })
+
+  it("ubica el centro de una mesa en el polígono porcentual de la zona", () => {
+    const zone = [
+      { x: 10, y: 10 },
+      { x: 40, y: 10 },
+      { x: 40, y: 40 },
+      { x: 10, y: 40 },
+    ]
+    assert.equal(isCanvasPointInZonePolygon({ x: 200, y: 140 }, zone), true)
+    assert.equal(isCanvasPointInZonePolygon({ x: 10, y: 10 }, zone), false)
   })
 })

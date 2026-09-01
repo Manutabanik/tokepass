@@ -153,6 +153,42 @@ export function polygonSvgPoints(points: VenueMapPoint[]): string {
     .join(" ")
 }
 
+/**
+ * Raycasting even-odd. `point` and `polygon` must share the same space.
+ * A closed last=first vertex is ignored as a duplicate.
+ */
+export function isPointInPolygon(
+  point: VenueMapPoint,
+  polygon: readonly VenueMapPoint[],
+): boolean {
+  if (polygon.length < 3) return false
+  const last = polygon[polygon.length - 1]!
+  const first = polygon[0]!
+  const closed =
+    last.x === first.x && last.y === first.y ? polygon.length - 1 : polygon.length
+  if (closed < 3) return false
+  let inside = false
+  for (let i = 0, j = closed - 1; i < closed; j = i, i += 1) {
+    const a = polygon[i]!
+    const b = polygon[j]!
+    const crosses =
+      a.y > point.y !== b.y > point.y &&
+      point.x <
+        ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y || Number.EPSILON) + a.x
+    if (crosses) inside = !inside
+  }
+  return inside
+}
+
+/** Mesa/butaca in canvas pixels vs zone vertices stored as % or pixels. */
+export function isCanvasPointInZonePolygon(
+  point: VenueMapPoint,
+  polygon: readonly VenueMapPoint[],
+  space?: VenuePolygonSpace | null,
+): boolean {
+  return isPointInPolygon(point, polygonToCanvas([...polygon], space))
+}
+
 export function zoneIdFromEventTarget(target: EventTarget | null): string | null {
   if (typeof Element === "undefined" || !(target instanceof Element)) {
     return null

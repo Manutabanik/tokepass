@@ -38,6 +38,7 @@ export function VenueMapZoneLayer({
   onVertexPointerDown,
   editVertices = false,
   fillHits = true,
+  passThroughFills = false,
   selectOnPointerUp = false,
   shouldCommitTap,
   unavailableIds = [],
@@ -65,6 +66,8 @@ export function VenueMapZoneLayer({
   ) => void
   editVertices?: boolean
   fillHits?: boolean
+  /** During drag, zone floors must not steal pointerup from the canvas. */
+  passThroughFills?: boolean
   selectOnPointerUp?: boolean
   shouldCommitTap?: (event: React.PointerEvent) => boolean
   unavailableIds?: string[]
@@ -200,7 +203,11 @@ export function VenueMapZoneLayer({
                   : soldOut
                     ? 0.5
                     : 1,
-              pointerEvents: zoneInteractive ? "auto" : "none",
+              pointerEvents: passThroughFills
+                ? "none"
+                : zoneInteractive
+                  ? "auto"
+                  : "none",
               transition: "opacity 0.3s ease, filter 0.3s ease",
               filter: isolatedOut
                 ? "grayscale(1)"
@@ -302,26 +309,32 @@ export function VenueMapZoneLayer({
               strokeWidth={lodSolid ? 2 : selected ? 3 : 2}
               strokeLinejoin="round"
               pointerEvents={
-                revealFocused || soldOut
+                passThroughFills || revealFocused || soldOut
                   ? "none"
                   : fillHits
                     ? "auto"
                     : "visibleStroke"
               }
+              className={cn(
+                "transition-[fill-opacity] duration-300 ease-out",
+                passThroughFills && "pointer-events-none",
+                zoneInteractive &&
+                  !passThroughFills &&
+                  (lodSolid
+                    ? "cursor-pointer hover:[fill-opacity:0.45]"
+                    : "cursor-pointer hover:[fill-opacity:0.82]"),
+              )}
               filter={
                 soldOut || revealFocused || lodSolid
                   ? undefined
                   : `url(#zone-neon-${glowId})`
               }
-              className={cn(
-                "transition-[fill-opacity] duration-300 ease-out",
-                zoneInteractive &&
-                  (lodSolid
-                    ? "cursor-pointer hover:[fill-opacity:0.45]"
-                    : "cursor-pointer hover:[fill-opacity:0.82]"),
-              )}
             />
-            {!fillHits && zoneInteractive && !soldOut && !revealFocused ? (
+            {!fillHits &&
+            zoneInteractive &&
+            !soldOut &&
+            !revealFocused &&
+            !passThroughFills ? (
               <polygon
                 data-zone-id={zone.id}
                 points={points}

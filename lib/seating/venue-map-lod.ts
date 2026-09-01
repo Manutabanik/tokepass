@@ -1,6 +1,7 @@
 import { elementAabb, unionAabb, type Aabb } from "@/lib/seating/venue-transform"
 import {
   canvasPointToPercent,
+  isPointInPolygon,
   polygonToCanvas,
   VENUE_MAP_CANVAS,
 } from "@/lib/seating/venue-polygon"
@@ -72,18 +73,7 @@ export function pointInPolygon(
   point: VenueMapPoint,
   polygon: VenueMapPoint[],
 ): boolean {
-  const ring = polygonToCanvas(polygon)
-  if (ring.length < 3) return false
-  let inside = false
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
-    const a = ring[i]!
-    const b = ring[j]!
-    const intersects =
-      a.y > point.y !== b.y > point.y &&
-      point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y || Number.EPSILON) + a.x
-    if (intersects) inside = !inside
-  }
-  return inside
+  return isPointInPolygon(point, polygonToCanvas(polygon))
 }
 
 function namesMatch(left: string | undefined, right: string | undefined) {

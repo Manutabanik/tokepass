@@ -888,6 +888,7 @@ export function InteractiveVenueMapEditor({
   const [transformingKind, setTransformingKind] = useState<
     "move" | "scale" | "rotate" | null
   >(null)
+  const [svgPassThrough, setSvgPassThrough] = useState(false)
   useEffect(() => {
     const current = selectionRef.current
     if (!current) return
@@ -1293,6 +1294,8 @@ export function InteractiveVenueMapEditor({
       liveSelection?.kind === "zone" ? liveSelection.id : null
     return (renderMap.zones ?? []).filter((zone) => zone.id !== selectedZoneId)
   }, [liveSelection, renderMap.zones])
+  const zoneFillsPermeable =
+    svgPassThrough || transformingKind != null || isPanning
   const showElementSeats = (renderMap.elements?.length ?? 0) < 220
   const activePriceGroup = matchPriceGroupFromSelection(map, {
     sectorId: selectedSector?.id ?? null,
@@ -1649,6 +1652,7 @@ export function InteractiveVenueMapEditor({
     }
     paintLive({ type: "move", dx: 0, dy: 0 })
     setTransformingKind("move")
+    setSvgPassThrough(true)
   }
 
   function beginScale(
@@ -2114,6 +2118,7 @@ export function InteractiveVenueMapEditor({
         setSeatEditMode(false)
         paintLive(null)
         setTransformingKind(null)
+        setSvgPassThrough(false)
         elementDrag.current = null
       }
     }
@@ -2135,6 +2140,7 @@ export function InteractiveVenueMapEditor({
     setSeatEditMode(false)
     paintLive(null)
     setTransformingKind(null)
+    setSvgPassThrough(false)
     elementDrag.current = null
   }
 
@@ -2240,6 +2246,7 @@ export function InteractiveVenueMapEditor({
       origY: panRef.current.y,
     }
     setIsPanning(true)
+    setSvgPassThrough(true)
   }
 
   function polygonCursorNodes() {
@@ -2364,6 +2371,7 @@ export function InteractiveVenueMapEditor({
     capturePointer(event)
     vertexDrag.current = { zoneId: zone.id, index, recorded: false }
     setVertexEditZoneId(zone.id)
+    setSvgPassThrough(true)
   }
 
   function applyVertexDragPoint(
@@ -2459,6 +2467,7 @@ export function InteractiveVenueMapEditor({
     setMarquee(null)
     elementDrag.current = null
     vertexDrag.current = null
+    setSvgPassThrough(false)
     pinchRef.current = null
     pendingPointer.current = null
     if (pointerFrame.current != null) {
@@ -3808,6 +3817,7 @@ export function InteractiveVenueMapEditor({
       origX,
       origY,
     }
+    setSvgPassThrough(true)
   }
 
   function onZonePointerDown(event: React.PointerEvent, zone: VenueMapZone) {
@@ -4169,6 +4179,7 @@ export function InteractiveVenueMapEditor({
   }
 
   function finishPointerGesture(shiftKey = false) {
+    setSvgPassThrough(false)
     if (pinchRef.current) return
     if (vertexDrag.current) {
       if (pointerFrame.current != null) {
@@ -5242,6 +5253,7 @@ export function InteractiveVenueMapEditor({
                 cursor={null}
                 zoom={zoom}
                 fillHits={false}
+                passThroughFills={zoneFillsPermeable}
                 onSelect={
                   tool === "polygon"
                     ? undefined
@@ -5416,6 +5428,7 @@ export function InteractiveVenueMapEditor({
                     emphasizeSelected={false}
                     focusedZoneId={activeZoneId}
                     fillHits={false}
+                    passThroughFills={zoneFillsPermeable}
                     onSelect={
                       tool === "polygon"
                         ? undefined
