@@ -1,8 +1,15 @@
 "use server"
 
-import { headers } from "next/headers"
+import { cookies, headers } from "next/headers"
 import { redirect } from "next/navigation"
 
+import { clearSupabaseAuthCookies } from "@/lib/auth/clear-auth-cookies"
+import {
+  AUTH_NEXT_COOKIE,
+  authNextCookieOptions,
+  buildAuthCallbackUrl,
+  resolveAuthRequestOrigin,
+} from "@/lib/auth/callback-url"
 import {
   WALLET_DEVICE_FORM_FIELD,
   WALLET_DEVICE_MISMATCH_MESSAGE,
@@ -36,19 +43,29 @@ async function assertAuthIpRateLimit(): Promise<AuthActionState | null> {
   return { error: AUTH_RATE_LIMIT_ERROR, success: null }
 }
 
-async function getAuthCallbackUrl(next?: string | null) {
+async function resolveRequestAuthOrigin() {
   const requestHeaders = await headers()
-  const origin = requestHeaders.get("origin")
-  const siteUrl = (
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    origin ||
-    "http://localhost:3000"
-  ).replace(/\/$/, "")
+  return resolveAuthRequestOrigin({
+    origin: requestHeaders.get("origin"),
+    forwardedHost: requestHeaders.get("x-forwarded-host"),
+    forwardedProto: requestHeaders.get("x-forwarded-proto"),
+    host: requestHeaders.get("host"),
+    siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
+  })
+}
 
-  const base = `${siteUrl}/auth/callback`
-  const safeNext = safeInternalNextPath(next)
-  if (!safeNext) return base
-  return `${base}?next=${encodeURIComponent(safeNext)}`
+async function persistAuthNextPath(next?: string | null) {
+  const store = await cookies()
+  const safe = safeInternalNextPath(next)
+  if (!safe) {
+    store.delete(AUTH_NEXT_COOKIE)
+    return
+  }
+  store.set(AUTH_NEXT_COOKIE, safe, authNextCookieOptions())
+}
+
+async function getAuthCallbackUrl(next?: string | null) {
+  return buildAuthCallbackUrl(await resolveRequestAuthOrigin(), next)
 }
 
 function isInvalidLoginCredentials(message: string): boolean {
@@ -89,6 +106,29 @@ function mapAuthErrorMessage(message: string): string {
     return "No pudimos enviar el enlace. Revisá el email e intentá de nuevo."
   }
   return message
+}
+
+function mapOtpVerifyError(message: string): string {
+  const normalized = message.toLowerCase()
+  if (
+    normalized.includes("invalid") ||
+    normalized.includes("expired") ||
+    normalized.includes("otp") ||
+    normalized.includes("token")
+  ) {
+    return "El código no es válido o venció. Pedí uno nuevo."
+  }
+  return mapAuthErrorMessage(message)
+}
+
+async function destroyAuthSession(): Promise<void> {
+  const supabase = await createClient()
+  try {
+    await supabase.auth.signOut({ scope: "local" })
+  } catch {
+    // Las cookies se borran igual para no dejar una sesión zombie.
+  }
+  await clearSupabaseAuthCookies()
 }
 
 async function bindWalletDeviceFromForm(formData?: FormData): Promise<void> {
@@ -441,7 +481,7 @@ export async function signInWithEmail(
   } = await supabase.auth.getUser()
 
   if (userError || !user) {
-    await supabase.auth.signOut()
+    await destroyAuthSession()
     return {
       error: "No se pudo validar la nueva sesión. Intentá nuevamente.",
       success: null,
@@ -458,7 +498,7 @@ export async function signInWithEmail(
       userId: user.id,
       error: profileError,
     })
-    await supabase.auth.signOut()
+    await destroyAuthSession()
     return {
       error: "No se pudo verificar tu perfil. Intentá nuevamente.",
       success: null,
@@ -469,7 +509,7 @@ export async function signInWithEmail(
     profile?.role === "admin" &&
     profile.organizerApprovalStatus === "rejected"
   ) {
-    await supabase.auth.signOut()
+    await destroyAuthSession()
     return {
       error: "Tu solicitud de organizador fue rechazada.",
       success: null,
@@ -480,7 +520,7 @@ export async function signInWithEmail(
     profile?.role === "admin" &&
     profile.organizerApprovalStatus === "suspended"
   ) {
-    await supabase.auth.signOut()
+    await destroyAuthSession()
     return {
       error:
         "Tu productora está suspendida. Contactá a soporte de TokePass para revisar el caso.",
@@ -497,7 +537,7 @@ export async function signInWithEmail(
       email: user.email ?? credentials.email,
     })
     if (!promoted.ok) {
-      await supabase.auth.signOut()
+      await destroyAuthSession()
       return {
         error:
           "No se pudo activar tu cuenta de organizador. Intentá de nuevo o escribinos a soporte.",
@@ -527,6 +567,7 @@ export async function signInWithMagicLink(
 
   const email = emailRaw.trim().toLowerCase()
   const next = safeInternalNextPath(formData.get("next"))
+  await persistAuthNextPath(next)
   const supabase = await createClient()
   const { error } = await supabase.auth.signInWithOtp({
     email,
@@ -542,8 +583,56 @@ export async function signInWithMagicLink(
 
   return {
     error: null,
-    success: "Te enviamos un enlace. Abrilo desde este dispositivo para entrar.",
+    success:
+      "Te enviamos un enlace y un código de 6 dígitos. Completá el código acá o abrí el enlace desde este dispositivo.",
   }
+}
+
+export async function verifyEmailOtp(
+  _previousState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  const limited = await assertAuthIpRateLimit()
+  if (limited) return limited
+
+  const emailRaw = formData.get("email")
+  const tokenRaw = formData.get("token")
+  if (typeof emailRaw !== "string" || !emailRaw.trim()) {
+    return { error: "El correo electrónico es obligatorio.", success: null }
+  }
+  if (typeof tokenRaw !== "string" || !/^\d{6}$/.test(tokenRaw.trim())) {
+    return { error: "Ingresá el código de 6 dígitos.", success: null }
+  }
+
+  const email = emailRaw.trim().toLowerCase()
+  const token = tokenRaw.trim()
+  const next = safeInternalNextPath(formData.get("next"))
+  const supabase = await createClient()
+  const { error } = await supabase.auth.verifyOtp({
+    email,
+    token,
+    type: "email",
+  })
+
+  if (error) {
+    return { error: mapOtpVerifyError(error.message), success: null }
+  }
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    await destroyAuthSession()
+    return {
+      error: "No se pudo validar la nueva sesión. Intentá nuevamente.",
+      success: null,
+    }
+  }
+
+  await bindWalletDeviceFromForm(formData)
+  redirect(next || "/cuenta/entradas")
 }
 
 export async function signInWithGoogle(formData?: FormData): Promise<void> {
@@ -558,11 +647,15 @@ export async function signInWithGoogle(formData?: FormData): Promise<void> {
 
   const supabase = await createClient()
   const next = safeInternalNextPath(formData?.get("next"))
-  const redirectTo = await getAuthCallbackUrl(next)
+  await persistAuthNextPath(next)
+  const redirectTo = await getAuthCallbackUrl()
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
       redirectTo,
+      queryParams: {
+        prompt: "select_account",
+      },
     },
   })
 
@@ -581,19 +674,21 @@ export async function signInWithGoogle(formData?: FormData): Promise<void> {
 }
 
 export async function signOut(): Promise<void> {
-  const supabase = await createClient()
-  await supabase.auth.signOut()
+  await destroyAuthSession()
   redirect("/")
 }
 
 export async function signOutDueToWalletDeviceMismatch(
   nextPath?: string,
 ): Promise<void> {
-  const supabase = await createClient()
-  await supabase.auth.signOut()
+  await destroyAuthSession()
   const loginUrl = new URL("/login", "http://localhost")
   loginUrl.searchParams.set("error", WALLET_DEVICE_MISMATCH_MESSAGE)
   const next = safeInternalNextPath(nextPath)
   if (next) loginUrl.searchParams.set("next", next)
   redirect(`${loginUrl.pathname}${loginUrl.search}`)
+}
+
+export async function purgeStaleAuthSession(): Promise<void> {
+  await destroyAuthSession()
 }

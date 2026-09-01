@@ -3,6 +3,10 @@ import { NextResponse, type NextRequest } from "next/server"
 import type { EmailOtpType } from "@supabase/supabase-js"
 
 import {
+  AUTH_NEXT_COOKIE,
+  authNextCookieOptions,
+} from "@/lib/auth/callback-url"
+import {
   getFreshLoginProfile,
   resolveAuthCallbackDestination,
   safeInternalNextPath,
@@ -64,7 +68,10 @@ export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code")
   const tokenHash = request.nextUrl.searchParams.get("token_hash")
   const otpType = request.nextUrl.searchParams.get("type")
-  const next = safeInternalNextPath(request.nextUrl.searchParams.get("next"))
+  const next = safeInternalNextPath(
+    request.nextUrl.searchParams.get("next") ??
+      request.cookies.get(AUTH_NEXT_COOKIE)?.value,
+  )
   const oauthError =
     request.nextUrl.searchParams.get("error_description") ??
     request.nextUrl.searchParams.get("error")
@@ -133,11 +140,20 @@ export async function GET(request: NextRequest) {
         deviceId,
         walletDeviceCookieOptions(),
       )
-      const { error: claimError } = await supabase.rpc(
-        "claim_active_wallet_device",
-        { p_device_id: deviceId },
-      )
-      if (claimError) {
+      try {
+        const { error: claimError } = await supabase.rpc(
+          "claim_active_wallet_device",
+          { p_device_id: deviceId },
+        )
+        if (claimError) {
+          logger.error({
+            context: "auth/callback",
+            message: "wallet_device_claim_failed",
+            userId: user.id,
+            error: claimError,
+          })
+        }
+      } catch (claimError) {
         logger.error({
           context: "auth/callback",
           message: "wallet_device_claim_failed",
@@ -146,6 +162,7 @@ export async function GET(request: NextRequest) {
         })
       }
 
+      cookieJar.cookies.set(AUTH_NEXT_COOKIE, "", authNextCookieOptions(true))
       const path = resolveAuthCallbackDestination(next, role)
       return copyCookies(
         cookieJar,
@@ -154,13 +171,31 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  if (oauthError) {
+    logger.error({
+      context: "auth/callback",
+      message: "oauth_provider_error",
+      error: oauthError,
+    })
+  }
+
+  cookieJar.cookies.set(AUTH_NEXT_COOKIE, "", authNextCookieOptions(true))
   const loginUrl = redirectUrl(request, "/login")
-  loginUrl.searchParams.set(
-    "error",
-    oauthError
-      ? "No se pudo completar el acceso con Google. Intentá de nuevo."
-      : "No se pudo confirmar la cuenta. Solicita un nuevo enlace.",
-  )
+  loginUrl.searchParams.set("error", loginErrorFromCallback(oauthError))
   if (next) loginUrl.searchParams.set("next", next)
   return copyCookies(cookieJar, NextResponse.redirect(loginUrl))
+}
+
+function loginErrorFromCallback(oauthError: string | null): string {
+  if (!oauthError) {
+    return "No se pudo confirmar la cuenta. Solicita un nuevo enlace."
+  }
+  const normalized = oauthError.toLowerCase()
+  if (normalized.includes("access_denied")) {
+    return "Cancelaste el acceso con Google."
+  }
+  if (normalized.includes("redirect") || normalized.includes("mismatch")) {
+    return "Este origen no está autorizado para Google. Probá el enlace por email."
+  }
+  return "No se pudo completar el acceso con Google. Intentá de nuevo."
 }

@@ -2,13 +2,14 @@
 
 import { LoaderCircle, Mail } from "lucide-react"
 import Link from "next/link"
-import { useActionState, useEffect } from "react"
+import { useActionState, useEffect, useState } from "react"
 import { useFormStatus } from "react-dom"
 import { toast } from "sonner"
 
 import {
   signInWithGoogle,
   signInWithMagicLink,
+  verifyEmailOtp,
   type AuthActionState,
 } from "@/app/actions/auth"
 import { WalletDeviceField } from "@/components/auth/wallet-device-field"
@@ -36,6 +37,21 @@ function MagicLinkSubmit() {
     >
       {pending ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Mail className="size-4" />}
       {pending ? "Enviando enlace..." : "Enviar enlace de acceso"}
+    </Button>
+  )
+}
+
+function VerifyOtpSubmit() {
+  const { pending } = useFormStatus()
+
+  return (
+    <Button
+      type="submit"
+      disabled={pending}
+      className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-3.5 text-sm font-bold text-white shadow-[0_0_25px_rgba(147,51,234,0.18)] transition-all hover:from-purple-500 hover:to-indigo-500 disabled:cursor-not-allowed"
+    >
+      {pending ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
+      {pending ? "Verificando..." : "Verificar Código"}
     </Button>
   )
 }
@@ -113,16 +129,24 @@ export function AuthForms({
   initialMode?: "login" | "register"
   nextPath?: string | null
 }) {
+  const [isOtpSent, setIsOtpSent] = useState(false)
+  const [email, setEmail] = useState("")
+  const [otpCode, setOtpCode] = useState("")
   const [magicState, magicAction] = useActionState(
     signInWithMagicLink,
     initialState,
   )
-  const visibleState =
-    magicState.error || magicState.success
-      ? magicState
-      : { error: initialError ?? null, success: null }
+  const [otpState, otpAction] = useActionState(verifyEmailOtp, initialState)
+  const bannerError =
+    magicState.error || magicState.success || otpState.error
+      ? null
+      : (initialError ?? null)
   const safeNext =
     nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : null
+
+  useEffect(() => {
+    if (magicState.success) setIsOtpSent(true)
+  }, [magicState.success])
 
   return (
     <div className="relative z-10 w-full max-w-md rounded-3xl border border-border bg-card/95 p-8 text-card-foreground shadow-2xl shadow-zinc-200/60 backdrop-blur-xl dark:shadow-black/40 sm:p-10">
@@ -140,6 +164,12 @@ export function AuthForms({
         cuenta.
       </p>
 
+      {bannerError ? (
+        <p role="alert" className="mb-4 text-center text-xs font-medium text-red-500">
+          {bannerError}
+        </p>
+      ) : null}
+
       <form action={signInWithGoogle}>
         {safeNext ? <input type="hidden" name="next" value={safeNext} /> : null}
         <WalletDeviceField />
@@ -154,38 +184,94 @@ export function AuthForms({
         <Separator className="flex-1 bg-border" />
       </div>
 
-      <form action={magicAction}>
-        {safeNext ? <input type="hidden" name="next" value={safeNext} /> : null}
-        <WalletDeviceField />
-        <div className="mb-6 space-y-4">
-          <div>
-            <label
-              htmlFor="login-email"
-              className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            >
-              Correo electrónico
-            </label>
-            <Input
-              id="login-email"
-              type="email"
-              name="email"
-              inputMode="email"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              placeholder="tu@email.com"
-              autoComplete="email"
-              required
-              aria-invalid={Boolean(visibleState.error)}
-              className={AUTH_INPUT_CLASS}
-            />
+      {isOtpSent ? (
+        <form action={otpAction}>
+          {safeNext ? <input type="hidden" name="next" value={safeNext} /> : null}
+          <input type="hidden" name="email" value={email} />
+          <WalletDeviceField />
+          <div className="mb-6 space-y-4">
+            <div>
+              <label
+                htmlFor="login-otp"
+                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+              >
+                Código de 6 dígitos
+              </label>
+              <Input
+                id="login-otp"
+                type="text"
+                name="token"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                pattern="[0-9]{6}"
+                placeholder="000000"
+                value={otpCode}
+                onChange={(event) =>
+                  setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+                }
+                required
+                aria-invalid={Boolean(otpState.error)}
+                className={`${AUTH_INPUT_CLASS} tracking-[0.35em]`}
+              />
+              <p className="mt-2 text-xs text-muted-foreground">
+                Enviado a {email || "tu correo"}.
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="space-y-4">
-          <ActionMessage state={visibleState} />
-          <MagicLinkSubmit />
-        </div>
-      </form>
+          <div className="space-y-4">
+            <ActionMessage
+              state={otpState.error ? otpState : magicState}
+            />
+            <VerifyOtpSubmit />
+            <button
+              type="button"
+              onClick={() => {
+                setIsOtpSent(false)
+                setOtpCode("")
+              }}
+              className="w-full text-center text-xs font-medium text-muted-foreground underline-offset-4 hover:underline"
+            >
+              Usar otro correo
+            </button>
+          </div>
+        </form>
+      ) : (
+        <form action={magicAction}>
+          {safeNext ? <input type="hidden" name="next" value={safeNext} /> : null}
+          <WalletDeviceField />
+          <div className="mb-6 space-y-4">
+            <div>
+              <label
+                htmlFor="login-email"
+                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+              >
+                Correo electrónico
+              </label>
+              <Input
+                id="login-email"
+                type="email"
+                name="email"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="tu@email.com"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                aria-invalid={Boolean(magicState.error)}
+                className={AUTH_INPUT_CLASS}
+              />
+            </div>
+          </div>
+          <div className="space-y-4">
+            <ActionMessage state={magicState} />
+            <MagicLinkSubmit />
+          </div>
+        </form>
+      )}
 
       <p className="mt-6 text-center text-xs text-muted-foreground">
         ¿Organizás eventos?{" "}

@@ -1,5 +1,6 @@
 ﻿import type { Metadata } from "next"
 
+import { LoginErrorSessionPurge } from "@/components/auth/login-error-session-purge"
 import { AuthForms } from "@/components/shared/auth-forms"
 import { safeInternalNextPath } from "@/lib/auth/next-path"
 
@@ -24,6 +25,7 @@ export default async function LoginPage({
         className="pointer-events-none absolute -bottom-40 -right-40 size-96 rounded-full bg-emerald-600/10 blur-[120px]"
         aria-hidden="true"
       />
+      <LoginErrorSessionPurge error={error} />
       <AuthForms
         initialError={error}
         nextPath={safeInternalNextPath(next)}

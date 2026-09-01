@@ -5,7 +5,7 @@ export const RATE_LIMITS = {
   /** Burst por IP para holdSeat / lockTickets / reservas de mapa. */
   cartHoldIp: { limit: 40, windowSeconds: 60 },
   paymentPreferenceUser: { limit: 5, windowSeconds: 60 },
-  authIp: { limit: 3, windowSeconds: 60 },
+  authIp: { limit: 10, windowSeconds: 60 },
   publicStockIp: { limit: 30, windowSeconds: 60 },
   /** POST de Server Actions en checkout + /api/scanner/scan (Edge). */
   checkoutEdgeIp: { limit: 80, windowSeconds: 60 },

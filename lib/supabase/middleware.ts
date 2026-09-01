@@ -18,6 +18,12 @@ import {
   staffCanAccessPath,
   staffHomeForRoles,
 } from "@/types/auth"
+import { AUTH_NEXT_COOKIE } from "@/lib/auth/callback-url"
+import {
+  expiredAuthCookieOptions,
+  isSupabaseAuthCookieName,
+  shouldPurgeAuthSessionOnLoginError,
+} from "@/lib/auth/session-cookies"
 import type { EventStaffRole } from "@/types/auth"
 import type { Database } from "@/types/database"
 
@@ -117,6 +123,29 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = "/cuenta/compras"
     return applyCsp(NextResponse.redirect(url, 308), nonce)
+  }
+
+  const loginError = request.nextUrl.searchParams.get("error")
+  if (
+    shouldPurgeAuthSessionOnLoginError(loginError) &&
+    (pathname === "/login" || pathname === "/login-organizador")
+  ) {
+    const security = sessionCookieSecurity(request)
+    for (const cookie of request.cookies.getAll()) {
+      if (!isSupabaseAuthCookieName(cookie.name)) continue
+      request.cookies.delete(cookie.name)
+      response.cookies.set(
+        cookie.name,
+        "",
+        expiredAuthCookieOptions(security.secure),
+      )
+    }
+    response.cookies.set(
+      AUTH_NEXT_COOKIE,
+      "",
+      expiredAuthCookieOptions(security.secure),
+    )
+    return response
   }
 
   const supabase = createServerClient<Database>(

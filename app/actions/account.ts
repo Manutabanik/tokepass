@@ -10,6 +10,11 @@ import {
   rasterContentType,
   readFileBytes,
 } from "@/lib/media/image-magic"
+import { clearSupabaseAuthCookies } from "@/lib/auth/clear-auth-cookies"
+import {
+  buildAuthCallbackUrl,
+  resolveAuthRequestOrigin,
+} from "@/lib/auth/callback-url"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
@@ -241,15 +246,16 @@ export async function requestPasswordResetEmail(): Promise<
   }
 
   const requestHeaders = await headers()
-  const origin = requestHeaders.get("origin")
-  const siteUrl = (
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    origin ||
-    "http://localhost:3000"
-  ).replace(/\/$/, "")
+  const siteUrl = resolveAuthRequestOrigin({
+    origin: requestHeaders.get("origin"),
+    forwardedHost: requestHeaders.get("x-forwarded-host"),
+    forwardedProto: requestHeaders.get("x-forwarded-proto"),
+    host: requestHeaders.get("host"),
+    siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
+  })
 
   const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-    redirectTo: `${siteUrl}/auth/callback?next=/cuenta/perfil`,
+    redirectTo: buildAuthCallbackUrl(siteUrl, "/cuenta/perfil"),
   })
 
   if (error) {
@@ -335,6 +341,7 @@ export async function deleteAccount(): Promise<{
   }
 
   await supabase.auth.signOut()
+  await clearSupabaseAuthCookies()
   revalidateBuyerProfile()
   redirect("/")
 }
