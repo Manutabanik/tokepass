@@ -12,6 +12,7 @@
     "start": "next start",
     "lint": "eslint . --max-warnings 0",
     "test": "node scripts/run-unit-tests.mjs",
+    "typecheck:tests": "tsc --project tsconfig.test.json --noEmit",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "load:smoke": "k6 run load-test.js",

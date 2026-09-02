@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Los tests corren en Node 20, no en el browser: el target ES2017 de la
+    // base rechaza literales BigInt que sí son válidos acá.
+    "target": "ES2022",
+    // La base activa `incremental`, que cachea diagnósticos en un .tsbuildinfo
+    // y hace que este chequeo reporte resultados obsoletos tras cambiar el
+    // config. Un typecheck de CI tiene que ser determinista.
+    "incremental": false
+  },
+  // `extends` hereda el `exclude` de la base, que excluye `**/*.test.ts` y
+  // `tests/**`. Como el `exclude` filtra al `include`, hay que sobrescribirlo
+  // acá o este proyecto resolvería a cero archivos.
+  "include": [
+    "next-env.d.ts",
+    "**/*.test.ts",
+    "tests/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next"
+  ]
+}
