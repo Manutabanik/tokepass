@@ -47,3 +47,6 @@ next-env.d.ts
 
 # supabase CLI cache
 supabase/.temp/
+
+# contratos firmados: el repo es publico y suelen llevar datos personales
+/docs/legal/
