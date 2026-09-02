@@ -53,6 +53,27 @@ function TabsList({
   )
 }
 
+/**
+ * Sliding surface for the active tab. Base UI measures the active tab and
+ * exposes its box as CSS variables, so the pill can never drift out of the
+ * list padding the way a per-tab background does.
+ *
+ * `renderBeforeHydration` is deliberately off: it emits an inline script that
+ * our nonce-based CSP blocks, so it only buys a console error.
+ */
+function TabsIndicator({ className, ...props }: TabsPrimitive.Indicator.Props) {
+  return (
+    <TabsPrimitive.Indicator
+      data-slot="tabs-indicator"
+      className={cn(
+        "pointer-events-none absolute top-[var(--active-tab-top)] left-[var(--active-tab-left)] h-[var(--active-tab-height)] w-[var(--active-tab-width)] transition-[left,width] duration-300 ease-out motion-reduce:transition-none",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
 function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
   return (
     <TabsPrimitive.Tab
@@ -84,4 +105,11 @@ function TabsContent({
   )
 }
 
-export { Tabs, TabsList, TabsTrigger, TabsContent, tabsListVariants }
+export {
+  Tabs,
+  TabsList,
+  TabsIndicator,
+  TabsTrigger,
+  TabsContent,
+  tabsListVariants,
+}

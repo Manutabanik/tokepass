@@ -26,7 +26,13 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Tabs,
+  TabsContent,
+  TabsIndicator,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs"
 import { formatEventDay, formatEventTime } from "@/lib/format"
 import {
   groupWalletAccessBlocks,
@@ -312,11 +318,22 @@ function ExtrasUpsellCard({
   )
 }
 
-const tabTriggerClass =
-  "flex h-10 w-full min-w-0 items-center justify-center gap-1 rounded-xl px-1.5 text-[clamp(0.6875rem,2.5vw,0.875rem)] leading-none font-medium text-muted-foreground transition-all hover:bg-muted/80 hover:text-foreground data-active:border-border data-active:bg-background data-active:text-foreground data-active:shadow-sm sm:gap-1.5 sm:px-4"
+// The active surface is the shared TabsIndicator, so every trigger stays
+// transparent. Weight is constant across states: bolding on activation would
+// resize the tab and make the indicator jitter as it slides.
+const tabTriggerClass = [
+  "relative z-10 flex h-9 w-full min-w-0 items-center justify-center gap-1 rounded-full px-1.5",
+  "text-[clamp(0.6875rem,2.5vw,0.875rem)] leading-none font-semibold",
+  "border-transparent bg-transparent text-muted-foreground transition-colors duration-200",
+  "hover:text-foreground",
+  "data-active:border-transparent data-active:bg-transparent data-active:text-foreground",
+  "dark:data-active:border-transparent dark:data-active:bg-transparent dark:data-active:text-foreground",
+  "group-data-[variant=default]/tabs-list:data-active:shadow-none",
+  "sm:gap-1.5 sm:px-3",
+].join(" ")
 
 const tabCountClass =
-  "shrink-0 rounded-md bg-muted px-1 py-0.5 font-mono text-[clamp(0.625rem,2vw,0.6875rem)] font-semibold tabular-nums text-foreground ring-1 ring-inset ring-border sm:px-1.5"
+  "shrink-0 rounded-full bg-foreground/10 px-1.5 py-0.5 font-mono text-[clamp(0.625rem,2vw,0.6875rem)] font-semibold leading-none tabular-nums text-foreground/80"
 
 export function TicketWallet({
   upcoming,
@@ -379,8 +396,12 @@ export function TicketWallet({
       <div className="w-full pb-1">
         <TabsList
           aria-label="Secciones de la billetera"
-          className="grid h-auto w-full grid-cols-[repeat(3,minmax(0,1fr))] items-stretch gap-1 rounded-2xl border border-border bg-muted/40 p-1.5 shadow-lg shadow-black/10 backdrop-blur-md"
+          // `group-data-horizontal/tabs:h-auto` must keep that variant prefix:
+          // the base list pins `group-data-horizontal/tabs:h-8`, and a bare
+          // `h-auto` is a different tailwind-merge key so it would not win.
+          className="relative grid h-auto w-full max-w-md grid-cols-[repeat(3,minmax(0,1fr))] items-stretch gap-0 rounded-full border border-border/70 bg-muted/40 p-1 shadow-sm shadow-black/5 backdrop-blur-md group-data-horizontal/tabs:h-auto"
         >
+          <TabsIndicator className="rounded-full bg-background shadow-sm ring-1 ring-border/60 dark:bg-foreground/10 dark:ring-white/10" />
           <TabsTrigger value="upcoming" className={tabTriggerClass}>
             <Ticket
               className="hidden size-3.5 shrink-0 sm:block"
