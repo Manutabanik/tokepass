@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 export function ClaimTicketView({
   token,
   eventTitle,
-  eventDate,
+  eventDateLabel,
   flyerUrl,
   emailMatches,
   alreadyOwner,
@@ -20,7 +20,8 @@ export function ClaimTicketView({
 }: {
   token: string
   eventTitle: string
-  eventDate: string | null
+  /** Ya formateado en el servidor: el cliente no debe reformatear la fecha. */
+  eventDateLabel: string | null
   flyerUrl: string | null
   emailMatches: boolean
   alreadyOwner: boolean
@@ -75,10 +76,8 @@ export function ClaimTicketView({
       <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-foreground">
         {eventTitle}
       </h1>
-      {eventDate ? (
-        <p className="mt-1 text-sm text-muted-foreground">
-          {new Date(eventDate).toLocaleString("es-AR")}
-        </p>
+      {eventDateLabel ? (
+        <p className="mt-1 text-sm text-muted-foreground">{eventDateLabel}</p>
       ) : null}
 
       {status === "cancelled" ? (

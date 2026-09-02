@@ -544,6 +544,7 @@ export async function claimTicketTransferAction(
         error: "Este enlace es inválido o ya no está disponible.",
       }
     }
+    // P208: SQL only raises this for real tickets on published events.
     if (normalized.includes("MAX_TICKETS_PER_USER")) {
       return {
         success: false,

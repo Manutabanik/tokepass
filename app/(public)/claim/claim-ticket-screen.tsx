@@ -6,6 +6,7 @@ import { peekTicketTransferClaimAction } from "@/app/actions/transfer"
 import { ClaimTicketView } from "@/components/public/claim-ticket-view"
 import { Button } from "@/components/ui/button"
 import { loginUrlWithNext } from "@/lib/auth/post-login"
+import { formatEventDate } from "@/lib/format"
 import { createClient } from "@/lib/supabase/server"
 
 export async function ClaimTicketScreen({ token }: { token: string }) {
@@ -49,7 +50,9 @@ export async function ClaimTicketScreen({ token }: { token: string }) {
       <ClaimTicketView
         token={rawToken}
         eventTitle={preview.eventTitle}
-        eventDate={preview.eventDate}
+        eventDateLabel={
+          preview.eventDate ? formatEventDate(preview.eventDate) : null
+        }
         flyerUrl={preview.flyerUrl}
         emailMatches={preview.emailMatches}
         alreadyOwner={preview.alreadyOwner}
