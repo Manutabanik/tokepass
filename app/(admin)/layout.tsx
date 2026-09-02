@@ -14,6 +14,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { DashboardHeaderHelp } from "@/components/dashboard/header"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { OrganizerSupportChat } from "@/components/admin/organizer-support-chat"
+import { organizerLoginUrlWithNext } from "@/lib/auth/next-path"
+import { currentRequestPath } from "@/lib/auth/request-path"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
@@ -29,7 +31,10 @@ export default async function AdminLayout({
   } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect("/login-organizador")
+    const intent = await currentRequestPath()
+    redirect(
+      intent ? organizerLoginUrlWithNext(intent) : "/login-organizador",
+    )
   }
 
   const { data: profile, error: profileError } = await supabase

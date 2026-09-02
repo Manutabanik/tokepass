@@ -8,6 +8,8 @@ import { SignOutButton } from "@/components/shared/sign-out-button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
+import { organizerLoginUrlWithNext } from "@/lib/auth/next-path"
+import { currentRequestPath } from "@/lib/auth/request-path"
 import { createClient } from "@/lib/supabase/server"
 import { getInitials } from "@/lib/format"
 
@@ -28,7 +30,10 @@ export default async function SuperAdminLayout({
   } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect("/login-organizador")
+    const intent = await currentRequestPath()
+    redirect(
+      intent ? organizerLoginUrlWithNext(intent) : "/login-organizador",
+    )
   }
 
   const { data: profile } = await supabase

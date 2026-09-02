@@ -40,6 +40,7 @@ interceptor Edge en cada request.
 | `lib/auth/clear-auth-cookies.ts` | Borrado server-side de cookies de sesión. |
 | `lib/session-cleanup.ts` | Borrado client-side: cookies, IndexedDB, service worker, caches. |
 | `lib/auth/next-path.ts` | Anti open-redirect y destinos por rol. |
+| `lib/auth/request-path.ts` | Lee la ruta actual del header `x-pathname` para los guards de layout. |
 | `lib/auth/callback-url.ts` | Allowlist de orígenes y cookie `next`. |
 | `lib/auth/post-login.ts` | Lee el rol **desde Postgres**, no del JWT. |
 | `lib/auth/wallet-device.ts` + `wallet-device-server.ts` | Vinculación de dispositivo para el QR vivo. |
@@ -537,6 +538,29 @@ export function safeInternalNextPath(raw: unknown): string | null {
 
 Rechaza absolutas, protocol-relative (`//evil.com`), esquemas y backslashes. Se usa en el server
 action, en el callback y en el propio componente (`safeNext`): tres capas con la misma regla.
+
+**Quién arma el `?next=`.** Tres lugares, en orden de qué tan temprano actúan:
+
+| Capa | Cómo obtiene la ruta | Helper |
+| --- | --- | --- |
+| Interceptor Edge | `request.nextUrl` directo | inline en `updateSession` |
+| Guard de página | la escribe a mano, porque conoce sus propios `params` | `loginUrlWithNext` |
+| Guard de layout | header `x-pathname` | `organizerLoginUrlWithNext` |
+
+La tercera fila existe por una restricción de Next: **un layout de servidor no recibe la ruta
+actual**. `app/(admin)/layout.tsx` y `app/(superadmin)/layout.tsx` sólo podían mandar a
+`/login-organizador` sin `next`, perdiendo la intención. La solución reusa el mecanismo del nonce
+CSP: el interceptor propaga `pathname + search` en el header `x-pathname`, y `currentRequestPath()`
+(en `lib/auth/request-path.ts`) lo lee y lo valida con `safeInternalNextPath` antes de usarlo.
+
+Importa poco en `/admin` y `/superadmin`, donde el interceptor ya redirige con `next` antes de que
+el layout corra. Importa en **`/dashboard/*` fuera del POS**: `isPosOpsPath` sólo cubre
+`/admin/pos` y `/dashboard/pos`, así que una ruta como `/dashboard/settings/bank` no es
+`isProtectedRoute` y el guard del layout es el que actúa. Toda ruta nueva bajo `/dashboard/` que no
+sea del POS cae en este caso.
+
+Si la ruta no pasó por el interceptor, `currentRequestPath()` devuelve `null` y el guard degrada al
+login sin `next`: se pierde la intención, nunca se inventa un destino.
 
 **Allowlist de orígenes.** `resolveAuthRequestOrigin` construye candidatos desde `Origin`,
 `x-forwarded-host`/`proto`, `Host` y `NEXT_PUBLIC_SITE_URL`, y devuelve el primero que pase

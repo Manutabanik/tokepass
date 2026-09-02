@@ -19,6 +19,7 @@ import {
   staffHomeForRoles,
 } from "@/types/auth"
 import { AUTH_NEXT_COOKIE } from "@/lib/auth/callback-url"
+import { REQUEST_PATHNAME_HEADER } from "@/lib/auth/next-path"
 import {
   expiredAuthCookieOptions,
   isSupabaseAuthCookieName,
@@ -38,6 +39,10 @@ function applyCsp(response: NextResponse, nonce: string) {
 function createPassthroughResponse(request: NextRequest, nonce: string) {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-nonce", nonce)
+  requestHeaders.set(
+    REQUEST_PATHNAME_HEADER,
+    `${request.nextUrl.pathname}${request.nextUrl.search}`,
+  )
   return applyCsp(
     NextResponse.next({
       request: { headers: requestHeaders },

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 
+import { REQUEST_PATHNAME_HEADER } from "@/lib/auth/next-path"
 import { updateSession } from "@/lib/supabase/middleware"
 import {
   buildContentSecurityPolicy,
@@ -19,6 +20,10 @@ function passthroughWithCsp(request: NextRequest) {
   const nonce = createCspNonce()
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-nonce", nonce)
+  requestHeaders.set(
+    REQUEST_PATHNAME_HEADER,
+    `${request.nextUrl.pathname}${request.nextUrl.search}`,
+  )
   const response = NextResponse.next({
     request: { headers: requestHeaders },
   })

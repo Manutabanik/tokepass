@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import {
   loginUrlWithNext,
+  organizerLoginUrlWithNext,
   resolveAuthCallbackDestination,
   safeInternalNextPath,
 } from "@/lib/auth/next-path"
@@ -31,6 +32,28 @@ describe("auth next path", () => {
     assert.equal(
       resolveAuthCallbackDestination("/cuenta/entradas", "customer"),
       "/cuenta/entradas",
+    )
+  })
+
+  it("keeps the organizer intent, query string included", () => {
+    assert.equal(
+      organizerLoginUrlWithNext("/dashboard/settings/bank"),
+      "/login-organizador?next=%2Fdashboard%2Fsettings%2Fbank",
+    )
+    assert.equal(
+      organizerLoginUrlWithNext("/admin/events/abc/tiers?tab=mesas"),
+      "/login-organizador?next=%2Fadmin%2Fevents%2Fabc%2Ftiers%3Ftab%3Dmesas",
+    )
+  })
+
+  it("falls back to the organizer panel instead of leaking an external next", () => {
+    assert.equal(
+      organizerLoginUrlWithNext("https://evil.test/admin"),
+      "/login-organizador?next=%2Fadmin",
+    )
+    assert.equal(
+      organizerLoginUrlWithNext("//evil.test"),
+      "/login-organizador?next=%2Fadmin",
     )
   })
 })
