@@ -11,9 +11,12 @@ import {
   walletAccessBlockExpandLabel,
   walletAccessBlockTitle,
   walletChildPlaceLabel,
+  walletDayValidityChips,
+  walletMetaWithoutEventTitle,
   walletQrModalTitle,
   walletOrderKey,
   walletPurchaseHeading,
+  walletTicketMetaChips,
 } from "@/lib/ticket-wallet"
 
 describe("ticket wallet ordinals", () => {
@@ -400,6 +403,75 @@ describe("wallet access blocks", () => {
         "General",
       ),
       "General",
+    )
+  })
+})
+
+describe("wallet ticket metadata chips", () => {
+  it("drops the boilerplate prefix of the day validity label", () => {
+    assert.deepEqual(walletDayValidityChips("Válido solo · Día 2"), ["Día 2"])
+  })
+
+  it("keeps the leading token when it is not a boilerplate prefix", () => {
+    assert.deepEqual(
+      walletDayValidityChips("Abono completo · todas las jornadas"),
+      ["Abono completo"],
+    )
+  })
+
+  it("returns nothing for an absent day validity label", () => {
+    assert.deepEqual(walletDayValidityChips(null), [])
+    assert.deepEqual(walletDayValidityChips("  "), [])
+  })
+
+  it("removes the event name when the header already shows it", () => {
+    assert.equal(
+      walletMetaWithoutEventTitle(
+        "Fiesta Nacional de la Tradición",
+        "fiesta nacional de la tradicion",
+      ),
+      "",
+    )
+  })
+
+  it("keeps the event name when the header shows a different event", () => {
+    assert.equal(
+      walletMetaWithoutEventTitle("Fiesta Nacional", "Cosquín Rock"),
+      "Fiesta Nacional",
+    )
+  })
+
+  it("builds scannable chips without repeating the header", () => {
+    assert.deepEqual(
+      walletTicketMetaChips({
+        eventTitle: "Fiesta Nacional de la Tradición",
+        dayValidityLabel: "Válido solo · Día 2",
+        dateLabel: "Viernes 13 Nov",
+        headingTitle: "Fiesta Nacional de la Tradición",
+      }),
+      ["Día 2", "Viernes 13 Nov"],
+    )
+  })
+
+  it("keeps the event chip when there is no header context", () => {
+    assert.deepEqual(
+      walletTicketMetaChips({
+        eventTitle: "Fiesta Nacional de la Tradición",
+        dayValidityLabel: null,
+        dateLabel: "Viernes 13 Nov",
+      }),
+      ["Fiesta Nacional de la Tradición", "Viernes 13 Nov"],
+    )
+  })
+
+  it("collapses chips that repeat each other", () => {
+    assert.deepEqual(
+      walletTicketMetaChips({
+        eventTitle: "Día 2",
+        dayValidityLabel: "Válido solo · Día 2",
+        dateLabel: "Viernes 13 Nov",
+      }),
+      ["Día 2", "Viernes 13 Nov"],
     )
   })
 })

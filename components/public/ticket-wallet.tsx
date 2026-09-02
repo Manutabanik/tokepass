@@ -107,9 +107,11 @@ function EmptyState({
 
 function OrderTicketList({
   tickets,
+  headingTitle,
   offline,
 }: {
   tickets: MyTicket[]
+  headingTitle: string
   userId: string
   offline: boolean
   appleWalletEnabled: boolean
@@ -121,7 +123,11 @@ function OrderTicketList({
     <ul className="w-full space-y-3 overflow-visible">
       {blocks.map((block) => (
         <li key={block.id} className="w-full">
-          <WalletAccessBlockCard block={block} offline={offline} />
+          <WalletAccessBlockCard
+            block={block}
+            headingTitle={headingTitle}
+            offline={offline}
+          />
         </li>
       ))}
     </ul>
@@ -130,6 +136,7 @@ function OrderTicketList({
 
 function EventOrderBuckets({
   orders,
+  headingTitle,
   userId,
   offline,
   appleWalletEnabled,
@@ -137,6 +144,7 @@ function EventOrderBuckets({
   showQr,
 }: {
   orders: WalletOrderBucket<MyTicket>[]
+  headingTitle: string
   userId: string
   offline: boolean
   appleWalletEnabled: boolean
@@ -160,6 +168,7 @@ function EventOrderBuckets({
           <div className="mt-3">
             <OrderTicketList
               tickets={order.tickets}
+              headingTitle={headingTitle}
               userId={userId}
               offline={offline}
               appleWalletEnabled={appleWalletEnabled}
@@ -462,6 +471,7 @@ export function TicketWallet({
                   </div>
                   <EventOrderBuckets
                     orders={group.orders}
+                    headingTitle={group.eventTitle}
                     userId={userId}
                     offline={offline}
                     appleWalletEnabled={appleWalletEnabled}
@@ -608,6 +618,7 @@ export function TicketWallet({
                 />
                 <EventOrderBuckets
                   orders={group.orders}
+                  headingTitle={group.eventTitle}
                   userId={userId}
                   offline={offline}
                   appleWalletEnabled={appleWalletEnabled}

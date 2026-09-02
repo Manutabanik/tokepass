@@ -7,15 +7,17 @@ import { toast } from "sonner"
 
 import { createResaleListingAction } from "@/app/actions/resale"
 import type { MyTicket } from "@/app/actions/tickets"
+import { TicketMetaChips } from "@/components/account/ticket-meta-chips"
 import { WalletPassCard } from "@/components/account/wallet-pass-card"
 import { ResaleConfirmDialog } from "@/components/public/resale-confirm-dialog"
 import { Button } from "@/components/ui/button"
-import { formatEventDay } from "@/lib/format"
+import { formatEventCartDateLong } from "@/lib/format"
 import type { WalletAccessBlock } from "@/lib/ticket-wallet"
 import {
   ticketAdmissionTitle,
   walletAccessBlockExpandLabel,
   walletChildPlaceLabel,
+  walletTicketMetaChips,
 } from "@/lib/ticket-wallet"
 import { cn } from "@/lib/utils"
 
@@ -35,9 +37,12 @@ function sellableTickets(tickets: MyTicket[], offline: boolean): MyTicket[] {
 
 export function WalletAccessBlockCard({
   block,
+  headingTitle,
   offline = false,
 }: {
   block: WalletAccessBlock<MyTicket>
+  /** Event name already shown by an ancestor header, so we can drop it here. */
+  headingTitle?: string | null
   offline?: boolean
 }) {
   const router = useRouter()
@@ -61,6 +66,7 @@ export function WalletAccessBlockCard({
       <WalletPassCard
         ticket={ticket}
         placeLabel={ticketAdmissionTitle(ticket, 0, 1)}
+        headingTitle={headingTitle}
         offline={offline}
         canSell={canSellBlock}
         showQrInitially={false}
@@ -96,11 +102,15 @@ export function WalletAccessBlockCard({
               {block.title}
             </h3>
             {first ? (
-              <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
-                {first.eventTitle}
-                {first.dayValidityLabel ? ` · ${first.dayValidityLabel}` : null}
-                {` · ${formatEventDay(first.eventDate)}`}
-              </p>
+              <TicketMetaChips
+                className="mt-2"
+                labels={walletTicketMetaChips({
+                  eventTitle: first.eventTitle,
+                  dayValidityLabel: first.dayValidityLabel,
+                  dateLabel: formatEventCartDateLong(first.eventDate),
+                  headingTitle,
+                })}
+              />
             ) : null}
           </div>
         </div>
@@ -159,6 +169,7 @@ export function WalletAccessBlockCard({
                     index,
                     block.tickets.length,
                   )}
+                  headingTitle={headingTitle}
                   offline={offline}
                   canSell={false}
                   showQrInitially={false}

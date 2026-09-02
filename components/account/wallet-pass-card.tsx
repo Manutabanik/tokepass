@@ -4,6 +4,7 @@ import { LoaderCircle, QrCode, Send, Tag, Undo2 } from "lucide-react"
 import { useState } from "react"
 
 import type { MyTicket } from "@/app/actions/tickets"
+import { TicketMetaChips } from "@/components/account/ticket-meta-chips"
 import { QrScanLightbox } from "@/components/public/qr-scan-lightbox"
 import { ResaleConfirmDialog } from "@/components/public/resale-confirm-dialog"
 import { TransferShareConfirmDialog } from "@/components/public/transfer-share-confirm-dialog"
@@ -11,8 +12,8 @@ import { useTicketResaleVisual } from "@/components/public/use-ticket-resale-vis
 import { useTicketTransferVisual } from "@/components/public/use-ticket-transfer-visual"
 import { Button } from "@/components/ui/button"
 import { isOnlineDelivery } from "@/lib/events/delivery-mode"
-import { formatEventDay } from "@/lib/format"
-import { walletQrModalTitle } from "@/lib/ticket-wallet"
+import { formatEventCartDateLong } from "@/lib/format"
+import { walletQrModalTitle, walletTicketMetaChips } from "@/lib/ticket-wallet"
 import { cn } from "@/lib/utils"
 
 function canShowTicketQr(ticket: MyTicket, visualStatus: string): boolean {
@@ -27,12 +28,15 @@ function canShowTicketQr(ticket: MyTicket, visualStatus: string): boolean {
 export function WalletPassCard({
   ticket,
   placeLabel,
+  headingTitle,
   offline = false,
   canSell = false,
   showQrInitially = false,
 }: {
   ticket: MyTicket
   placeLabel: string
+  /** Event name already shown by an ancestor header, so we can drop it here. */
+  headingTitle?: string | null
   offline?: boolean
   canSell?: boolean
   showQrInitially?: boolean
@@ -76,15 +80,18 @@ export function WalletPassCard({
         ticket.isTest && "border-red-500/40",
       )}
     >
-      <div className="space-y-1 px-4 py-3">
-        <p className="text-lg font-bold tracking-tight text-foreground">
+      <div className="space-y-2 px-4 py-3">
+        <p className="text-balance text-[clamp(0.9375rem,4vw,1.125rem)] font-bold leading-snug tracking-tight text-foreground">
           {placeLabel}
         </p>
-        <p className="line-clamp-2 text-sm text-muted-foreground">
-          {ticket.eventTitle}
-          {ticket.dayValidityLabel ? ` · ${ticket.dayValidityLabel}` : null}
-          {` · ${formatEventDay(ticket.eventDate)}`}
-        </p>
+        <TicketMetaChips
+          labels={walletTicketMetaChips({
+            eventTitle: ticket.eventTitle,
+            dayValidityLabel: ticket.dayValidityLabel,
+            dateLabel: formatEventCartDateLong(ticket.eventDate),
+            headingTitle,
+          })}
+        />
       </div>
 
       <div className="flex w-full flex-col items-stretch gap-2 p-4 pt-0">

@@ -141,6 +141,86 @@ export function walletPurchaseHeading(input: {
     .join(" · ")
 }
 
+function normalizeMetaToken(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("es-AR")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function splitMetaTokens(value: string): string[] {
+  return value
+    .split("·")
+    .map((token) => token.trim())
+    .filter(Boolean)
+}
+
+/** Qualifiers that only restate what the following token already says. */
+const DAY_VALIDITY_PREFIXES = new Set([
+  "valido solo",
+  "valido unicamente",
+  "valido solo para",
+  "valido para",
+])
+
+/**
+ * "Válido solo · Día 2" -> ["Día 2"].
+ * "Abono completo · todas las jornadas" -> ["Abono completo"].
+ */
+export function walletDayValidityChips(
+  label: string | null | undefined,
+): string[] {
+  const tokens = splitMetaTokens(label ?? "")
+  const [head, ...rest] = tokens
+  if (!head) return []
+  if (rest.length > 0 && DAY_VALIDITY_PREFIXES.has(normalizeMetaToken(head))) {
+    return rest
+  }
+  return [head]
+}
+
+/** Drops the event name when the surrounding header already shows it. */
+export function walletMetaWithoutEventTitle(
+  value: string,
+  headingTitle?: string | null,
+): string {
+  const heading = normalizeMetaToken(headingTitle ?? "")
+  const tokens = splitMetaTokens(value)
+  const kept = heading
+    ? tokens.filter((token) => normalizeMetaToken(token) !== heading)
+    : tokens
+  return kept.join(" · ")
+}
+
+/**
+ * Metadata of a pass as scannable chips instead of one run-on sentence.
+ * `dateLabel` arrives pre-formatted so this module stays free of Intl deps.
+ */
+export function walletTicketMetaChips(input: {
+  eventTitle: string
+  dayValidityLabel?: string | null
+  dateLabel: string
+  headingTitle?: string | null
+}): string[] {
+  const chips = [
+    walletMetaWithoutEventTitle(input.eventTitle, input.headingTitle),
+    ...walletDayValidityChips(input.dayValidityLabel),
+    input.dateLabel,
+  ]
+
+  const seen = new Set<string>()
+  const unique: string[] = []
+  for (const chip of chips) {
+    const key = normalizeMetaToken(chip)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    unique.push(chip.trim())
+  }
+  return unique
+}
+
 function earliestTimestamp(values: Array<string | null | undefined>): string {
   return values
     .map((value) => value?.trim() || "")
