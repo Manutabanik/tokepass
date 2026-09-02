@@ -43,8 +43,10 @@ describe("published combo items", () => {
   it("binds a combo even if the live ticket_type is still the column default", async () => {
     const dayA = "550e8400-e29b-41d4-a716-446655440001"
     const dayB = "550e8400-e29b-41d4-a716-446655440002"
-    let synced: { p_combo_tier_id: string; p_schedule_ids: string[] } | null =
-      null
+    // Un array evita que el control flow narrowee la variable a null: el
+    // assign pasa dentro del callback y TS no lo ve.
+    const synced: Array<{ p_combo_tier_id: string; p_schedule_ids: string[] }> =
+      []
     const result = await syncPublishedComboItems({
       db: {
         from: () => ({
@@ -62,7 +64,7 @@ describe("published combo items", () => {
           }),
         }),
         rpc: async (_fn, args) => {
-          synced = args
+          synced.push(args)
           return { error: null }
         },
       },
@@ -89,7 +91,7 @@ describe("published combo items", () => {
       ],
     })
     assert.equal(result.ok, true)
-    assert.equal(synced?.p_combo_tier_id, "tier-1")
-    assert.deepEqual(synced?.p_schedule_ids, [dayA, dayB])
+    assert.equal(synced[0]?.p_combo_tier_id, "tier-1")
+    assert.deepEqual(synced[0]?.p_schedule_ids, [dayA, dayB])
   })
 })

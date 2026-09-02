@@ -147,7 +147,10 @@ describe("rehydrateEventDraftV2", () => {
     assert.equal(draft.tickets[1]?.sectorId, "sector-platea")
     assert.equal(draft.extras[0]?.name, "Cerveza")
     assert.equal(draft.extras[0]?.ticketType, "extra")
-    assert.equal(draft.seatingMap.sectors[0]?.id, "sector-platea")
+    assert.equal(
+      (draft.seatingMap.sectors as Array<{ id: string }>)[0]?.id,
+      "sector-platea",
+    )
     assert.equal(draft.schedule.length, 1)
     assert.equal(draft.schedule[0]?.name, "Día 1")
     assert.ok(draft.schedule[0]?.startDate)
@@ -320,7 +323,11 @@ describe("rehydrateEventDraftV2", () => {
     assert.equal(draft.seatingMaps.length, 2)
     assert.equal(draft.seatingMaps[0]?.dateId, dayA)
     assert.equal(draft.seatingMaps[1]?.dateId, dayB)
-    assert.equal(draft.seatingMaps[1]?.mapConfig.sectors[0]?.id, "sector-b")
+    assert.equal(
+      (draft.seatingMaps[1]?.mapConfig as { sectors: Array<{ id: string }> })
+        .sectors[0]?.id,
+      "sector-b",
+    )
   })
 
   it("rebuilds a multi-day schedule from schedule_days", () => {

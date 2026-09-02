@@ -76,7 +76,6 @@ describe("buildInventorySummaryRows", () => {
       sectors: [{ id: "legacy", name: "Viejo", price: 1, seats: [] }],
       seatingMaps: [
         {
-          dateId: "day-1",
           mapConfig: {
             sectors: [
               {

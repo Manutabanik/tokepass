@@ -8,45 +8,32 @@ import {
   type DraftEventFormValues,
 } from "@/lib/validations/event-form"
 
+/**
+ * El borrador se arma con el mismo schema que usa el editor, asi que los
+ * defaults salen de produccion y el test solo declara lo que ejercita.
+ */
 function draftWithDays(
   isMultiDay: boolean,
   scheduleDays: DraftEventFormValues["basics"]["scheduleDays"],
 ): DraftEventFormValues {
-  return {
+  return draftEventSchema.parse({
     basics: {
       title: "Festival Test",
       date: "2026-11-14T20:00",
       endDate: "2026-11-14T23:00",
-      description: "",
-      flyerName: null,
-      visibility: "public",
       isMultiDay,
       scheduleDays,
-      categoryId: "",
-      ageRestriction: "",
     },
-    venue: {
-      mode: "new",
-      existingVenueId: null,
-      zoneType: "general_admission",
-      venueName: "Club",
-      includesSeatingMap: false,
-      saveVenueForReuse: true,
-    },
-    tickets: [
-      {
-        name: "General",
-        price: 10000,
-        capacity: 100,
-        visibility: "public",
-        layoutType: "general",
-        capacityPerUnit: 1,
-        admitCount: 1,
-      },
-    ],
-    ticketsDefaultTab: "auto",
-    lineup: [],
-  }
+    venue: { venueName: "Club" },
+    tickets: [{ name: "General", price: 10000, capacity: 100 }],
+  })
+}
+
+function draftTickets(
+  ...tickets: Array<Partial<DraftEventFormValues["tickets"][number]>>
+): DraftEventFormValues["tickets"] {
+  return draftEventSchema.parse({ basics: { title: "Festival Test" }, tickets })
+    .tickets
 }
 
 describe("multi-day draft coercion", () => {
@@ -97,28 +84,20 @@ describe("multi-day draft coercion", () => {
           endTime: "2026-11-16T04:00",
         },
       ]),
-      tickets: [
+      tickets: draftTickets(
         {
           name: "General Día 1",
           price: 10000,
           capacity: 100,
-          visibility: "public",
-          layoutType: "general",
-          capacityPerUnit: 1,
-          admitCount: 1,
           dayId: liveDay,
         },
         {
           name: "General viejo",
           price: 10000,
           capacity: 100,
-          visibility: "public",
-          layoutType: "general",
-          capacityPerUnit: 1,
-          admitCount: 1,
           dayId: staleDay,
         },
-      ],
+      ),
     })
     assert.equal(coerced.tickets[0]?.dayId, liveDay)
     assert.equal(coerced.tickets[1]?.dayId, null)
@@ -141,19 +120,13 @@ describe("multi-day draft coercion", () => {
           endTime: "2026-11-16T04:00",
         },
       ]),
-      tickets: [
-        {
-          name: "Abono",
-          price: 20000,
-          capacity: 50,
-          visibility: "public",
-          layoutType: "general",
-          capacityPerUnit: 1,
-          admitCount: 1,
-          dayId: liveDay,
-          tierType: "bundle",
-        },
-      ],
+      tickets: draftTickets({
+        name: "Abono",
+        price: 20000,
+        capacity: 50,
+        dayId: liveDay,
+        tierType: "bundle",
+      }),
     })
     assert.equal(coerced.tickets[0]?.dayId, null)
   })
@@ -161,27 +134,10 @@ describe("multi-day draft coercion", () => {
   it("keeps a short name and a ticket without sector instead of dropping the row", () => {
     const coerced = coerceDraftEventForm({
       ...draftWithDays(false, []),
-      tickets: [
-        {
-          name: "A",
-          price: 0,
-          capacity: 10,
-          visibility: "public",
-          layoutType: "general",
-          capacityPerUnit: 1,
-          admitCount: 1,
-        },
-        {
-          name: "",
-          price: 2500,
-          capacity: 20,
-          visibility: "public",
-          layoutType: "general",
-          seatingSectorId: null,
-          capacityPerUnit: 1,
-          admitCount: 1,
-        },
-      ],
+      tickets: draftTickets(
+        { name: "A", price: 0, capacity: 10 },
+        { name: "", price: 2500, capacity: 20, seatingSectorId: null },
+      ),
     })
     assert.equal(coerced.tickets.length, 2)
     assert.equal(coerced.tickets[0]?.name, "A")
@@ -194,17 +150,7 @@ describe("multi-day draft coercion", () => {
   it("does not invent a placeholder ticket when the draft has none", () => {
     const coerced = coerceDraftEventForm({
       ...draftWithDays(false, []),
-      tickets: [
-        {
-          name: "",
-          price: 0,
-          capacity: 1,
-          visibility: "public",
-          layoutType: "general",
-          capacityPerUnit: 1,
-          admitCount: 1,
-        },
-      ],
+      tickets: draftTickets({ name: "", price: 0, capacity: 1 }),
     })
     assert.equal(coerced.tickets.length, 0)
   })
@@ -212,18 +158,12 @@ describe("multi-day draft coercion", () => {
   it("keeps unnamed map-sector tickets so they are not dropped on save", () => {
     const coerced = coerceDraftEventForm({
       ...draftWithDays(false, []),
-      tickets: [
-        {
-          name: "  ",
-          price: 8000,
-          capacity: 50,
-          visibility: "public",
-          layoutType: "general",
-          seatingSectorId: "zone-campo",
-          capacityPerUnit: 1,
-          admitCount: 1,
-        },
-      ],
+      tickets: draftTickets({
+        name: "  ",
+        price: 8000,
+        capacity: 50,
+        seatingSectorId: "zone-campo",
+      }),
     })
     assert.equal(coerced.tickets.length, 1)
     assert.equal(coerced.tickets[0]?.seatingSectorId, "zone-campo")
@@ -231,29 +171,7 @@ describe("multi-day draft coercion", () => {
 
   it("does not invent venue, age or dates when drafting", () => {
     const coerced = coerceDraftEventForm(
-      {
-        basics: {
-          title: "Borrador nuevo",
-          date: "",
-          endDate: "",
-          description: "",
-          flyerName: null,
-          visibility: "public",
-          isMultiDay: false,
-          scheduleDays: [],
-          categoryId: "",
-          ageRestriction: "",
-        },
-        venue: {
-          mode: "new",
-          existingVenueId: null,
-          zoneType: "general_admission",
-          venueName: "",
-          includesSeatingMap: false,
-          saveVenueForReuse: true,
-        },
-        tickets: [],
-      },
+      draftEventSchema.parse({ basics: { title: "Borrador nuevo" } }),
       { inventPlaceholders: false },
     )
     assert.equal(coerced.basics.date, "")

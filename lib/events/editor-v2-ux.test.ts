@@ -19,6 +19,7 @@ import {
   shouldBlockDraftLeave,
   withDraftPersistTimeout,
 } from "./editor-v2-ux"
+import { draftLineItem } from "@/tests/fixtures/event-draft-v2"
 
 describe("editor v2 autosave window", () => {
   it("keeps the draft JSON debounce inside 1500-2000ms", () => {
@@ -84,25 +85,23 @@ describe("draftInventoryDrifted", () => {
   it("detects when persist rematched or converted ticket identities", () => {
     const current = {
       tickets: [
-        {
+        draftLineItem({
           id: "map:vip",
           source: "map",
           sectorId: "vip",
           layoutType: "table_combo",
-          slotId: "",
-        },
+        }),
       ],
       extras: [],
     }
     const saved = {
       tickets: [
-        {
+        draftLineItem({
           id: "550e8400-e29b-41d4-a716-446655440099",
           source: "map",
           sectorId: "vip",
           layoutType: "table_combo",
-          slotId: "",
-        },
+        }),
       ],
       extras: [],
     }

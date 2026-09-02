@@ -7,6 +7,7 @@ import {
   pruneDraftScheduleBindings,
 } from "@/lib/events/draft-schedule-bindings"
 import { flattenDraftScheduleOccurrences } from "@/lib/events/draft-schedule-slots-v2"
+import { draftLineItem } from "@/tests/fixtures/event-draft-v2"
 
 const dayId = "550e8400-e29b-41d4-a716-446655440010"
 const slotA = "550e8400-e29b-41d4-a716-446655440011"
@@ -49,11 +50,11 @@ describe("expandDraftTicketsForSchedule", () => {
     const occurrences = flattenDraftScheduleOccurrences(twoSlotDay)
     const expanded = expandDraftTicketsForSchedule(
       [
-        {
+        draftLineItem({
           id: "pase-sabado",
           source: "general",
           validDayIds: [dayId],
-        },
+        }),
       ],
       occurrences,
     )

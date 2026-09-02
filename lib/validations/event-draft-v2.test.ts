@@ -14,9 +14,14 @@ import {
   resolveDraftHasMap,
   toEventDraftV2Payload,
   toggleDraftLineupDay,
+  type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
+import {
+  draftLineItem,
+  draftScheduleDay,
+} from "@/tests/fixtures/event-draft-v2"
 
-function publishableDraft() {
+function publishableDraft(): EventDraftV2 {
   return {
     ...emptyEventDraftV2(),
     basicInfo: {
@@ -35,15 +40,14 @@ function publishableDraft() {
     },
     venueCapacity: 200,
     tickets: [
-      {
+      draftLineItem({
         id: "t1",
         name: "General",
-        description: "",
         price: 15000,
         stock: 80,
         minOrder: 1,
         maxOrder: 10,
-      },
+      }),
     ],
   }
 }
@@ -138,12 +142,10 @@ describe("eventPublishSchema", () => {
     const draft = publishableDraft()
     draft.basicInfo.endDate = "2026-08-01T22:00"
     draft.schedule = [
-      {
-        id: "day-1",
-        name: "Día 1",
+      draftScheduleDay({
         startDate: "2026-09-01T22:00",
         endDate: "2026-08-01T22:00",
-      },
+      }),
     ]
     const result = eventPublishSchema.safeParse(draft)
     assert.equal(result.success, false)
@@ -161,7 +163,7 @@ describe("eventPublishSchema", () => {
     draft.basicInfo.startDate = ""
     draft.basicInfo.endDate = ""
     draft.schedule = [
-      { id: "day-1", name: "Día 1", startDate: "", endDate: "" },
+      draftScheduleDay({ date: "", startDate: "", endDate: "" }),
     ]
     const result = eventPublishSchema.safeParse(draft)
     assert.equal(result.success, false)
@@ -177,18 +179,16 @@ describe("eventPublishSchema", () => {
   it("requires an end date on every day of a multi-day schedule", () => {
     const draft = publishableDraft()
     draft.schedule = [
-      {
-        id: "day-1",
-        name: "Día 1",
+      draftScheduleDay({
         startDate: "2026-09-01T22:00",
         endDate: "2026-09-02T04:00",
-      },
-      {
+      }),
+      draftScheduleDay({
         id: "day-2",
         name: "Función Noche",
         startDate: "2026-09-02T22:00",
         endDate: "",
-      },
+      }),
     ]
     const result = eventPublishSchema.safeParse(draft)
     assert.equal(result.success, false)
@@ -303,16 +303,14 @@ describe("eventPublishSchema", () => {
 
     draft.tickets[0]!.stock = 201
     draft.schedule = [
-      {
-        id: "day-1",
-        name: "Día 1",
+      draftScheduleDay({
         startDate: "2026-09-01T22:00",
         endDate: "2026-09-02T04:00",
         slots: [
           { id: "s1", startTime: "22:00", endTime: "23:00" },
           { id: "s2", startTime: "23:30", endTime: "00:30" },
         ],
-      },
+      }),
     ]
     assert.equal(eventPublishSchema.safeParse(draft).success, false)
     draft.tickets[0]!.stock = 200
@@ -324,16 +322,15 @@ describe("eventPublishSchema", () => {
     draft.venueCapacity = 80
     draft.tickets[0]!.stock = 80
     draft.extras = [
-      {
+      draftLineItem({
         id: "e1",
         name: "Estacionamiento",
-        description: "",
         price: 2000,
         stock: 400,
         minOrder: 1,
         maxOrder: 2,
         ticketType: "extra",
-      },
+      }),
     ]
     assert.equal(eventPublishSchema.safeParse(draft).success, true)
   })
@@ -628,12 +625,10 @@ describe("toEventDraftV2Payload", () => {
     const payload = toEventDraftV2Payload({
       ...empty,
       schedule: [
-        {
-          id: "day-1",
-          name: "Día 1",
+        draftScheduleDay({
           startDate: "2026-09-01T22:00",
           endDate: "2026-09-02T04:00",
-        },
+        }),
       ],
     })
     assert.equal(payload.basicInfo.startDate, "2026-09-01T22:00")
@@ -775,10 +770,9 @@ describe("draftCapacityThermometer", () => {
   it("publishes mixed inventory without requiring sector on generals", () => {
     const draft = publishableDraft()
     draft.tickets = [
-      {
+      draftLineItem({
         id: "t-general",
         name: "Campo",
-        description: "",
         price: 8000,
         stock: 100,
         minOrder: 1,
@@ -786,11 +780,10 @@ describe("draftCapacityThermometer", () => {
         source: "general",
         sectorId: "",
         seating_sector_id: null,
-      },
-      {
+      }),
+      draftLineItem({
         id: "t-map",
         name: "Platea",
-        description: "",
         price: 18000,
         stock: 24,
         minOrder: 1,
@@ -798,7 +791,7 @@ describe("draftCapacityThermometer", () => {
         source: "map",
         sectorId: "sector-platea",
         seating_sector_id: "sector-platea",
-      },
+      }),
     ]
     draft.seatingMap = {
       version: 1,

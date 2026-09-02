@@ -18,7 +18,10 @@ import {
   toDraftSeatingMap,
   upsertDraftSeatingMapInstance,
 } from "@/lib/events/draft-seating-map-v2"
-import { emptyEventDraftV2LineItem } from "@/lib/validations/event-draft-v2"
+import {
+  emptyEventDraftV2LineItem,
+  type EventDraftV2LineItem,
+} from "@/lib/validations/event-draft-v2"
 import { emptyVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
 
 function plateaMap(): InteractiveVenueMap {
@@ -381,7 +384,7 @@ describe("draft seating map isolation", () => {
 
   it("creates one map ticket per schedule day for the same sector", () => {
     const merged = mergeDraftTicketsWithScheduleMaps(
-      [],
+      [] as EventDraftV2LineItem[],
       plateaMap(),
       "day-a",
       ["day-a", "day-b"],

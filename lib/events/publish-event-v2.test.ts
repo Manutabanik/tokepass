@@ -20,6 +20,7 @@ import {
 } from "@/lib/events/publish-event-v2"
 import { saleWindowToIso } from "@/lib/inventory/ticket-sale-window"
 import { emptyEventDraftV2, eventPublishSchema } from "@/lib/validations/event-draft-v2"
+import { draftLineItem, draftScheduleDay } from "@/tests/fixtures/event-draft-v2"
 
 function publishableDraft() {
   return {
@@ -34,7 +35,7 @@ function publishableDraft() {
     bannerUrl: "https://cdn.example/banner.jpg",
     venueCapacity: 200,
     tickets: [
-      {
+      draftLineItem({
         id: "550e8400-e29b-41d4-a716-446655440000",
         name: "General",
         description: "Acceso",
@@ -42,27 +43,16 @@ function publishableDraft() {
         stock: 80,
         minOrder: 1,
         maxOrder: 6,
-      },
+      }),
     ],
     extras: [
-      {
+      draftLineItem({
         id: "item-extra",
         name: "Cerveza",
-        description: "",
         price: 4000,
         stock: 50,
-        minOrder: 1,
-        maxOrder: 10,
-      },
-      {
-        id: "skip-me",
-        name: "",
-        description: "",
-        price: 0,
-        stock: 0,
-        minOrder: 1,
-        maxOrder: 10,
-      },
+      }),
+      draftLineItem({ id: "skip-me" }),
     ],
     location: {
       venueName: "Niceto",
@@ -264,18 +254,20 @@ describe("buildPublishEventV2Payload", () => {
   it("writes the first day to events.date and the rest to schedule_days", () => {
     const draft = publishableDraft()
     draft.schedule = [
-      {
+      draftScheduleDay({
         id: "550e8400-e29b-41d4-a716-446655440001",
         name: "Día 1",
+        date: "2026-09-01",
         startDate: "2026-09-01T18:00",
         endDate: "2026-09-01T23:00",
-      },
-      {
+      }),
+      draftScheduleDay({
         id: "550e8400-e29b-41d4-a716-446655440002",
         name: "Función Noche",
+        date: "2026-09-02",
         startDate: "2026-09-02T20:00",
         endDate: "2026-09-02T23:30",
-      },
+      }),
     ]
     const payload = buildPublishEventV2Payload(draft)
     assert.match(payload.date, /^2026-09-0[12]T/)
@@ -448,18 +440,18 @@ describe("buildPublishEventV2Payload", () => {
   it("unpacks map tickets with seating sector ids", () => {
     const draft = publishableDraft()
     draft.hasMap = true
-    draft.tickets.push({
-      id: "map-platea",
-      name: "Platea",
-      description: "",
-      price: 18000,
-      stock: 24,
-      minOrder: 1,
-      maxOrder: 4,
-      source: "map",
-      sectorId: "sector-platea",
-      layoutType: "numbered_seat",
-    })
+    draft.tickets.push(
+      draftLineItem({
+        id: "map-platea",
+        name: "Platea",
+        price: 18000,
+        stock: 24,
+        maxOrder: 4,
+        source: "map",
+        sectorId: "sector-platea",
+        layoutType: "numbered_seat",
+      }),
+    )
     draft.seatingMap = {
       ...draft.seatingMap,
       version: 1,
@@ -563,18 +555,18 @@ describe("buildPublishEventV2Payload", () => {
 
   it("drops map tickets when the map is off", () => {
     const draft = publishableDraft()
-    draft.tickets.push({
-      id: "map-platea",
-      name: "Platea",
-      description: "",
-      price: 18000,
-      stock: 24,
-      minOrder: 1,
-      maxOrder: 4,
-      source: "map",
-      sectorId: "sector-platea",
-      layoutType: "numbered_seat",
-    })
+    draft.tickets.push(
+      draftLineItem({
+        id: "map-platea",
+        name: "Platea",
+        price: 18000,
+        stock: 24,
+        maxOrder: 4,
+        source: "map",
+        sectorId: "sector-platea",
+        layoutType: "numbered_seat",
+      }),
+    )
     const payload = buildPublishEventV2Payload(draft)
     assert.equal(payload.has_seating_plan, false)
     assert.equal(
@@ -592,18 +584,18 @@ describe("buildPublishEventV2Payload", () => {
 
   it("drops orphan map tickets that are no longer in the venue map", () => {
     const draft = publishableDraft()
-    draft.tickets.push({
-      id: "map-gone",
-      name: "Viejo",
-      description: "",
-      price: 12000,
-      stock: 10,
-      minOrder: 1,
-      maxOrder: 4,
-      source: "map",
-      sectorId: "sector-borrado",
-      layoutType: "numbered_seat",
-    })
+    draft.tickets.push(
+      draftLineItem({
+        id: "map-gone",
+        name: "Viejo",
+        price: 12000,
+        stock: 10,
+        maxOrder: 4,
+        source: "map",
+        sectorId: "sector-borrado",
+        layoutType: "numbered_seat",
+      }),
+    )
     draft.seatingMap = {
       ...draft.seatingMap,
       version: 1,
@@ -641,18 +633,18 @@ describe("buildPublishEventV2Payload", () => {
   it("heals a map ticket whose seating_sector_id changed but the name still matches", () => {
     const draft = publishableDraft()
     draft.hasMap = true
-    draft.tickets.push({
-      id: "map-platea",
-      name: "Platea",
-      description: "",
-      price: 18000,
-      stock: 24,
-      minOrder: 1,
-      maxOrder: 4,
-      source: "map",
-      sectorId: "sec-viejo",
-      layoutType: "numbered_seat",
-    })
+    draft.tickets.push(
+      draftLineItem({
+        id: "map-platea",
+        name: "Platea",
+        price: 18000,
+        stock: 24,
+        maxOrder: 4,
+        source: "map",
+        sectorId: "sec-viejo",
+        layoutType: "numbered_seat",
+      }),
+    )
     draft.seatingMap = {
       ...draft.seatingMap,
       version: 1,
@@ -706,32 +698,28 @@ describe("buildPublishEventV2Payload", () => {
       },
     ]
     draft.tickets.push(
-      {
+      draftLineItem({
         id: "map-viernes",
         name: "Grada Naranja",
-        description: "",
         price: 15000,
         stock: 40,
-        minOrder: 1,
         maxOrder: 4,
         source: "map",
         sectorId: "sector-grada",
         layoutType: "numbered_seat",
         validDayIds: [dayA],
-      },
-      {
+      }),
+      draftLineItem({
         id: "map-sabado",
         name: "Grada Naranja",
-        description: "",
         price: 15000,
         stock: 40,
-        minOrder: 1,
         maxOrder: 4,
         source: "map",
         sectorId: "sector-grada",
         layoutType: "numbered_seat",
         validDayIds: [dayB],
-      },
+      }),
     )
     draft.seatingMap = {
       ...draft.seatingMap,
@@ -817,30 +805,26 @@ describe("buildPublishEventV2Payload", () => {
       },
     ]
     draft.tickets = [
-      {
+      draftLineItem({
         id: `map:${dayA}:grada-naranja`,
         name: "Grada Naranja",
-        description: "",
         price: 40000,
         stock: 27,
-        minOrder: 1,
         maxOrder: 4,
         source: "map",
         sectorId: "grada-naranja",
         layoutType: "table_combo",
-      },
-      {
+      }),
+      draftLineItem({
         id: `map:${dayB}:grada-naranja`,
         name: "Grada Naranja",
-        description: "",
         price: 70000,
         stock: 27,
-        minOrder: 1,
         maxOrder: 4,
         source: "map",
         sectorId: "grada-naranja",
         layoutType: "table_combo",
-      },
+      }),
     ]
     const payload = buildPublishEventV2Payload(draft)
     const mapTickets = payload.tickets.filter(
@@ -897,18 +881,18 @@ describe("buildPublishEventV2Payload", () => {
         },
       ],
     }
-    draft.tickets.push({
-      id: "map-huérfano",
-      name: "Grada Naranja",
-      description: "",
-      price: 40000,
-      stock: 27,
-      minOrder: 1,
-      maxOrder: 4,
-      source: "map",
-      sectorId: "grada-naranja",
-      layoutType: "table_combo",
-    })
+    draft.tickets.push(
+      draftLineItem({
+        id: "map-huérfano",
+        name: "Grada Naranja",
+        price: 40000,
+        stock: 27,
+        maxOrder: 4,
+        source: "map",
+        sectorId: "grada-naranja",
+        layoutType: "table_combo",
+      }),
+    )
     assert.throws(
       () => buildPublishEventV2Payload(draft),
       /atada a un día/,
@@ -1407,17 +1391,15 @@ describe("publish helpers", () => {
       },
     ]
     draft.tickets = [
-      {
+      draftLineItem({
         id: "550e8400-e29b-41d4-a716-446655440099",
         name: "Pack 2 días",
-        description: "",
         price: 25000,
         stock: 40,
-        minOrder: 1,
         maxOrder: 4,
         ticketType: "combo",
         validDayIds: [dayA, dayB],
-      },
+      }),
     ]
     const payload = buildPublishEventV2Payload(draft)
     const combos = payload.tickets.filter((ticket) => ticket.ticket_type === "combo")

@@ -16,6 +16,7 @@ import {
   seatingPersistUserMessage,
 } from "@/lib/events/sanitize-ticket-tiers"
 import type { EventFormValues } from "@/lib/validations/event-form"
+import { eventFormValues } from "@/tests/fixtures/event-form"
 import { emptyVenueMap } from "@/types/venue-map"
 
 function ticket(
@@ -319,26 +320,10 @@ describe("sanitizeEventSubmitPayload", () => {
       },
     ]
     const next = sanitizeEventSubmitPayload(
-      {
-        basics: {
-          title: "Test",
-          date: "",
-          endDate: "",
-          description: "",
-          flyerName: null,
-          visibility: "public",
-          isMultiDay: false,
-          scheduleDays: [],
-          categoryId: "",
-          ageRestriction: "atp",
-          hasSeatingPlan: true,
-        },
+      eventFormValues({
+        basics: { title: "Test", hasSeatingPlan: true },
         venue: {
-          mode: "new",
-          existingVenueId: null,
-          zoneType: "general_admission",
           venueName: "Lugar",
-          saveVenueForReuse: true,
           venueMap: map,
           includesSeatingMap: true,
         },
@@ -352,8 +337,7 @@ describe("sanitizeEventSubmitPayload", () => {
             layoutType: "numbered_seat",
           }),
         ],
-        ticketsDefaultTab: "auto",
-      } as EventFormValues,
+      }),
       { mode: "create" },
     )
     assert.equal(next.tickets[0]?.seatingSectorId, "campo")
@@ -378,26 +362,10 @@ describe("sanitizeEventSubmitPayload", () => {
       },
     ]
     const next = sanitizeEventSubmitPayload(
-      {
-        basics: {
-          title: "Hibrido",
-          date: "",
-          endDate: "",
-          description: "",
-          flyerName: null,
-          visibility: "public",
-          isMultiDay: false,
-          scheduleDays: [],
-          categoryId: "",
-          ageRestriction: "atp",
-          hasSeatingPlan: true,
-        },
+      eventFormValues({
+        basics: { title: "Hibrido", hasSeatingPlan: true },
         venue: {
-          mode: "new",
-          existingVenueId: null,
-          zoneType: "general_admission",
           venueName: "Predio",
-          saveVenueForReuse: true,
           venueMap: map,
           includesSeatingMap: true,
           zones: [
@@ -420,8 +388,7 @@ describe("sanitizeEventSubmitPayload", () => {
             name: "Campo",
           }),
         ],
-        ticketsDefaultTab: "auto",
-      } as EventFormValues,
+      }),
       { mode: "create" },
     )
     assert.equal(next.tickets[0]?.seatingSectorId, null)
@@ -451,26 +418,10 @@ describe("sanitizeEventSubmitPayload", () => {
       },
     ]
     const next = sanitizeEventSubmitPayload(
-      {
-        basics: {
-          title: "Mapa GA",
-          date: "",
-          endDate: "",
-          description: "",
-          flyerName: null,
-          visibility: "public",
-          isMultiDay: false,
-          scheduleDays: [],
-          categoryId: "",
-          ageRestriction: "atp",
-          hasSeatingPlan: true,
-        },
+      eventFormValues({
+        basics: { title: "Mapa GA", hasSeatingPlan: true },
         venue: {
-          mode: "new",
-          existingVenueId: null,
-          zoneType: "general_admission",
           venueName: "Predio",
-          saveVenueForReuse: true,
           venueMap: map,
           includesSeatingMap: true,
         },
@@ -482,8 +433,7 @@ describe("sanitizeEventSubmitPayload", () => {
             tierType: "general",
           }),
         ],
-        ticketsDefaultTab: "auto",
-      } as EventFormValues,
+      }),
       { mode: "create" },
     )
     assert.equal(next.tickets[0]?.seatingSectorId, "campo")
@@ -512,26 +462,10 @@ describe("sanitizeEventSubmitPayload", () => {
       },
     ]
     const next = sanitizeEventSubmitPayload(
-      {
-        basics: {
-          title: "Fiesta simple",
-          date: "",
-          endDate: "",
-          description: "",
-          flyerName: null,
-          visibility: "public",
-          isMultiDay: false,
-          scheduleDays: [],
-          categoryId: "",
-          ageRestriction: "atp",
-          hasSeatingPlan: true,
-        },
+      eventFormValues({
+        basics: { title: "Fiesta simple", hasSeatingPlan: true },
         venue: {
-          mode: "new",
-          existingVenueId: null,
-          zoneType: "general_admission",
           venueName: "Club",
-          saveVenueForReuse: true,
           includesSeatingMap: false,
           venueMap: map,
         },
@@ -541,8 +475,7 @@ describe("sanitizeEventSubmitPayload", () => {
             layoutType: "general",
           }),
         ],
-        ticketsDefaultTab: "auto",
-      } as EventFormValues,
+      }),
       { mode: "create" },
     )
     assert.equal(next.tickets[0]?.seatingSectorId, null)
@@ -550,26 +483,10 @@ describe("sanitizeEventSubmitPayload", () => {
 
   it("deja seatingSectorId en null si el evento no tiene mapa", () => {
     const next = sanitizeEventSubmitPayload(
-      {
-        basics: {
-          title: "Fiesta simple",
-          date: "",
-          endDate: "",
-          description: "",
-          flyerName: null,
-          visibility: "public",
-          isMultiDay: false,
-          scheduleDays: [],
-          categoryId: "",
-          ageRestriction: "atp",
-          hasSeatingPlan: false,
-        },
+      eventFormValues({
+        basics: { title: "Fiesta simple", hasSeatingPlan: false },
         venue: {
-          mode: "new",
-          existingVenueId: null,
-          zoneType: "general_admission",
           venueName: "Club",
-          saveVenueForReuse: true,
           includesSeatingMap: false,
         },
         tickets: [
@@ -578,8 +495,7 @@ describe("sanitizeEventSubmitPayload", () => {
             layoutType: "general",
           }),
         ],
-        ticketsDefaultTab: "auto",
-      } as EventFormValues,
+      }),
       { mode: "create" },
     )
     assert.equal(next.tickets[0]?.seatingSectorId, null)
