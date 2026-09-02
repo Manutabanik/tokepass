@@ -92,7 +92,7 @@ export function WalletAccessBlockCard({
             <Users className="size-5" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
-            <h3 className="text-lg font-bold tracking-tight text-foreground">
+            <h3 className="text-balance text-[clamp(0.9375rem,4vw,1.125rem)] font-bold leading-snug tracking-tight text-foreground">
               {block.title}
             </h3>
             {first ? (

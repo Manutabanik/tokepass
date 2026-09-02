@@ -248,10 +248,10 @@ function EventGroupHeader({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <h3 className="truncate text-lg font-bold tracking-tight text-foreground">
+        <h3 className="text-balance text-[clamp(0.9375rem,4vw,1.125rem)] font-bold leading-snug tracking-tight text-foreground">
           {title}
         </h3>
-        <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
+        <p className="mt-0.5 line-clamp-2 text-[clamp(0.75rem,3vw,0.875rem)] text-muted-foreground">
           {formatEventDay(date)} · {formatEventTime(date)}
           {location ? ` · ${location}` : null}
         </p>
@@ -301,8 +301,10 @@ function ExtrasUpsellCard({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-        <p className="mt-0.5 text-sm text-muted-foreground">
+        <p className="text-balance text-[clamp(0.8125rem,3vw,0.875rem)] font-semibold text-foreground">
+          {title}
+        </p>
+        <p className="mt-0.5 text-[clamp(0.75rem,3vw,0.875rem)] text-muted-foreground">
           ¿Querés sumar tragos o servicios para este evento?
         </p>
       </div>
@@ -318,10 +320,10 @@ function ExtrasUpsellCard({
 }
 
 const tabTriggerClass =
-  "h-10 w-full min-w-0 items-center justify-center gap-1 rounded-xl px-2 text-[11px] font-medium text-muted-foreground transition-all hover:bg-muted/80 hover:text-foreground data-active:border-border data-active:bg-background data-active:text-foreground data-active:shadow-sm sm:px-4 sm:text-sm"
+  "flex h-10 w-full min-w-0 items-center justify-center gap-1 rounded-xl px-1.5 text-[clamp(0.6875rem,2.5vw,0.875rem)] leading-none font-medium text-muted-foreground transition-all hover:bg-muted/80 hover:text-foreground data-active:border-border data-active:bg-background data-active:text-foreground data-active:shadow-sm sm:gap-1.5 sm:px-4"
 
 const tabCountClass =
-  "rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-foreground ring-1 ring-inset ring-border"
+  "shrink-0 rounded-md bg-muted px-1 py-0.5 font-mono text-[clamp(0.625rem,2vw,0.6875rem)] font-semibold tabular-nums text-foreground ring-1 ring-inset ring-border sm:px-1.5"
 
 export function TicketWallet({
   upcoming,
@@ -387,27 +389,34 @@ export function TicketWallet({
 
   return (
     <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full overflow-x-clip overflow-y-visible gap-6 pb-32">
-      <div className="w-full overflow-hidden pb-1">
+      <div className="w-full pb-1">
         <TabsList
           aria-label="Secciones de la billetera"
-          className="grid h-auto w-full grid-cols-3 items-stretch gap-1 rounded-2xl border border-border bg-muted/40 p-1.5 shadow-lg shadow-black/10 backdrop-blur-md"
+          className="grid h-auto w-full grid-cols-[repeat(3,minmax(0,1fr))] items-stretch gap-1 rounded-2xl border border-border bg-muted/40 p-1.5 shadow-lg shadow-black/10 backdrop-blur-md"
         >
           <TabsTrigger value="upcoming" className={tabTriggerClass}>
-            <Ticket className="hidden size-3.5 sm:block" aria-hidden="true" />
-            <span>Entradas</span>
+            <Ticket
+              className="hidden size-3.5 shrink-0 sm:block"
+              aria-hidden="true"
+            />
+            <span className="min-w-0">Entradas</span>
             <span className={tabCountClass}>{upcoming.length}</span>
           </TabsTrigger>
           <TabsTrigger value="bar" className={tabTriggerClass}>
             <ShoppingBag
-              className="hidden size-3.5 sm:block"
+              className="hidden size-3.5 shrink-0 sm:block"
               aria-hidden="true"
             />
-            <span>Mis Extras</span>
+            <span className="min-w-0 max-[379px]:hidden">Mis Extras</span>
+            <span className="min-w-0 min-[380px]:hidden">Extras</span>
             <span className={tabCountClass}>{validBar}</span>
           </TabsTrigger>
           <TabsTrigger value="past" className={tabTriggerClass}>
-            <History className="hidden size-3.5 sm:block" aria-hidden="true" />
-            <span>Pasados</span>
+            <History
+              className="hidden size-3.5 shrink-0 sm:block"
+              aria-hidden="true"
+            />
+            <span className="min-w-0">Pasados</span>
             <span className={tabCountClass}>{past.length}</span>
           </TabsTrigger>
         </TabsList>
@@ -477,10 +486,10 @@ export function TicketWallet({
         {extraGroups.length > 0 ? (
           <div className="space-y-8">
             <div>
-              <h2 className="text-base font-bold text-foreground">
+              <h2 className="text-[clamp(0.875rem,3.5vw,1rem)] font-bold text-foreground">
                 Tus consumiciones
               </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-1 text-[clamp(0.75rem,3vw,0.875rem)] text-muted-foreground">
                 Canjealas en barra o tienda con el QR de cada extra.
               </p>
             </div>
@@ -513,16 +522,16 @@ export function TicketWallet({
           <div className="space-y-3">
             {extraGroups.length === 0 ? (
               <div>
-                <h2 className="text-base font-bold text-foreground">
+                <h2 className="text-[clamp(0.875rem,3.5vw,1rem)] font-bold text-foreground">
                   Tus consumiciones
                 </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="mt-1 text-[clamp(0.75rem,3vw,0.875rem)] text-muted-foreground">
                   Todavía no compraste extras. Sumá tragos o servicios para tus
                   eventos.
                 </p>
               </div>
             ) : (
-              <h3 className="text-sm font-semibold text-foreground">
+              <h3 className="text-[clamp(0.8125rem,3vw,0.875rem)] font-semibold text-foreground">
                 Sumá extras a tus eventos
               </h3>
             )}
@@ -558,7 +567,7 @@ export function TicketWallet({
                 className="size-4 text-amber-700 dark:text-amber-300"
                 aria-hidden="true"
               />
-              <h3 className="text-base font-bold text-foreground">
+              <h3 className="text-[clamp(0.875rem,3.5vw,1rem)] font-bold text-foreground">
                 Tienda de extras
               </h3>
             </div>

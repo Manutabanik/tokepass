@@ -188,7 +188,7 @@ export function WalletExtrasBundleCard({
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300/90">
                 {EVENT_ITEM_CATEGORY_LABELS[first.category]}
               </p>
-              <h2 className="mt-1 text-lg font-bold tracking-tight text-foreground">
+              <h2 className="mt-1 text-balance text-[clamp(0.9375rem,4vw,1.125rem)] font-bold leading-snug tracking-tight text-foreground">
                 {bundle.title}
               </h2>
               <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
