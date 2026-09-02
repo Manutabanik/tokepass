@@ -1037,12 +1037,26 @@ sin consultar el rol. Un `admin` que entre por el login de compradores sin `?nex
 billetera, no en su panel. Y el callback de OAuth manda a `/` (home) en vez de `/cuenta`, mientras
 el login con contraseña manda a `/cuenta`. Tres caminos, tres criterios.
 
-### 9.2 Sin reenvío ni cooldown para el OTP
+### 9.2 El cooldown del reenvío de OTP es sólo de UX
 
-No hay botón de "reenviar código" ni contador de espera. El usuario tiene que volver con `Usar otro
-correo` y reescribir su mail. El único freno de abuso es `authIp` (10/min por IP), que además
-comparte cuota con Google y con los logins por contraseña. Contrasta con el OTP de invitado, que sí
-tiene cooldown de 60 s y tope de 5 intentos.
+Ya existe `Solicitar nuevo código` con un contador de 60 s (`RESEND_COOLDOWN_SECONDS` en
+`auth-forms.tsx`), pero **vive entero en el cliente**: es UX, no una defensa. Un `curl` contra el
+Server Action lo ignora por completo.
+
+El freno real sigue siendo `authIp` (10/min por IP), que además comparte cuota con Google y con los
+logins por contraseña, más los límites de envío que aplique Supabase. **No hay cooldown por
+dirección de correo del lado del servidor**, así que un atacante distribuido puede pedir códigos
+para la misma casilla desde varias IPs. Contrasta con el OTP de invitado, que sí tiene cooldown de
+60 s y tope de 5 intentos server-side.
+
+Tres detalles del contador que conviene conocer antes de tocarlo:
+
+- **Es por dirección, no global.** Corregir un mail mal tipeado no espera; pedir otro código para el
+  mismo destino sí. Sin esto, `Usar otro correo` sería un bypass trivial del contador.
+- **Se recalcula desde una fecha límite**, no restando 1 por tick, porque una pestaña en segundo
+  plano throttlea los timers y un contador decremental se atrasaría.
+- **No sobrevive un recargado de página.** El estado es `useState`; un F5 devuelve el botón
+  habilitado. Cerrar esto requiere el límite server-side de arriba, no más código de cliente.
 
 ### 9.3 Sin tope de intentos de verificación del lado de la app
 

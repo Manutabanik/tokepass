@@ -26,18 +26,54 @@ const initialState: AuthActionState = {
 const AUTH_INPUT_CLASS =
   "h-12 min-h-12 rounded-xl border-border bg-background px-4 py-3.5 text-base text-foreground placeholder:text-muted-foreground focus-visible:border-violet-500/80 focus-visible:ring-2 focus-visible:ring-violet-500/20 aria-invalid:border-red-500 aria-invalid:ring-2 aria-invalid:ring-red-500/20"
 
-function MagicLinkSubmit() {
+const RESEND_COOLDOWN_SECONDS = 60
+
+function MagicLinkSubmit({ cooldownSeconds }: { cooldownSeconds: number }) {
   const { pending } = useFormStatus()
+  const waiting = cooldownSeconds > 0
 
   return (
     <Button
       type="submit"
-      disabled={pending}
+      disabled={pending || waiting}
       className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-3.5 text-sm font-bold text-white shadow-[0_0_25px_rgba(147,51,234,0.18)] transition-all hover:from-purple-500 hover:to-indigo-500 disabled:cursor-not-allowed"
     >
       {pending ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Mail className="size-4" />}
-      {pending ? "Enviando enlace..." : "Enviar enlace de acceso"}
+      {pending
+        ? "Enviando enlace..."
+        : waiting
+          ? `Reenviar en ${cooldownSeconds}s`
+          : "Enviar enlace de acceso"}
     </Button>
+  )
+}
+
+/**
+ * Vive dentro del form del OTP y apunta a otra acción con `formAction`.
+ * `formNoValidate` es necesario porque el input del token es `required` y el
+ * navegador bloquearía este submit con el campo vacío.
+ */
+function ResendOtpButton({
+  action,
+  cooldownSeconds,
+}: {
+  action: (formData: FormData) => void
+  cooldownSeconds: number
+}) {
+  const { pending } = useFormStatus()
+  const waiting = cooldownSeconds > 0
+
+  return (
+    <button
+      type="submit"
+      formAction={action}
+      formNoValidate
+      disabled={pending || waiting}
+      aria-live="polite"
+      className="w-full cursor-pointer text-center text-xs font-medium text-muted-foreground underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60"
+    >
+      {waiting ? `Reenviar en ${cooldownSeconds}s` : "Solicitar nuevo código"}
+    </button>
   )
 }
 
@@ -132,15 +168,52 @@ export function AuthForms({
   const [isOtpSent, setIsOtpSent] = useState(false)
   const [email, setEmail] = useState("")
   const [otpCode, setOtpCode] = useState("")
+  const [cooldown, setCooldown] = useState<{
+    email: string
+    until: number
+  } | null>(null)
+  const [secondsLeft, setSecondsLeft] = useState(0)
   const [magicState, magicAction] = useActionState(
     async (previous: AuthActionState, formData: FormData) => {
       const result = await signInWithMagicLink(previous, formData)
-      if (result.success) setIsOtpSent(true)
+      if (result.success) {
+        setIsOtpSent(true)
+        // Reenviar invalida el código anterior; dejarlo tipeado sólo produce
+        // un "código inválido" al verificar.
+        setOtpCode("")
+        setCooldown({
+          email: String(formData.get("email") ?? "").trim().toLowerCase(),
+          until: Date.now() + RESEND_COOLDOWN_SECONDS * 1000,
+        })
+        setSecondsLeft(RESEND_COOLDOWN_SECONDS)
+      }
       return result
     },
     initialState,
   )
   const [otpState, otpAction] = useActionState(verifyEmailOtp, initialState)
+
+  // Se recalcula desde la fecha límite en vez de restar 1 por tick: una pestaña
+  // en segundo plano throttlea los timers y un contador decremental se atrasaría.
+  // El valor inicial lo fija quien pide el código, no este efecto.
+  useEffect(() => {
+    if (!cooldown) return
+
+    const { until } = cooldown
+    const timer = setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((until - Date.now()) / 1000))
+      setSecondsLeft(remaining)
+      if (remaining === 0) setCooldown(null)
+    }, 250)
+
+    return () => clearInterval(timer)
+  }, [cooldown])
+
+  // El cooldown es por dirección: corregir un mail mal tipeado no debe esperar,
+  // pero pedir otro código para el mismo destino sí.
+  const cooldownSeconds =
+    cooldown && cooldown.email === email.trim().toLowerCase() ? secondsLeft : 0
+
   const bannerError =
     magicState.error || magicState.success || otpState.error
       ? null
@@ -224,6 +297,10 @@ export function AuthForms({
               state={otpState.error ? otpState : magicState}
             />
             <VerifyOtpSubmit />
+            <ResendOtpButton
+              action={magicAction}
+              cooldownSeconds={cooldownSeconds}
+            />
             <button
               type="button"
               onClick={() => {
@@ -268,7 +345,7 @@ export function AuthForms({
           </div>
           <div className="space-y-4">
             <ActionMessage state={magicState} />
-            <MagicLinkSubmit />
+            <MagicLinkSubmit cooldownSeconds={cooldownSeconds} />
           </div>
         </form>
       )}
