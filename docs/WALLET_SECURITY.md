@@ -485,7 +485,15 @@ Refuerzos de la UI que acompañan a la criptografía:
 - Badge "Living QR" vs "QR estático" en el encabezado del lightbox, para que nadie confunda
   los dos modos.
 - **Código de respaldo** (`ticketBackupCode`: 12 caracteres del UUID en mayúsculas) impreso
-  bajo el QR, para búsqueda manual si la cámara falla.
+  bajo el QR, para búsqueda manual si la cámara falla. `manifestTicketMatchesQuery()` lo
+  matchea por prefijo en `EmergencyTicketSearch`, además de nombre, DNI y tier. No es un
+  secreto: es un prefijo del `ticketId`, que ya viaja en claro dentro de cada payload `TP2.`.
+  Lo que autoriza el ingreso es la validación supervisada contra el manifiesto, que refleja
+  transferencias y reventas y exhibe nombre y DNI para verificar identidad.
+- **Acceso de respaldo por link** (`/valida/<ticketId>`, el que va en el mail de
+  confirmación): sin sesión ni acceso de invitado, en lugar de rebotar al login muestra el
+  código de respaldo (`TicketRecoveryCard`). Nunca expone `totp_secret` ni renderiza un QR;
+  el link lleva solo el `ticketId`.
 - Nombre y DNI del titular debajo, y un banner rojo **"Modo prueba · sin validez"** cuando
   `isTest`.
 
@@ -691,6 +699,14 @@ Reglas que cualquier cambio en la billetera debe respetar:
    explícito.
 9. **Los Hijos no pueden venderse por separado** de un bloque cerrado (`canSell={false}`).
 10. **Los dominios de payload no se cruzan**: puerta y tienda se rechazan mutuamente.
+11. **Ningún mecanismo de respaldo transporta la semilla.** Ni en la URL, ni en un query
+    param, ni cifrada de forma que el cliente pueda revertirla. Una URL es peor que una
+    captura: es texto reenviable que generaría QRs válidos y rotativos para siempre, en
+    cualquier dispositivo, saltando `xfer_dead_`, la vinculación de dispositivo y
+    `canShowTicketQr()`; además queda en logs de acceso, en el header `Referer`, en Sentry,
+    en el historial del navegador y en los previsualizadores de link. Un respaldo solo puede
+    llevar identificadores ya públicos (`ticketId`, código de respaldo) y resolverse con
+    validación supervisada contra el manifiesto.
 
 ## 8. Cobertura de tests
 
@@ -703,7 +719,7 @@ Reglas que cualquier cambio en la billetera debe respetar:
 | Política de QR estático | `lib/tickets/static-tps-policy.test.ts`, `lib/tickets/ensure-dynamic-qr.test.ts` |
 | Visibilidad y carga de la billetera | `lib/tickets/wallet-visibility.test.ts`, `lib/tickets/wallet-query.test.ts`, `lib/wallet-os.test.ts` |
 | Anti-duplicado y reloj en puerta | `lib/scanner/admission-lease.test.ts`, `lib/scanner/server-clock.test.ts`, `lib/scanner/scan-replay.test.ts`, `lib/scanner/offline-sync-conflicts.test.ts` |
-| Códigos de respaldo e impresión | `lib/ticket-print.test.ts` |
+| Códigos de respaldo e impresión | `lib/ticket-print.test.ts`, `lib/scanner/manifest-search.test.ts` |
 | Estado visual y ciclo de vida | `lib/ticket-visual-status.test.ts`, `lib/ticket-schedule.test.ts`, `lib/ticket-share.test.ts` |
 
 Se ejecutan con `npm test`.

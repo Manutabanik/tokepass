@@ -15,6 +15,7 @@ import {
   type ScannerDeviceSlot,
 } from "@/lib/scanner/admission-lease"
 import { deviceClockOffsetMs } from "@/lib/totp-offline"
+import { manifestTicketMatchesQuery } from "@/lib/scanner/manifest-search"
 import {
   decryptTotpSecret,
   encryptTotpSecret,
@@ -732,12 +733,7 @@ export async function searchManifestTickets(
   db.close()
 
   return rows
-    .filter((row) => {
-      const name = row.owner_name.toLowerCase()
-      const dni = (row.dni ?? "").toLowerCase()
-      const tier = row.ticket_tier.toLowerCase()
-      return name.includes(q) || dni.includes(q) || tier.includes(q)
-    })
+    .filter((row) => manifestTicketMatchesQuery(row, q))
     .map((row) => ({ ...row, totp_secret: "" }))
     .slice(0, limit)
 }

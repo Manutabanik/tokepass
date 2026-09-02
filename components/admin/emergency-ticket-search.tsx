@@ -50,7 +50,7 @@ export function EmergencyTicketSearch({
 
   const emptyHint = useMemo(() => {
     if (query.trim().length < 2) {
-      return "Escribí al menos 2 caracteres (nombre o DNI)."
+      return "Escribí al menos 2 caracteres (nombre, DNI o código de respaldo)."
     }
     if (!isPending && results.length === 0) {
       return "No encontramos coincidencias en la lista local."
@@ -79,10 +79,10 @@ export function EmergencyTicketSearch({
         className="z-[100] max-h-[85dvh] overflow-hidden border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white sm:max-w-md"
       >
         <DialogHeader>
-          <DialogTitle>Buscar por DNI / Nombre</DialogTitle>
+          <DialogTitle>Buscar entrada</DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            Buscá por nombre o DNI. Si es una mesa, podés validar un acceso o
-            todos juntos.
+            Buscá por nombre, DNI o el código de respaldo que aparece debajo
+            del QR. Si es una mesa, podés validar un acceso o todos juntos.
           </DialogDescription>
         </DialogHeader>
 
@@ -91,7 +91,7 @@ export function EmergencyTicketSearch({
           <Input
             value={query}
             onChange={(event) => handleQuery(event.target.value)}
-            placeholder="Nombre, apellido o DNI"
+            placeholder="Nombre, DNI o código de respaldo"
             autoFocus
             className="h-14 rounded-2xl border-zinc-300 bg-black pl-10 text-base text-zinc-900 dark:border-zinc-700 dark:text-white"
           />
