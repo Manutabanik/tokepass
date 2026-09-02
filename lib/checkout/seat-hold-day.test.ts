@@ -8,7 +8,6 @@ import {
   requireHoldEventDateId,
   seatingUnitMatchesEventDate,
   filterSeatingUnitsForRequestedDay,
-  pickExclusiveHoldRowForRequestedDay,
   pickSeatingUnitRowForRequestedDay,
   inventoryRowMatchesActiveDay,
   storefrontItemMatchesSchedule,
@@ -255,27 +254,6 @@ describe("pickSeatingUnitRowForRequestedDay", () => {
       ],
       dayA,
       2,
-    )
-    assert.equal(picked, null)
-  })
-})
-
-describe("pickExclusiveHoldRowForRequestedDay", () => {
-  it("does not fall back to Friday when Saturday is missing", () => {
-    const picked = pickExclusiveHoldRowForRequestedDay(
-      [{ id: "fri", event_date_id: dayA }],
-      dayB,
-    )
-    assert.equal(picked, null)
-  })
-
-  it("requires a jornada when the combo hold returns more than one row", () => {
-    const picked = pickExclusiveHoldRowForRequestedDay(
-      [
-        { id: "fri", event_date_id: dayA },
-        { id: "sat", event_date_id: dayB },
-      ],
-      null,
     )
     assert.equal(picked, null)
   })

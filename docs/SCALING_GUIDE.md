@@ -6,7 +6,7 @@ TokePass concentra el pico en **reservas atómicas** (`reserve_tickets_tx` / `re
 
 - Corré `npm run load:collision` contra **staging** con `K6_SEATING_UNIT_ID` = una mesa real. Esperás **1 OK** y **99 conflictos** (`SEATING_UNIT_UNAVAILABLE` / sold out), sin timeouts.
 - Spike 5k–10k VUs (`K6_SCENARIO=spike`) solo en un proyecto Supabase de carga, con **Supavisor (transaction pooler)** y `max_connections` deje margen para el dashboard.
-- Confirmá que el evento está `published`, que `zone_tier_pricing` no tiene rangos solapados y que el hold de checkout (≈8 min) no deja unidades colgadas: el cron `expire-orders` tiene que correr.
+- Confirmá que el evento está `published`, que `zone_tier_pricing` no tiene rangos solapados y que el hold de checkout (15 min) no deja unidades colgadas: el cron `expire-orders` tiene que correr.
 
 ## Supabase (Postgres + API)
 

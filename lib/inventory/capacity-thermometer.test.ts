@@ -14,7 +14,6 @@ function ticket(
   return {
     name: patch.name ?? "Entrada",
     price: patch.price ?? 0,
-    capacity: patch.capacity,
     timeLimit: "",
     saleStartsAt: "",
     saleEndsAt: "",
@@ -27,7 +26,6 @@ function ticket(
     minPurchaseLimit: 1,
     maxPurchaseLimit: null,
     admitCount: 1,
-    tierType: patch.tierType,
     listPrice: null,
     bundleItems: [],
     bundleType: null,

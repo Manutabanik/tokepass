@@ -34,6 +34,7 @@ import {
   getOrCreateDeviceHash,
 } from "@/lib/checkout/client-security"
 import { formatCurrency } from "@/lib/format"
+import { SEATING_HOLD_MINUTES } from "@/lib/checkout-hold"
 import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
 import { cn } from "@/lib/utils"
 import type { EventSeatingUnit } from "@/types/venues"
@@ -652,7 +653,7 @@ export function DualSeatingSelector({
               </Button>
               <p className="flex items-center gap-1.5 text-[11px] text-zinc-500">
                 <Clock3 className="size-3.5" aria-hidden="true" />
-                Al continuar, se reserva durante 8 minutos.
+                Al continuar, se reserva durante {SEATING_HOLD_MINUTES} minutos.
               </p>
             </div>
             </div>

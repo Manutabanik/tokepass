@@ -156,23 +156,6 @@ export function pickSeatingUnitRowForRequestedDay<
   )
 }
 
-/** Combo RPC without a loaded schedule: never fall back to another jornada. */
-export function pickExclusiveHoldRowForRequestedDay<
-  T extends { event_date_id?: string | null },
->(
-  rows: readonly T[],
-  eventDateId?: string | null,
-): T | null {
-  const requestedDay = asHoldEventDateId(eventDateId)
-  if (requestedDay) {
-    return (
-      rows.find((row) => asHoldEventDateId(row.event_date_id) === requestedDay) ??
-      null
-    )
-  }
-  return rows.length === 1 ? (rows[0] ?? null) : null
-}
-
 export function requireHoldEventDateId(input: {
   eventDateId?: unknown
   scheduleDayIds: readonly string[]

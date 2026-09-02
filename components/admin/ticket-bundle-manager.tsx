@@ -19,6 +19,7 @@ import {
   type BundleCreatorValue,
 } from "@/components/admin/bundle-creator-modal"
 import { Button } from "@/components/ui/button"
+import { GA_CHECKOUT_HOLD_MINUTES } from "@/lib/checkout-hold"
 import { formatCurrency } from "@/lib/format"
 import {
   BUNDLE_TYPE_LABELS,
@@ -136,7 +137,7 @@ export function TicketBundleManager({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           Abonos, packs con extras y descuentos por volumen. El checkout reserva
-          el stock de cada componente 8 minutos.
+          el stock de cada componente {GA_CHECKOUT_HOLD_MINUTES} minutos.
         </p>
         <Button type="button" onClick={openCreate} className="min-h-11">
           <Plus className="size-4" />

@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation"
 
 import { getEventBundleWorkspace } from "@/app/actions/ticket-bundles"
 import { TicketBundleManager } from "@/components/admin/ticket-bundle-manager"
+import { GA_CHECKOUT_HOLD_MINUTES } from "@/lib/checkout-hold"
 import { parseScheduleDays } from "@/lib/event-schedule"
 import { createClient } from "@/lib/supabase/server"
 
@@ -64,7 +65,8 @@ export default async function EventTiersPage({
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
         Clasificá abonos, packs con extras y descuentos por volumen. El
-        checkout reserva el stock de cada componente durante 8 minutos.
+        checkout reserva el stock de cada componente durante{" "}
+        {GA_CHECKOUT_HOLD_MINUTES} minutos.
         </p>
       </header>
 
