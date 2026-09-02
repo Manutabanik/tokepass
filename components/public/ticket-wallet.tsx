@@ -520,7 +520,11 @@ export function TicketWallet({
                     group.checkoutExtras,
                     group.redemptions,
                   ).map((bundle) => (
-                    <WalletExtrasBundleCard key={bundle.id} bundle={bundle} />
+                    <WalletExtrasBundleCard
+                      key={bundle.id}
+                      bundle={bundle}
+                      isWalletMode
+                    />
                   ))}
                 </div>
               </section>

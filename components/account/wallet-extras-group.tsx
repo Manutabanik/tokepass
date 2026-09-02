@@ -132,8 +132,11 @@ function ExtraQrLightbox({
 
 export function WalletExtrasBundleCard({
   bundle,
+  isWalletMode = false,
 }: {
   bundle: WalletExtraBundle<WalletExtraDisplayUnit>
+  /** In the wallet the extra is an access pass, not an offer: no price, bigger CTA. */
+  isWalletMode?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [scanUnit, setScanUnit] = useState<WalletExtraDisplayUnit | null>(null)
@@ -153,6 +156,7 @@ export function WalletExtrasBundleCard({
         ready={first.ready}
         redeemedLabel={first.redeemedLabel}
         qr={first.qr}
+        isWalletMode={isWalletMode}
       />
     )
   }

@@ -28,6 +28,7 @@ export function ExtraConsumableCard({
   ready,
   redeemedLabel,
   qr,
+  isWalletMode = false,
 }: {
   category: EventItemCategory
   title: string
@@ -41,6 +42,8 @@ export function ExtraConsumableCard({
   qr:
     | { kind: "store"; token: string }
     | { kind: "door"; ticketId: string; totpSecret: string; isStatic: boolean }
+  /** In the wallet the extra is an access pass, not an offer: no price, bigger CTA. */
+  isWalletMode?: boolean
 }) {
   const [scanOpen, setScanOpen] = useState(false)
   const CategoryIcon = EVENT_ITEM_CATEGORY_ICONS[category]
@@ -99,18 +102,23 @@ export function ExtraConsumableCard({
           <p className="text-sm leading-6 text-muted-foreground">{description}</p>
         ) : null}
 
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Valor</span>
-          <span className="font-semibold tabular-nums text-foreground">
-            {formatCurrency(price)}
-          </span>
-        </div>
+        {isWalletMode ? null : (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Valor</span>
+            <span className="font-semibold tabular-nums text-foreground">
+              {formatCurrency(price)}
+            </span>
+          </div>
+        )}
 
         {ready ? (
           <div className="space-y-3">
             <Button
               type="button"
-              className="h-11 w-full cursor-pointer rounded-full bg-violet-500 text-white transition-transform hover:scale-105 hover:bg-violet-400"
+              className={cn(
+                "w-full cursor-pointer rounded-full bg-violet-500 text-white transition-transform hover:scale-105 hover:bg-violet-400",
+                isWalletMode ? "h-14 text-base font-semibold" : "h-11",
+              )}
               onClick={() => setScanOpen(true)}
               title="Tocar para agrandar"
             >
