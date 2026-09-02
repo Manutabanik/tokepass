@@ -112,11 +112,7 @@ function OrderTicketList({
 }: {
   tickets: MyTicket[]
   headingTitle: string
-  userId: string
   offline: boolean
-  appleWalletEnabled: boolean
-  googleWalletEnabled: boolean
-  showQr: boolean
 }) {
   const blocks = groupWalletAccessBlocks(tickets)
   return (
@@ -137,19 +133,11 @@ function OrderTicketList({
 function EventOrderBuckets({
   orders,
   headingTitle,
-  userId,
   offline,
-  appleWalletEnabled,
-  googleWalletEnabled,
-  showQr,
 }: {
   orders: WalletOrderBucket<MyTicket>[]
   headingTitle: string
-  userId: string
   offline: boolean
-  appleWalletEnabled: boolean
-  googleWalletEnabled: boolean
-  showQr: boolean
 }) {
   return (
     <div className="space-y-3">
@@ -169,11 +157,7 @@ function EventOrderBuckets({
             <OrderTicketList
               tickets={order.tickets}
               headingTitle={headingTitle}
-              userId={userId}
               offline={offline}
-              appleWalletEnabled={appleWalletEnabled}
-              googleWalletEnabled={googleWalletEnabled}
-              showQr={showQr}
             />
           </div>
         </section>
@@ -337,24 +321,18 @@ const tabCountClass =
 export function TicketWallet({
   upcoming,
   past,
-  userId,
   barRedemptions = [],
   extraTickets = [],
   storeOffers = [],
   offline = false,
-  appleWalletEnabled = false,
-  googleWalletEnabled = false,
   initialTab,
 }: {
   upcoming: MyTicket[]
   past: MyTicket[]
-  userId: string
   barRedemptions?: MyStoreRedemption[]
   extraTickets?: MyTicket[]
   storeOffers?: StoreOfferBlock[]
   offline?: boolean
-  appleWalletEnabled?: boolean
-  googleWalletEnabled?: boolean
   initialTab?: "upcoming" | "bar" | "past"
 }) {
   const defaultTab =
@@ -472,11 +450,7 @@ export function TicketWallet({
                   <EventOrderBuckets
                     orders={group.orders}
                     headingTitle={group.eventTitle}
-                    userId={userId}
                     offline={offline}
-                    appleWalletEnabled={appleWalletEnabled}
-                    googleWalletEnabled={googleWalletEnabled}
-                    showQr
                   />
                 </AccordionContent>
               </AccordionItem>
@@ -623,11 +597,7 @@ export function TicketWallet({
                 <EventOrderBuckets
                   orders={group.orders}
                   headingTitle={group.eventTitle}
-                  userId={userId}
                   offline={offline}
-                  appleWalletEnabled={appleWalletEnabled}
-                  googleWalletEnabled={googleWalletEnabled}
-                  showQr={false}
                 />
               </section>
             ))}

@@ -12,7 +12,6 @@ import { OfflineTicketWallet } from "@/components/pwa/offline-ticket-wallet"
 import { loginUrlWithNext } from "@/lib/auth/post-login"
 import { countActiveTickets } from "@/lib/ticket-schedule"
 import { walletFriendlyLoadError } from "@/lib/tickets/wallet-query"
-import { getWalletUiFlags } from "@/lib/wallet-cache"
 
 export async function DigitalWalletScreen({
   userId,
@@ -48,8 +47,6 @@ export async function DigitalWalletScreen({
   if (redemptionsResult.status === "fulfilled") {
     storeRedemptions = redemptionsResult.value
   }
-
-  const walletFlags = getWalletUiFlags()
 
   const eligibleEvents = new Map<string, { title: string }>()
   for (const ticket of initialTickets) {
@@ -113,8 +110,6 @@ export async function DigitalWalletScreen({
           barRedemptions={storeRedemptions}
           storeOffers={storeBlocks}
           loadError={loadError}
-          appleWalletEnabled={walletFlags.appleWalletEnabled}
-          googleWalletEnabled={walletFlags.googleWalletEnabled}
         />
       </Suspense>
     </section>

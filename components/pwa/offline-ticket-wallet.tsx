@@ -25,8 +25,6 @@ type OfflineTicketWalletProps = {
   barRedemptions?: MyStoreRedemption[]
   storeOffers?: StoreOfferBlock[]
   loadError?: string | null
-  appleWalletEnabled?: boolean
-  googleWalletEnabled?: boolean
 }
 
 export function OfflineTicketWallet({
@@ -35,8 +33,6 @@ export function OfflineTicketWallet({
   barRedemptions = [],
   storeOffers = [],
   loadError = null,
-  appleWalletEnabled = false,
-  googleWalletEnabled = false,
 }: OfflineTicketWalletProps) {
   const online = useOnlineStatus()
   const searchParams = useSearchParams()
@@ -166,13 +162,10 @@ export function OfflineTicketWallet({
         <TicketWallet
           upcoming={upcoming}
           past={past}
-          userId={userId}
           extraTickets={extraTickets}
           barRedemptions={online ? barRedemptions : []}
           storeOffers={online ? storeOffers : []}
           offline={!online}
-          appleWalletEnabled={appleWalletEnabled}
-          googleWalletEnabled={googleWalletEnabled}
           initialTab={initialTab}
         />
       )}
