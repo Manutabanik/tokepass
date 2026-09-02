@@ -311,6 +311,12 @@ export type InteractiveVenueMap = {
   backgroundScale: number
   backgroundX: number
   backgroundY: number
+  /**
+   * Draw the chairs of a closed block as a decorative ring so the organiser can
+   * judge how much room a table takes. Purely cosmetic: the chairs never carry
+   * inventory nor accept pointer events.
+   */
+  showAestheticChairs: boolean
 }
 
 export function emptyVenueMap(): InteractiveVenueMap {
@@ -333,6 +339,7 @@ export function emptyVenueMap(): InteractiveVenueMap {
     backgroundScale: 1,
     backgroundX: 0,
     backgroundY: 0,
+    showAestheticChairs: true,
   }
 }
 
@@ -500,6 +507,9 @@ function parseElement(raw: unknown, index = 0): VenueMapElement | null {
             }
           })
         : []
+  const chairCount = asNumber(item.chairCount, 8)
+  const sideA = asNumber(item.sideA, 4)
+  const sideB = asNumber(item.sideB, 4)
   return {
     id,
     type: layer === "infrastructure" ? "infrastructure" : type,
@@ -522,9 +532,9 @@ function parseElement(raw: unknown, index = 0): VenueMapElement | null {
       item.color ?? (layer === "infrastructure" ? "#a1a1aa" : "#f97316"),
     ),
     opacity: asOpacity(item.opacity, layer === "infrastructure" ? 0.92 : 1),
-    chairCount: asNumber(item.chairCount, 8),
-    sideA: asNumber(item.sideA, 4),
-    sideB: asNumber(item.sideB, 4),
+    chairCount,
+    sideA,
+    sideB,
     ...(layer === "infrastructure"
       ? { sellMode: "per_seat" as const, priceMode: "per_person" as const }
       : resolveVenuePricing({
@@ -532,8 +542,22 @@ function parseElement(raw: unknown, index = 0): VenueMapElement | null {
           priceMode: item.priceMode ?? item.price_mode,
           fallback: "per_seat",
         })),
+    // Capacity is the hard number a table sells, so a legacy map that never
+    // stored it must inherit the geometry instead of parsing as zero.
     capacity:
-      layer === "infrastructure" ? 0 : Math.max(0, asNumber(item.capacity, 0)),
+      layer === "infrastructure"
+        ? 0
+        : Math.max(
+            0,
+            asNumber(
+              item.capacity,
+              type === "long_table"
+                ? sideA + sideB
+                : type === "round_table" || type === "vip_box"
+                  ? chairCount
+                  : 0,
+            ),
+          ),
     seats,
     zoneId: textOrUndefined(item.zoneId ?? item.zone_id ?? item.parentId),
     groupId:
@@ -895,6 +919,10 @@ export function parseVenueMap(raw: unknown): InteractiveVenueMap {
       : 1,
     backgroundX: asNumber(record.backgroundX ?? record.background_x, 0),
     backgroundY: asNumber(record.backgroundY ?? record.background_y, 0),
+    showAestheticChairs:
+      parseOptionalBoolean(
+        record.showAestheticChairs ?? record.show_aesthetic_chairs,
+      ) ?? true,
   }
 }
 

@@ -20,6 +20,8 @@ import {
 } from "@/lib/seating/buyer-seat-fill"
 import { lookupOccupancyStatus } from "@/lib/seating/venue-map-occupancy"
 import {
+  aestheticChairGeometry,
+  isClosedBlockElement,
   resolveVenueShapeType,
   VENUE_SHAPE,
 } from "@/lib/seating/venue-element-geometry"
@@ -37,8 +39,18 @@ function seatInteractionProps(
   locked = false,
   onSeatPointerUp?: (event: React.PointerEvent, seatId: string) => void,
   parentId?: string,
+  interactive = true,
 ) {
   if (!seatId) return undefined
+  // Chairs of a closed block are decoration. They must not answer to the
+  // pointer nor advertise themselves as inventory, or hit-testing would resolve
+  // to the chair instead of the table that actually holds the price.
+  if (!interactive) {
+    return {
+      className: "pointer-events-none",
+      style: { pointerEvents: "none" as const },
+    }
+  }
   return {
     "data-inventory": parentId ? "element-seat" : "seat",
     "data-element-id": parentId,
@@ -75,8 +87,9 @@ function expandedChairHit(
   onSeatPointerUp?: (event: React.PointerEvent, seatId: string) => void,
   locked = false,
   parentId?: string,
+  interactive = true,
 ) {
-  if (!seatId || locked) return null
+  if (!seatId || locked || !interactive) return null
   if (
     !onSeatPointerDown &&
     !onSeatDoubleClick &&
@@ -367,6 +380,7 @@ export function RoundTableSymbol({
   onSeatPointerUp,
   buyerOccupancy = false,
   hitPadding = 0,
+  seatsInteractive = true,
 }: {
   cx: number
   cy: number
@@ -382,6 +396,7 @@ export function RoundTableSymbol({
   onSeatPointerUp?: (event: React.PointerEvent, seatId: string) => void
   buyerOccupancy?: boolean
   hitPadding?: number
+  seatsInteractive?: boolean
 }) {
   const r = Math.max(8, radius)
   const orbit = r + CHAIR_DOT_RADIUS + 2
@@ -412,6 +427,7 @@ export function RoundTableSymbol({
               onSeatPointerUp,
               locked,
               parentIds[0] ?? undefined,
+              seatsInteractive,
             )}
             <circle
               cx={x}
@@ -428,6 +444,7 @@ export function RoundTableSymbol({
                 locked,
                 onSeatPointerUp,
                 parentIds[0] ?? undefined,
+                seatsInteractive,
               )}
             />
           </g>
@@ -462,6 +479,7 @@ export function LongTableSymbol({
   onSeatPointerUp,
   buyerOccupancy = false,
   hitPadding = 0,
+  seatsInteractive = true,
 }: {
   cx: number
   cy: number
@@ -481,6 +499,7 @@ export function LongTableSymbol({
   onSeatPointerUp?: (event: React.PointerEvent, seatId: string) => void
   buyerOccupancy?: boolean
   hitPadding?: number
+  seatsInteractive?: boolean
 }) {
   const w = Math.max(8, width)
   const h = Math.max(8, height)
@@ -512,6 +531,7 @@ export function LongTableSymbol({
             onSeatPointerUp,
             locked,
             parentIds[0] ?? undefined,
+            seatsInteractive,
           )}
           <circle
             cx={x}
@@ -528,6 +548,7 @@ export function LongTableSymbol({
               locked,
               onSeatPointerUp,
               parentIds[0] ?? undefined,
+              seatsInteractive,
             )}
           />
         </g>
@@ -568,6 +589,7 @@ export function VipBoxSymbol({
   onSeatPointerUp,
   buyerOccupancy = false,
   hitPadding = 0,
+  seatsInteractive = true,
 }: {
   cx: number
   cy: number
@@ -585,6 +607,7 @@ export function VipBoxSymbol({
   onSeatPointerUp?: (event: React.PointerEvent, seatId: string) => void
   buyerOccupancy?: boolean
   hitPadding?: number
+  seatsInteractive?: boolean
 }) {
   const w = Math.max(24, width)
   const h = Math.max(18, height)
@@ -684,6 +707,7 @@ export function VipBoxSymbol({
               onSeatPointerUp,
               locked,
               parentIds[0] ?? undefined,
+              seatsInteractive,
             )}
             <circle
               cx={x}
@@ -700,6 +724,7 @@ export function VipBoxSymbol({
                 locked,
                 onSeatPointerUp,
                 parentIds[0] ?? undefined,
+                seatsInteractive,
               )}
             />
           </g>
@@ -855,6 +880,7 @@ export function VenueElementSymbol({
   selectedSeatIds,
   showLabels = true,
   showChairs = true,
+  showAestheticChairs = true,
   zoom = 1,
   label,
   onSeatPointerDown,
@@ -869,6 +895,8 @@ export function VenueElementSymbol({
   selectedSeatIds: Set<string>
   showLabels?: boolean
   showChairs?: boolean
+  /** Decorative chair ring on closed blocks. Never affects sellable seats. */
+  showAestheticChairs?: boolean
   zoom?: number
   label?: string
   onSeatPointerDown?: (event: React.PointerEvent, seatId: string) => void
@@ -880,7 +908,18 @@ export function VenueElementSymbol({
   const shape = resolveVenueShapeType(element)
   const color = element.color
   const rx = element.roundedCorner
-  const chairs = showChairs ? (element.seats ?? []) : []
+  const seatsInteractive = !isClosedBlockElement(element)
+  // A closed block draws one chair per declared place. Its stored seats are
+  // stale geometry the moment capacity changes, so they are not to be trusted
+  // for the ring the organiser uses to judge spacing. Turning the ring off is
+  // cosmetic and must never reach chairs that are real inventory.
+  const aesthetic =
+    seatsInteractive || !showAestheticChairs
+      ? null
+      : aestheticChairGeometry(element)
+  const chairsHidden =
+    !showChairs || (!seatsInteractive && !showAestheticChairs)
+  const chairs = chairsHidden ? [] : (aesthetic?.seats ?? element.seats ?? [])
   const parentIds = [element.id]
   const live = elementOccupancyState(
     occupancyBySeatId,
@@ -925,6 +964,7 @@ export function VenueElementSymbol({
         onSeatPointerUp={onSeatPointerUp}
         buyerOccupancy={buyerOccupancy}
         hitPadding={hitPadding}
+        seatsInteractive={seatsInteractive}
       />
     )
   }
@@ -938,8 +978,8 @@ export function VenueElementSymbol({
         color={color}
         selected={selected}
         roundedCorner={rx ?? 4}
-        sideA={showChairs ? element.sideA : 0}
-        sideB={showChairs ? element.sideB : 0}
+        sideA={chairsHidden ? 0 : (aesthetic?.sideA ?? element.sideA)}
+        sideB={chairsHidden ? 0 : (aesthetic?.sideB ?? element.sideB)}
         chairs={chairs}
         occupancyBySeatId={occupancyBySeatId}
         parentIds={parentIds}
@@ -949,6 +989,7 @@ export function VenueElementSymbol({
         onSeatPointerUp={onSeatPointerUp}
         buyerOccupancy={buyerOccupancy}
         hitPadding={hitPadding}
+        seatsInteractive={seatsInteractive}
       />
     )
   }
@@ -971,6 +1012,7 @@ export function VenueElementSymbol({
         onSeatPointerUp={onSeatPointerUp}
         buyerOccupancy={buyerOccupancy}
         hitPadding={hitPadding}
+        seatsInteractive={seatsInteractive}
       />
     )
   }

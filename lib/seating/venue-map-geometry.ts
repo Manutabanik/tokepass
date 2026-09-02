@@ -73,12 +73,19 @@ export function elementInventorySectorId(element: VenueMapElement): string {
   return element.groupId?.trim() || element.id
 }
 
+/**
+ * Accesses a block-sold unit emits, i.e. how many QRs the table hands out.
+ *
+ * `capacity` wins: it is the number the organiser types, and the chairs on the
+ * canvas are only a drawing of it. The geometry fallbacks exist for legacy maps
+ * saved before capacity was stored.
+ */
 function elementUnitCapacity(element: VenueMapElement): number {
+  const sides = (element.sideA || 0) + (element.sideB || 0)
+  const geometry =
+    element.type === "long_table" ? sides || element.chairCount : element.chairCount
   const active = element.seats.filter((seat) => seat.status !== "blocked").length
-  return Math.min(
-    100,
-    Math.max(1, active || element.chairCount || element.capacity || 1),
-  )
+  return Math.min(100, Math.max(1, element.capacity || geometry || active || 1))
 }
 
 function serializeStandaloneElement(element: VenueMapElement) {
@@ -95,7 +102,6 @@ function serializeStandaloneElement(element: VenueMapElement) {
   }
 
   const groupSale = element.sellMode === "group"
-  const activeSeats = element.seats.filter((seat) => seat.status !== "blocked")
   if (groupSale) {
     return {
       id: element.id,
@@ -103,7 +109,7 @@ function serializeStandaloneElement(element: VenueMapElement) {
       color: element.color,
       pricing_tier_id: null,
       layout_type: "table_combo" as VenueLayoutType,
-      capacity_per_unit: Math.max(1, activeSeats.length || element.chairCount || 1),
+      capacity_per_unit: elementUnitCapacity(element),
       rows: [
         {
           row_id: `${element.id}-group`,
@@ -113,7 +119,9 @@ function serializeStandaloneElement(element: VenueMapElement) {
             {
               id: element.id,
               label: venueElementTicketLabel(element) || element.label,
-              capacity: Math.max(1, activeSeats.length || 1),
+              // Must agree with capacity_per_unit: this is what decides how
+              // many QRs the table emits.
+              capacity: elementUnitCapacity(element),
               status: "available" as const,
             },
           ],
@@ -290,7 +298,13 @@ export function venueMapToSeatingLayout(
 
   const fromZones = (map.zones ?? []).map((zone) => expandParametricZone(zone))
 
-  return [...fromSectors, ...fromElements, ...fromZones]
+  // The buyer map has no editor state to read, so the decision of drawing
+  // chairs or plain blocks travels with the exported layout.
+  const renderChairs = map.showAestheticChairs !== false
+  return [...fromSectors, ...fromElements, ...fromZones].map((sector) => ({
+    ...sector,
+    render_chairs: renderChairs,
+  }))
 }
 
 export function venueMapCapacity(map: InteractiveVenueMap): number {
@@ -396,6 +410,8 @@ export function seatingLayoutToVenueMap(
   map.backgroundScale = existing?.backgroundScale ?? map.backgroundScale
   map.backgroundX = existing?.backgroundX ?? map.backgroundX
   map.backgroundY = existing?.backgroundY ?? map.backgroundY
+  map.showAestheticChairs =
+    existing?.showAestheticChairs ?? map.showAestheticChairs
   return map
 }
 

@@ -101,6 +101,13 @@ function mergePreservedSeatFields(
   })
 }
 
+/** `0` is a valid side (a table pushed against a wall), so only treat a
+ * missing or broken value as unset. A bare `|| fallback` would resurrect the
+ * chairs the organiser just removed. */
+function sideSeatCount(value: number, fallback: number): number {
+  return Number.isFinite(value) ? Math.floor(value) : fallback
+}
+
 export function rebuildElementSeats(element: VenueMapElement): VenueMapElementSeat[] {
   const prefix = element.id
   if (element.type === "infrastructure" || element.type === "standing_zone") {
@@ -134,8 +141,8 @@ export function rebuildElementSeats(element: VenueMapElement): VenueMapElementSe
     return mergePreservedSeatFields(seats, element.seats)
   }
   if (element.type === "long_table") {
-    const sideA = Math.min(12, Math.max(1, Math.floor(element.sideA) || 4))
-    const sideB = Math.min(12, Math.max(0, Math.floor(element.sideB) || 4))
+    const sideA = Math.min(12, Math.max(1, sideSeatCount(element.sideA, 4)))
+    const sideB = Math.min(12, Math.max(0, sideSeatCount(element.sideB, 4)))
     const width = Math.max(8, element.width || VENUE_SHAPE.longTableWidth)
     const height = Math.max(8, element.height || VENUE_SHAPE.longTableHeight)
     const inset = 8
@@ -189,6 +196,118 @@ export function rebuildElementSeats(element: VenueMapElement): VenueMapElementSe
   return []
 }
 
+/**
+ * A table sold as one closed package. Its chairs are a drawing of `capacity`,
+ * never inventory of their own, so nothing inside it may be clicked, selected
+ * or priced separately.
+ */
+function isTableType(type: VenueElementType): boolean {
+  return (
+    type === "round_table" || type === "long_table" || type === "vip_box"
+  )
+}
+
+function defaultElementCapacity(type: VenueElementType): number {
+  if (type === "standing_zone") return 80
+  if (type === "round_table") return 8
+  if (type === "long_table") return 8
+  if (type === "vip_box") return 6
+  return 0
+}
+
+export function isClosedBlockElement(
+  element: Pick<VenueMapElement, "type" | "sellMode">,
+): boolean {
+  if (
+    element.type !== "round_table" &&
+    element.type !== "long_table" &&
+    element.type !== "vip_box"
+  ) {
+    return false
+  }
+  return element.sellMode === "group"
+}
+
+/**
+ * Bounds the organiser can pick from. They mirror what `rebuildElementSeats`
+ * can actually draw: letting capacity exceed the geometry would silently clamp
+ * the chairs and leave the sold accesses disagreeing with the map.
+ */
+export function elementCapacityRange(
+  element: Pick<VenueMapElement, "type">,
+): { min: number; max: number } {
+  if (element.type === "long_table") return { min: 1, max: 24 }
+  if (element.type === "standing_zone") return { min: 1, max: 100 }
+  return { min: 2, max: 12 }
+}
+
+/**
+ * Places the element offers. `capacity` is the organiser's own number and wins;
+ * the geometry is only consulted for legacy maps saved before it existed.
+ */
+export function elementCapacity(element: VenueMapElement): number {
+  if (element.type === "standing_zone") {
+    return Math.max(1, Math.floor(element.capacity) || 1)
+  }
+  if (element.type === "vip_chair") return 1
+  const declared = Math.floor(element.capacity) || 0
+  if (declared > 0) return declared
+  if (element.type === "long_table") {
+    const sides =
+      (Math.floor(element.sideA) || 0) + (Math.floor(element.sideB) || 0)
+    return sides > 0 ? sides : Math.max(1, Math.floor(element.chairCount) || 1)
+  }
+  return Math.max(1, Math.floor(element.chairCount) || 1)
+}
+
+/**
+ * Decorative chairs for a closed block, one per declared place. Derived from
+ * `capacity` instead of the stored seats so the ring always shows what the
+ * table actually sells, even on a map whose chairs were never generated.
+ */
+export function aestheticChairGeometry(element: VenueMapElement): {
+  seats: VenueMapElementSeat[]
+  sideA: number
+  sideB: number
+} {
+  const drawn = {
+    ...element,
+    ...elementCapacityPatch(element, elementCapacity(element)),
+  }
+  return {
+    seats: rebuildElementSeats(drawn),
+    sideA: drawn.sideA,
+    sideB: drawn.sideB,
+  }
+}
+
+/**
+ * Patch that makes capacity the single number the organiser edits: it drives
+ * both the chairs drawn on the canvas and the accesses emitted per unit, so the
+ * two cannot drift apart.
+ *
+ * Long tables spread it across their two sides. A table that is currently
+ * one-sided stays one-sided until it no longer fits on a single side.
+ */
+export function elementCapacityPatch(
+  element: VenueMapElement,
+  capacity: number,
+): Partial<VenueMapElement> {
+  const { min, max } = elementCapacityRange(element)
+  const next = Math.min(max, Math.max(min, Math.floor(capacity) || min))
+
+  if (element.type === "vip_chair") return {}
+  if (element.type === "standing_zone") return { capacity: next }
+
+  if (element.type === "long_table") {
+    const oneSided = (Math.floor(element.sideB) || 0) === 0
+    const sideA = oneSided ? Math.min(12, next) : Math.ceil(next / 2)
+    return { capacity: next, chairCount: next, sideA, sideB: next - sideA }
+  }
+
+  return { capacity: next, chairCount: next }
+}
+
 export function createVenueElement(
   type: VenueElementType,
   index: number,
@@ -218,9 +337,10 @@ export function createVenueElement(
     chairCount: type === "round_table" ? 8 : 6,
     sideA: 4,
     sideB: 4,
-    sellMode: type === "vip_box" ? "group" : "per_seat",
-    priceMode: type === "vip_box" ? "closed_unit" : "per_person",
-    capacity: type === "standing_zone" ? 80 : 0,
+    // Tables are closed packages: one price, one reservation, N accesses.
+    sellMode: isTableType(type) ? "group" : "per_seat",
+    priceMode: isTableType(type) ? "closed_unit" : "per_person",
+    capacity: defaultElementCapacity(type),
     seats: [],
     ...(extras?.zoneId?.trim() ? { zoneId: extras.zoneId.trim() } : {}),
   }

@@ -64,7 +64,9 @@ describe("reconcile map seating units", () => {
     const table = drafts.find((draft) => draft.layoutItemId === "mesa-08")
     assert.ok(table)
     assert.equal(table?.layoutType, "table_combo")
-    assert.equal(table?.capacityPerUnit, 2)
+    // Declared capacity rules the accesses, not how many chair dots the map
+    // happens to store: this table seats 8 even with 2 chairs drawn.
+    assert.equal(table?.capacityPerUnit, 8)
     assert.equal(table?.ticketTypeId, "tier-grada")
     assert.equal(
       drafts.some((draft) => draft.layoutItemId === "mesa-08-S1"),

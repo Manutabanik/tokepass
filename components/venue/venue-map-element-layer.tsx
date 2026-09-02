@@ -34,6 +34,7 @@ const VenueElementShape = memo(function VenueElementShape({
   hitPadding = 0,
   showLabels,
   showChairs,
+  showAestheticChairs = true,
   interactive,
   zoom,
   dimmed = false,
@@ -93,6 +94,7 @@ const VenueElementShape = memo(function VenueElementShape({
   hitPadding?: number
   showLabels: boolean
   showChairs: boolean
+  showAestheticChairs?: boolean
   interactive: boolean
   zoom: number
   dimmed?: boolean
@@ -237,6 +239,7 @@ const VenueElementShape = memo(function VenueElementShape({
           selectedSeatIds={selectedSeatIds}
           showLabels={showLabels}
           showChairs={showChairs}
+          showAestheticChairs={showAestheticChairs}
           zoom={zoom}
           label={element.type === "standing_zone" ? undefined : labelText}
           onSeatPointerDown={
@@ -370,6 +373,7 @@ export const VenueMapElementLayer = memo(function VenueMapElementLayer({
   selectOnPointerUp = false,
   hitPadding = 0,
   showSeats = true,
+  showAestheticChairs = true,
   zoom = 1,
   interactive = true,
   spotlight = false,
@@ -430,6 +434,8 @@ export const VenueMapElementLayer = memo(function VenueMapElementLayer({
   selectOnPointerUp?: boolean
   hitPadding?: number
   showSeats?: boolean
+  /** Decorative chair ring on closed blocks. Never hides sellable seats. */
+  showAestheticChairs?: boolean
   zoom?: number
   interactive?: boolean
   spotlight?: boolean
@@ -533,6 +539,7 @@ export const VenueMapElementLayer = memo(function VenueMapElementLayer({
               }
               showLabels={renderLabels || isSelected || isHighlighted}
               showChairs={renderChairs || isSelected}
+              showAestheticChairs={showAestheticChairs}
               interactive={
                 visible &&
                 interactive &&

@@ -127,6 +127,7 @@ import {
   publicRevealSeats,
   resolveLodZones,
   shouldEnableMapLod,
+  shouldRenderMapBackground,
   shouldRunBuyerAutoFit,
   zoneCanvasAabb,
   type BuyerMapFitInset,
@@ -1585,7 +1586,9 @@ export function InteractiveSeatingCanvas({
             >
               {stageLabel}
             </text>
-            <VenueMapBackgroundLayer map={map} />
+            {shouldRenderMapBackground({ lodEnabled, viewMode }) ? (
+              <VenueMapBackgroundLayer map={map} />
+            ) : null}
             {map.aisles.map((aisle) => (
               <rect
                 key={aisle.id}
@@ -1662,6 +1665,7 @@ export function InteractiveSeatingCanvas({
               preserveOrder
               popSelected={false}
               showSeats
+              showAestheticChairs={map.showAestheticChairs !== false}
               zoom={zoom}
               interactive={!readOnly}
               buyerOccupancy={buyerOccupancy}

@@ -169,6 +169,41 @@ describe("venue-map-geometry", () => {
     assert.equal(layout[0]?.rows[0]?.items[0]?.id, "M-01")
   })
 
+  it("keeps a block-sold table's accesses when the map carries no seats", () => {
+    // capacity_per_unit decides how many QRs a table emits, so it must fall
+    // back to the declared geometry instead of collapsing to a single access
+    // when seats[] is absent.
+    const layout = venueMapToSeatingLayout(
+      parseVenueMap({
+        elements: [
+          {
+            id: "M-09",
+            type: "round_table",
+            label: "Mesa 09",
+            category: "commercial",
+            sectorName: "VIP",
+            x: 100,
+            y: 100,
+            width: 36,
+            height: 36,
+            rotation: 0,
+            price: 50000,
+            color: "#ea580c",
+            opacity: 1,
+            chairCount: 8,
+            sideA: 4,
+            sideB: 4,
+            sellMode: "group",
+            capacity: 8,
+            seats: [],
+          },
+        ],
+      }),
+    )
+    assert.equal(layout[0]?.capacity_per_unit, 8)
+    assert.equal(layout[0]?.rows[0]?.items[0]?.capacity, 8)
+  })
+
   it("flattens nested sector elements and snake_case background", () => {
     const map = parseVenueMap({
       background_image: "https://cdn.example.com/anfiteatro.jpg",

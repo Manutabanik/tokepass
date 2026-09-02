@@ -7,6 +7,7 @@ import {
   AlignEndVertical,
   AlignStartHorizontal,
   AlignStartVertical,
+  Armchair,
   Spline,
   Group,
   Ungroup,
@@ -194,7 +195,11 @@ import {
 import {
   cloneVenueElement,
   createVenueElement,
+  elementCapacity,
+  elementCapacityPatch,
+  elementCapacityRange,
   explodeVenueSectorToChairs,
+  isClosedBlockElement,
   rebuildElementSeats,
 } from "@/lib/seating/venue-element-geometry"
 import {
@@ -1308,6 +1313,7 @@ export function InteractiveVenueMapEditor({
   }, [liveSelection, renderMap.zones])
   const zoneFillsPermeable =
     svgPassThrough || transformingKind != null || isPanning
+  const isAestheticMode = map.showAestheticChairs !== false
   const showElementSeats = (renderMap.elements?.length ?? 0) < 220
   const activePriceGroup = matchPriceGroupFromSelection(map, {
     sectorId: selectedSector?.id ?? null,
@@ -1921,6 +1927,14 @@ export function InteractiveVenueMapEditor({
         ensureElements(current),
         selectedElementIds,
       ),
+    })
+  }
+
+  function toggleAestheticChairs() {
+    const current = mapRef.current
+    commit({
+      ...current,
+      showAestheticChairs: current.showAestheticChairs === false,
     })
   }
 
@@ -3581,6 +3595,10 @@ export function InteractiveVenueMapEditor({
     shiftKey = false,
   ) {
     if (workModeRef.current === "pricing") return false
+    // A closed block has no editable interior: its chairs are a drawing of
+    // `capacity`, so selecting one would suggest a per-seat sale that does not
+    // exist.
+    if (isClosedBlockElement(element)) return false
     const seat = seatId
       ? element.seats.find((item) => item.id === seatId)
       : element.seats[0]
@@ -3682,6 +3700,14 @@ export function InteractiveVenueMapEditor({
     seatId: string,
   ) {
     if (!element?.id || !seatId) return
+    // A chair is part of the table, not a target of its own: unless the
+    // organiser is explicitly editing seats, grabbing one selects and drags the
+    // whole unit. Delegating before any side effect keeps the pointer handling
+    // identical to grabbing the table body.
+    if (!(event.detail >= 2 || seatEditModeRef.current || event.shiftKey)) {
+      onMapElementPointerDown(event, element)
+      return
+    }
     blurCanvasTypingTarget()
     if (wantsCanvasPan(event)) return
     if (
@@ -3694,15 +3720,11 @@ export function InteractiveVenueMapEditor({
     }
     isolateCanvasPointer(event, { preventGhostClick: true })
     if (event.button !== 0) return
-    const key = elementSeatKey(element.id, seatId)
-    if (event.detail >= 2 || seatEditModeRef.current || event.shiftKey) {
-      enterIsolation(element.id)
-      beginSeatEditFromPointer([key], event.shiftKey)
-      return
-    }
     enterIsolation(element.id)
-    applyElementIds([element.id], { isolate: true })
-    requestMobileProperties()
+    beginSeatEditFromPointer(
+      [elementSeatKey(element.id, seatId)],
+      event.shiftKey,
+    )
   }
 
   function patchSeatsByKeys(
@@ -5155,6 +5177,19 @@ export function InteractiveVenueMapEditor({
         <Magnet className="size-3.5" />
         <span className="hidden xl:inline">Alinear a la grilla</span>
       </Button>
+      <Button
+        type="button"
+        variant={isAestheticMode ? "secondary" : "ghost"}
+        size="sm"
+        title="Mostrar sillas: dibuja una silla por lugar alrededor de cada mesa para calcular el espacio. Es solo decoración, no cambia cuántas entradas se emiten."
+        aria-label="Mostrar sillas"
+        aria-pressed={isAestheticMode}
+        onClick={toggleAestheticChairs}
+        className="h-8 px-2"
+      >
+        <Armchair className="size-3.5" />
+        <span className="hidden xl:inline">Mostrar sillas</span>
+      </Button>
     </div>
   ) : null
 
@@ -5473,6 +5508,7 @@ export function InteractiveVenueMapEditor({
                 interactive={objectHitsEnabled}
                 delegateEvents
                 showSeats={showElementSeats}
+                showAestheticChairs={isAestheticMode}
                 zoom={zoom}
                 popSelected={false}
                 isolationDimIds={isolationDimElementIds}
@@ -5589,6 +5625,7 @@ export function InteractiveVenueMapEditor({
                     interactive={objectHitsEnabled}
                     delegateEvents
                     showSeats={showElementSeats}
+                    showAestheticChairs={isAestheticMode}
                     zoom={zoom}
                     popSelected={false}
                     isolationDimIds={isolationDimElementIds}
@@ -6299,66 +6336,36 @@ export function InteractiveVenueMapEditor({
                 element={selectedElement}
                 onChange={(patch) => patchElement(selectedElement.id, patch)}
               />
-              {selectedElement.type === "round_table" ||
-              selectedElement.type === "vip_box" ? (
-                <Field label="Cantidad de sillas">
+              {selectedElement.type === "vip_chair" ? null : (
+                <Field
+                  label={
+                    selectedElement.type === "standing_zone"
+                      ? "Cupo máximo"
+                      : "Capacidad (personas)"
+                  }
+                >
                   <Input
                     type="number"
-                    min={2}
-                    max={12}
-                    value={selectedElement.chairCount}
+                    min={elementCapacityRange(selectedElement).min}
+                    max={elementCapacityRange(selectedElement).max}
+                    value={elementCapacity(selectedElement)}
                     onChange={(event) =>
-                      patchElement(selectedElement.id, {
-                        chairCount: Number(event.target.value) || 2,
-                      })
+                      patchElement(
+                        selectedElement.id,
+                        elementCapacityPatch(
+                          selectedElement,
+                          Number(event.target.value),
+                        ),
+                      )
                     }
                   />
+                  {selectedElement.type === "standing_zone" ? null : (
+                    <p className="text-[11px] leading-snug text-muted-foreground">
+                      Define las sillas del plano y los accesos que se emiten.
+                    </p>
+                  )}
                 </Field>
-              ) : null}
-              {selectedElement.type === "long_table" ? (
-                <div className="grid grid-cols-2 gap-2">
-                  <Field label="Lado A">
-                    <Input
-                      type="number"
-                      min={1}
-                      max={12}
-                      value={selectedElement.sideA}
-                      onChange={(event) =>
-                        patchElement(selectedElement.id, {
-                          sideA: Number(event.target.value) || 1,
-                        })
-                      }
-                    />
-                  </Field>
-                  <Field label="Lado B">
-                    <Input
-                      type="number"
-                      min={0}
-                      max={12}
-                      value={selectedElement.sideB}
-                      onChange={(event) =>
-                        patchElement(selectedElement.id, {
-                          sideB: Number(event.target.value) || 0,
-                        })
-                      }
-                    />
-                  </Field>
-                </div>
-              ) : null}
-              {selectedElement.type === "standing_zone" ? (
-                <Field label="Cupo máximo">
-                  <Input
-                    type="number"
-                    min={1}
-                    value={selectedElement.capacity}
-                    onChange={(event) =>
-                      patchElement(selectedElement.id, {
-                        capacity: Number(event.target.value) || 1,
-                      })
-                    }
-                  />
-                </Field>
-              ) : null}
+              )}
               {selectedGroupId ? (
                 <Field label="Nombre del sector">
                   <Input

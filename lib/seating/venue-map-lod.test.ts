@@ -25,6 +25,7 @@ import {
   publicRevealSeats,
   resolveLodZones,
   shouldEnableMapLod,
+  shouldRenderMapBackground,
   shouldRunBuyerAutoFit,
   synthesizeLodZones,
   zoneCanvasAabb,
@@ -151,6 +152,23 @@ describe("venue-map-lod", () => {
     map.zones = [zone()]
     assert.equal(resolveLodZones(map).length, 1)
     assert.equal(shouldEnableMapLod(map), true)
+  })
+
+  it("deja la imagen del predio en el nivel de orientacion y la desmonta dentro de una zona", () => {
+    assert.equal(
+      shouldRenderMapBackground({ lodEnabled: true, viewMode: "macro" }),
+      true,
+    )
+    assert.equal(
+      shouldRenderMapBackground({ lodEnabled: true, viewMode: "micro" }),
+      false,
+    )
+    // Sin zonas trazadas no hay dos niveles, asi que el fondo es el unico
+    // contexto que tiene el comprador y no se puede sacar.
+    assert.equal(
+      shouldRenderMapBackground({ lodEnabled: false, viewMode: "micro" }),
+      true,
+    )
   })
 
   it("une mesas y asientos y no usa zonas si hay contenido", () => {

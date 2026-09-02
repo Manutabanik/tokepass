@@ -23,6 +23,11 @@ export type VenueSeatingSector = {
   pricing_tier_id: string | null
   layout_type: VenueLayoutType
   capacity_per_unit: number
+  /**
+   * Whether the buyer map draws the decorative chairs of this sector or shows
+   * it as a plain block. Absent on layouts exported before the toggle existed.
+   */
+  render_chairs?: boolean
   /** Legacy flat layouts created before the row-by-row engine. */
   items?: VenueSeatingItem[]
   rows: VenueSeatingRow[]

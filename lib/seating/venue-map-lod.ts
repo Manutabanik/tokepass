@@ -172,6 +172,19 @@ export function shouldEnableMapLod(map: InteractiveVenueMap): boolean {
   return resolveLodZones(map).length > 0
 }
 
+/**
+ * The uploaded venue render belongs to the orientation level only. Inside a
+ * zone it is pure cost: the buyer already knows where they are, and the browser
+ * would rasterise a full-canvas image at whatever zoom the reveal lands on,
+ * under an abstract layout that is meant to read as clean vectors.
+ */
+export function shouldRenderMapBackground(input: {
+  lodEnabled: boolean
+  viewMode: MapLodMode
+}): boolean {
+  return !input.lodEnabled || input.viewMode === "macro"
+}
+
 export function expandSelectionForContext(
   box: Aabb,
   canvas = VENUE_MAP_CANVAS,
