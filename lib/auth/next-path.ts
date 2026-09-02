@@ -34,6 +34,33 @@ export function postLoginDestination(
   return "/cuenta"
 }
 
+/**
+ * Pantallas que no tienen sentido con sesión activa.
+ *
+ * `/register-organizador` queda deliberadamente afuera: es donde un cliente ya
+ * logueado postula su productora, y es el destino al que el layout de admin manda
+ * a los organizadores rechazados o suspendidos. Bloquearla rompería el embudo de
+ * alta y crearía un bucle con ese layout.
+ */
+const AUTH_ENTRY_ROUTES = new Set(["/login", "/login-organizador", "/register"])
+
+export function isAuthEntryRoute(pathname: string): boolean {
+  return AUTH_ENTRY_ROUTES.has(pathname)
+}
+
+/**
+ * Dónde mandar a alguien que ya tiene sesión y pide una pantalla de login.
+ * Honra `next` salvo que apunte a otra pantalla de auth, que sería un bucle.
+ */
+export function authenticatedVisitorDestination(
+  next: unknown,
+  role: UserRole | null | undefined,
+): string {
+  const safe = safeInternalNextPath(next)
+  if (safe && !isAuthEntryRoute(safe.split("?")[0] ?? "")) return safe
+  return postLoginDestination(role)
+}
+
 /** Buyer default is home; honor `next` (checkout, cuenta, evento). */
 export function resolveAuthCallbackDestination(
   next: unknown,

@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  authenticatedVisitorDestination,
+  isAuthEntryRoute,
   loginUrlWithNext,
   organizerLoginUrlWithNext,
   resolveAuthCallbackDestination,
@@ -54,6 +56,55 @@ describe("auth next path", () => {
     assert.equal(
       organizerLoginUrlWithNext("//evil.test"),
       "/login-organizador?next=%2Fadmin",
+    )
+  })
+
+  it("treats only the login screens as auth entry routes", () => {
+    assert.equal(isAuthEntryRoute("/login"), true)
+    assert.equal(isAuthEntryRoute("/login-organizador"), true)
+    assert.equal(isAuthEntryRoute("/register"), true)
+    assert.equal(isAuthEntryRoute("/cuenta"), false)
+  })
+
+  it("leaves /register-organizador reachable so the signup funnel survives", () => {
+    // Un cliente logueado postula su productora ahí, y el layout de admin manda
+    // a los suspendidos a esa misma ruta: bloquearla haría un bucle.
+    assert.equal(isAuthEntryRoute("/register-organizador"), false)
+  })
+
+  it("sends an already logged in visitor to their panel by role", () => {
+    assert.equal(authenticatedVisitorDestination(null, "customer"), "/cuenta")
+    assert.equal(authenticatedVisitorDestination(null, "admin"), "/admin")
+    assert.equal(
+      authenticatedVisitorDestination(null, "super_admin"),
+      "/superadmin",
+    )
+  })
+
+  it("honors next but never bounces back into a login screen", () => {
+    assert.equal(
+      authenticatedVisitorDestination("/cuenta/compras", "customer"),
+      "/cuenta/compras",
+    )
+    assert.equal(authenticatedVisitorDestination("/login", "customer"), "/cuenta")
+    assert.equal(
+      authenticatedVisitorDestination("/login?next=/login", "customer"),
+      "/cuenta",
+    )
+    assert.equal(
+      authenticatedVisitorDestination("/login-organizador", "admin"),
+      "/admin",
+    )
+  })
+
+  it("ignores an external next instead of redirecting off-site", () => {
+    assert.equal(
+      authenticatedVisitorDestination("https://evil.test", "customer"),
+      "/cuenta",
+    )
+    assert.equal(
+      authenticatedVisitorDestination("//evil.test", "customer"),
+      "/cuenta",
     )
   })
 })

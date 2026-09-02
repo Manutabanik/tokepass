@@ -190,6 +190,28 @@ Notá la bifurcación del destino: los promotores van al login de compradores (s
 passwordless), el resto al login de organizadores. Y el `next` preserva el querystring completo
 (`${pathname}${request.nextUrl.search}`).
 
+**La compuerta inversa.** Hay una quinta familia que se bloquea al revés: con sesión activa, no sin
+ella. `isAuthEntryRoute` cubre `/login`, `/login-organizador` y `/register`, y un visitante ya
+autenticado se va por redirect a `authenticatedVisitorDestination(next, role)` antes de que se
+renderice una sola línea de HTML, lo que elimina el flasheo del formulario de login.
+
+Tres reglas que la hacen no morderse la cola:
+
+- **Va después del bloque de purga por `?error=`.** Ese caso necesita renderizar `/login` con la
+  sesión todavía viva, porque es el cliente el que limpia las cookies zombie
+  (`LoginErrorSessionPurge`). Si el redirect corriera antes, el flujo de dispositivo desalineado
+  entraría en bucle infinito: mismatch → `/login` → panel → mismatch.
+- **Un `next` que apunte a otra pantalla de auth se descarta.** `/login?next=/login` resolvería a
+  `/login` y volvería a entrar. Se cae al destino por rol.
+- **`/register-organizador` queda deliberadamente afuera.** Es donde un cliente **ya logueado**
+  postula su productora, y es el destino al que este mismo layout manda a los organizadores
+  `rejected` o `suspended`. Incluirla rompería el embudo de alta y crearía un bucle con
+  `app/(admin)/layout.tsx`.
+
+El destino sale de `postLoginDestination` salvo que haya un `next` usable, así que respeta el rol:
+`/superadmin`, `/admin` o `/cuenta`. Cuesta una consulta extra a `profiles`, que sólo se paga cuando
+alguien con sesión pide una pantalla de login.
+
 ### 3.2 Con sesión: tres compuertas de rol
 
 **Panel de plataforma, exclusivo de `super_admin`:**

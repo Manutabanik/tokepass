@@ -19,7 +19,11 @@ import {
   staffHomeForRoles,
 } from "@/types/auth"
 import { AUTH_NEXT_COOKIE } from "@/lib/auth/callback-url"
-import { REQUEST_PATHNAME_HEADER } from "@/lib/auth/next-path"
+import {
+  REQUEST_PATHNAME_HEADER,
+  authenticatedVisitorDestination,
+  isAuthEntryRoute,
+} from "@/lib/auth/next-path"
 import {
   expiredAuthCookieOptions,
   isSupabaseAuthCookieName,
@@ -184,6 +188,29 @@ export async function updateSession(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
+
+  // Va después del bloque de purga por `?error=`: ese caso necesita renderizar
+  // /login con sesión viva para que el cliente limpie las cookies zombie, y
+  // redirigirlo acá lo dejaría en un bucle.
+  if (user && isAuthEntryRoute(pathname)) {
+    const { data: visitorProfile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    const destination = authenticatedVisitorDestination(
+      request.nextUrl.searchParams.get("next"),
+      visitorProfile?.role ?? null,
+    )
+
+    return redirectWithRefreshedCookies(
+      new URL(destination, request.nextUrl.origin),
+      response,
+      nonce,
+      request,
+    )
+  }
 
   const isAdminRoute = pathname.startsWith("/admin")
   const isSuperAdminRoute =
