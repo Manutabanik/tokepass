@@ -21,6 +21,7 @@ function stubTicket(
     checkedInAt: null,
     purchasedAt: "2026-08-13T15:30:00.000Z",
     ticketUrl: "https://tokepass.app/t/1",
+    isTest: false,
     originalBuyer: {
       name: "María José",
       email: "maria@example.com",

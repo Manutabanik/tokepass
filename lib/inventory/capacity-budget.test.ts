@@ -330,15 +330,15 @@ describe("capacity-budget", () => {
 
   it("no deja que la suma de lotes pase el padre", () => {
     const sum = phaseLimitSum([
-      { name: "Preventa 1", price: 8000, capacityLimit: 30 },
-      { name: "Preventa 2", price: 10000, capacityLimit: 20 },
+      { name: "Preventa 1", price: 8000, capacityLimit: 30, status: "active" },
+      { name: "Preventa 2", price: 10000, capacityLimit: 20, status: "scheduled" },
     ])
     assert.equal(sum, 50)
     assert.equal(
       phaseLimitSum(
         [
-          { name: "Preventa 1", price: 8000, capacityLimit: 30 },
-          { name: "Preventa 2", price: 10000, capacityLimit: 20 },
+          { name: "Preventa 1", price: 8000, capacityLimit: 30, status: "active" },
+          { name: "Preventa 2", price: 10000, capacityLimit: 20, status: "scheduled" },
         ],
         1,
       ),

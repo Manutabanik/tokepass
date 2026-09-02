@@ -8,6 +8,7 @@ import {
   persistTicketDayId,
   scheduleDaysMissingTicketsMessage,
   uncoveredScheduleDays,
+  type DayCoverageTicket,
 } from "@/lib/inventory/day-ticket-coverage"
 
 const days = [
@@ -67,7 +68,7 @@ describe("day ticket coverage", () => {
   })
 
   it("clones day tickets onto the target day without repeating names", () => {
-    const tickets = [
+    const tickets: DayCoverageTicket[] = [
       { name: "General", dayId: "d1", visibility: "public", sold: 4 },
       { name: "VIP", dayId: "d1", visibility: "public" },
       { name: "General", dayId: "d2", visibility: "public" },

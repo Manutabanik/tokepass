@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import { computeCapacityThermometer } from "@/lib/inventory/capacity-thermometer"
 import type { EventFormValues } from "@/lib/validations/event-form"
+import { eventFormTicket } from "@/tests/fixtures/event-form"
 import { emptyVenueMap } from "@/types/venue-map"
 
 function ticket(
@@ -11,33 +12,7 @@ function ticket(
     capacity: number
   },
 ): EventFormValues["tickets"][number] {
-  return {
-    name: patch.name ?? "Entrada",
-    price: patch.price ?? 0,
-    timeLimit: "",
-    saleStartsAt: "",
-    saleEndsAt: "",
-    bonusReward: "",
-    dayId: null,
-    visibility: "public",
-    layoutType: patch.layoutType ?? "general",
-    seatingSectorId: patch.seatingSectorId ?? null,
-    capacityPerUnit: 1,
-    minPurchaseLimit: 1,
-    maxPurchaseLimit: null,
-    admitCount: 1,
-    listPrice: null,
-    bundleItems: [],
-    bundleType: null,
-    promoDiscountType: null,
-    promoDiscountValue: 0,
-    promoRequiredQty: 1,
-    promoPayQty: 1,
-    description: "",
-    highlightBadge: null,
-    phases: [],
-    ...patch,
-  }
+  return eventFormTicket({ name: "Entrada", ...patch })
 }
 
 describe("capacity thermometer", () => {
