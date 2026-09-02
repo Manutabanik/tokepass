@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import {
   defaultInventoryDayId,
+  findScheduleDay,
   formatInventoryDayOption,
   isFullPassDayId,
   isTicketValidForNow,
@@ -14,8 +15,10 @@ import {
   remapDayIdsByOrder,
   resolveEventAnchorDate,
   resolveEventSchedulePersist,
+  resolveTicketDate,
   scheduleDaysFromEvent,
 } from "@/lib/event-schedule"
+import { formatEventCartDateLong } from "@/lib/format"
 
 describe("event-schedule", () => {
   const days = [
@@ -142,6 +145,54 @@ describe("event-schedule", () => {
   it("anchors event date to first jornada", () => {
     assert.equal(
       resolveEventAnchorDate(days, "2026-01-01T00:00:00.000Z"),
+      days[0].start_time,
+    )
+  })
+
+  it("dates a day-bound ticket on its own jornada, not on day 1", () => {
+    // Viernes 13 Nov 2026 (día 1) + Sábado 14 Nov 2026 (día 2), 21:00 -03.
+    const weekend = [
+      {
+        id: "d1",
+        title: "Día 1",
+        start_time: "2026-11-14T00:00:00.000Z",
+        end_time: "2026-11-14T08:00:00.000Z",
+      },
+      {
+        id: "d2",
+        title: "Día 2",
+        start_time: "2026-11-15T00:00:00.000Z",
+        end_time: "2026-11-15T08:00:00.000Z",
+      },
+    ]
+    const eventDate = weekend[0].start_time
+
+    const saturdayTicket = {
+      eventDate,
+      doorsOpenAt: findScheduleDay(weekend, "d2")!.start_time,
+    }
+    assert.equal(
+      formatEventCartDateLong(resolveTicketDate(saturdayTicket)),
+      "Sábado 14 Nov",
+    )
+
+    const fridayTicket = {
+      eventDate,
+      doorsOpenAt: findScheduleDay(weekend, "d1")!.start_time,
+    }
+    assert.equal(
+      formatEventCartDateLong(resolveTicketDate(fridayTicket)),
+      "Viernes 13 Nov",
+    )
+  })
+
+  it("falls back to the event date when a ticket has no jornada anchor", () => {
+    assert.equal(
+      resolveTicketDate({ eventDate: days[0].start_time, doorsOpenAt: null }),
+      days[0].start_time,
+    )
+    assert.equal(
+      resolveTicketDate({ eventDate: days[0].start_time, doorsOpenAt: "  " }),
       days[0].start_time,
     )
   })

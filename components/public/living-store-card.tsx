@@ -8,6 +8,7 @@ import type { MyTicket } from "@/app/actions/tickets"
 import { QrScanLightbox } from "@/components/public/qr-scan-lightbox"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { resolveTicketDate } from "@/lib/event-schedule"
 import { formatCurrency, formatEventDay, formatEventTime } from "@/lib/format"
 import {
   EVENT_ITEM_CATEGORY_ICONS,
@@ -198,7 +199,7 @@ export function LivingCheckoutExtraCard({ ticket }: { ticket: MyTicket }) {
       category={inferCheckoutExtraCategory(ticket.tierName)}
       title={ticket.tierName}
       eventTitle={ticket.eventTitle}
-      eventDate={ticket.eventDate}
+      eventDate={resolveTicketDate(ticket)}
       description={ticket.bonusReward}
       imageUrl={ticket.flyerUrl}
       price={ticket.tierPrice}

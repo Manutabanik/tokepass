@@ -35,6 +35,7 @@ import { useTicketTransferVisual } from "@/components/public/use-ticket-transfer
 import { useOnlineStatus } from "@/components/pwa/use-online-status"
 import { BrandMark } from "@/components/shared/brand-logo"
 import { Button } from "@/components/ui/button"
+import { resolveTicketDate } from "@/lib/event-schedule"
 import { formatEventDay, formatEventTime } from "@/lib/format"
 import { storyCategoryLabel } from "@/lib/story-canvas"
 import { getTicketsOffline } from "@/lib/offline-store"
@@ -114,7 +115,7 @@ export function TicketDetailView({
   )}`
 
   const totpSecret = ticket.totpSecret ?? ""
-  const doorsAt = ticket.doorsOpenAt || ticket.eventDate
+  const doorsAt = resolveTicketDate(ticket)
   const sector = ticketAdmissionTitle(ticket).toUpperCase()
   const venue = ticketVenueLine(ticket)
 
@@ -153,7 +154,7 @@ export function TicketDetailView({
             <Calendar className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
             <span>
               <span className="block font-semibold capitalize">
-                {formatEventDay(ticket.eventDate)}
+                {formatEventDay(doorsAt)}
               </span>
               <span className="text-xs text-muted-foreground">
                 {eventAccessTimeLabel(ticket.deliveryMode)}{" "}

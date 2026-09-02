@@ -9,6 +9,7 @@ import { ExtraConsumableCard } from "@/components/public/living-store-card"
 import { QrScanLightbox } from "@/components/public/qr-scan-lightbox"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { resolveTicketDate } from "@/lib/event-schedule"
 import { formatEventDay, formatEventTime } from "@/lib/format"
 import {
   EVENT_ITEM_CATEGORY_ICONS,
@@ -72,7 +73,7 @@ export function checkoutTicketToExtraUnit(ticket: MyTicket): WalletExtraDisplayU
     title: ticket.tierName,
     category: inferCheckoutExtraCategory(ticket.tierName),
     eventTitle: ticket.eventTitle,
-    eventDate: ticket.eventDate,
+    eventDate: resolveTicketDate(ticket),
     description: ticket.bonusReward,
     imageUrl: ticket.flyerUrl,
     price: ticket.tierPrice,

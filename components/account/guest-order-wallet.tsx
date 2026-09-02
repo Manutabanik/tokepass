@@ -12,6 +12,7 @@ import {
   QrScanLightbox,
 } from "@/components/public/qr-scan-lightbox"
 import { BrandMark } from "@/components/shared/brand-logo"
+import { resolveTicketDate } from "@/lib/event-schedule"
 import { formatEventDay, formatEventTime } from "@/lib/format"
 import { ticketBackupCode } from "@/lib/ticket-print"
 import { ticketVenueLine } from "@/lib/ticket-stub"
@@ -26,7 +27,7 @@ function GuestTicketCard({ ticket }: { ticket: MyTicket }) {
     !onlineEvent && ticket.status === "valid" && Boolean(ticket.totpSecret)
   const isStatic = ticket.qrType === "static"
   const totpSecret = ticket.totpSecret ?? ""
-  const doorsAt = ticket.doorsOpenAt || ticket.eventDate
+  const doorsAt = resolveTicketDate(ticket)
   const sector = ticketAdmissionTitle(ticket).toUpperCase()
   const venue = ticketVenueLine(ticket)
 
@@ -54,7 +55,7 @@ function GuestTicketCard({ ticket }: { ticket: MyTicket }) {
           <Calendar className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <span>
             <span className="block font-semibold capitalize">
-              {formatEventDay(ticket.eventDate)}
+              {formatEventDay(doorsAt)}
             </span>
             <span className="text-xs text-muted-foreground">
               {eventAccessTimeLabel(ticket.deliveryMode)}{" "}

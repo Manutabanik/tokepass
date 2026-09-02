@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
+import { resolveTicketDate } from "@/lib/event-schedule"
+import { formatEventCartDateLong } from "@/lib/format"
 import {
   groupWalletAccessBlocks,
   groupWalletTicketsByEventOrders,
@@ -461,6 +463,24 @@ describe("wallet ticket metadata chips", () => {
         dateLabel: "Viernes 13 Nov",
       }),
       ["Fiesta Nacional de la Tradición", "Viernes 13 Nov"],
+    )
+  })
+
+  it("dates a Día 2 ticket on Saturday instead of the event's Friday", () => {
+    // Regression: the card showed "General Sábado · Día 2 · Viernes 13 Nov"
+    // because the chip read events.date (día 1) instead of the ticket jornada.
+    const saturdayTicket = {
+      eventDate: "2026-11-14T00:00:00.000Z", // día 1, viernes 13 Nov -03
+      doorsOpenAt: "2026-11-15T00:00:00.000Z", // día 2, sábado 14 Nov -03
+    }
+    assert.deepEqual(
+      walletTicketMetaChips({
+        eventTitle: "Fiesta Nacional de la Tradición",
+        dayValidityLabel: "Válido solo · Día 2",
+        dateLabel: formatEventCartDateLong(resolveTicketDate(saturdayTicket)),
+        headingTitle: "Fiesta Nacional de la Tradición",
+      }),
+      ["Día 2", "Sábado 14 Nov"],
     )
   })
 

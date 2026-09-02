@@ -6,12 +6,14 @@ import type { PrintableTicket } from "@/app/actions/pos"
 import { ThermalAdmissionTicket } from "@/components/print/thermal-admission-ticket"
 import { TokepassPrintWordmark } from "@/components/print/tokepass-print-wordmark"
 import { TestTicketWatermark } from "@/components/public/test-ticket-watermark"
+import { resolveTicketDate } from "@/lib/event-schedule"
 import { formatCurrency, formatEventDay, formatEventTime } from "@/lib/format"
 import { ticketPrintCode } from "@/lib/ticket-print"
 import { ticketSectorLabel } from "@/lib/ticket-stub"
 import { ticketAdmissionTitle, ticketExactSeatLabel } from "@/lib/ticket-wallet"
 
 function ThermalTicket({ ticket }: { ticket: PrintableTicket }) {
+  const doorsAt = resolveTicketDate(ticket)
   const priceLabel =
     ticket.tierPrice != null ? formatCurrency(ticket.tierPrice) : null
   const seatLabel = ticketExactSeatLabel({
@@ -23,7 +25,7 @@ function ThermalTicket({ ticket }: { ticket: PrintableTicket }) {
     <div id="printable-ticket">
       <ThermalAdmissionTicket
         eventTitle={ticket.eventTitle}
-        eventDate={ticket.eventDate}
+        eventDate={doorsAt}
         eventLocation={ticket.eventLocation}
         tierName={ticketAdmissionTitle({
           tierName: ticket.tierName,
@@ -57,7 +59,7 @@ function PremiumPassTicket({ ticket }: { ticket: PrintableTicket }) {
     tierName: ticket.tierName,
   })
   const code = ticketPrintCode(ticket.id)
-  const doorsAt = ticket.doorsOpenAt || ticket.eventDate
+  const doorsAt = resolveTicketDate(ticket)
   const priceLabel =
     ticket.tierPrice != null ? formatCurrency(ticket.tierPrice) : null
 
@@ -98,7 +100,7 @@ function PremiumPassTicket({ ticket }: { ticket: PrintableTicket }) {
         </div>
 
         <div className="border-b border-dashed border-black pb-3 text-center">
-          <p className="font-bold capitalize">{formatEventDay(ticket.eventDate)}</p>
+          <p className="font-bold capitalize">{formatEventDay(doorsAt)}</p>
           <p className="mt-0.5 text-sm font-semibold tabular-nums">
             {formatEventTime(doorsAt)}
           </p>

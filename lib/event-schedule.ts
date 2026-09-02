@@ -337,6 +337,21 @@ export function findScheduleDay(
 }
 
 /**
+ * Instant a ticket actually admits you on.
+ *
+ * `events.date` only carries the first jornada, so a day-bound ticket must read
+ * its own day anchor: otherwise a "Día 2" (Saturday) ticket advertises the
+ * event's Friday. `doorsOpenAt` is already resolved per jornada upstream, with
+ * the event anchor as fallback for abonos and single-day events.
+ */
+export function resolveTicketDate(ticket: {
+  doorsOpenAt?: string | null
+  eventDate: string
+}): string {
+  return ticket.doorsOpenAt?.trim() || ticket.eventDate
+}
+
+/**
  * Admission window for a ticket:
  * - single-day event / empty schedule → always eligible (date gate is soft)
  * - abono (null day_id) → any schedule day window

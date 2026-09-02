@@ -11,6 +11,7 @@ import { TransferShareConfirmDialog } from "@/components/public/transfer-share-c
 import { useTicketResaleVisual } from "@/components/public/use-ticket-resale-visual"
 import { useTicketTransferVisual } from "@/components/public/use-ticket-transfer-visual"
 import { Button } from "@/components/ui/button"
+import { resolveTicketDate } from "@/lib/event-schedule"
 import { isOnlineDelivery } from "@/lib/events/delivery-mode"
 import { formatEventCartDateLong } from "@/lib/format"
 import { walletQrModalTitle, walletTicketMetaChips } from "@/lib/ticket-wallet"
@@ -88,7 +89,7 @@ export function WalletPassCard({
           labels={walletTicketMetaChips({
             eventTitle: ticket.eventTitle,
             dayValidityLabel: ticket.dayValidityLabel,
-            dateLabel: formatEventCartDateLong(ticket.eventDate),
+            dateLabel: formatEventCartDateLong(resolveTicketDate(ticket)),
             headingTitle,
           })}
         />

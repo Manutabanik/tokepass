@@ -11,6 +11,7 @@ import { TicketMetaChips } from "@/components/account/ticket-meta-chips"
 import { WalletPassCard } from "@/components/account/wallet-pass-card"
 import { ResaleConfirmDialog } from "@/components/public/resale-confirm-dialog"
 import { Button } from "@/components/ui/button"
+import { resolveTicketDate } from "@/lib/event-schedule"
 import { formatEventCartDateLong } from "@/lib/format"
 import type { WalletAccessBlock } from "@/lib/ticket-wallet"
 import {
@@ -107,7 +108,7 @@ export function WalletAccessBlockCard({
                 labels={walletTicketMetaChips({
                   eventTitle: first.eventTitle,
                   dayValidityLabel: first.dayValidityLabel,
-                  dateLabel: formatEventCartDateLong(first.eventDate),
+                  dateLabel: formatEventCartDateLong(resolveTicketDate(first)),
                   headingTitle,
                 })}
               />

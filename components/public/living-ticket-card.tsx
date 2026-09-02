@@ -43,6 +43,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { resolveTicketDate } from "@/lib/event-schedule"
 import { formatEventDay, formatEventTime } from "@/lib/format"
 import { storyCategoryLabel } from "@/lib/story-canvas"
 import { ticketSectorLabel, ticketVenueLine } from "@/lib/ticket-stub"
@@ -211,7 +212,7 @@ export function LivingTicketCard({
     visualStatus === "active"
 
   const totpSecret = ticket.totpSecret ?? ""
-  const doorsAt = ticket.doorsOpenAt || ticket.eventDate
+  const doorsAt = resolveTicketDate(ticket)
   const seatLabel = ticketExactSeatLabel(ticket)
   const sector = (
     seatLabel
@@ -416,7 +417,7 @@ export function LivingTicketCard({
             <div>
               <dt className="sr-only">Fecha</dt>
               <dd className="font-semibold capitalize text-foreground">
-                {formatEventDay(ticket.eventDate)}
+                {formatEventDay(doorsAt)}
               </dd>
               <p className="text-xs text-muted-foreground">
                 {eventAccessTimeLabel(ticket.deliveryMode)}{" "}
