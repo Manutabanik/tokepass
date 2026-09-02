@@ -1,6 +1,6 @@
 /* TokePass PWA Service Worker — Offline-First billetera /cuenta/entradas */
 
-const CACHE_VERSION = "tokepass-wallet-v13"
+const CACHE_VERSION = "tokepass-wallet-v14"
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 
 const PRECACHE_URLS = [
@@ -119,6 +119,57 @@ function usableResponse(response) {
   return Boolean(response && response.ok && response.type !== "opaque")
 }
 
+/**
+ * Los chunks de `/_next/static` llevan hash, así que PRECACHE_URLS no puede
+ * nombrarlos: cambian en cada deploy. Sin ellos el precache promete rutas que
+ * no puede servir — el HTML de /puerta sale del caché pero su JS todavía no
+ * está, y la primera visita sin señal muestra una pantalla vacía.
+ *
+ * Como el install ya descarga esos documentos, se leen de ahí los nombres
+ * reales. No hace falta un paso de build y se corrige solo en cada deploy.
+ */
+const NEXT_ASSET_PATTERN = /\/_next\/static\/[^"'\\\s>)]+\.(?:js|css|woff2)/g
+
+function extractNextAssets(html) {
+  if (typeof html !== "string" || html.length === 0) return []
+
+  const found = new Set()
+  for (const match of html.matchAll(NEXT_ASSET_PATTERN)) {
+    const path = match[0]
+    // El payload de flight repite las mismas rutas escapadas; el Set alcanza.
+    if (!isIncompleteNextStatic(new URL(path, "https://sw.local"))) {
+      found.add(path)
+    }
+  }
+  return [...found]
+}
+
+function isHtmlResponse(response) {
+  return (response.headers.get("Content-Type") || "").includes("text/html")
+}
+
+async function precacheShellAssets(cache, paths) {
+  await Promise.allSettled(
+    paths.map(async (path) => {
+      try {
+        const url = new URL(path, self.location.origin)
+        if (!isNextStaticAsset(url)) return
+        if (await cache.match(url.href)) return
+
+        const response = await fetch(url.href, {
+          credentials: "same-origin",
+          mode: "same-origin",
+        })
+        if (!usableResponse(response) || response.redirected) return
+
+        await cache.put(url.href, response.clone())
+      } catch {
+        // Precache best-effort
+      }
+    }),
+  )
+}
+
 function offlineHtmlResponse() {
   return new Response(OFFLINE_WALLET_HTML, {
     status: 200,
@@ -143,18 +194,30 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(ASSET_CACHE)
+      const shellAssets = new Set()
+
       await Promise.allSettled(
         PRECACHE_URLS.map(async (url) => {
           try {
             const response = await fetch(url, { credentials: "same-origin" })
-            if (usableResponse(response) && !response.redirected) {
-              await cache.put(url, response.clone())
+            if (!usableResponse(response) || response.redirected) return
+
+            const forCache = response.clone()
+            if (isHtmlResponse(response)) {
+              for (const asset of extractNextAssets(await response.text())) {
+                shellAssets.add(asset)
+              }
             }
+
+            await cache.put(url, forCache)
           } catch {
             // Precache best-effort
           }
         }),
       )
+
+      await precacheShellAssets(cache, [...shellAssets])
+
       // Primera instalación: activar ya. Un deploy nuevo espera SKIP_WAITING.
       if (!self.registration.active) {
         await self.skipWaiting()
