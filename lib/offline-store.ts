@@ -3,14 +3,16 @@
  * Solo guarda datos del usuario autenticado necesarios para regenerar el Living QR.
  */
 
+import type { MyStoreRedemption } from "@/app/actions/addons"
 import type { MyTicket } from "@/app/actions/tickets"
 import type { QrType, TicketIssuanceChannel, TicketStatus } from "@/types/database"
 import { resolveTicketVisualStatus } from "@/lib/ticket-visual-status"
 import { requestTicketAssetCache } from "@/lib/wallet-cache"
 
 const DB_NAME = "tokepass-offline"
-const DB_VERSION = 3
+const DB_VERSION = 4
 const TICKETS_STORE = "tickets"
+const REDEMPTIONS_STORE = "redemptions"
 const META_STORE = "meta"
 const KEYS_STORE = "keys"
 const WALLET_KEY_ID = "wallet-aes-gcm-v1"
@@ -88,6 +90,30 @@ type StoredOfflineTicketRecord =
   | OfflineTicketRecord
   | EncryptedOfflineTicketRecord
 
+export type OfflineRedemptionRecord = {
+  redemption_id: string
+  user_id: string
+  /**
+   * En barra el `qrCodeToken` ES el secreto: no hay HMAC ni identificador
+   * público que lo acompañe. Se guarda cifrado igual que `totp_secret`.
+   */
+  redemption: MyStoreRedemption
+  synced_at: number
+}
+
+type EncryptedOfflineRedemptionRecord = {
+  redemption_id: string
+  user_id: string
+  sealed: true
+  iv: string
+  ciphertext: string
+  synced_at: number
+}
+
+type StoredOfflineRedemptionRecord =
+  | OfflineRedemptionRecord
+  | EncryptedOfflineRedemptionRecord
+
 type MetaRecord = {
   key: string
   value: string
@@ -110,6 +136,12 @@ function openDb(): Promise<IDBDatabase> {
       reject(request.error ?? new Error("No se pudo abrir IndexedDB"))
     }
 
+    // Otra pestaña con la versión anterior abierta bloquea el upgrade. Sin este
+    // handler la promesa queda colgada para siempre y la billetera nunca carga.
+    request.onblocked = () => {
+      reject(new Error("IndexedDB bloqueada por otra pestaña"))
+    }
+
     request.onsuccess = () => {
       resolve(request.result)
     }
@@ -120,6 +152,13 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(TICKETS_STORE)) {
         const store = db.createObjectStore(TICKETS_STORE, {
           keyPath: "ticket_id",
+        })
+        store.createIndex("by_user", "user_id", { unique: false })
+      }
+
+      if (!db.objectStoreNames.contains(REDEMPTIONS_STORE)) {
+        const store = db.createObjectStore(REDEMPTIONS_STORE, {
+          keyPath: "redemption_id",
         })
         store.createIndex("by_user", "user_id", { unique: false })
       }
@@ -203,38 +242,79 @@ function getWalletKey(): Promise<CryptoKey> {
   return walletKeyPromise
 }
 
-function recordAad(ticketId: string, userId: string): ArrayBuffer {
-  const encoded = new TextEncoder().encode(
-    `tokepass-wallet-v1:${ticketId}:${userId}`,
-  )
+/** Dominio del AAD de tickets. Cambiarlo invalida todo lo ya cacheado. */
+const TICKET_AAD_DOMAIN = "tokepass-wallet-v1"
+/** Dominio propio para canjes: un sobre no puede reusarse en el otro store. */
+const REDEMPTION_AAD_DOMAIN = "tokepass-redemption-v1"
+
+type SealedEnvelope = {
+  iv: string
+  ciphertext: string
+}
+
+function recordAad(domain: string, id: string, userId: string): ArrayBuffer {
+  const encoded = new TextEncoder().encode(`${domain}:${id}:${userId}`)
   return encoded.buffer.slice(
     encoded.byteOffset,
     encoded.byteOffset + encoded.byteLength,
   ) as ArrayBuffer
 }
 
+async function sealJson(
+  domain: string,
+  id: string,
+  userId: string,
+  payload: unknown,
+): Promise<SealedEnvelope> {
+  const key = await getWalletKey()
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const plaintext = new TextEncoder().encode(JSON.stringify(payload))
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv, additionalData: recordAad(domain, id, userId) },
+    key,
+    plaintext,
+  )
+
+  return {
+    iv: bytesToBase64(iv),
+    ciphertext: bytesToBase64(new Uint8Array(ciphertext)),
+  }
+}
+
+async function unsealJson<T>(
+  domain: string,
+  id: string,
+  userId: string,
+  envelope: SealedEnvelope,
+): Promise<T> {
+  const key = await getWalletKey()
+  const plaintext = await crypto.subtle.decrypt(
+    {
+      name: "AES-GCM",
+      iv: base64ToBytes(envelope.iv),
+      additionalData: recordAad(domain, id, userId),
+    },
+    key,
+    base64ToBytes(envelope.ciphertext),
+  )
+  return JSON.parse(new TextDecoder().decode(plaintext)) as T
+}
+
 async function sealOfflineRecord(
   record: OfflineTicketRecord,
 ): Promise<EncryptedOfflineTicketRecord> {
-  const key = await getWalletKey()
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-  const plaintext = new TextEncoder().encode(JSON.stringify(record))
-  const ciphertext = await crypto.subtle.encrypt(
-    {
-      name: "AES-GCM",
-      iv,
-      additionalData: recordAad(record.ticket_id, record.user_id),
-    },
-    key,
-    plaintext,
+  const envelope = await sealJson(
+    TICKET_AAD_DOMAIN,
+    record.ticket_id,
+    record.user_id,
+    record,
   )
 
   return {
     ticket_id: record.ticket_id,
     user_id: record.user_id,
     sealed: true,
-    iv: bytesToBase64(iv),
-    ciphertext: bytesToBase64(new Uint8Array(ciphertext)),
+    ...envelope,
     synced_at: record.synced_at,
   }
 }
@@ -244,19 +324,44 @@ async function unsealOfflineRecord(
 ): Promise<OfflineTicketRecord> {
   if (!("sealed" in stored)) return stored
 
-  const key = await getWalletKey()
-  const plaintext = await crypto.subtle.decrypt(
-    {
-      name: "AES-GCM",
-      iv: base64ToBytes(stored.iv),
-      additionalData: recordAad(stored.ticket_id, stored.user_id),
-    },
-    key,
-    base64ToBytes(stored.ciphertext),
+  return unsealJson<OfflineTicketRecord>(
+    TICKET_AAD_DOMAIN,
+    stored.ticket_id,
+    stored.user_id,
+    stored,
   )
-  return JSON.parse(
-    new TextDecoder().decode(plaintext),
-  ) as OfflineTicketRecord
+}
+
+async function sealOfflineRedemption(
+  record: OfflineRedemptionRecord,
+): Promise<EncryptedOfflineRedemptionRecord> {
+  const envelope = await sealJson(
+    REDEMPTION_AAD_DOMAIN,
+    record.redemption_id,
+    record.user_id,
+    record.redemption,
+  )
+
+  return {
+    redemption_id: record.redemption_id,
+    user_id: record.user_id,
+    sealed: true,
+    ...envelope,
+    synced_at: record.synced_at,
+  }
+}
+
+async function unsealOfflineRedemption(
+  stored: StoredOfflineRedemptionRecord,
+): Promise<MyStoreRedemption> {
+  if (!("sealed" in stored)) return stored.redemption
+
+  return unsealJson<MyStoreRedemption>(
+    REDEMPTION_AAD_DOMAIN,
+    stored.redemption_id,
+    stored.user_id,
+    stored,
+  )
 }
 
 export const OFFLINE_TICKET_TTL_GRACE_MS = 86_400_000
@@ -286,6 +391,38 @@ export function isOfflineTicketExpired(
   const endMs = new Date(endedAt).getTime()
   if (!Number.isFinite(endMs)) return false
   return nowMs > endMs + OFFLINE_TICKET_TTL_GRACE_MS
+}
+
+/** Los canjes no traen `ends_at`, así que la gracia corre desde `eventDate`. */
+export function isOfflineRedemptionExpired(
+  redemption: { eventDate?: string | null },
+  nowMs = Date.now(),
+): boolean {
+  return isOfflineTicketExpired(
+    { eventDate: redemption.eventDate ?? null },
+    nowMs,
+  )
+}
+
+/**
+ * Un canje ya consumido se guarda sin token: la UI solo muestra la fecha de
+ * canje, así que el secreto no hace falta y no tiene por qué seguir en disco.
+ */
+export function sanitizeRedemptionForOffline(
+  redemption: MyStoreRedemption,
+): MyStoreRedemption {
+  if (redemption.status === "valid") return redemption
+  return { ...redemption, qrCodeToken: "" }
+}
+
+export function keepRedemptionOffline(
+  redemption: MyStoreRedemption,
+  nowMs = Date.now(),
+): boolean {
+  if (redemption.status !== "valid" && redemption.status !== "redeemed") {
+    return false
+  }
+  return !isOfflineRedemptionExpired(redemption, nowMs)
 }
 
 export function ticketToOfflineRecord(
@@ -583,6 +720,116 @@ export async function purgeExpiredOfflineTickets(): Promise<void> {
   await getTicketsOffline()
 }
 
+/**
+ * Sync completo de los canjes de barra del usuario. El QR de tienda se arma
+ * offline (`Base64(token-bloque)`, sin HMAC ni red), así que con el token
+ * cacheado el cliente puede mostrarlo sin señal; la red la necesita el escáner
+ * del staff, no el teléfono del cliente.
+ */
+export async function saveRedemptionsOffline(
+  userId: string,
+  redemptions: MyStoreRedemption[],
+): Promise<void> {
+  if (!userId || !isBrowser()) return
+
+  const keep = redemptions
+    .filter((redemption) => keepRedemptionOffline(redemption))
+    .map(sanitizeRedemptionForOffline)
+  const keepIds = new Set(keep.map((redemption) => redemption.id))
+  const syncedAt = Date.now()
+  const sealed = await Promise.all(
+    keep.map((redemption) =>
+      sealOfflineRedemption({
+        redemption_id: redemption.id,
+        user_id: userId,
+        redemption,
+        synced_at: syncedAt,
+      }),
+    ),
+  )
+
+  // Lectura fuera de la tx de escritura (Safari/WebKit auto-commit).
+  const readDb = await openDb()
+  const readTx = readDb.transaction(REDEMPTIONS_STORE, "readonly")
+  const existing = (await requestToPromise(
+    readTx.objectStore(REDEMPTIONS_STORE).getAll(),
+  )) as StoredOfflineRedemptionRecord[]
+  await txDone(readTx)
+  readDb.close()
+
+  const db = await openDb()
+  const tx = db.transaction(REDEMPTIONS_STORE, "readwrite")
+  const store = tx.objectStore(REDEMPTIONS_STORE)
+
+  for (const row of existing) {
+    if (row.user_id !== userId || !keepIds.has(row.redemption_id)) {
+      store.delete(row.redemption_id)
+    }
+  }
+
+  for (const row of sealed) {
+    store.put(row)
+  }
+
+  await txDone(tx)
+  db.close()
+}
+
+export async function getRedemptionsOffline(
+  userId?: string | null,
+): Promise<MyStoreRedemption[]> {
+  if (!isBrowser()) return []
+
+  const db = await openDb()
+  const tx = db.transaction(REDEMPTIONS_STORE, "readonly")
+  const storedRows = (await requestToPromise(
+    tx.objectStore(REDEMPTIONS_STORE).getAll(),
+  )) as StoredOfflineRedemptionRecord[]
+  await txDone(tx)
+  db.close()
+
+  const owned = userId
+    ? storedRows.filter((row) => row.user_id === userId)
+    : storedRows
+
+  const rows = (
+    await Promise.all(
+      owned.map(async (stored) => {
+        try {
+          return await unsealOfflineRedemption(stored)
+        } catch (error) {
+          console.warn("[offline-store] canje cifrado inválido", error)
+          return null
+        }
+      }),
+    )
+  ).filter((row): row is MyStoreRedemption => row !== null)
+
+  const expired = rows.filter((row) => isOfflineRedemptionExpired(row))
+  for (const row of expired) {
+    await removeRedemptionOffline(row.id)
+  }
+
+  return rows
+    .filter((row) => !isOfflineRedemptionExpired(row))
+    .sort(
+      (a, b) =>
+        new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime(),
+    )
+}
+
+export async function removeRedemptionOffline(
+  redemptionId: string,
+): Promise<void> {
+  if (!redemptionId || !isBrowser()) return
+
+  const db = await openDb()
+  const tx = db.transaction(REDEMPTIONS_STORE, "readwrite")
+  tx.objectStore(REDEMPTIONS_STORE).delete(redemptionId)
+  await txDone(tx)
+  db.close()
+}
+
 export async function getOfflineActiveUserId(): Promise<string | null> {
   if (!isBrowser()) return null
 
@@ -614,10 +861,11 @@ export async function clearOfflineWalletStore(): Promise<void> {
 
   const db = await openDb()
   const tx = db.transaction(
-    [TICKETS_STORE, META_STORE, KEYS_STORE],
+    [TICKETS_STORE, REDEMPTIONS_STORE, META_STORE, KEYS_STORE],
     "readwrite",
   )
   tx.objectStore(TICKETS_STORE).clear()
+  tx.objectStore(REDEMPTIONS_STORE).clear()
   tx.objectStore(META_STORE).clear()
   tx.objectStore(KEYS_STORE).clear()
   await txDone(tx)

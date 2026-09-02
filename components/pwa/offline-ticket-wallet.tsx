@@ -6,14 +6,19 @@ import { useEffect, useMemo, useState } from "react"
 
 import type { MyStoreRedemption } from "@/app/actions/addons"
 import type { MyTicket } from "@/app/actions/tickets"
-import { useOnlineStatus } from "@/components/pwa/use-online-status"
+import {
+  useOnlineStatus,
+  useVerifiedOnlineStatus,
+} from "@/components/pwa/use-online-status"
 import {
   TicketWallet,
   type StoreOfferBlock,
 } from "@/components/public/ticket-wallet"
 import { Badge } from "@/components/ui/badge"
 import {
+  getRedemptionsOffline,
   getTicketsOffline,
+  saveRedemptionsOffline,
   saveTicketsOffline,
 } from "@/lib/offline-store"
 import { splitTicketsBySchedule } from "@/lib/ticket-schedule"
@@ -34,9 +39,15 @@ export function OfflineTicketWallet({
   storeOffers = [],
   loadError = null,
 }: OfflineTicketWalletProps) {
-  const online = useOnlineStatus()
+  // `deviceOnline` habilita escribir el caché (los datos del server ya
+  // llegaron); `connected` gatea la UI y todo lo que necesita red de verdad.
+  const deviceOnline = useOnlineStatus()
+  const connected = useVerifiedOnlineStatus()
   const searchParams = useSearchParams()
   const [cachedTickets, setCachedTickets] = useState<MyTicket[] | null>(null)
+  const [cachedRedemptions, setCachedRedemptions] = useState<
+    MyStoreRedemption[] | null
+  >(null)
   const [cacheReady, setCacheReady] = useState(false)
 
   const tabParam = searchParams.get("tab")
@@ -49,17 +60,30 @@ export function OfflineTicketWallet({
           ? ("upcoming" as const)
           : undefined
 
-  const tickets = online
+  // En la primera visita la lectura del caché puede resolverse antes de que
+  // termine la escritura, así que un caché vacío cae a los datos que el server
+  // ya entregó en esta carga en lugar de mostrar la billetera vacía.
+  const tickets = connected
     ? initialTickets
-    : (cachedTickets ?? initialTickets)
+    : cachedTickets && cachedTickets.length > 0
+      ? cachedTickets
+      : initialTickets
 
   useEffect(() => {
-    if (!online || !userId || loadError) return
+    if (!deviceOnline || !userId || loadError) return
 
     void saveTicketsOffline(userId, initialTickets).catch(() => {
       // Sync offline best-effort
     })
-  }, [online, userId, initialTickets, loadError])
+  }, [deviceOnline, userId, initialTickets, loadError])
+
+  useEffect(() => {
+    if (!deviceOnline || !userId || loadError) return
+
+    void saveRedemptionsOffline(userId, barRedemptions).catch(() => {
+      // Sync offline best-effort
+    })
+  }, [deviceOnline, userId, barRedemptions, loadError])
 
   useEffect(() => {
     let cancelled = false
@@ -82,7 +106,23 @@ export function OfflineTicketWallet({
   }, [userId])
 
   useEffect(() => {
-    if (!online || !loadError || initialTickets.length > 0) return
+    let cancelled = false
+
+    void getRedemptionsOffline(userId)
+      .then((cached) => {
+        if (!cancelled) setCachedRedemptions(cached)
+      })
+      .catch(() => {
+        if (!cancelled) setCachedRedemptions([])
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
+
+  useEffect(() => {
+    if (!connected || !loadError || initialTickets.length > 0) return
 
     let cancelled = false
     void getTicketsOffline(userId).then((cached) => {
@@ -91,12 +131,21 @@ export function OfflineTicketWallet({
     return () => {
       cancelled = true
     }
-  }, [online, loadError, initialTickets.length, userId])
+  }, [connected, loadError, initialTickets.length, userId])
 
   const displayTickets =
-    online && loadError && cachedTickets && cachedTickets.length > 0
+    connected && loadError && cachedTickets && cachedTickets.length > 0
       ? cachedTickets
       : tickets
+
+  // Sin conexión el QR de canje se sigue armando en el dispositivo, así que los
+  // extras cacheados se muestran igual. Las ofertas de tienda no: comprar
+  // necesita red.
+  const displayRedemptions = connected
+    ? barRedemptions
+    : cachedRedemptions && cachedRedemptions.length > 0
+      ? cachedRedemptions
+      : barRedemptions
 
   const { upcoming, past } = useMemo(
     () => splitTicketsBySchedule(displayTickets),
@@ -107,8 +156,8 @@ export function OfflineTicketWallet({
     [displayTickets],
   )
 
-  const showOfflineBanner = !online
-  const showLoadError = Boolean(online && loadError)
+  const showOfflineBanner = !connected
+  const showLoadError = Boolean(connected && loadError)
   const hasDisplayTickets = displayTickets.length > 0
 
   return (
@@ -163,9 +212,9 @@ export function OfflineTicketWallet({
           upcoming={upcoming}
           past={past}
           extraTickets={extraTickets}
-          barRedemptions={online ? barRedemptions : []}
-          storeOffers={online ? storeOffers : []}
-          offline={!online}
+          barRedemptions={displayRedemptions}
+          storeOffers={connected ? storeOffers : []}
+          offline={!connected}
           initialTab={initialTab}
         />
       )}

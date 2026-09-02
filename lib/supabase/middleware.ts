@@ -20,9 +20,13 @@ import {
 } from "@/types/auth"
 import { AUTH_NEXT_COOKIE } from "@/lib/auth/callback-url"
 import {
+  DEVICE_WALLET_PATH,
+  DEVICE_WALLET_REASON_EXPIRED,
+  DEVICE_WALLET_REASON_PARAM,
   REQUEST_PATHNAME_HEADER,
   authenticatedVisitorDestination,
   isAuthEntryRoute,
+  isDeviceWalletFallbackPath,
 } from "@/lib/auth/next-path"
 import {
   expiredAuthCookieOptions,
@@ -210,6 +214,21 @@ export async function updateSession(request: NextRequest) {
       nonce,
       request,
     )
+  }
+
+  // `AccountPortalLayout` manda al login cuando no hay sesión, y eso deja al
+  // usuario sin acceso a una entrada que ya está guardada en su dispositivo.
+  // La billetera local no necesita sesión, así que el pase sigue alcanzable.
+  if (!user && isDeviceWalletFallbackPath(pathname)) {
+    const walletUrl = request.nextUrl.clone()
+    walletUrl.pathname = DEVICE_WALLET_PATH
+    walletUrl.search = ""
+    walletUrl.searchParams.set(
+      DEVICE_WALLET_REASON_PARAM,
+      DEVICE_WALLET_REASON_EXPIRED,
+    )
+
+    return redirectWithRefreshedCookies(walletUrl, response, nonce, request)
   }
 
   const isAdminRoute = pathname.startsWith("/admin")

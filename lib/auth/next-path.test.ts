@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import {
   authenticatedVisitorDestination,
   isAuthEntryRoute,
+  isDeviceWalletFallbackPath,
   loginUrlWithNext,
   organizerLoginUrlWithNext,
   resolveAuthCallbackDestination,
@@ -106,5 +107,32 @@ describe("auth next path", () => {
       authenticatedVisitorDestination("//evil.test", "customer"),
       "/cuenta",
     )
+  })
+})
+
+describe("device wallet fallback path", () => {
+  it("catches the wallet root so a dead session does not hide the pass", () => {
+    assert.equal(isDeviceWalletFallbackPath("/cuenta/entradas"), true)
+    assert.equal(isDeviceWalletFallbackPath("/cuenta/entradas/"), true)
+  })
+
+  it("leaves the guest token routes alone", () => {
+    // Ambas resuelven el caso sin sesión con su propio acceso por token.
+    assert.equal(isDeviceWalletFallbackPath("/cuenta/entradas/acceso"), false)
+    assert.equal(
+      isDeviceWalletFallbackPath("/cuenta/entradas/8f0c1d2e-ticket"),
+      false,
+    )
+  })
+
+  it("does not catch the rest of the account portal", () => {
+    assert.equal(isDeviceWalletFallbackPath("/cuenta"), false)
+    assert.equal(isDeviceWalletFallbackPath("/cuenta/compras"), false)
+    assert.equal(isDeviceWalletFallbackPath("/cuenta/perfil"), false)
+  })
+
+  it("does not catch lookalike paths from another prefix", () => {
+    assert.equal(isDeviceWalletFallbackPath("/admin/cuenta/entradas"), false)
+    assert.equal(isDeviceWalletFallbackPath("/cuenta/entradas-extra"), false)
   })
 })
