@@ -52,7 +52,7 @@ export function QrScanLightbox({
   caption = "Acercá este código al escáner de ingreso",
   kind = "door",
   title,
-  isTest = false,
+  isSandbox = false,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -64,7 +64,8 @@ export function QrScanLightbox({
   caption?: string
   kind?: "door" | "store"
   title?: string
-  isTest?: boolean
+  /** Sandbox orders get the red banner whatever the scanned item is. */
+  isSandbox?: boolean
 }) {
   const isStore = kind === "store"
   const living = !isStatic
@@ -95,7 +96,9 @@ export function QrScanLightbox({
               <DialogTitle className="text-left text-lg font-bold leading-snug text-white">
                 {heading}
               </DialogTitle>
-              <DialogDescription className="sr-only">{caption}</DialogDescription>
+              <DialogDescription className="mt-1 text-left text-sm font-medium text-zinc-300">
+                {caption}
+              </DialogDescription>
             </div>
             <CloseQrButton className="shrink-0" />
           </header>
@@ -104,20 +107,20 @@ export function QrScanLightbox({
             className="relative flex w-full flex-col items-center rounded-2xl bg-white p-5 text-zinc-950 shadow-2xl"
             style={{ colorScheme: "light" }}
           >
-            <div className="size-[min(20rem,calc(100vw-5rem))] bg-white">
+            <div className="w-[min(20rem,calc(100vw-5rem))] max-w-full bg-white">
               {isStore ? (
                 <LivingStoreQR
                   token={ticketId}
                   size={320}
                   variant="scan"
-                  className="size-full max-w-none bg-white"
+                  className="w-full max-w-none bg-white"
                 />
               ) : isStatic ? (
                 <StaticSignedQR
                   ticketId={ticketId}
                   totpSecret={totpSecret}
                   size={320}
-                  className="aspect-square size-full max-w-none bg-white p-0 shadow-none"
+                  className="aspect-square w-full max-w-none bg-white p-0 shadow-none"
                 />
               ) : (
                 <LivingTicketQR
@@ -125,33 +128,36 @@ export function QrScanLightbox({
                   totpSecret={totpSecret}
                   size={320}
                   variant="scan"
-                  className="size-full max-w-none bg-white"
+                  className="w-full max-w-none bg-white"
                 />
               )}
             </div>
-            <p className="mt-4 font-mono text-sm font-semibold tracking-[0.22em] text-zinc-800">
-              {backup}
-            </p>
-            {holderName ? (
-              <p className="mt-3 text-center text-base font-bold text-zinc-950">
-                {holderName}
-              </p>
-            ) : null}
-            {holderDni ? (
-              <p className="mt-0.5 text-sm font-semibold tabular-nums text-zinc-600">
-                DNI {holderDni}
-              </p>
-            ) : null}
-            {isTest ? (
-              <p className="mt-3 w-full rounded-xl bg-red-600/90 px-3 py-2 text-center text-[11px] font-black uppercase tracking-[0.16em] text-white">
-                Modo prueba · sin validez
-              </p>
-            ) : null}
-          </div>
 
-          <p className="mt-4 max-w-xs self-center text-center text-sm font-semibold text-white">
-            {caption}
-          </p>
+            <div className="mt-4 flex w-full flex-col items-center gap-2">
+              <p className="font-mono text-sm font-semibold tracking-[0.22em] text-zinc-800">
+                {backup}
+              </p>
+              {holderName || holderDni ? (
+                <div className="flex flex-col items-center">
+                  {holderName ? (
+                    <p className="text-center text-base font-bold text-zinc-950">
+                      {holderName}
+                    </p>
+                  ) : null}
+                  {holderDni ? (
+                    <p className="mt-0.5 text-sm font-semibold tabular-nums text-zinc-600">
+                      DNI {holderDni}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              {isSandbox ? (
+                <p className="w-full rounded-xl bg-red-600 px-3 py-2 text-center text-[11px] font-black uppercase tracking-[0.16em] text-white">
+                  Modo prueba · sin validez
+                </p>
+              ) : null}
+            </div>
+          </div>
 
           <CloseQrButton className="mt-5 w-full justify-center" />
         </div>

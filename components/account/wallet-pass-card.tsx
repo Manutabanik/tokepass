@@ -180,7 +180,7 @@ export function WalletPassCard({
           title={walletQrModalTitle(ticket, placeLabel)}
           holderName={ticket.holderName}
           holderDni={ticket.holderDni}
-          isTest={ticket.isTest}
+          isSandbox={ticket.isTest}
         />
       ) : null}
       <TransferShareConfirmDialog

@@ -54,6 +54,8 @@ export type MyStoreRedemption = {
   itemImageUrl: string | null
   itemCategory: EventItemCategory
   orderId: string | null
+  /** Inherited from the parent order so the QR can flag itself as sandbox. */
+  isTest: boolean
   eventId: string
   eventTitle: string
   eventDate: string
@@ -196,6 +198,9 @@ export async function getMyStoreRedemptions(): Promise<MyStoreRedemption[]> {
       qr_code_token,
       status,
       redeemed_at,
+      orders (
+        is_test
+      ),
       event_items (
         id,
         name,
@@ -228,6 +233,7 @@ export async function getMyStoreRedemptions(): Promise<MyStoreRedemption[]> {
     qr_code_token: string
     status: MyStoreRedemption["status"]
     redeemed_at: string | null
+    orders: { is_test: boolean | null } | null
     event_items: {
       id?: string | null
       name: string
@@ -260,6 +266,7 @@ export async function getMyStoreRedemptions(): Promise<MyStoreRedemption[]> {
         redeemedAt: row.redeemed_at,
         itemId: row.item_id?.trim() || item.id?.trim() || null,
         orderId: row.order_id?.trim() || null,
+        isTest: Boolean(row.orders?.is_test),
         itemName: item.name,
         itemDescription: item.description,
         itemPrice: Number(item.price),

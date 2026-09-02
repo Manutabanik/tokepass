@@ -32,6 +32,8 @@ export type WalletExtraDisplayUnit = WalletExtraGroupable & {
   price: number
   ready: boolean
   redeemedLabel?: string | null
+  /** Inherited from the parent order; flags the QR as sandbox. */
+  isTest: boolean
   qr:
     | { kind: "store"; token: string }
     | { kind: "door"; ticketId: string; totpSecret: string; isStatic: boolean }
@@ -54,6 +56,7 @@ export function storeRedemptionToExtraUnit(
     imageUrl: redemption.itemImageUrl,
     price: redemption.itemPrice,
     ready: redemption.status === "valid",
+    isTest: redemption.isTest,
     redeemedLabel: redemption.redeemedAt
       ? `Ya fue canjeado · ${new Date(redemption.redeemedAt).toLocaleString("es-AR")}`
       : "Ya fue canjeado",
@@ -74,6 +77,7 @@ export function checkoutTicketToExtraUnit(ticket: MyTicket): WalletExtraDisplayU
     imageUrl: ticket.flyerUrl,
     price: ticket.tierPrice,
     ready: ticket.status === "valid",
+    isTest: ticket.isTest,
     redeemedLabel: "Ya fue canjeado",
     qr: {
       kind: "door",
@@ -115,6 +119,7 @@ function ExtraQrLightbox({
       totpSecret=""
       title={`Canje: ${unit.title}`}
       caption="Acercá este código al escáner de canje"
+      isSandbox={unit.isTest}
     />
   ) : (
     <QrScanLightbox
@@ -126,6 +131,7 @@ function ExtraQrLightbox({
       totpSecret={qr.totpSecret}
       title={`Canje: ${unit.title}`}
       caption="Acercá este código al escáner de canje"
+      isSandbox={unit.isTest}
     />
   )
 }
@@ -156,6 +162,7 @@ export function WalletExtrasBundleCard({
         ready={first.ready}
         redeemedLabel={first.redeemedLabel}
         qr={first.qr}
+        isTest={first.isTest}
         isWalletMode={isWalletMode}
       />
     )

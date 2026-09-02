@@ -28,6 +28,7 @@ export function ExtraConsumableCard({
   ready,
   redeemedLabel,
   qr,
+  isTest = false,
   isWalletMode = false,
 }: {
   category: EventItemCategory
@@ -42,6 +43,8 @@ export function ExtraConsumableCard({
   qr:
     | { kind: "store"; token: string }
     | { kind: "door"; ticketId: string; totpSecret: string; isStatic: boolean }
+  /** Inherited from the parent order; flags the QR as sandbox. */
+  isTest?: boolean
   /** In the wallet the extra is an access pass, not an offer: no price, bigger CTA. */
   isWalletMode?: boolean
 }) {
@@ -135,6 +138,7 @@ export function ExtraConsumableCard({
                 totpSecret=""
                 title={`Canje: ${title}`}
                 caption="Acercá este código al escáner de canje"
+                isSandbox={isTest}
               />
             ) : (
               <QrScanLightbox
@@ -146,6 +150,7 @@ export function ExtraConsumableCard({
                 totpSecret={qr.totpSecret}
                 title={`Canje: ${title}`}
                 caption="Acercá este código al escáner de canje"
+                isSandbox={isTest}
               />
             )}
           </div>
@@ -181,6 +186,7 @@ export function LivingStoreCard({
           : "Ya fue canjeado"
       }
       qr={{ kind: "store", token: redemption.qrCodeToken }}
+      isTest={redemption.isTest}
     />
   )
 }
@@ -204,6 +210,7 @@ export function LivingCheckoutExtraCard({ ticket }: { ticket: MyTicket }) {
         totpSecret: ticket.totpSecret ?? "",
         isStatic: ticket.qrType === "static",
       }}
+      isTest={ticket.isTest}
     />
   )
 }

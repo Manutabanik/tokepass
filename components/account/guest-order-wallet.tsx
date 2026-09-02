@@ -115,7 +115,7 @@ function GuestTicketCard({ ticket }: { ticket: MyTicket }) {
             title={sector}
             holderName={ticket.holderName}
             holderDni={ticket.holderDni}
-            isTest={ticket.isTest}
+            isSandbox={ticket.isTest}
           />
           <p className="mt-3 font-mono text-xs tracking-wider text-muted-foreground">
             {ticketBackupCode(ticket.id)}

@@ -233,7 +233,7 @@ export function LivingTicketCard({
           title={sector}
           holderName={ticket.holderName}
           holderDni={ticket.holderDni}
-          isTest={ticket.isTest}
+          isSandbox={ticket.isTest}
         />
       ) : null}
       <TransferShareConfirmDialog
