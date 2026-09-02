@@ -13,6 +13,7 @@ import {
   parseCartCompositeItemId,
   projectQuantitiesForSchedule,
   upsertGeneralCartLine,
+  type CartIdentityLine,
 } from "./cart-item-identity"
 
 const friday = "550e8400-e29b-41d4-a716-446655440001"
@@ -55,7 +56,7 @@ describe("cartCompositeItemId", () => {
 
 describe("upsertGeneralCartLine", () => {
   it("keeps friday and saturday as independent objects", () => {
-    const fridayLine = upsertGeneralCartLine([], {
+    const fridayLine = upsertGeneralCartLine<CartIdentityLine>([], {
       ticketTierId: general,
       name: "General",
       price: 10000,
@@ -83,7 +84,7 @@ describe("upsertGeneralCartLine", () => {
   })
 
   it("does not rewrite a frozen snapshot when only quantity changes", () => {
-    const [first] = upsertGeneralCartLine([], {
+    const [first] = upsertGeneralCartLine<CartIdentityLine>([], {
       ticketTierId: general,
       name: "General",
       price: 10000,
@@ -110,7 +111,7 @@ describe("upsertGeneralCartLine", () => {
 
 describe("mergeImmutableCartLines", () => {
   it("does not replace a dated general with an undated rebuild", () => {
-    const current = [
+    const current: CartIdentityLine[] = [
       {
         id: cartCompositeItemId(general, friday),
         ticketTierId: general,
@@ -121,7 +122,7 @@ describe("mergeImmutableCartLines", () => {
         dateString: "Viernes 13 Nov",
       },
     ]
-    const incoming = [
+    const incoming: CartIdentityLine[] = [
       {
         id: cartCompositeItemId(general, null),
         ticketTierId: general,
@@ -136,7 +137,7 @@ describe("mergeImmutableCartLines", () => {
   })
 
   it("keeps the other day's lines when the active tab rebuilds", () => {
-    const current = [
+    const current: CartIdentityLine[] = [
       {
         id: cartCompositeItemId(general, friday),
         ticketTierId: general,
@@ -147,7 +148,7 @@ describe("mergeImmutableCartLines", () => {
         dateString: "Viernes 13 Nov",
       },
     ]
-    const incoming = [
+    const incoming: CartIdentityLine[] = [
       {
         id: cartCompositeItemId(general, saturday),
         ticketTierId: general,
@@ -165,7 +166,7 @@ describe("mergeImmutableCartLines", () => {
   })
 
   it("replaces a same-day line even if the id format changed", () => {
-    const current = [
+    const current: CartIdentityLine[] = [
       {
         id: "seat-1",
         ticketTierId: general,
@@ -178,7 +179,7 @@ describe("mergeImmutableCartLines", () => {
         seatLabel: "Mesa 04",
       },
     ]
-    const incoming = [
+    const incoming: CartIdentityLine[] = [
       {
         id: cartCompositeItemId(general, friday, "seat-1"),
         ticketTierId: general,
@@ -199,7 +200,7 @@ describe("mergeImmutableCartLines", () => {
   })
 
   it("does not drop another day's general when a map place arrives", () => {
-    const current = [
+    const current: CartIdentityLine[] = [
       {
         id: cartCompositeItemId(general, friday),
         ticketTierId: general,
@@ -219,7 +220,7 @@ describe("mergeImmutableCartLines", () => {
         dateString: "Sábado 14 Nov",
       },
     ]
-    const incoming = [
+    const incoming: CartIdentityLine[] = [
       {
         id: cartCompositeItemId(general, saturday, "tablon-16"),
         ticketTierId: general,
@@ -238,7 +239,7 @@ describe("mergeImmutableCartLines", () => {
   })
 
   it("drops a cleared general when that jornada is rebuilt", () => {
-    const current = [
+    const current: CartIdentityLine[] = [
       {
         id: cartCompositeItemId(general, friday),
         ticketTierId: general,
@@ -295,7 +296,7 @@ describe("cartLineSnapshot", () => {
 describe("projectQuantitiesForSchedule", () => {
   it("exposes only the active day's general qty under the ticket id", () => {
     const lines = upsertGeneralCartLine(
-      upsertGeneralCartLine([], {
+      upsertGeneralCartLine<CartIdentityLine>([], {
         ticketTierId: general,
         name: "General",
         price: 1,
@@ -372,7 +373,7 @@ describe("projectQuantitiesForSchedule", () => {
 
 describe("dropUndatedGeneralState", () => {
   it("removes leftover _all qty and lines once a jornada key exists", () => {
-    const dated = upsertGeneralCartLine([], {
+    const dated = upsertGeneralCartLine<CartIdentityLine>([], {
       ticketTierId: general,
       name: "General",
       price: 1,
@@ -380,7 +381,7 @@ describe("dropUndatedGeneralState", () => {
       scheduleId: friday,
       dateString: "Vie",
     })
-    const mixed = [
+    const mixed: CartIdentityLine[] = [
       ...dated,
       {
         id: cartCompositeItemId(general, null),
@@ -408,7 +409,7 @@ describe("dropUndatedGeneralState", () => {
   })
 
   it("keeps the same quantity and line refs when nothing undated remains", () => {
-    const dated = upsertGeneralCartLine([], {
+    const dated = upsertGeneralCartLine<CartIdentityLine>([], {
       ticketTierId: general,
       name: "General",
       price: 1,

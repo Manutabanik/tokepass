@@ -54,6 +54,8 @@ function tier(
     price: 10000,
     available: 10,
     isFullPass: true,
+    layoutType: "general",
+    capacityPerUnit: 1,
     ...patch,
   }
 }

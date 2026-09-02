@@ -117,9 +117,9 @@ describe("storefrontItemMatchesSchedule", () => {
       storefrontItemMatchesSchedule({ eventDateId: dayA }, dayB),
       false,
     )
-    assert.equal(storefrontItemMatchesSchedule({ id: "seat-1" }, dayA), true)
+    assert.equal(storefrontItemMatchesSchedule({}, dayA), true)
     assert.equal(
-      storefrontItemMatchesSchedule({ id: "seat-1" }, dayA, {
+      storefrontItemMatchesSchedule({}, dayA, {
         scheduleDayCount: 2,
       }),
       false,
@@ -141,7 +141,7 @@ describe("storefrontItemMatchesSchedule", () => {
   it("does not treat a combo pack as a single-jornada place", () => {
     assert.equal(
       storefrontItemMatchesSchedule(
-        { id: "mesa-09", comboTierId: "pack-1", eventDateId: dayA },
+        { comboTierId: "pack-1", eventDateId: dayA },
         dayB,
         { scheduleDayCount: 2 },
       ),
@@ -149,7 +149,7 @@ describe("storefrontItemMatchesSchedule", () => {
     )
     assert.equal(
       storefrontItemMatchesSchedule(
-        { id: "mesa-09", comboTierId: "pack-1" },
+        { comboTierId: "pack-1" },
         "combo_packs",
         { scheduleDayCount: 2 },
       ),

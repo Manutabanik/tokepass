@@ -273,19 +273,13 @@ describe("sellable public tickets", () => {
       { ok: true },
     )
     assert.deepEqual(
-      assertLoadedCheckoutTiersCoverCart(
-        ["adm", "extra"],
-        [{ id: "adm", ticket_type: "standard" }],
-      ),
+      assertLoadedCheckoutTiersCoverCart(["adm", "extra"], [{ id: "adm" }]),
       { ok: false, error: CHECKOUT_TIERS_UNREADABLE_ERROR },
     )
     assert.deepEqual(
       assertLoadedCheckoutTiersCoverCart(
         ["adm", "extra"],
-        [
-          { id: "adm", ticket_type: "standard" },
-          { id: "extra", ticket_type: "extra" },
-        ],
+        [{ id: "adm" }, { id: "extra" }],
       ),
       { ok: true },
     )
