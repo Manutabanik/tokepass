@@ -800,7 +800,7 @@ function toDatetimeLocal(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-function blankDraftTicket(): EventFormValues["tickets"][number] {
+export function blankDraftTicket(): EventFormValues["tickets"][number] {
   return {
     name: "Borrador",
     price: 0,

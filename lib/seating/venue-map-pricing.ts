@@ -459,9 +459,16 @@ function keepTicketWithLiveSector<
   return (Number(tier.sold) || 0) > 0
 }
 
-export function consolidateEventTicketsForPersist(
-  data: Pick<EventFormValues, "tickets" | "basics" | "venue">,
-): EventFormValues["tickets"] {
+/**
+ * Declara solo los campos que lee. Pedir `EventFormValues` entero obligaba a
+ * cada caller a armar un formulario completo (o a castear) para decidir algo
+ * que depende del mapa, la jornada y los tiers.
+ */
+export function consolidateEventTicketsForPersist(data: {
+  tickets: EventFormValues["tickets"]
+  basics: Pick<EventFormValues["basics"], "hasSeatingPlan" | "scheduleDays">
+  venue: Pick<EventFormValues["venue"], "venueMap" | "includesSeatingMap">
+}): EventFormValues["tickets"] {
   const venueMap = parseVenueMap(data.venue.venueMap)
   const liveSectors = collectNamedMapSectorIds(venueMap)
   const mapActive = eventHasActiveSeatingMap({

@@ -6,6 +6,7 @@ import {
   healTicketSeatingSector,
   stabilizeVenueMapIds,
 } from "@/lib/seating/stabilize-venue-map-ids"
+import { venueElement } from "@/tests/fixtures/venue-map"
 import { emptyVenueMap, parseVenueMap } from "@/types/venue-map"
 
 function grada(id: string) {
@@ -40,21 +41,19 @@ describe("stabilize-venue-map-ids", () => {
   })
 
   it("keeps a furniture group id when only the display name changes", () => {
-    const table = {
+    const table = venueElement({
       id: "mesa-1",
-      type: "round_table" as const,
+      type: "round_table",
       x: 10,
       y: 10,
-      rotation: 0,
       label: "Mesa 01",
-      seats: [],
       capacity: 8,
       price: 70000,
       color: "#f97316",
       groupId: "grada-naranja",
       groupName: "Grada Naranja",
       sectorName: "Grada Naranja",
-    }
+    })
     const previous = { ...emptyVenueMap(), elements: [table] }
     const incoming = {
       ...emptyVenueMap(),

@@ -116,9 +116,15 @@ type IsolatablePointer = {
   }
 }
 
+/** Solo se registran y quitan listeners: no hace falta un EventTarget entero. */
+type PassiveTouchTarget = Pick<
+  EventTarget,
+  "addEventListener" | "removeEventListener"
+>
+
 /** Register touch gestures without blocking the main thread / scroll warnings. */
 export function attachPassiveTouchListeners(
-  el: EventTarget,
+  el: PassiveTouchTarget,
   handlers: {
     onTouchStart?: (event: TouchEvent) => void
     onTouchMove?: (event: TouchEvent) => void

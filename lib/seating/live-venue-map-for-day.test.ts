@@ -2,30 +2,13 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import { resolveLiveVenueMapForDay } from "./live-venue-map-for-day"
-import { emptyVenueMap } from "@/types/venue-map"
+import { venueMap, venueZone } from "@/tests/fixtures/venue-map"
 
 const friday = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 const saturday = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 
 function map(zoneId: string) {
-  return {
-    ...emptyVenueMap(),
-    zones: [
-      {
-        id: zoneId,
-        name: zoneId,
-        color: "#111",
-        price: 0,
-        polygon: [],
-        layoutType: "general" as const,
-        sellMode: "unit" as const,
-        rows: 1,
-        itemsPerRow: 1,
-        capacityPerUnit: 1,
-        capacity: 10,
-      },
-    ],
-  }
+  return venueMap({ zones: [venueZone({ id: zoneId, name: zoneId })] })
 }
 
 describe("resolveLiveVenueMapForDay", () => {

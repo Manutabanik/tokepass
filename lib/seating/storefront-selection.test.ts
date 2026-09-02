@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
+import { venueZone } from "@/tests/fixtures/venue-map"
 import { emptyVenueMap } from "@/types/venue-map"
 import {
   addSelectedSeatToCartItem,
@@ -101,7 +102,7 @@ describe("storefront-selection", () => {
   it("usa la zona del recinto como sector de hold y toma el precio del sector padre", () => {
     const map = emptyVenueMap()
     map.zones = [
-      {
+      venueZone({
         id: "sector-naranja",
         name: "Sector Naranja",
         color: "#f97316",
@@ -112,7 +113,7 @@ describe("storefront-selection", () => {
           { x: 80, y: 80 },
           { x: 0, y: 80 },
         ],
-      },
+      }),
     ]
     map.elements = [
       {
@@ -202,7 +203,7 @@ describe("storefront-selection", () => {
   it("acepta precio 0 como Gratis y no lo trata como vacio", () => {
     const map = emptyVenueMap()
     map.zones = [
-      {
+      venueZone({
         id: "sector-gratis",
         name: "Campo",
         color: "#22c55e",
@@ -213,7 +214,7 @@ describe("storefront-selection", () => {
           { x: 40, y: 40 },
           { x: 0, y: 40 },
         ],
-      },
+      }),
     ]
     map.elements = [
       {

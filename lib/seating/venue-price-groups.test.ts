@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import { applyVenuePriceGroupPatch, listVenuePriceGroups } from "./venue-price-groups"
+import { venueElement } from "@/tests/fixtures/venue-map"
 import { emptyVenueMap } from "@/types/venue-map"
 
 describe("venue-price-groups", () => {
@@ -39,21 +40,19 @@ describe("venue-price-groups", () => {
   it("renombra un grupo de mesas en el paso de precios", () => {
     const map = emptyVenueMap()
     map.elements = [
-      {
+      venueElement({
         id: "mesa-1",
         type: "round_table",
         x: 10,
         y: 10,
-        rotation: 0,
         label: "Mesa 01",
-        seats: [],
         capacity: 8,
         price: 70000,
         color: "#f97316",
         groupId: "grada-naranja",
         groupName: "Grada Naranja",
         sectorName: "Grada Naranja",
-      },
+      }),
     ]
     const group = listVenuePriceGroups(map)[0]
     assert.ok(group)

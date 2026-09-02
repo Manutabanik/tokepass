@@ -47,12 +47,11 @@ describe("studio-bulk-edit", () => {
       table("a", "#ea580c"),
       table("b", "#EA580C"),
       table("c", "#22d3ee"),
-      {
-        ...table("d", "#ea580c"),
+      table("d", "#ea580c", {
         type: "infrastructure",
         category: "infrastructure",
         subtype: "bar",
-      },
+      }),
     ]
     assert.deepEqual(selectSimilarElementIds(elements, "a"), ["a", "b"])
   })

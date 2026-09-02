@@ -56,9 +56,12 @@ function readInventoryHit(node: AttrNode): InventoryHit | null {
   return null
 }
 
-export function inventoryHitFromNode(
-  node: EventTarget | null | undefined,
-): InventoryHit | null {
+/**
+ * `node` es `unknown` a proposito: `isAttrNode` es un type guard en runtime y
+ * lo unico que se lee son data attributes. Pedir un `EventTarget` obligaria a
+ * cada caller a construir un nodo DOM completo sin que la funcion lo use.
+ */
+export function inventoryHitFromNode(node: unknown): InventoryHit | null {
   if (!isAttrNode(node)) return null
   const direct = readInventoryHit(node)
   if (direct) return direct
@@ -68,8 +71,8 @@ export function inventoryHitFromNode(
 }
 
 export function inventoryHitFromEvent(event: {
-  target?: EventTarget | null
-  composedPath?: () => EventTarget[]
+  target?: unknown
+  composedPath?: () => unknown[]
 }): InventoryHit | null {
   const path =
     typeof event.composedPath === "function" ? event.composedPath() : []

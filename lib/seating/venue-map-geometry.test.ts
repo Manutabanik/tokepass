@@ -6,6 +6,7 @@ import {
   rebuildSectorSeats,
   venueMapToSeatingLayout,
 } from "./venue-map-geometry"
+import { venueElement, venueMap } from "@/tests/fixtures/venue-map"
 import { parseVenueMap } from "@/types/venue-map"
 import type { VenueMapSector } from "@/types/venue-map"
 
@@ -76,92 +77,69 @@ describe("venue-map-geometry", () => {
 
   it("serializes sectors into seating_layout rows", () => {
     const built = sector({ seats: rebuildSectorSeats(sector()) })
-    const layout = venueMapToSeatingLayout({
-      version: 1,
-      stage: null,
-      labels: [],
-      aisles: [],
-      sectors: [built],
-      elements: [],
-      zones: [],
-      backgroundImage: null,
-      backgroundOpacity: 0.4,
-      backgroundScale: 1,
-      backgroundX: 0,
-      backgroundY: 0,
-    })
+    const layout = venueMapToSeatingLayout(
+      venueMap({ stage: null, sectors: [built] }),
+    )
     assert.equal(layout[0]?.layout_type, "numbered_seat")
     assert.equal(layout[0]?.rows.length, 2)
   })
 
   it("groups ring tables into a single seating sector", () => {
-    const layout = venueMapToSeatingLayout({
-      version: 1,
-      stage: null,
-      labels: [],
-      aisles: [],
-      sectors: [],
-      zones: [],
-      backgroundImage: null,
-      backgroundOpacity: 0.4,
-      backgroundScale: 1,
-      backgroundX: 0,
-      backgroundY: 0,
-      elements: [
-        {
-          id: "M-01",
-          type: "round_table",
-          label: "Mesa 01",
-          category: "commercial",
-          sectorName: "Mesa Premium",
-          x: 140,
-          y: 210,
-          width: 36,
-          height: 36,
-          rotation: 15,
-          price: 45000,
-          color: "#ea580c",
-          opacity: 1,
-          chairCount: 8,
-          sideA: 4,
-          sideB: 4,
-          sellMode: "group",
-          capacity: 8,
-          seats: [
-            { id: "M-01-S1", number: 1, x: 140, y: 210, status: "available" },
-          ],
-          groupId: "grada-naranja",
-          groupName: "Grada Naranja - Mesas y Tablones",
-          ringIndex: 0,
-        },
-        {
-          id: "TAB-01",
-          type: "long_table",
-          label: "Tablon 01",
-          category: "commercial",
-          sectorName: "Mesa Premium",
-          x: 180,
-          y: 240,
-          width: 96,
-          height: 28,
-          rotation: 22,
-          price: 60000,
-          color: "#ea580c",
-          opacity: 1,
-          chairCount: 8,
-          sideA: 4,
-          sideB: 4,
-          sellMode: "group",
-          capacity: 8,
-          seats: [
-            { id: "TAB-01-S1", number: 1, x: 180, y: 240, status: "available" },
-          ],
-          groupId: "grada-naranja",
-          groupName: "Grada Naranja - Mesas y Tablones",
-          ringIndex: 1,
-        },
-      ],
-    })
+    const layout = venueMapToSeatingLayout(
+      venueMap({
+        stage: null,
+        elements: [
+          venueElement({
+            id: "M-01",
+            type: "round_table",
+            label: "Mesa 01",
+            sectorName: "Mesa Premium",
+            x: 140,
+            y: 210,
+            width: 36,
+            height: 36,
+            rotation: 15,
+            price: 45000,
+            color: "#ea580c",
+            chairCount: 8,
+            sideA: 4,
+            sideB: 4,
+            sellMode: "group",
+            capacity: 8,
+            seats: [
+              { id: "M-01-S1", number: 1, x: 140, y: 210, status: "available" },
+            ],
+            groupId: "grada-naranja",
+            groupName: "Grada Naranja - Mesas y Tablones",
+            ringIndex: 0,
+          }),
+          venueElement({
+            id: "TAB-01",
+            type: "long_table",
+            label: "Tablon 01",
+            sectorName: "Mesa Premium",
+            x: 180,
+            y: 240,
+            width: 96,
+            height: 28,
+            rotation: 22,
+            price: 60000,
+            color: "#ea580c",
+            chairCount: 8,
+            sideA: 4,
+            sideB: 4,
+            sellMode: "group",
+            capacity: 8,
+            seats: [
+              { id: "TAB-01-S1", number: 1, x: 180, y: 240, status: "available" },
+            ],
+            groupId: "grada-naranja",
+            groupName: "Grada Naranja - Mesas y Tablones",
+            ringIndex: 1,
+          }),
+        ],
+      }),
+    )
     assert.equal(layout.length, 1)
     assert.equal(layout[0]?.id, "grada-naranja")
     assert.equal(layout[0]?.layout_type, "table_combo")

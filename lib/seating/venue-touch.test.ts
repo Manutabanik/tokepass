@@ -135,6 +135,7 @@ describe("venue-touch", () => {
       },
       preventDefault() {},
       nativeEvent: {
+        cancelBubble: false,
         stopImmediatePropagation() {
           immediate = true
         },

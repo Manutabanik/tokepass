@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import type { OrganizerVenue } from "../../app/actions/venues"
+import { venueMap } from "@/tests/fixtures/venue-map"
 import {
   buildEmptyPricingMap,
   mapVenueToUniversalSeatData,
@@ -22,20 +23,7 @@ function baseVenue(
     capacity: 100,
     zoneBlueprint: [],
     seatingLayout: [],
-    venueMap: {
-      version: 1,
-      stage: null,
-      labels: [],
-      aisles: [],
-      sectors: [],
-      elements: [],
-      zones: [],
-      backgroundImage: null,
-      backgroundOpacity: 0.4,
-      backgroundScale: 1,
-      backgroundX: 0,
-      backgroundY: 0,
-    },
+    venueMap: venueMap({ stage: null }),
     seatingBackgroundUrl: "https://example.com/map.png",
     isArchived: false,
     linkedEventCount: 0,

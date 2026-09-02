@@ -3,13 +3,14 @@ import { describe, it } from "node:test"
 
 import { createVenueElement } from "./venue-element-geometry"
 import { listStorefrontSectorCatalog } from "./storefront-sector-catalog"
+import { venueZone } from "@/tests/fixtures/venue-map"
 import { emptyVenueMap } from "@/types/venue-map"
 
 describe("storefront-sector-catalog", () => {
   it("mete las mesas configuradas dentro del sector, no un acceso general", () => {
     const map = emptyVenueMap()
     map.zones = [
-      {
+      venueZone({
         id: "sector-naranja",
         name: "Sector Naranja",
         color: "#f97316",
@@ -22,7 +23,7 @@ describe("storefront-sector-catalog", () => {
           { x: 40, y: 40 },
           { x: 10, y: 40 },
         ],
-      },
+      }),
     ]
     const mesa = createVenueElement("round_table", 0, { x: 200, y: 140 })
     mesa.id = "mesa-1"
@@ -55,7 +56,7 @@ describe("storefront-sector-catalog", () => {
   it("deja un sector sin muebles como acceso general", () => {
     const map = emptyVenueMap()
     map.zones = [
-      {
+      venueZone({
         id: "pista",
         name: "PISTA",
         color: "#22c55e",
@@ -68,7 +69,7 @@ describe("storefront-sector-catalog", () => {
           { x: 80, y: 80 },
           { x: 50, y: 80 },
         ],
-      },
+      }),
     ]
     const catalog = listStorefrontSectorCatalog({
       map,
@@ -82,7 +83,7 @@ describe("storefront-sector-catalog", () => {
   it("conserva precio 0 como Gratis y no lo reemplaza por el fallback", () => {
     const map = emptyVenueMap()
     map.zones = [
-      {
+      venueZone({
         id: "campo-gratis",
         name: "Campo",
         color: "#22c55e",
@@ -95,7 +96,7 @@ describe("storefront-sector-catalog", () => {
           { x: 40, y: 40 },
           { x: 10, y: 40 },
         ],
-      },
+      }),
     ]
     const mesa = createVenueElement("round_table", 0, { x: 200, y: 140 })
     mesa.id = "mesa-gratis"
@@ -117,7 +118,7 @@ describe("storefront-sector-catalog", () => {
   it("marca una mesa agotada cuando el inventario la ocupa", () => {
     const map = emptyVenueMap()
     map.zones = [
-      {
+      venueZone({
         id: "sector-naranja",
         name: "Sector Naranja",
         color: "#f97316",
@@ -130,7 +131,7 @@ describe("storefront-sector-catalog", () => {
           { x: 40, y: 40 },
           { x: 10, y: 40 },
         ],
-      },
+      }),
     ]
     const mesa = createVenueElement("round_table", 0, { x: 200, y: 140 })
     mesa.id = "mesa-1"
