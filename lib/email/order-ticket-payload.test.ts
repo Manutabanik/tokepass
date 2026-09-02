@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import {
   buildOrderEmailTickets,
   formatOrderNumber,
+  groupOrderEmailTickets,
   missingGroupSlots,
   planGroupTicketExpansion,
   ticketPassLabel,
@@ -82,5 +83,68 @@ describe("ticket labels for receipts", () => {
     assert.equal(rows[1]?.label, "Mesa 12 - Pase 2 de 2")
     assert.equal("qrCodeUrl" in (rows[0] ?? {}), false)
     assert.equal("codeText" in (rows[0] ?? {}), false)
+  })
+})
+
+describe("groupOrderEmailTickets", () => {
+  function labels(tickets: Array<{ id: string; label: string }>) {
+    return groupOrderEmailTickets(tickets).map((group) => group.label)
+  }
+
+  it("colapsa una mesa de 8 pases en una sola linea", () => {
+    const tickets = Array.from({ length: 8 }, (_, index) => ({
+      id: `t${index + 1}`,
+      label: `Mesa 13 - Pase ${index + 1} de 8`,
+    }))
+    assert.deepEqual(labels(tickets), ["1x Mesa 13 (8 accesos)"])
+  })
+
+  it("cuenta entradas individuales sin sufijo de pase", () => {
+    const tickets = Array.from({ length: 4 }, (_, index) => ({
+      id: `t${index + 1}`,
+      label: "Campo General",
+    }))
+    assert.deepEqual(labels(tickets), ["4x Campo General"])
+  })
+
+  it("suma dos mesas del mismo nombre como 2x", () => {
+    const tickets = Array.from({ length: 16 }, (_, index) => ({
+      id: `t${index + 1}`,
+      label: `Mesa 13 - Pase ${(index % 8) + 1} de 8`,
+    }))
+    assert.deepEqual(labels(tickets), ["2x Mesa 13 (8 accesos)"])
+  })
+
+  it("separa lugares distintos y preserva el orden de aparicion", () => {
+    assert.deepEqual(
+      labels([
+        { id: "a", label: "Mesa 13 - Pase 1 de 2" },
+        { id: "b", label: "Mesa 13 - Pase 2 de 2" },
+        { id: "c", label: "Campo General" },
+        { id: "d", label: "Mesa 14 - Pase 1 de 2" },
+        { id: "e", label: "Mesa 14 - Pase 2 de 2" },
+      ]),
+      ["1x Mesa 13 (2 accesos)", "1x Campo General", "1x Mesa 14 (2 accesos)"],
+    )
+  })
+
+  it("no pierde una mesa cuando llegan menos pases que el total", () => {
+    assert.deepEqual(labels([{ id: "a", label: "Mesa 13 - Pase 1 de 8" }]), [
+      "1x Mesa 13 (8 accesos)",
+    ])
+  })
+
+  it("expone el desglose ademas de la etiqueta", () => {
+    const [group] = groupOrderEmailTickets([
+      { id: "a", label: "Mesa 13 - Pase 1 de 2" },
+      { id: "b", label: "Mesa 13 - Pase 2 de 2" },
+    ])
+    assert.equal(group?.place, "Mesa 13")
+    assert.equal(group?.units, 1)
+    assert.equal(group?.accessesPerUnit, 2)
+  })
+
+  it("devuelve lista vacia sin tickets", () => {
+    assert.deepEqual(groupOrderEmailTickets([]), [])
   })
 })

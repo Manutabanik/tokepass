@@ -13,6 +13,7 @@ import {
   buildOrderEmailTickets,
   expandIndividualAccessTickets,
   formatOrderNumber,
+  groupOrderEmailTickets,
   httpImageUrl,
   type OrderEmailData,
 } from "@/lib/email/order-ticket-payload"
@@ -89,6 +90,7 @@ export async function sendOrderTicketsEmail(
 
   const accountUrl =
     payload.accountUrl?.trim() || walletReceiptUrl(getEmailAppUrl())
+  const ticketGroups = groupOrderEmailTickets(payload.tickets)
   const emailProps: OrderEmailProps = {
     customerName: payload.customerName,
     orderNumber: payload.orderNumber,
@@ -100,7 +102,7 @@ export async function sendOrderTicketsEmail(
       typeof payload.totalAmount === "number"
         ? formatCurrency(payload.totalAmount)
         : payload.totalAmount,
-    tickets: payload.tickets,
+    ticketGroups,
     accountUrl,
   }
 
@@ -116,7 +118,7 @@ export async function sendOrderTicketsEmail(
     `Fecha: ${payload.eventDate}`,
     `Lugar: ${payload.eventVenue}`,
     `Total: ${emailProps.totalAmount}`,
-    ...payload.tickets.map((ticket) => ticket.label),
+    ...ticketGroups.map((group) => group.label),
     LIVING_QR_EMAIL_DISCLAIMER,
     `${EMAIL_WALLET_CTA}: ${accountUrl}`,
     "¿Tuviste algún problema con tu compra? Respondé a este mail o escribinos por WhatsApp.",
@@ -204,6 +206,7 @@ export async function sendTicketConfirmationEmail({
   const eventDateLabel = formatEventDate(eventDetails.date)
   const totalPaidLabel = formatCurrency(orderDetails.totalPaid)
   const from = resendFromAddress()
+  const ticketGroups = groupOrderEmailTickets(tickets ?? [])
 
   const html = await render(
     TicketReceiptEmail({
@@ -213,7 +216,7 @@ export async function sendTicketConfirmationEmail({
       eventLocation: eventDetails.location ?? "Online",
       orderNumber,
       ticketCount,
-      tickets,
+      ticketGroups,
       totalPaidLabel,
       walletUrl: accessUrl,
       logoUrl,
@@ -230,6 +233,7 @@ export async function sendTicketConfirmationEmail({
     `Fecha: ${eventDateLabel}`,
     `Lugar: ${eventDetails.location?.trim() || "Online"}`,
     `Entradas: ${ticketCount}`,
+    ...ticketGroups.map((group) => group.label),
     `Total pagado: ${totalPaidLabel}`,
     LIVING_QR_EMAIL_DISCLAIMER,
     `${EMAIL_WALLET_CTA}: ${accessUrl}`,

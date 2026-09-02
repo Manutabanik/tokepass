@@ -28,7 +28,8 @@ export type TicketReceiptEmailProps = {
   eventLocation: string
   orderNumber?: string
   ticketCount: number
-  tickets?: TicketReceiptLine[]
+  /** Líneas ya agrupadas por `groupOrderEmailTickets`, no un item por ticket. */
+  ticketGroups?: TicketReceiptLine[]
   totalPaidLabel: string
   walletUrl: string
   logoUrl: string
@@ -43,7 +44,7 @@ export function TicketReceiptEmail({
   eventLocation,
   orderNumber,
   ticketCount,
-  tickets = [],
+  ticketGroups = [],
   totalPaidLabel,
   walletUrl,
   logoUrl,
@@ -93,6 +94,12 @@ export function TicketReceiptEmail({
             />
           ) : null}
 
+          <Section style={styles.ctaWrap}>
+            <Button href={walletUrl} style={styles.button}>
+              {EMAIL_WALLET_CTA}
+            </Button>
+          </Section>
+
           <Section style={styles.card}>
             <Text style={styles.cardLabel}>Evento</Text>
             <Text style={styles.cardValue}>{eventTitle}</Text>
@@ -117,13 +124,13 @@ export function TicketReceiptEmail({
             <Text style={styles.total}>{totalPaidLabel}</Text>
           </Section>
 
-          {tickets.length > 0 ? (
+          {ticketGroups.length > 0 ? (
             <>
               <Text style={styles.sectionTitle}>Detalle de entradas</Text>
-              {tickets.map((ticket) => (
-                <Section key={ticket.id} style={styles.ticketCard}>
-                  <Text style={styles.ticketLabel}>{ticket.label}</Text>
-                </Section>
+              {ticketGroups.map((group) => (
+                <Text key={group.id} style={styles.ticketLine}>
+                  {group.label}
+                </Text>
               ))}
             </>
           ) : null}
@@ -131,12 +138,6 @@ export function TicketReceiptEmail({
           <Section style={styles.alert}>
             <Text style={styles.alertTitle}>Alerta de seguridad</Text>
             <Text style={styles.alertBody}>{LIVING_QR_EMAIL_DISCLAIMER}</Text>
-          </Section>
-
-          <Section style={styles.ctaWrap}>
-            <Button href={walletUrl} style={styles.button}>
-              {EMAIL_WALLET_CTA}
-            </Button>
           </Section>
 
           {otpCode ? (
@@ -257,18 +258,12 @@ const styles = {
     fontWeight: 800,
     margin: "24px 0 10px",
   },
-  ticketCard: {
-    backgroundColor: "#18181b",
-    border: "1px solid #27272a",
-    borderRadius: "14px",
-    marginBottom: "8px",
-    padding: "12px 14px",
-  },
-  ticketLabel: {
+  ticketLine: {
     color: "#e4e4e7",
-    fontSize: "14px",
-    fontWeight: 700,
-    margin: "0",
+    fontSize: "15px",
+    fontWeight: 600,
+    lineHeight: "1.5",
+    margin: "0 0 6px",
   },
   alert: {
     backgroundColor: "#3f1d1d",
@@ -292,7 +287,7 @@ const styles = {
     margin: "0",
   },
   ctaWrap: {
-    margin: "28px 0 20px",
+    margin: "0 0 24px",
     textAlign: "center" as const,
   },
   button: {

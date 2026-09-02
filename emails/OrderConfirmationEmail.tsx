@@ -29,7 +29,8 @@ export type OrderEmailProps = {
   eventVenue: string
   eventBannerUrl?: string
   totalAmount: string
-  tickets: OrderEmailTicket[]
+  /** Líneas ya agrupadas por `groupOrderEmailTickets`, no un item por ticket. */
+  ticketGroups: OrderEmailTicket[]
   accountUrl?: string
 }
 
@@ -44,9 +45,9 @@ export const PreviewProps: OrderEmailProps = {
   eventBannerUrl: "https://www.tokepass.com.ar/brand/tokepass-mark.png",
   totalAmount: "$ 48.000",
   accountUrl: DEFAULT_ACCOUNT_URL,
-  tickets: [
-    { id: "tkt-demo-1", label: "Mesa 12 · Living" },
-    { id: "tkt-demo-2", label: "General · Viernes" },
+  ticketGroups: [
+    { id: "Mesa 12|8", label: "1x Mesa 12 (8 accesos)" },
+    { id: "General|1", label: "4x General" },
   ],
 }
 
@@ -58,7 +59,7 @@ export function OrderConfirmationEmail({
   eventVenue,
   eventBannerUrl,
   totalAmount,
-  tickets,
+  ticketGroups,
   accountUrl = DEFAULT_ACCOUNT_URL,
 }: OrderEmailProps) {
   const greeting = customerName.trim()
@@ -91,6 +92,12 @@ export function OrderConfirmationEmail({
             />
           ) : null}
 
+          <Section style={styles.ctaWrap}>
+            <Button href={accountUrl} style={styles.button}>
+              {EMAIL_WALLET_CTA}
+            </Button>
+          </Section>
+
           <Section style={styles.card}>
             <Text style={styles.cardLabel}>Evento</Text>
             <Text style={styles.cardValue}>{eventName}</Text>
@@ -108,22 +115,20 @@ export function OrderConfirmationEmail({
             <Text style={styles.total}>{totalAmount}</Text>
           </Section>
 
-          <Text style={styles.sectionTitle}>Detalle de entradas</Text>
-          {tickets.map((ticket) => (
-            <Section key={ticket.id} style={styles.ticketCard}>
-              <Text style={styles.ticketLabel}>{ticket.label}</Text>
-            </Section>
-          ))}
+          {ticketGroups.length > 0 ? (
+            <>
+              <Text style={styles.sectionTitle}>Detalle de entradas</Text>
+              {ticketGroups.map((group) => (
+                <Text key={group.id} style={styles.ticketLine}>
+                  {group.label}
+                </Text>
+              ))}
+            </>
+          ) : null}
 
           <Section style={styles.alert}>
             <Text style={styles.alertTitle}>Alerta de seguridad</Text>
             <Text style={styles.alertBody}>{LIVING_QR_EMAIL_DISCLAIMER}</Text>
-          </Section>
-
-          <Section style={styles.ctaWrap}>
-            <Button href={accountUrl} style={styles.button}>
-              {EMAIL_WALLET_CTA}
-            </Button>
           </Section>
 
           <Hr style={styles.footerRule} />
@@ -231,18 +236,12 @@ const styles = {
     fontWeight: 800,
     margin: "28px 0 12px",
   },
-  ticketCard: {
-    backgroundColor: "#1F2937",
-    border: "1px solid #374151",
-    borderRadius: "16px",
-    marginBottom: "10px",
-    padding: "14px 16px",
-  },
-  ticketLabel: {
+  ticketLine: {
     color: "#E5E7EB",
-    fontSize: "14px",
-    fontWeight: 700,
-    margin: "0",
+    fontSize: "15px",
+    fontWeight: 600,
+    lineHeight: "1.5",
+    margin: "0 0 6px",
   },
   alert: {
     backgroundColor: "#3F1D1D",
@@ -266,7 +265,7 @@ const styles = {
     margin: "0",
   },
   ctaWrap: {
-    margin: "28px 0 16px",
+    margin: "0 0 24px",
     textAlign: "center" as const,
   },
   button: {

@@ -255,6 +255,67 @@ export function formatOrderNumber(orderId: string): string {
   return `TP-${orderId.replace(/-/g, "").slice(0, 8).toUpperCase()}`
 }
 
+export type OrderEmailTicketGroup = {
+  id: string
+  label: string
+  place: string
+  units: number
+  accessesPerUnit: number
+}
+
+/** Inverso de `ticketPassLabel` para el sufijo de pase agrupado. */
+const PASS_SUFFIX = /^(.*?) - Pase \d+ de (\d+)$/
+
+/**
+ * Colapsa las líneas por ticket en una lista compacta para el recibo. Ocho
+ * filas de "Mesa 13 - Pase N de 8" pasan a "1x Mesa 13 (8 accesos)", y cuatro
+ * generales sueltas a "4x Campo General".
+ *
+ * Agrupa por lugar y tamaño de grupo, no por `group_id`, para que funcione con
+ * cualquier emisor: `/api/send-tickets` recibe las etiquetas ya armadas desde
+ * el cliente y no tiene las filas de la base. Una etiqueta que no siga el
+ * formato de pase cuenta como un acceso, que es el resultado correcto.
+ */
+export function groupOrderEmailTickets(
+  tickets: OrderEmailTicket[],
+): OrderEmailTicketGroup[] {
+  const buckets = tickets.reduce((acc, ticket) => {
+    const raw = ticket.label?.trim() || "Entrada"
+    const match = PASS_SUFFIX.exec(raw)
+    const place = match?.[1]?.trim() || raw
+    const accessesPerUnit = Math.max(1, Number(match?.[2] ?? 1) || 1)
+    const key = `${place}|${accessesPerUnit}`
+
+    const current = acc.get(key)
+    if (current) {
+      current.tickets += 1
+    } else {
+      acc.set(key, { key, place, accessesPerUnit, tickets: 1 })
+    }
+    return acc
+  }, new Map<string, { key: string; place: string; accessesPerUnit: number; tickets: number }>())
+
+  return [...buckets.values()].map((bucket) => {
+    // Con pases agrupados, cada unidad aporta `accessesPerUnit` filas: dos
+    // mesas de 8 llegan como 16 tickets y deben rendirse como "2x".
+    const units =
+      bucket.accessesPerUnit > 1
+        ? Math.max(1, Math.round(bucket.tickets / bucket.accessesPerUnit))
+        : bucket.tickets
+
+    return {
+      id: bucket.key,
+      place: bucket.place,
+      units,
+      accessesPerUnit: bucket.accessesPerUnit,
+      label:
+        bucket.accessesPerUnit > 1
+          ? `${units}x ${bucket.place} (${bucket.accessesPerUnit} accesos)`
+          : `${units}x ${bucket.place}`,
+    }
+  })
+}
+
 export function buildOrderEmailTickets(input: {
   tickets: Array<{
     id: string
