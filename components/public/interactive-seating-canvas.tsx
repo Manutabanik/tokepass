@@ -251,6 +251,8 @@ export function InteractiveSeatingCanvas({
   onCloseMap?: () => void
   readOnly?: boolean
   maxSelectable?: number
+  zoneQuantityMaxById?: Record<string, number>
+  onZoneQuantity?: any
   heldSeatIds?: string[]
   onPickSeat?: (seat: InteractiveSelectedSeat) => void
   onPickElement?: (element: VenueMapElement) => void
