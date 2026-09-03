@@ -172,17 +172,24 @@ export function shouldEnableMapLod(map: InteractiveVenueMap): boolean {
   return resolveLodZones(map).length > 0
 }
 
+/** Dentro de una zona la foto queda de contexto, no de protagonista. */
+export const MAP_BACKDROP_MICRO_OPACITY = 0.18
+
 /**
- * The uploaded venue render belongs to the orientation level only. Inside a
- * zone it is pure cost: the buyer already knows where they are, and the browser
- * would rasterise a full-canvas image at whatever zoom the reveal lands on,
- * under an abstract layout that is meant to read as clean vectors.
+ * Cuánto se ve la foto del predio. Al entrar a una zona **no se desmonta**: baja
+ * a un fantasma y vuelve al salir, así la transición es un zoom sobre algo que
+ * el comprador ya estaba mirando y no un corte a un lienzo vacío.
+ *
+ * El costo de rasterizar la imagen con zoom alto está acotado por el viewport
+ * (el navegador solo pinta los tiles visibles), y multiplica —no pisa— la
+ * opacidad que eligió el organizador en `map.backgroundOpacity`.
  */
-export function shouldRenderMapBackground(input: {
+export function mapBackdropOpacity(input: {
   lodEnabled: boolean
   viewMode: MapLodMode
-}): boolean {
-  return !input.lodEnabled || input.viewMode === "macro"
+}): number {
+  if (!input.lodEnabled || input.viewMode === "macro") return 1
+  return MAP_BACKDROP_MICRO_OPACITY
 }
 
 export function expandSelectionForContext(
@@ -474,6 +481,29 @@ export function publicRevealSeats<
 >(seats: T[], zone: VenueMapZone | null): T[] {
   if (!zone) return []
   return seats.filter((seat) => seatBelongsToZone(seat, zone))
+}
+
+/**
+ * ¿Hay algo adentro para mostrar si entramos a la zona?
+ *
+ * Es exactamente la cuenta que hace el render del micro, y esa es la gracia:
+ * una zona puede clasificar como numerada (`hasAssignedReservedPlaces()` acepta
+ * una grilla paramétrica declarada, o piezas atribuidas por `zoneId`) y no
+ * tener nada que dibujar adentro. Entrar en ese caso es un zoom hacia un lienzo
+ * vacío, porque el micro además apaga el fondo del plano.
+ */
+export function zoneHasRevealableInventory<
+  T extends { x: number; y: number; sectorId: string; sectorName: string },
+>(
+  elements: VenueMapElement[] | undefined,
+  seats: T[],
+  zone: VenueMapZone | null,
+): boolean {
+  if (!zone) return false
+  return (
+    publicRevealElements(elements, zone).length > 0 ||
+    publicRevealSeats(seats, zone).length > 0
+  )
 }
 
 export function buyerViewportFitSessionKey(

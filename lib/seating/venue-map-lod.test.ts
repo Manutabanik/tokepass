@@ -20,15 +20,16 @@ import {
   buyerViewportLooksReset,
   expandSelectionForContext,
   lodCameraTransform,
+  mapBackdropOpacity,
   pointInPolygon,
   publicRevealElements,
   publicRevealSeats,
   resolveLodZones,
   shouldEnableMapLod,
-  shouldRenderMapBackground,
   shouldRunBuyerAutoFit,
   synthesizeLodZones,
   zoneCanvasAabb,
+  zoneHasRevealableInventory,
 } from "./venue-map-lod"
 import { VENUE_MAP_CANVAS } from "@/lib/seating/venue-polygon"
 import { emptyVenueMap, parseVenueMap } from "@/types/venue-map"
@@ -154,20 +155,20 @@ describe("venue-map-lod", () => {
     assert.equal(shouldEnableMapLod(map), true)
   })
 
-  it("deja la imagen del predio en el nivel de orientacion y la desmonta dentro de una zona", () => {
+  it("atenúa la imagen del predio dentro de una zona, sin apagarla", () => {
     assert.equal(
-      shouldRenderMapBackground({ lodEnabled: true, viewMode: "macro" }),
-      true,
+      mapBackdropOpacity({ lodEnabled: true, viewMode: "macro" }),
+      1,
     )
-    assert.equal(
-      shouldRenderMapBackground({ lodEnabled: true, viewMode: "micro" }),
-      false,
-    )
+    // Fantasma, no cero: entrar a una zona es un zoom sobre algo que el
+    // comprador ya estaba mirando, no un corte a un lienzo vacío.
+    const inside = mapBackdropOpacity({ lodEnabled: true, viewMode: "micro" })
+    assert.ok(inside > 0 && inside < 0.35)
     // Sin zonas trazadas no hay dos niveles, asi que el fondo es el unico
-    // contexto que tiene el comprador y no se puede sacar.
+    // contexto que tiene el comprador y se ve entero.
     assert.equal(
-      shouldRenderMapBackground({ lodEnabled: false, viewMode: "micro" }),
-      true,
+      mapBackdropOpacity({ lodEnabled: false, viewMode: "micro" }),
+      1,
     )
   })
 
@@ -276,6 +277,50 @@ describe("venue-map-lod", () => {
   })
 })
 
+describe("zoom semántico solo con algo adentro", () => {
+  it("una zona numerada pero vacía no habilita el micro", () => {
+    // `zone()` declara grilla paramétrica (rows/itemsPerRow), que alcanza para
+    // que la zona clasifique como numerada aunque nadie haya dibujado piezas
+    // adentro. Entrar ahí es un zoom hacia un lienzo vacío.
+    const vip = zone()
+    assert.equal(zoneHasRevealableInventory([], [], vip), false)
+    assert.equal(
+      zoneHasRevealableInventory(
+        [createVenueElement("round_table", 0, { x: 700, y: 500 })],
+        [],
+        vip,
+      ),
+      false,
+    )
+  })
+
+  it("la decoración no cuenta como inventario para entrar", () => {
+    const vip = zone()
+    const decor = createVenueElement("infrastructure", 0, { x: 200, y: 140 }, "bar")
+    assert.equal(zoneHasRevealableInventory([decor], [], vip), false)
+  })
+
+  it("una mesa o un asiento adentro sí habilitan el micro", () => {
+    const vip = zone()
+    assert.equal(
+      zoneHasRevealableInventory(
+        [createVenueElement("round_table", 0, { x: 200, y: 140 })],
+        [],
+        vip,
+      ),
+      true,
+    )
+    assert.equal(
+      zoneHasRevealableInventory(
+        [],
+        [{ x: 200, y: 140, sectorId: "otro", sectorName: "Otro" }],
+        vip,
+      ),
+      true,
+    )
+  })
+})
+
 describe("buyer auto-fit isolation", () => {
   it("runs only on the first macro frame of an event/day, not on later selection renders", () => {
     const sessionKey = buyerViewportFitSessionKey("evt-1", "day-1")
@@ -330,6 +375,27 @@ describe("buyer auto-fit isolation", () => {
         wrapHeight: 480,
         fittedWidth: 390,
         fittedHeight: 480,
+      }),
+      false,
+    )
+  })
+
+  it("no reencuadra al volver del detalle: eso lo hace el botón", () => {
+    // Salir de una zona deja `viewMode` en macro pero la sesión ya fue
+    // encuadrada y el contenedor no cambió de tamaño, así que este efecto no
+    // corre. Por eso `exitLodView()` llama al encuadre él mismo: si delegara
+    // acá, la cámara se quedaría con el zoom de la zona y el resto del plano
+    // fuera de pantalla, que se ve como si las zonas hubieran desaparecido.
+    const sessionKey = buyerViewportFitSessionKey("evt-1", "day-1")
+    assert.equal(
+      shouldRunBuyerAutoFit({
+        sessionKey,
+        fittedSessionKey: sessionKey,
+        viewMode: "macro",
+        wrapWidth: 390,
+        wrapHeight: 520,
+        fittedWidth: 390,
+        fittedHeight: 520,
       }),
       false,
     )

@@ -124,6 +124,11 @@ la esquina superior izquierda del plano.
 `polygonFromCanvas()` existe como camino explícito canvas → % para el cierre de polígonos
 durante el dibujo, justamente para saltear la heurística cuando ya se conoce el espacio.
 
+Los vértices se registran con el flotante exacto del puntero. El imán de grilla
+(`VENUE_GRID_SIZE`, 20 px) aplica al mobiliario y al desplazamiento de la zona entera, nunca
+al contorno: el borde real de un recinto casi nunca cae en múltiplos de 20, y forzarlo
+deformaba el trazado sobre la foto.
+
 ---
 
 ## 3. Estado interactivo
@@ -173,13 +178,38 @@ espera que el undo actúe sobre lo que está dibujando.
 
 ### 3.5 Modos y aislamiento
 
-- `tool`: `select` | `stage` | `sector` | `aisle` | `label` | `polygon`.
+- `tool`: `select` | `stage` | `sector` | `aisle` | `label` | `polygon` | `matrix`.
+  `polygon` y `matrix` dibujan sobre el lienzo, así que apagan los hit targets de los
+  objetos (`drawingOnCanvas`) para que el arrastre no agarre una mesa por el camino.
 - `workMode`: `architecture` (geometría libre) vs. `pricing` (geometría congelada,
   `geometryLocked`, y colores reemplazados por heatmap de precios).
-- `isolationId` / `activeZoneId`: drill-down. Al enfocar una zona el resto del plano se
-  atenúa (`opacity-30 grayscale`) para editar dentro de un sector sin ruido visual.
+- `isolationId`: aislamiento de un grupo de elementos; el resto del plano baja a
+  `opacity-50`.
+- `activeZoneId`: navegación macro/micro. Se entra desde "Ingresar y distribuir sector" en
+  el inspector de la zona, que guarda el encuadre en `overviewViewportRef` y encuadra el
+  polígono con `fitViewportToWorldBox`. En vista micro el lienzo **no atenúa: oculta** —
+  se van la foto de fondo, las demás zonas, el escenario, los pasillos, los carteles y
+  todo elemento o butaca que no pertenezca a la zona. Queda el polígono activo como
+  contorno tenue (`lodMode="micro"`, sin etiqueta ni relleno pesado) sobre el lienzo
+  neutro con grilla. Todo lo que se coloca adentro se adopta a esa zona
+  (`withActiveZoneId` y el hover de drop forzado). Se sale con "Volver al mapa general",
+  Escape, o seleccionando algo de afuera en el árbol de capas.
+- El id se resuelve siempre contra el mapa (`microZoneId = activeZone?.id`), así un id
+  colgado no deja el lienzo en blanco.
 - Selección polimórfica: `Selection` distingue `element`, `elements`, `seats`, `zone`,
   `sector`, `stage`, `aisle`, `label` — cada tipo con su propio gizmo e inspector.
+- El inspector de una zona (`VenueZoneBasicsPanel`) tiene solo Nombre, Color y el botón de
+  ingreso: el inventario de una zona son las piezas que se colocan adentro, no una grilla
+  paramétrica tipeada a mano. Los campos `rows`/`itemsPerRow`/`capacity` siguen en el tipo
+  y en los mapas ya guardados, pero ya no se editan desde el panel; el precio se sigue
+  tocando en el modo Tarifas.
+- El inspector de una pieza abre con **Nombre** y **Capacidad (accesos)**: son los dos
+  datos que la vuelven inventario. La capacidad es un número por objeto
+  (`elementCapacityPatch`) que mueve a la vez las sillas dibujadas y los accesos que se
+  emiten, con los topes de `elementCapacityRange` (mesa 2–12, tablón 1–24, cupo 1–100);
+  en una butaca el campo no aparece porque siempre vale 1. Debajo, el switch **Mostrar
+  nombre en el plano** escribe `hideLabel` y solo cambia el dibujo: el nombre sigue
+  saliendo en el boleto y en la lista de la puerta.
 
 ---
 
@@ -265,16 +295,75 @@ un único handler delegado en el `<svg>` raíz, en lugar de suscribir miles de l
 
 | Herramienta | Función | Matemática |
 | --- | --- | --- |
-| Duplicar | `cloneVenueElement(el, offset)` | Copia con nuevo UUID corto y desplazamiento |
-| Grilla | `generateGridArray(config)` | `pitch = base[kind] + gap`, tope **800** items |
+| Duplicar | `cloneVenueElements(els, ids, offset)` | Copias con UUID corto nuevo, nombre libre y desplazamiento |
+| Matriz | `generateGridArray(config)` | `pitch = (ancho/columnas, alto/filas)` del área, tope **800** items |
 | Anillos | `lib/seating/concentric-ring.ts` | `polarFromUp(cx, cy, r, θ)` |
 | Arco | `distributeOnArc(...)` | Redistribución sobre circunferencia |
 
-`generateGridArray` centra el bloque horizontalmente
-(`originX = (800 - (columns-1)·pitchX) / 2`), asigna un `groupId` compartido
+`generateGridArray` arranca en el centro de la primera celda del área
+(`originX = area.minX + pitchX/2`), asigna un `groupId` compartido
 (`grid-<slug>-<uuid8>`), guarda la fila en `ringIndex` y reconstruye las sillas de cada
 pieza con `rebuildElementSeats()`. `clampGridArraySize()` recorta filas y columnas para no
 pasar de `GRID_ARRAY_MAX_ITEMS = 800`, ajustando primero columnas y después filas.
+
+**Matriz de elementos (estampado por área).** La herramienta `matrix` de la barra
+flotante (y el ítem homónimo de la paleta) no coloca nada al activarse: el
+organizador arrastra sobre el lienzo, y al soltar se abre `GridArrayDialog` con el
+área ya medida. Con `area` presente el paso lo define la caja y no el gap
+(`gridArrayPitch` → `pitch = (área / columnas, área / filas)`), y cada pieza queda
+en el centro de su celda, así ninguna se pasa del borde dibujado.
+`gridArrayPiecesOverlap()` avisa en el modal cuando la densidad pedida hace que las
+piezas se pisen.
+
+Lo que se inyecta son elementos sueltos: id propio, `x`/`y` propios y adopción a la
+zona con `adoptDroppedElements(..., activeZoneId)`. La matriz es la forma de
+estamparlos, no un objeto que los agrupe: después se puede mover o borrar cualquiera
+de a uno para recortar un borde en diagonal. Mientras la herramienta está activa el
+lienzo no agarra objetos (`objectHitsEnabled = false`), el área se recorta al mundo
+con `clampWorldPoint()` y Escape vuelve a selección.
+
+**Nombrado del bloque (opcional).** El modal pide `Prefijo` y `N° de inicio`, y
+`nameGridArray()` decide con eso:
+
+- **Con prefijo** numera de izquierda a derecha y de arriba abajo delegando en
+  `applyAutoNumbering(..., { direction: "ltr", pad: 1 })` — alcanza porque
+  `generateGridArray` ya guardó la fila en `ringIndex`. El separador lo pone la
+  librería: "Mesa" → `Mesa 1`, pero un prefijo que ya termina en separador se
+  respeta ("M-" → `M-1`). `pad: 1` evita el relleno de ceros del panel de
+  numeración inteligente ("Mesa 01"). El modal muestra el primero y el último
+  nombre que van a salir, y avisa si esos nombres ya están en uso en el plano
+  (subir el `N° de inicio` es la salida).
+- **Sin prefijo** las piezas quedan **sin etiqueta dibujada**, no sin nombre:
+  `nameGridArray` marca `hideLabel: true` y conserva el nombre por defecto del
+  tipo. Es deliberado: `normalizeSeatingLayout()` (`app/actions/venues.ts`)
+  rechaza ubicaciones con `label` vacío, `elementSeatLabel()` armaría boletos
+  tipo `" - Silla 3"` y el manifiesto de la puerta quedaría sin nada que leer.
+  Para que dos matrices sin prefijo no dejen dos "Mesa 1" en la lista de la
+  puerta, el editor pasa `labelOffset` con las piezas del mismo tipo que ya hay
+  en el plano, igual que la colocación de a una.
+
+`hideLabel` es puro dibujo: `VenueMapElementLayer` calcula `labelText = ""` y las
+etiquetas superpuestas solo se emiten con texto no vacío (antes salía un `<text>`
+vacío). Aplica también al plano del comprador, que comparte esa capa; el nombre
+del carrito no cambia porque sale de `getVenueElementDisplayName()`. En el
+inspector el switch **Mostrar nombre en el plano** lo alterna, y escribir un
+nombre lo vuelve a mostrar solo.
+
+**Alt + arrastre duplica.** Sobre una pieza (o sobre la silla de una mesa, que
+duplica la mesa) el gesto crea la copia bajo el puntero y arrastra **solo la copia**,
+aunque pertenezca a una grada: `beginGroupMove([clone.id])` en lugar de expandir al
+grupo. Sobre el lienzo vacío Alt sigue siendo paneo, así que `wantsAltDuplicate()`
+solo le gana a `wantsCanvasPan()` cuando hay un objeto debajo, y nunca en modo
+`pricing`. Si el arrastre no llegó a mover nada, `settleDuplicateDrag()` corre la
+copia 15 px para que no quede invisible sobre el original; si el gesto se cancela,
+`abortTransientGestures()` deshace el paso de historial que la creó.
+
+Dos detalles que la copia no hereda: el **nombre**, porque viaja al boleto
+(`nextFreeElementLabel()` da el primer libre: "Mesa 4" → "Mesa 5", "Mesa VIP" →
+"Mesa VIP 2"), y **`isLocked`**, que `applyLocalStockLocks()` inyecta cuando la pieza
+tiene ventas y `occupancyFromMapSeatStatuses()` lee como ocupado — heredarlo mostraría
+la copia agotada antes de existir. Capacidad, precio, color, `zoneId` y `groupId` sí
+se copian tal cual.
 
 `distributeOnArc` calcula el radio desde el sweep pedido:
 
@@ -297,6 +386,78 @@ Cuando el mapa no tiene zonas dibujadas, `synthesizeLodZones()` **inventa** pol�
 agrupando elementos por `groupId`/`sectorName` y calculando el AABB de cada grupo con
 `unionAabb`, más 18 px de padding. Requiere al menos 2 grupos para activarse: con uno solo
 no hay nada que discriminar.
+
+**Macro/micro del comprador.** En `InteractiveSeatingCanvas` la navegación es estado
+local (`viewMode`, `focusedZoneId`, `revealedZoneId`) y el carrito vive en
+`useStorefrontSeatStore` + `useCheckoutStore`. Están separados a propósito: el
+polígono de cada zona sale siempre de `resolveLodZones(map)` — el 100 % de las zonas
+del evento — y lo seleccionado solo decide **con qué color se pinta**
+(`syncSelectionPaint`, `selectedId`), nunca qué zonas existen. `exitLodView()` toca
+navegación y cámara, y nada del carrito.
+
+**Entrar cuesta más que salir.** `enterLodZone()` solo cambia de vista si hay algo
+que mostrar: `zoneHasRevealableInventory()` corre la misma cuenta que el render del
+micro (`publicRevealElements` + `publicRevealSeats`) **antes** de tocar cámara o
+estado. Hace falta porque `hasAssignedReservedPlaces()` clasifica como numerada a una
+zona con grilla paramétrica declarada aunque nadie haya dibujado piezas adentro, y
+también a piezas atribuidas por `zoneId` que caen fuera del polígono; entrar en esos
+casos era un zoom hacia un lienzo sin nada. Sin inventario adentro, el clic se
+resuelve como sector entero (`onSelectZone`, o `selectGeneralZone()` si el canvas no
+tiene padre) y la navegación queda intacta.
+
+**La transición no corta, atenúa.** Entrar a una zona es una sola animación de
+cámara (`zoomToZone` → `zoomToElement(node, scale, 400ms)`) sobre un plano que sigue
+ahí: la foto del predio baja a `MAP_BACKDROP_MICRO_OPACITY` (0,18) con la transición
+de `.venue-map-backdrop` en vez de desmontarse, y las zonas no enfocadas quedan en
+0,3 con `grayscale(1)` y su propia transición en `VenueMapZoneLayer`. El escenario,
+los pasillos y las etiquetas nunca se sacan. Las piezas de adentro montan 160 ms
+después (`REVEAL_MOUNT_MS`, por `revealedZoneId`) y entran con el fade de
+`.venue-map-reveal` (350 ms), que se reinicia solo porque el grupo va con
+`key={focusedZoneId}`. Todo respeta `prefers-reduced-motion`.
+
+La cámara es la parte delicada: al salir del detalle hay que reencuadrar el plano
+completo en el mismo gesto. El efecto de auto-encuadre no sirve para eso, porque
+`shouldRunBuyerAutoFit()` solo corre en el primer frame macro de la sesión o si cambia
+el tamaño del contenedor; volver de una zona no cumple ninguna de las dos. Por eso
+`exitLodView()` llama al encuadre él mismo, y `applyBuyerContentFit()` **no mira
+`viewMode`**: se la invoca en el mismo tick que `setViewMode("macro")`, cuando el
+estado todavía dice "micro". Un guard ahí adentro dejaba al comprador con el zoom
+clavado en la zona que acababa de cerrar, con el resto del plano fuera de pantalla —
+se ve igual que si las zonas hubieran desaparecido.
+
+**Tres estados que se leen sin texto.** `buyerZonePaint({ selected, soldOut, baseColor })`
+(en `lib/seating/buyer-map-selection-paint.ts`) es la única definición de cómo se ve
+un sector para el comprador:
+
+| Estado | Relleno | Opacidad | Contorno | Resplandor | Click |
+| --- | --- | --- | --- | --- | --- |
+| Agotado | `BUYER_SEAT_FILL.sold` | 0,3 | gris | no | no |
+| En el carrito | color del sector | 0,9 | anillo de contraste, 3 px | sí, en su color | sí |
+| Disponible | color del sector | 0,4 | su color, 2 px | el neón del mapa | sí |
+
+El color del sector se mantiene en los tres: lo que cambia es la solidez, el anillo y
+el resplandor. El agotado gana sobre el carrito, así que nunca brilla algo que no se
+vende. El anillo es blanco salvo que el relleno sea casi blanco (`buyerZoneRing()`
+mide luminancia), donde el blanco sobre blanco no se vería.
+
+Se aplica por dos caminos que coinciden a propósito. En el render, `VenueMapZoneLayer`
+usa la función cuando `buyerOccupancy` está prendido — el editor conserva su paleta,
+que tiene estados que el comprador no ve (drop target, spotlight, nodos) — y ahí el
+estado "elegido" ahora gana sobre `lodMode="macro"`, que antes lo tapaba y dejaba al
+sector del carrito igual que a uno libre. En vivo, `paintBuyerMapSelection()` repinta
+el DOM sin remount con la misma función: hace falta porque la pertenencia al carrito
+vive en refs (`selectionIdsRef`) y no en props, justamente para no re-renderizar el
+canvas entero con cada cambio de carrito. `selectedId` solo cubre la zona enfocada
+(`visibleZoneId`), así que el pintor es el que alcanza a las demás zonas del carrito.
+
+Dos límites del pintor, deliberados: no toca `fill-opacity` (depende de la vista —
+macro, micro, zona enfocada — y devolver un valor capturado antes lo replicaría en la
+vista equivocada; de la opacidad se encarga React), y a butacas y mesas las sigue
+pintando con el verde del carrito (`BUYER_SELECTION_FILL`) en lugar del color base:
+el color base de una butaca **es** su estado (libre / tomada), así que reusarlo
+borraría la selección. En el micro los tres estados de una mesa quedan igual de
+legibles: gris sin click si está vendida, verde sólido con resplandor si está en el
+carrito, su color si está libre.
 
 ---
 
@@ -381,7 +542,9 @@ Mientras se mueve la selección, cada `pointermove` en modo `move` llama a
    del arrastre, no la posición comprometida.
 3. Resuelve la zona y la escribe en `hoveredZoneIdRef` + `hoveredZoneId`, con un guard de
    igualdad (`if (hoveredZoneIdRef.current === next) return`) para no re-renderizar en cada
-   frame cuando el hover no cambió.
+   frame cuando el hover no cambió. En vista micro se saltea el cálculo y el hover es
+   siempre la zona activa: como el resto del plano está oculto, un polígono solapado que
+   no se ve no puede robarse la adopción.
 
 Ese `hoveredZoneId` alimenta el resaltado del polígono: el organizador ve a qué sector va a
 caer la mesa antes de soltar.
@@ -774,4 +937,5 @@ Cada módulo del motor tiene su test colocado, ejecutable con `npm test`:
 `stabilize-venue-map-ids.test.ts`, `reconcile-map-seating-units.test.ts`,
 `map-inventory-hydration.test.ts`, `venue-element-geometry.test.ts`, `venue-array.test.ts`,
 `concentric-ring.test.ts`, `venue-transform.test.ts`, `venue-grid-snap.test.ts`,
-`venue-map-sku-consistency.test.ts`, `venue-map-persist.test.ts`.
+`venue-map-sku-consistency.test.ts`, `venue-map-persist.test.ts`,
+`buyer-map-selection-paint.test.ts`.

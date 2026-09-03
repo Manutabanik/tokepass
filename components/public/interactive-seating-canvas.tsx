@@ -123,13 +123,14 @@ import {
   expandSelectionForContext,
   fitBuyerMapCamera,
   lodCameraTransform,
+  mapBackdropOpacity,
   publicRevealElements,
   publicRevealSeats,
   resolveLodZones,
   shouldEnableMapLod,
-  shouldRenderMapBackground,
   shouldRunBuyerAutoFit,
   zoneCanvasAabb,
+  zoneHasRevealableInventory,
   type BuyerMapFitInset,
   type BuyerMapViewport,
   type MapLodMode,
@@ -476,9 +477,16 @@ export function InteractiveSeatingCanvas({
     savedViewportRef.current = null
   }
 
+  /**
+   * Encuadra el plano completo. Es una primitiva de cámara y no mira `viewMode`
+   * a propósito: `exitLodView()` la llama en el mismo tick que
+   * `setViewMode("macro")`, cuando el estado todavía dice "micro", y un guard
+   * acá dejaba al comprador con el zoom clavado en la zona que acababa de
+   * cerrar. Cada llamador decide cuándo corresponde.
+   */
   const applyBuyerContentFit = useCallback(
     (animate: boolean) => {
-      if (!buyerChrome || viewMode !== "macro") return false
+      if (!buyerChrome) return false
       if (wrapWidth < 80 || wrapHeight < 80 || !buyerFitBox) return false
       const controls = transformRef.current
       if (!controls) return false
@@ -500,14 +508,7 @@ export function InteractiveSeatingCanvas({
       fittedSizeRef.current = { width: wrapWidth, height: wrapHeight }
       return true
     },
-    [
-      buyerChrome,
-      buyerFitBox,
-      buyerFitInset,
-      viewMode,
-      wrapHeight,
-      wrapWidth,
-    ],
+    [buyerChrome, buyerFitBox, buyerFitInset, wrapHeight, wrapWidth],
   )
 
   useEffect(() => {
@@ -1128,30 +1129,42 @@ export function InteractiveSeatingCanvas({
   }
 
   function enterLodZone(zone: VenueMapZone) {
+    markActivity()
     if (resolveEffectiveSeatingType(zone, map) === "GENERAL") {
-      markActivity()
       selectGeneralZone(zone)
       return
     }
-    markActivity()
+    // Numerada en el papel pero vacía en el plano: grilla paramétrica sin
+    // piezas dibujadas, o piezas atribuidas a la zona que caen fuera del
+    // polígono. Entrar sería un zoom hacia un lienzo vacío, así que el clic se
+    // resuelve como sector entero y la navegación no se toca.
+    if (!zoneHasRevealableInventory(map.elements, plotSeats, zone)) {
+      if (onSelectZone) {
+        onSelectZone(zone)
+        return
+      }
+      selectGeneralZone(zone)
+      return
+    }
     if (focusedZoneId !== zone.id) setRevealedZoneId(null)
     zoomToZone(zone)
     setFocusedZoneId(zone.id)
     setViewMode("micro")
-    const hasMicro =
-      publicRevealElements(map.elements, zone).length > 0 ||
-      publicRevealSeats(plotSeats, zone).length > 0
-    if (!hasMicro) onSelectZone?.(zone)
   }
 
+  /**
+   * Volver al mapa general. Toca solo navegación y cámara: el carrito no se
+   * mira ni se altera acá, y las zonas nunca se filtran por lo seleccionado.
+   * La cámara tiene que volver sí o sí, porque quedarse con el zoom de la zona
+   * deja el resto del plano fuera de pantalla y parece que las zonas se
+   * borraron.
+   */
   function exitLodView() {
     markActivity()
     setViewMode("macro")
     setFocusedZoneId(null)
     setRevealedZoneId(null)
-    if (buyerChrome) {
-      applyBuyerContentFit(true)
-    } else {
+    if (!buyerChrome || !applyBuyerContentFit(true)) {
       transformRef.current?.resetTransform(400, "easeOut")
     }
   }
@@ -1586,9 +1599,12 @@ export function InteractiveSeatingCanvas({
             >
               {stageLabel}
             </text>
-            {shouldRenderMapBackground({ lodEnabled, viewMode }) ? (
+            <g
+              className="venue-map-backdrop"
+              style={{ opacity: mapBackdropOpacity({ lodEnabled, viewMode }) }}
+            >
               <VenueMapBackgroundLayer map={map} />
-            ) : null}
+            </g>
             {map.aisles.map((aisle) => (
               <rect
                 key={aisle.id}

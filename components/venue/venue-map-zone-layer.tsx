@@ -2,7 +2,7 @@
 
 import { useId, useRef } from "react"
 
-import { BUYER_SEAT_FILL } from "@/lib/seating/buyer-seat-fill"
+import { buyerZonePaint } from "@/lib/seating/buyer-map-selection-paint"
 import { semanticMapLabelScale } from "@/lib/seating/venue-element-geometry"
 import {
   beginBuyerTap,
@@ -172,7 +172,14 @@ export function VenueMapZoneLayer({
         const revealFocused = lodMode === "micro" && focusedZoneId === zone.id
         const dimmed = hasSelection && !selected && !highlighted && !soldOut
         const lodSolid = lodMode === "macro"
-        const zoneInteractive = interactive && !soldOut && !revealFocused
+        // El comprador lee tres estados sin texto (agotado / en el carrito /
+        // disponible) y salen de una sola función. El editor conserva su
+        // paleta, que además tiene estados que el comprador no ve.
+        const buyerPaint = buyerOccupancy
+          ? buyerZonePaint({ selected, soldOut, baseColor: zone.color })
+          : null
+        const clickable = buyerPaint ? buyerPaint.interactive : !soldOut
+        const zoneInteractive = interactive && clickable && !revealFocused
         const lit = selected || highlighted
         const pop =
           emphasizeSelected &&
@@ -278,48 +285,56 @@ export function VenueMapZoneLayer({
               data-zone-id={zone.id}
               points={points}
               fill={
-                soldOut
-                  ? buyerOccupancy
-                    ? BUYER_SEAT_FILL.sold
-                    : "#9ca3af"
-                  : zone.color || "#22d3ee"
+                buyerPaint
+                  ? buyerPaint.fill
+                  : soldOut
+                    ? "#9ca3af"
+                    : zone.color || "#22d3ee"
               }
               fillOpacity={
                 revealFocused
                   ? 0.06
-                  : soldOut
-                    ? buyerOccupancy
-                      ? 0.3
-                      : 0.45
-                    : dropTarget
-                      ? selected
-                        ? 0.78
-                        : 0.52
-                      : lodSolid
-                        ? 0.3
-                        : selected
-                          ? 0.62
-                          : 0.28
+                  : dropTarget
+                    ? selected
+                      ? 0.78
+                      : 0.52
+                    : buyerPaint
+                      ? buyerPaint.fillOpacity
+                      : soldOut
+                        ? 0.45
+                        : lodSolid
+                          ? 0.3
+                          : selected
+                            ? 0.62
+                            : 0.28
               }
               stroke={
                 dropTarget
                   ? "#34d399"
-                  : soldOut
-                    ? buyerOccupancy
-                      ? BUYER_SEAT_FILL.sold
-                      : "#9ca3af"
-                    : lodSolid
-                      ? zone.color || "#67e8f9"
-                      : selected
-                        ? buyerOccupancy
-                          ? "#10b981"
-                          : "#ffffff"
-                        : zone.color || "#67e8f9"
+                  : buyerPaint
+                    ? buyerPaint.stroke
+                    : soldOut
+                      ? "#9ca3af"
+                      : lodSolid
+                        ? zone.color || "#67e8f9"
+                        : selected
+                          ? "#ffffff"
+                          : zone.color || "#67e8f9"
               }
-              strokeWidth={dropTarget ? 4 : lodSolid ? 2 : selected ? 3 : 2}
+              strokeWidth={
+                dropTarget
+                  ? 4
+                  : buyerPaint
+                    ? buyerPaint.strokeWidth
+                    : lodSolid
+                      ? 2
+                      : selected
+                        ? 3
+                        : 2
+              }
               strokeLinejoin="round"
               pointerEvents={
-                passThroughFills || revealFocused || soldOut
+                passThroughFills || revealFocused || !clickable
                   ? "none"
                   : fillHits
                     ? "auto"
@@ -328,14 +343,18 @@ export function VenueMapZoneLayer({
               className={cn(
                 "transition-[fill-opacity] duration-300 ease-out",
                 passThroughFills && "pointer-events-none",
+                zoneInteractive && !passThroughFills && "cursor-pointer",
+                // El hover no puede aguar un sector ya elegido: sube la opacidad
+                // desde el estado disponible, no desde el sólido.
                 zoneInteractive &&
                   !passThroughFills &&
+                  !selected &&
                   (lodSolid
-                    ? "cursor-pointer hover:[fill-opacity:0.45]"
-                    : "cursor-pointer hover:[fill-opacity:0.82]"),
+                    ? "hover:[fill-opacity:0.45]"
+                    : "hover:[fill-opacity:0.82]"),
               )}
               filter={
-                soldOut || revealFocused || lodSolid
+                !clickable || revealFocused || (lodSolid && !selected)
                   ? undefined
                   : `url(#zone-neon-${glowId})`
               }

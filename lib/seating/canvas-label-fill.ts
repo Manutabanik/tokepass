@@ -1,6 +1,6 @@
 const LIGHT_LABEL = "#e4e4e7"
 
-function hexLuminance(hex: string): number | null {
+export function hexLuminance(hex: string): number | null {
   const raw = hex.startsWith("#") ? hex.slice(1) : hex
   const full =
     raw.length === 3

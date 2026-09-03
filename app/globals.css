@@ -893,6 +893,11 @@ select:-webkit-autofill {
   animation: venue-map-reveal 350ms ease-out both;
 }
 
+/* La foto del predio se atenúa al entrar a una zona en vez de desaparecer. */
+.venue-map-backdrop {
+  transition: opacity 320ms ease-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in,
   .animate-pulse-subtle,
@@ -900,5 +905,9 @@ select:-webkit-autofill {
   .living-qr-live-ring,
   .venue-map-reveal {
     animation: none;
+  }
+
+  .venue-map-backdrop {
+    transition: none;
   }
 }
