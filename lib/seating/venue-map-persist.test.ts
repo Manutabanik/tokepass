@@ -185,4 +185,24 @@ describe("venue-map persist", () => {
     })
     assert.equal(fromParent.elements[0]?.zoneId, "zona-b")
   })
+
+  it("persiste la pieza sin etiqueta a la vista", () => {
+    const map = emptyVenueMap()
+    map.elements = [
+      { ...createVenueElement("round_table", 4, { x: 60, y: 40 }), hideLabel: true },
+      createVenueElement("round_table", 5, { x: 120, y: 40 }),
+    ]
+    const persisted = parseVenueMap(serializeVenueMap(map))
+    assert.equal(persisted.elements[0]?.hideLabel, true)
+    // El nombre viaja igual: el boleto y la puerta lo necesitan.
+    assert.equal(persisted.elements[0]?.label, "Mesa 5")
+    assert.equal(persisted.elements[1]?.hideLabel, undefined)
+
+    const fromSnake = parseVenueMap({
+      elements: [
+        { id: "m3", type: "round_table", x: 10, y: 20, hide_label: true },
+      ],
+    })
+    assert.equal(fromSnake.elements[0]?.hideLabel, true)
+  })
 })

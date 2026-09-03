@@ -94,9 +94,9 @@ const PALETTE_TABS: Array<{
       },
       {
         placement: { kind: "grid_array" },
-        label: "Matriz filas × columnas",
-        shortLabel: "Gradas",
-        hint: "Genera un bloque de sillas o mesas con filas, columnas y separación.",
+        label: "Matriz de elementos",
+        shortLabel: "Matriz",
+        hint: "Arrastrá para dibujar el área y elegí elemento, filas y columnas. Cada pieza queda independiente.",
         icon: Grid3x3,
       },
       {

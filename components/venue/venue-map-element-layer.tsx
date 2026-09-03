@@ -114,10 +114,14 @@ const VenueElementShape = memo(function VenueElementShape({
       : `rotate(${element.rotation} ${element.x} ${element.y})`
   const opacity =
     (element.opacity ?? 1) * (isolationDim ? 0.3 : dimmed && !lit ? 0.7 : 1)
-  const labelText = compactVenueElementLabel(
-    element.customLabel || element.label,
-    lit ? 99 : zoom,
-  )
+  // `hideLabel` deja el nodo sin etiqueta sobre el plano. El nombre existe igual
+  // para el boleto y el inventario; acá solo se decide si se pinta.
+  const labelText = element.hideLabel
+    ? ""
+    : compactVenueElementLabel(
+        element.customLabel || element.label,
+        lit ? 99 : zoom,
+      )
   const tableLike =
     element.type !== "standing_zone" &&
     element.type !== "vip_chair" &&
@@ -313,16 +317,18 @@ const VenueElementShape = memo(function VenueElementShape({
       ) : null}
       {element.type === "standing_zone" && showLabels ? (
         <>
-          <text
-            x={element.x}
-            y={element.y - 4}
-            textAnchor="middle"
-            fill={element.color}
-            fontSize={11 * semanticMapLabelScale(zoom)}
-            className="pointer-events-none font-bold"
-          >
-            {labelText}
-          </text>
+          {labelText ? (
+            <text
+              x={element.x}
+              y={element.y - 4}
+              textAnchor="middle"
+              fill={element.color}
+              fontSize={11 * semanticMapLabelScale(zoom)}
+              className="pointer-events-none font-bold"
+            >
+              {labelText}
+            </text>
+          ) : null}
           <text
             x={element.x}
             y={element.y + 12}
@@ -335,6 +341,7 @@ const VenueElementShape = memo(function VenueElementShape({
         </>
       ) : null}
       {showLabels &&
+      labelText &&
       element.type !== "vip_chair" &&
       element.type !== "standing_zone" &&
       element.type !== "infrastructure" ? (

@@ -1,12 +1,18 @@
 "use client"
 
-import { GripVertical, HandGrab, MousePointer2, PenTool } from "lucide-react"
+import {
+  Grid3x3,
+  GripVertical,
+  HandGrab,
+  MousePointer2,
+  PenTool,
+} from "lucide-react"
 import { motion, useDragControls } from "motion/react"
 import { type PointerEvent, type RefObject } from "react"
 
 import { cn } from "@/lib/utils"
 
-export type FloatingDrawTool = "select" | "pan" | "polygon"
+export type FloatingDrawTool = "select" | "pan" | "polygon" | "matrix"
 
 const TOOLS: Array<{
   id: FloatingDrawTool
@@ -16,6 +22,11 @@ const TOOLS: Array<{
   { id: "select", label: "Selección", icon: MousePointer2 },
   { id: "pan", label: "Mover mapa", icon: HandGrab },
   { id: "polygon", label: "Dibujar zona", icon: PenTool },
+  {
+    id: "matrix",
+    label: "Matriz de elementos: arrastrá para dibujar el área",
+    icon: Grid3x3,
+  },
 ]
 
 function stopCanvas(event: PointerEvent<HTMLElement>) {

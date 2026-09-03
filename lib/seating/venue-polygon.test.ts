@@ -106,6 +106,22 @@ describe("parametric zone polygons", () => {
     assert.equal(zone.polygon[1]?.x, closed[1]?.x)
   })
 
+  it("conserva vértices con decimales al guardar el trazado", () => {
+    // El lápiz registra el puntero tal cual, sin imantarlo a la grilla de 20px,
+    // así que el viaje canvas → percent → canvas no puede redondear a enteros.
+    const draft = [
+      { x: 137.4, y: 93.7 },
+      { x: 411.9, y: 93.7 },
+      { x: 411.9, y: 268.3 },
+    ]
+    const zone = createVenueZone(0, polygonFromCanvas(draft))
+    const back = polygonToCanvas(zone.polygon)
+    draft.forEach((point, index) => {
+      assert.ok(Math.abs((back[index]?.x ?? 0) - point.x) < 0.01)
+      assert.ok(Math.abs((back[index]?.y ?? 0) - point.y) < 0.01)
+    })
+  })
+
   it("does not treat overflow percents as pixels on parse", () => {
     const map = parseVenueMap({
       zones: [

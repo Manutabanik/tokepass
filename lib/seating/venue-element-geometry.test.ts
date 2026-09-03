@@ -3,9 +3,11 @@ import { describe, it } from "node:test"
 
 import {
   aestheticChairGeometry,
+  cloneVenueElements,
   compactVenueElementLabel,
   semanticMapLabelScale,
   createVenueElement,
+  nextFreeElementLabel,
   elementCapacity,
   elementCapacityPatch,
   elementCapacityRange,
@@ -34,6 +36,57 @@ describe("venue-element-geometry", () => {
       { zoneId: "zona-vip" },
     )
     assert.equal(table.zoneId, "zona-vip")
+  })
+
+  it("nombra la copia con el primer número libre", () => {
+    const taken = new Set(["mesa 1", "mesa 2"])
+    assert.equal(nextFreeElementLabel("Mesa 1", taken), "Mesa 3")
+    assert.equal(nextFreeElementLabel("Mesa 08", new Set(["mesa 09"])), "Mesa 10")
+    assert.equal(nextFreeElementLabel("Mesa VIP", new Set()), "Mesa VIP 2")
+  })
+
+  it("duplica con id y nombre propios, conservando capacidad y zona", () => {
+    const table = createVenueElement(
+      "round_table",
+      0,
+      { x: 120, y: 140 },
+      undefined,
+      { zoneId: "zona-vip" },
+    )
+    const original = { ...table, ...elementCapacityPatch(table, 6), price: 9000 }
+    original.seats = rebuildElementSeats(original)
+
+    const [clone] = cloneVenueElements(
+      [{ ...original, isLocked: true }],
+      [original.id],
+      0,
+    )
+    assert.ok(clone)
+    assert.notEqual(clone.id, original.id)
+    // La copia no arrastra el candado de ventas del original.
+    assert.equal(clone.isLocked, undefined)
+    assert.notEqual(clone.label, original.label)
+    assert.equal(clone.x, original.x)
+    assert.equal(clone.y, original.y)
+    assert.equal(elementCapacity(clone), 6)
+    assert.equal(clone.price, 9000)
+    assert.equal(clone.zoneId, "zona-vip")
+    // Los ids de asiento cuelgan del id nuevo: si los compartieran, la butaca
+    // vendida de una mesa aparecería ocupada en la copia.
+    assert.equal(clone.seats.length, 6)
+    assert.equal(
+      clone.seats.every((seat) => seat.id.startsWith(clone.id)),
+      true,
+    )
+  })
+
+  it("no repite nombres al duplicar varias piezas juntas", () => {
+    const a = createVenueElement("round_table", 0, { x: 100, y: 100 })
+    const b = createVenueElement("round_table", 1, { x: 200, y: 100 })
+    const clones = cloneVenueElements([a, b], [a.id, b.id], 15)
+    const labels = new Set([a.label, b.label, ...clones.map((c) => c.label)])
+    assert.equal(clones.length, 2)
+    assert.equal(labels.size, 4)
   })
 
   it("places 8 chairs around a round table", () => {

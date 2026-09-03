@@ -240,6 +240,12 @@ export type VenueMapElement = {
   ringIndex?: number
   /** When true, bulk numbering leaves this label untouched. */
   labelLocked?: boolean
+  /**
+   * No pintar el nombre sobre la pieza en el plano. El nombre sigue existiendo:
+   * el boleto, el manifiesto de la puerta y el inventario lo necesitan, y
+   * `normalizeSeatingLayout()` rechaza ubicaciones sin nombre al guardar.
+   */
+  hideLabel?: boolean
   /** When true, drag / resize / rotate are disabled. */
   isLocked?: boolean
   /** Ej: "Mesa VIP Escenario". Si existe, pisa el nombre generado en carrito y boleto. */
@@ -574,6 +580,9 @@ function parseElement(raw: unknown, index = 0): VenueMapElement | null {
         : parseOptionalInt(item.ringIndex ?? item.ring_index),
     ...(parseOptionalBoolean(item.labelLocked ?? item.label_locked)
       ? { labelLocked: true as const }
+      : {}),
+    ...(parseOptionalBoolean(item.hideLabel ?? item.hide_label)
+      ? { hideLabel: true as const }
       : {}),
     ...(parseOptionalBoolean(item.isLocked ?? item.is_locked)
       ? { isLocked: true as const }
@@ -969,6 +978,7 @@ export function serializeVenueMap(map: InteractiveVenueMap): InteractiveVenueMap
       priceMode: "per_person" as const,
       capacity: 0,
       seats: [] as VenueMapElement["seats"],
+      ...(element.hideLabel ? { hideLabel: true as const } : {}),
     }
   })
   const zones = (map.zones ?? []).map((zone) => ({

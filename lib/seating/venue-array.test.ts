@@ -6,6 +6,10 @@ import {
   distributeOnArc,
   generateGridArray,
   GRID_ARRAY_MAX_ITEMS,
+  gridArrayLabelAt,
+  gridArrayPiecesOverlap,
+  gridArrayPitch,
+  nameGridArray,
 } from "./venue-array"
 import type { VenueMapElement } from "@/types/venue-map"
 
@@ -47,8 +51,8 @@ describe("venue-array", () => {
       type: "vip_chair",
       rows: 3,
       columns: 4,
-      gap: 4,
-      origin: { x: 100, y: 80 },
+      // Celdas de 40×40: el primer centro cae en (100, 80).
+      area: { minX: 80, minY: 60, maxX: 240, maxY: 180 },
       groupName: "Platea",
     })
     assert.equal(elements.length, 12)
@@ -63,6 +67,119 @@ describe("venue-array", () => {
     assert.equal(elements[4]!.y > elements[0]!.y, true)
     const ids = new Set(elements.map((item) => item.id))
     assert.equal(ids.size, 12)
+  })
+
+  it("estampa la matriz dentro del área dibujada", () => {
+    // Cada pieza cae en el centro de su celda, así ninguna se pasa del borde
+    // que dibujó el organizador.
+    const area = { minX: 100, minY: 200, maxX: 300, maxY: 400 }
+    const elements = generateGridArray({
+      type: "round_table",
+      rows: 2,
+      columns: 4,
+      area,
+    })
+    assert.equal(elements.length, 8)
+    assert.equal(elements[0]?.x, 125)
+    assert.equal(elements[0]?.y, 250)
+    assert.equal(elements[7]?.x, 275)
+    assert.equal(elements[7]?.y, 350)
+    for (const element of elements) {
+      assert.ok(element.x >= area.minX && element.x <= area.maxX)
+      assert.ok(element.y >= area.minY && element.y <= area.maxY)
+    }
+  })
+
+  it("crea nodos independientes que se pueden borrar de a uno", () => {
+    const elements = generateGridArray({
+      type: "long_table",
+      rows: 2,
+      columns: 3,
+      area: { minX: 0, minY: 0, maxX: 600, maxY: 400 },
+    })
+    const ids = new Set(elements.map((item) => item.id))
+    assert.equal(ids.size, 6)
+    const points = new Set(elements.map((item) => `${item.x}:${item.y}`))
+    assert.equal(points.size, 6)
+  })
+
+  it("el paso sale del área y avisa cuando las piezas se pisan", () => {
+    const area = { minX: 0, minY: 0, maxX: 100, maxY: 100 }
+    const pitch = gridArrayPitch({ rows: 5, columns: 5, area })
+    assert.equal(pitch.x, 20)
+    assert.equal(pitch.y, 20)
+    assert.equal(gridArrayPiecesOverlap("round_table", pitch), true)
+    const roomy = gridArrayPitch({ rows: 1, columns: 1, area })
+    assert.equal(gridArrayPiecesOverlap("round_table", roomy), false)
+  })
+
+  it("numera la matriz de izquierda a derecha y de arriba abajo", () => {
+    const elements = generateGridArray({
+      type: "round_table",
+      rows: 2,
+      columns: 3,
+      area: { minX: 0, minY: 0, maxX: 600, maxY: 400 },
+    })
+    const named = nameGridArray(elements, { prefix: "Mesa", start: 1 })
+    // Sin ceros de relleno y con el espacio puesto por nosotros: "Mesa 1".
+    assert.deepEqual(
+      named.map((item) => item.label),
+      ["Mesa 1", "Mesa 2", "Mesa 3", "Mesa 4", "Mesa 5", "Mesa 6"],
+    )
+    assert.equal(
+      named.every((item) => item.hideLabel === undefined),
+      true,
+    )
+  })
+
+  it("respeta el número de inicio y el separador que escribió el organizador", () => {
+    const elements = generateGridArray({
+      type: "round_table",
+      rows: 1,
+      columns: 2,
+      area: { minX: 0, minY: 0, maxX: 400, maxY: 200 },
+    })
+    assert.deepEqual(
+      nameGridArray(elements, { prefix: "Mesa", start: 25 }).map(
+        (item) => item.label,
+      ),
+      ["Mesa 25", "Mesa 26"],
+    )
+    assert.deepEqual(
+      nameGridArray(elements, { prefix: "M-", start: 1 }).map(
+        (item) => item.label,
+      ),
+      ["M-1", "M-2"],
+    )
+    assert.equal(gridArrayLabelAt({ prefix: "Mesa", start: 3 }, 2), "Mesa 5")
+    assert.equal(gridArrayLabelAt({ prefix: "  ", start: 1 }, 0), "")
+  })
+
+  it("sin prefijo esconde la etiqueta pero conserva el nombre interno", () => {
+    // El boleto, el manifiesto de la puerta y la validación del layout piden un
+    // nombre; lo que el organizador pidió es no verlo dibujado en el plano.
+    const elements = generateGridArray({
+      type: "round_table",
+      rows: 1,
+      columns: 2,
+      area: { minX: 0, minY: 0, maxX: 400, maxY: 200 },
+      labelOffset: 4,
+    })
+    const named = nameGridArray(elements, { prefix: "", start: 1 })
+    assert.equal(
+      named.every((item) => item.hideLabel === true),
+      true,
+    )
+    assert.equal(
+      named.every((item) => item.label.trim().length > 0),
+      true,
+    )
+    // `labelOffset` continúa la cuenta del plano: dos matrices sin prefijo no
+    // dejan dos "Mesa 1" en la lista de la puerta.
+    assert.deepEqual(
+      named.map((item) => item.label),
+      ["Mesa 5", "Mesa 6"],
+    )
   })
 
   it("distributes a row on an arc facing a top focal point", () => {

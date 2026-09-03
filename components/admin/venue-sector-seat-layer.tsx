@@ -22,7 +22,6 @@ const SectorSeatNode = memo(function SectorSeatNode({
   seat,
   selected,
   showLabel,
-  isolatedOut,
   occupancy,
   testOccupancy,
 }: {
@@ -30,7 +29,6 @@ const SectorSeatNode = memo(function SectorSeatNode({
   seat: VenueMapSeat
   selected: boolean
   showLabel: boolean
-  isolatedOut: boolean
   occupancy?: SeatStatus
   testOccupancy?: SeatStatus
 }) {
@@ -57,10 +55,7 @@ const SectorSeatNode = memo(function SectorSeatNode({
         held={occupancy === "held"}
         label={showLabel ? String(seat.number) : undefined}
         showLabel={showLabel}
-        className={cn(
-          isolatedOut && "pointer-events-none opacity-30 grayscale",
-          stockLocked && "opacity-60 grayscale",
-        )}
+        className={cn(stockLocked && "opacity-60 grayscale")}
       />
       {testOccupied ? (
         <circle
@@ -111,17 +106,22 @@ export const VenueSectorSeatLayer = memo(function VenueSectorSeatLayer({
               const key = sectorSeatKey(sector.id, seat.id)
               if (filterMode === "exclude" && filterKeys.has(key)) return null
               if (filterMode === "include" && !filterKeys.has(key)) return null
-              const isolatedOut = activeZone
-                ? !seatBelongsToZone(
-                    {
-                      x: seat.x,
-                      y: seat.y,
-                      sectorId: sector.id,
-                      sectorName: sector.name,
-                    },
-                    activeZone,
-                  )
-                : false
+              // Vista micro: la butaca que cae fuera de la zona activa no se
+              // atenúa, no se dibuja.
+              if (
+                activeZone &&
+                !seatBelongsToZone(
+                  {
+                    x: seat.x,
+                    y: seat.y,
+                    sectorId: sector.id,
+                    sectorName: sector.name,
+                  },
+                  activeZone,
+                )
+              ) {
+                return null
+              }
               return (
                 <SectorSeatNode
                   key={seat.id}
@@ -131,7 +131,6 @@ export const VenueSectorSeatLayer = memo(function VenueSectorSeatLayer({
                     sectorSelected || selectedSeatKeys.has(key)
                   }
                   showLabel={showLabels}
-                  isolatedOut={isolatedOut}
                   occupancy={lookupOccupancyStatus(
                     occupancyBySeatId,
                     seat.id,

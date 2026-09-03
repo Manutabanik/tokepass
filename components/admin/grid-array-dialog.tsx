@@ -17,37 +17,52 @@ import { Label } from "@/components/ui/label"
 import {
   clampGridArraySize,
   GRID_ARRAY_MAX_ITEMS,
+  gridArrayLabelAt,
+  gridArrayPiecesOverlap,
+  gridArrayPitch,
+  type GridArrayArea,
   type GridArrayKind,
 } from "@/lib/seating/venue-array"
 
 const KIND_OPTIONS: Array<{ id: GridArrayKind; label: string }> = [
-  { id: "vip_chair", label: "Silla / butaca" },
   { id: "round_table", label: "Mesa redonda" },
   { id: "long_table", label: "Tablón" },
+  { id: "vip_chair", label: "Butaca" },
 ]
 
 export type GridArrayDialogValues = {
   type: GridArrayKind
   rows: number
   columns: number
-  gap: number
   groupName: string
+  /** Vacío: las piezas se estampan sin nombre a la vista. */
+  prefix: string
+  start: number
 }
+
+const EMPTY_AREA: GridArrayArea = { minX: 0, minY: 0, maxX: 0, maxY: 0 }
 
 export function GridArrayDialog({
   open,
   onOpenChange,
   onGenerate,
+  area,
+  takenLabels = [],
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onGenerate: (values: GridArrayDialogValues) => void
+  /** Caja dibujada en el lienzo: define la separación entre piezas. */
+  area: GridArrayArea | null
+  /** Nombres ya usados en el plano, para avisar si la numeración se solapa. */
+  takenLabels?: string[]
 }) {
-  const [type, setType] = useState<GridArrayKind>("vip_chair")
-  const [rows, setRows] = useState(10)
-  const [columns, setColumns] = useState(12)
-  const [gap, setGap] = useState(4)
-  const [groupName, setGroupName] = useState("Platea")
+  const [type, setType] = useState<GridArrayKind>("round_table")
+  const [rows, setRows] = useState(4)
+  const [columns, setColumns] = useState(6)
+  const [groupName, setGroupName] = useState("Bloque")
+  const [prefix, setPrefix] = useState("")
+  const [start, setStart] = useState(1)
 
   const size = useMemo(
     () => clampGridArraySize(rows, columns),
@@ -55,6 +70,30 @@ export function GridArrayDialog({
   )
   const total = size.rows * size.columns
   const clamped = size.rows !== rows || size.columns !== columns
+  const pitch = useMemo(
+    () =>
+      gridArrayPitch({
+        rows: size.rows,
+        columns: size.columns,
+        area: area ?? EMPTY_AREA,
+      }),
+    [area, size.columns, size.rows],
+  )
+  const overlaps = Boolean(area) && gridArrayPiecesOverlap(type, pitch)
+  const firstName = gridArrayLabelAt({ prefix, start }, 0)
+  const lastName = gridArrayLabelAt({ prefix, start }, total - 1)
+  const collisions = useMemo(() => {
+    if (!firstName) return 0
+    const taken = new Set(
+      takenLabels.map((label) => label.trim().toLowerCase()),
+    )
+    let hits = 0
+    for (let index = 0; index < total; index += 1) {
+      const name = gridArrayLabelAt({ prefix, start }, index)
+      if (taken.has(name.trim().toLowerCase())) hits += 1
+    }
+    return hits
+  }, [firstName, prefix, start, takenLabels, total])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -65,8 +104,9 @@ export function GridArrayDialog({
             Generar matriz
           </DialogTitle>
           <DialogDescription>
-            Crea un bloque alineado de sillas o mesas. Después podés numerarlo
-            como teatro o alinearlo en curva.
+            Cada pieza se estampa como objeto independiente dentro del área que
+            dibujaste. Después podés mover o borrar cualquiera para ajustar
+            bordes en diagonal.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -124,19 +164,52 @@ export function GridArrayDialog({
               />
             </div>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="grid-array-gap">
-              Separación extra (gap) · {gap} px
-            </Label>
-            <Input
-              id="grid-array-gap"
-              type="number"
-              min={0}
-              max={80}
-              value={gap}
-              onChange={(event) => setGap(Number(event.target.value) || 0)}
-            />
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="grid-array-prefix">
+                Prefijo{" "}
+                <span className="font-normal text-muted-foreground">
+                  (opcional)
+                </span>
+              </Label>
+              <Input
+                id="grid-array-prefix"
+                value={prefix}
+                onChange={(event) => setPrefix(event.target.value)}
+                placeholder="Mesa"
+              />
+            </div>
+            <div className="w-28 space-y-1.5">
+              <Label htmlFor="grid-array-start">N° de inicio</Label>
+              <Input
+                id="grid-array-start"
+                type="number"
+                min={1}
+                value={start}
+                disabled={!prefix.trim()}
+                onChange={(event) => setStart(Number(event.target.value) || 1)}
+              />
+            </div>
           </div>
+          <p className="text-xs text-muted-foreground">
+            {firstName
+              ? `Se van a llamar ${firstName} … ${lastName}, de izquierda a derecha y de arriba abajo.`
+              : "Sin prefijo las piezas se estampan sin nombre a la vista. Podés nombrarlas de a una en el panel derecho."}
+          </p>
+          {collisions > 0 ? (
+            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              Ya hay {collisions} {collisions === 1 ? "pieza" : "piezas"} con
+              esos nombres en el plano. Subí el número de inicio para no repetir
+              lo que después se imprime en el boleto.
+            </p>
+          ) : null}
+          <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+            Separación calculada del área dibujada:{" "}
+            <span className="font-medium text-foreground">
+              {Math.round(pitch.x)} × {Math.round(pitch.y)} px
+            </span>{" "}
+            entre centros.
+          </p>
           <p className="text-xs text-muted-foreground">
             Se van a crear <span className="font-medium text-foreground">{total}</span>{" "}
             elementos
@@ -145,6 +218,12 @@ export function GridArrayDialog({
               : null}
             .
           </p>
+          {overlaps ? (
+            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              Con esa cantidad las piezas se van a superponer. Bajá filas o
+              columnas, o dibujá un área más grande.
+            </p>
+          ) : null}
         </div>
         <DialogFooter>
           <Button
@@ -156,17 +235,19 @@ export function GridArrayDialog({
           </Button>
           <Button
             type="button"
+            disabled={!area}
             onClick={() => {
               onGenerate({
                 type,
                 rows: size.rows,
                 columns: size.columns,
-                gap,
                 groupName,
+                prefix,
+                start,
               })
             }}
           >
-            Generar bloque
+            Estampar en el área
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,32 +1,48 @@
+import { applyAutoNumbering } from "@/lib/seating/auto-numbering"
 import { polarFromUp } from "@/lib/seating/concentric-ring"
 import {
   createVenueElement,
   rebuildElementSeats,
   VENUE_SHAPE,
 } from "@/lib/seating/venue-element-geometry"
-import { VENUE_MAP_CANVAS } from "@/lib/seating/venue-polygon"
 import type { VenueMapElement } from "@/types/venue-map"
 
 export type GridArrayKind = "vip_chair" | "round_table" | "long_table"
 
 export const GRID_ARRAY_MAX_ITEMS = 800
 
-/** Center-to-center pitch before the user gap is added. */
+/** Paso cómodo entre centros: por debajo de esto las piezas se pisan. */
 export const GRID_ARRAY_BASE_PITCH: Record<GridArrayKind, { x: number; y: number }> = {
   vip_chair: { x: VENUE_SHAPE.theatreSeat + 6, y: VENUE_SHAPE.theatreSeat + 8 },
   round_table: { x: 56, y: 56 },
   long_table: { x: VENUE_SHAPE.longTableWidth + 12, y: VENUE_SHAPE.longTableHeight + 16 },
 }
 
+/** Caja dibujada sobre el lienzo, en píxeles de canvas. */
+export type GridArrayArea = {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+
 export type GridArrayConfig = {
   type: GridArrayKind
   rows: number
   columns: number
-  gap: number
-  origin?: { x: number; y: number }
+  /** Toda matriz nace de un área dibujada en el lienzo. */
+  area: GridArrayArea
   color?: string
   groupName?: string
   price?: number
+  /** Cuántas piezas del tipo ya hay en el plano, para no repetir el nombre interno. */
+  labelOffset?: number
+}
+
+/** Nombrado opcional del bloque: sin prefijo, las piezas quedan sin etiqueta. */
+export type GridArrayNaming = {
+  prefix: string
+  start: number
 }
 
 export type ArcDistributeOptions = {
@@ -57,6 +73,33 @@ export function clampGridArraySize(rows: number, columns: number): {
   return { rows: nextRows, columns: nextCols }
 }
 
+/**
+ * Paso entre centros. Cada pieza ocupa una celda del área y queda en su centro,
+ * así ninguna se pasa del borde que marcó el organizador.
+ */
+export function gridArrayPitch(config: {
+  rows: number
+  columns: number
+  area: GridArrayArea
+}): { x: number; y: number } {
+  const { rows, columns } = clampGridArraySize(config.rows, config.columns)
+  const width = Math.max(0, config.area.maxX - config.area.minX)
+  const height = Math.max(0, config.area.maxY - config.area.minY)
+  return {
+    x: Math.max(1, width / columns),
+    y: Math.max(1, height / rows),
+  }
+}
+
+/** Con esa densidad las piezas se pisan: el área es chica para tantas filas. */
+export function gridArrayPiecesOverlap(
+  type: GridArrayKind,
+  pitch: { x: number; y: number },
+): boolean {
+  const base = GRID_ARRAY_BASE_PITCH[type]
+  return pitch.x < base.x - 4 || pitch.y < base.y - 4
+}
+
 function slugGroupId(name: string): string {
   const slug = name
     .normalize("NFKD")
@@ -70,19 +113,15 @@ function slugGroupId(name: string): string {
 
 export function generateGridArray(config: GridArrayConfig): VenueMapElement[] {
   const { rows, columns } = clampGridArraySize(config.rows, config.columns)
-  const gap = Math.min(80, Math.max(0, Number(config.gap) || 0))
   const kind = config.type
-  const pitchX = GRID_ARRAY_BASE_PITCH[kind].x + gap
-  const pitchY = GRID_ARRAY_BASE_PITCH[kind].y + gap
-  const width = Math.max(0, columns - 1) * pitchX
-  const originX =
-    config.origin?.x ??
-    Math.round((VENUE_MAP_CANVAS.width - width) / 2)
-  const originY = config.origin?.y ?? 120
+  const { x: pitchX, y: pitchY } = gridArrayPitch(config)
+  const originX = config.area.minX + pitchX / 2
+  const originY = config.area.minY + pitchY / 2
   const groupName = (config.groupName ?? "Bloque").trim() || "Bloque"
   const groupId = `grid-${slugGroupId(groupName)}-${crypto.randomUUID().slice(0, 8)}`
   const color = config.color?.trim() || "#f97316"
   const price = Math.max(0, Number(config.price) || 0)
+  const labelOffset = Math.max(0, Math.floor(config.labelOffset ?? 0))
   const elements: VenueMapElement[] = []
 
   for (let row = 0; row < rows; row += 1) {
@@ -92,7 +131,7 @@ export function generateGridArray(config: GridArrayConfig): VenueMapElement[] {
         x: Math.round((originX + col * pitchX) * 10) / 10,
         y: Math.round((originY + row * pitchY) * 10) / 10,
       }
-      const created = createVenueElement(kind, index, point)
+      const created = createVenueElement(kind, labelOffset + index, point)
       created.groupId = groupId
       created.groupName = groupName
       created.ringIndex = row
@@ -106,6 +145,57 @@ export function generateGridArray(config: GridArrayConfig): VenueMapElement[] {
   }
 
   return elements
+}
+
+/**
+ * Un prefijo se pega al número con un espacio, salvo que el organizador ya haya
+ * escrito su propio separador: "Mesa" → "Mesa 1", pero "M-" → "M-1".
+ */
+function joinLabelPrefix(prefix: string): string {
+  const trimmed = prefix.trim()
+  if (!trimmed) return ""
+  return /[\s\-_./:#]$/.test(prefix) ? prefix : `${trimmed} `
+}
+
+/** Nombre que llevará la pieza `index` (0-based) del bloque. Vacío = sin nombre. */
+export function gridArrayLabelAt(
+  naming: GridArrayNaming,
+  index: number,
+): string {
+  const prefix = joinLabelPrefix(naming.prefix)
+  if (!prefix) return ""
+  const start = Math.max(1, Math.floor(naming.start) || 1)
+  return `${prefix}${start + index}`
+}
+
+/**
+ * Nombra el bloque de izquierda a derecha y de arriba abajo (`ringIndex` guarda
+ * la fila, así que `direction: "ltr"` alcanza).
+ *
+ * Sin prefijo las piezas quedan **sin etiqueta en el plano**, no sin nombre: el
+ * nombre por defecto se conserva porque el boleto, el manifiesto de la puerta y
+ * `normalizeSeatingLayout()` lo necesitan; solo se marca `hideLabel`.
+ */
+export function nameGridArray(
+  elements: VenueMapElement[],
+  naming: GridArrayNaming,
+): VenueMapElement[] {
+  const prefix = joinLabelPrefix(naming.prefix)
+  if (!prefix) {
+    return elements.map((element) => ({ ...element, hideLabel: true }))
+  }
+  return applyAutoNumbering(
+    elements,
+    new Set(elements.map((element) => element.id)),
+    {
+      start: Math.max(1, Math.floor(naming.start) || 1),
+      prefix,
+      suffix: "",
+      direction: "ltr",
+      // Sin relleno de ceros: "Mesa 1", no "Mesa 01".
+      pad: 1,
+    },
+  )
 }
 
 function selectedSet(ids: Iterable<string>): Set<string> {

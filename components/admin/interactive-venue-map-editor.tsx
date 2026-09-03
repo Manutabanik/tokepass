@@ -7,7 +7,6 @@ import {
   AlignEndVertical,
   AlignStartHorizontal,
   AlignStartVertical,
-  Armchair,
   Spline,
   Group,
   Ungroup,
@@ -46,7 +45,10 @@ import {
   VenueBulkEditPanel,
   VenueTicketTypeSelect,
 } from "@/components/admin/venue-bulk-edit-panel"
-import { GridArrayDialog } from "@/components/admin/grid-array-dialog"
+import {
+  GridArrayDialog,
+  type GridArrayDialogValues,
+} from "@/components/admin/grid-array-dialog"
 import { LabelOverrideDialog } from "@/components/admin/label-override-dialog"
 import { VenueHeatmapPanel } from "@/components/admin/venue-heatmap-panel"
 import { VenueWorkModeTabs, type VenueWorkMode } from "@/components/admin/venue-work-mode-tabs"
@@ -66,7 +68,7 @@ import {
 } from "@/components/admin/venue-layer-tree"
 import { CanvasPropertiesInspector } from "@/components/admin/canvas-properties-inspector"
 import { VenueMapBackgroundPanel } from "@/components/admin/venue-map-background-panel"
-import { VenueParametricRulesPanel } from "@/components/admin/venue-parametric-rules-panel"
+import { VenueZoneBasicsPanel } from "@/components/admin/venue-zone-basics-panel"
 import { VenueRowsConfigEditor } from "@/components/admin/venue-rows-config-editor"
 import { VenueSectorColorPicker } from "@/components/admin/venue-sector-color-field"
 import { SvgTransformBox } from "@/components/admin/svg-transform-box"
@@ -129,6 +131,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { PriceInput } from "@/components/ui/price-input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
 import { VenueMapGridLayer } from "@/components/venue/venue-map-grid-layer"
@@ -154,10 +157,7 @@ import { hydrateVenueMapOccupancy } from "@/lib/seating/map-inventory-hydration"
 import type { VenueMapSeatingUnitRef } from "@/lib/seating/map-inventory-hydration"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { canvasLabelFill } from "@/lib/seating/canvas-label-fill"
-import {
-  applyLabelOverride,
-  applyMatrixNumbering,
-} from "@/lib/seating/auto-numbering"
+import { applyLabelOverride } from "@/lib/seating/auto-numbering"
 import {
   composeManualSeatLabel,
   parseManualSeatFields,
@@ -193,7 +193,7 @@ import {
   selectSimilarElementIds,
 } from "@/lib/seating/studio-bulk-edit"
 import {
-  cloneVenueElement,
+  cloneVenueElements,
   createVenueElement,
   elementCapacity,
   elementCapacityPatch,
@@ -236,6 +236,7 @@ import {
   clampVenueZoom,
   elementAabb,
   expandViewBoxToContainer,
+  fitViewportToWorldBox,
   flipSelectedElements,
   handlePoint,
   liveScaleAxes,
@@ -317,6 +318,8 @@ import {
 import {
   distributeOnArc,
   generateGridArray,
+  nameGridArray,
+  type GridArrayArea,
 } from "@/lib/seating/venue-array"
 import {
   CONTEXT_FOCUS_ANIM_MS,
@@ -341,7 +344,17 @@ import {
 } from "@/types/venue-map"
 import type { VenueSeatingLayout } from "@/types/venues"
 
-type Tool = "select" | "stage" | "sector" | "aisle" | "label" | "polygon"
+type Tool =
+  | "select"
+  | "stage"
+  | "sector"
+  | "aisle"
+  | "label"
+  | "polygon"
+  | "matrix"
+
+/** Un área más chica que esto es un clic torpe, no una matriz. */
+const MATRIX_MIN_AREA_PX = 24
 type Selection =
   | { kind: "stage" }
   | { kind: "sector"; id: string }
@@ -596,10 +609,10 @@ export function InteractiveVenueMapEditor({
   const [magneticSnap, setMagneticSnap] = useState(true)
   const [vertexEditZoneId, setVertexEditZoneId] = useState<string | null>(null)
   const [gridArrayOpen, setGridArrayOpen] = useState(false)
-  const [gridArrayOrigin, setGridArrayOrigin] = useState<{
-    x: number
-    y: number
-  } | null>(null)
+  const [gridArrayArea, setGridArrayArea] = useState<GridArrayArea | null>(null)
+  const matrixDrag = useRef(false)
+  /** Copia recién nacida bajo el puntero, esperando que el arrastre la ubique. */
+  const duplicateDrag = useRef<string | null>(null)
   const [labelOverride, setLabelOverride] = useState<{
     id: string
     value: string
@@ -858,6 +871,7 @@ export function InteractiveVenueMapEditor({
   const actionsRef = useRef<{
     closePolygonDraft: (source?: { pointerId?: number }) => void
     cancelPolygonDraft: () => void
+    cancelMatrixDraft: () => void
     applyPointerMove: (sample: PointerSample) => void
     cancelLiveTransform: () => void
     applyElementIds: (ids: string[], options?: { isolate?: boolean }) => void
@@ -1096,14 +1110,12 @@ export function InteractiveVenueMapEditor({
         : null,
     [activeZoneId, map.zones],
   )
-  const isolationDimElementIds = useMemo(() => {
-    if (!activeZone) return null
-    const ids = new Set<string>()
-    for (const element of map.elements ?? []) {
-      if (!elementBelongsToZone(element, activeZone)) ids.add(element.id)
-    }
-    return ids
-  }, [activeZone, map.elements])
+  /**
+   * La vista micro se dibuja siempre contra una zona que existe: si el id
+   * quedó colgado (undo, mapa recargado) el lienzo vuelve solo a la vista macro
+   * en vez de quedarse en blanco.
+   */
+  const microZoneId = activeZone?.id ?? null
   const selectedElement =
     liveSelection?.kind === "element"
       ? (map.elements ?? []).find((item) => item.id === liveSelection.id) ??
@@ -1296,21 +1308,50 @@ export function InteractiveVenueMapEditor({
     const locked = applyLocalStockLocks(map, occupancyBySeatId)
     return workMode === "pricing" ? applyHeatmapColors(locked) : locked
   }, [map, occupancyBySeatId, workMode])
-  const unselectedElements = useMemo(
+  /**
+   * Vista micro: dentro de una zona el lienzo queda con esa zona y su
+   * mobiliario, nada más. Lo de afuera se saca del árbol en vez de atenuarlo,
+   * que es la única forma de trabajar el detalle sin ruido ni clics perdidos.
+   */
+  const visibleElements = useMemo(() => {
+    const all = renderMap.elements ?? []
+    if (!activeZone) return all
+    return all.filter((element) => elementBelongsToZone(element, activeZone))
+  }, [activeZone, renderMap.elements])
+
+  /** Nombres en uso, para avisar en la matriz si la numeración pisa alguno. */
+  const takenElementLabels = useMemo(
     () =>
-      (renderMap.elements ?? []).filter((item) => !selectedIdSet.has(item.id)),
-    [renderMap.elements, selectedIdSet],
+      gridArrayOpen
+        ? (renderMap.elements ?? []).map(
+            (element) => element.customLabel?.trim() || element.label,
+          )
+        : [],
+    [gridArrayOpen, renderMap.elements],
+  )
+  const unselectedElements = useMemo(
+    () => visibleElements.filter((item) => !selectedIdSet.has(item.id)),
+    [selectedIdSet, visibleElements],
   )
   const selectedRenderElements = useMemo(
-    () =>
-      (renderMap.elements ?? []).filter((item) => selectedIdSet.has(item.id)),
-    [renderMap.elements, selectedIdSet],
+    () => visibleElements.filter((item) => selectedIdSet.has(item.id)),
+    [selectedIdSet, visibleElements],
   )
   const unselectedZones = useMemo(() => {
     const selectedZoneId =
       liveSelection?.kind === "zone" ? liveSelection.id : null
-    return (renderMap.zones ?? []).filter((zone) => zone.id !== selectedZoneId)
-  }, [liveSelection, renderMap.zones])
+    return (renderMap.zones ?? []).filter(
+      (zone) =>
+        zone.id !== selectedZoneId &&
+        (!microZoneId || zone.id === microZoneId),
+    )
+  }, [microZoneId, liveSelection, renderMap.zones])
+  /**
+   * Dentro de la zona su polígono baja a un contorno tenue y sin etiqueta, para
+   * que no tape el mobiliario. Al editar nodos vuelve a ser sólido y clickeable.
+   */
+  const microZoneLodMode =
+    microZoneId && vertexEditActiveId !== microZoneId ? ("micro" as const) : null
   const zoneFillsPermeable =
     svgPassThrough || transformingKind != null || isPanning
   const isAestheticMode = map.showAestheticChairs !== false
@@ -1648,7 +1689,15 @@ export function InteractiveVenueMapEditor({
   ) {
     if (objectDragSuppressed(event.pointerId)) return
     const seatIds = selectedSeatEntries.map((item) => item.key)
-    const extras = zoneId ? { zoneId } : transformTargetFromSelection()
+    // Con ids explícitos el gesto es sobre esas piezas y nada más.
+    // `transformTargetFromSelection()` lee `selectionRef`, que se sincroniza en
+    // un layout effect: en el mismo pointerdown que acaba de seleccionar la
+    // mesa todavía dice "zona" o "butacas", y el arrastre se llevaría eso.
+    const extras = zoneId
+      ? { zoneId }
+      : ids.length > 0
+        ? {}
+        : transformTargetFromSelection()
     const usingSeats =
       extras.target === "seats" ||
       (!extras.zoneId &&
@@ -1810,6 +1859,21 @@ export function InteractiveVenueMapEditor({
     )
   }
 
+  /**
+   * Alt + arrastre sobre una pieza la duplica, como en cualquier editor de
+   * diseño. Sobre el lienzo vacío Alt sigue siendo paneo, así que el gesto tiene
+   * que ganarle a `wantsCanvasPan` solo cuando hay un objeto abajo.
+   */
+  function wantsAltDuplicate(event: { button: number; altKey: boolean }) {
+    return (
+      event.button === 0 &&
+      event.altKey &&
+      !spaceHeld.current &&
+      !handPanRef.current &&
+      workModeRef.current === "architecture"
+    )
+  }
+
   function armSheetDismissGuard() {
     isSelectingRef.current = true
     sheetGuardUntil.current = nowMs() + SHEET_DISMISS_GUARD_MS
@@ -1930,12 +1994,10 @@ export function InteractiveVenueMapEditor({
     })
   }
 
-  function toggleAestheticChairs() {
+  function setAestheticChairs(next: boolean) {
     const current = mapRef.current
-    commit({
-      ...current,
-      showAestheticChairs: current.showAestheticChairs === false,
-    })
+    if ((current.showAestheticChairs !== false) === next) return
+    commit({ ...current, showAestheticChairs: next })
   }
 
   function tidyAlignCenter() {
@@ -2039,6 +2101,7 @@ export function InteractiveVenueMapEditor({
       if (tool === "polygon" || polygonDraft.length > 0) {
         cancelPolygonDraft()
       }
+      if (tool === "matrix") cancelMatrixDraft()
       setPlacement(null)
       setShowRings(false)
       setTool("select")
@@ -2053,7 +2116,8 @@ export function InteractiveVenueMapEditor({
     if (!element?.id) return
     blurCanvasTypingTarget()
     if (objectDragSuppressed(event.pointerId)) return
-    if (wantsCanvasPan(event)) return
+    const duplicating = wantsAltDuplicate(event)
+    if (wantsCanvasPan(event) && !duplicating) return
     if (elementHasCommittedStock(element, occupancyRef.current)) {
       isolateCanvasPointer(event)
       refuseStockLocked()
@@ -2061,16 +2125,21 @@ export function InteractiveVenueMapEditor({
     }
     isolateCanvasPointer(event, { preventGhostClick: true })
     if (event.button !== 0) return
-    let target = element
-    if (event.altKey) {
-      const clone = cloneVenueElement(element)
+    if (duplicating) {
+      // La copia nace debajo del puntero y se arrastra sola: aunque pertenezca a
+      // una grada, el gesto no puede llevarse el bloque entero.
       const current = mapRef.current
-      commit({
-        ...current,
-        elements: [...ensureElements(current), clone],
-      })
-      target = clone
+      const items = ensureElements(current)
+      const clone = cloneVenueElements(items, [element.id], 0)[0]
+      if (!clone) return
+      commit({ ...current, elements: [...items, clone] })
+      applyElementIds([clone.id])
+      duplicateDrag.current = clone.id
+      beginGroupMove([clone.id], event)
+      requestMobileProperties()
+      return
     }
+    const target = element
     const items = ensureElements(mapRef.current)
     const grouped = Boolean(target.groupId?.trim())
 
@@ -2427,17 +2496,14 @@ export function InteractiveVenueMapEditor({
     setSvgPassThrough(true)
   }
 
-  function applyVertexDragPoint(
-    point: { x: number; y: number },
-    shiftKey: boolean,
-  ) {
+  function applyVertexDragPoint(point: { x: number; y: number }) {
     const dragState = vertexDrag.current
     if (!dragState) return
     if (!dragState.recorded) {
       pushHistory()
       dragState.recorded = true
     }
-    const snapped = clampWorldPoint(snapPointToGrid(point, snapActive(shiftKey)))
+    const next = clampWorldPoint(point)
     const current = mapRef.current
     commit(
       {
@@ -2449,7 +2515,7 @@ export function InteractiveVenueMapEditor({
                 polygon: setPolygonVertexAtCanvas(
                   zone.polygon,
                   dragState.index,
-                  snapped,
+                  next,
                 ),
               }
             : zone,
@@ -2457,6 +2523,35 @@ export function InteractiveVenueMapEditor({
       },
       { skipHistory: true },
     )
+  }
+
+  /**
+   * Aísla la zona y la encuadra para distribuir mobiliario adentro. Guarda el
+   * encuadre general para poder volver, y `withActiveZoneId` se encarga de que
+   * cada pieza colocada desde acá quede atada a esta zona.
+   */
+  function enterZoneDistribution(zone: VenueMapZone) {
+    if (preview) return
+    const box = zoneCanvasAabb(zone)
+    if (!box) {
+      toast.error("Trazá la zona antes de distribuir su interior.")
+      return
+    }
+    abortTransientGestures()
+    exitZoneVertexEdit()
+    setIsolationId(null)
+    setActiveZoneId(zone.id)
+    activeZoneIdRef.current = zone.id
+    overviewViewportRef.current = {
+      pan: { ...panRef.current },
+      zoom: zoomRef.current,
+    }
+    animateViewport(
+      fitViewportToWorldBox({ box, viewBox: svgViewBoxRef.current }),
+    )
+    setTool("select")
+    setPlacement(null)
+    setSelection({ kind: "zone", id: zone.id })
   }
 
   function exitZoneIsolation() {
@@ -2511,11 +2606,16 @@ export function InteractiveVenueMapEditor({
   }
 
   function abortTransientGestures() {
+    // Cancelar un Alt + arrastre deshace la copia: el paso de historial que la
+    // creó es justo el último, así que alcanza con volver atrás.
     const revertInProgress =
       Boolean(elementDrag.current?.recorded) ||
-      Boolean(vertexDrag.current?.recorded)
+      Boolean(vertexDrag.current?.recorded) ||
+      Boolean(duplicateDrag.current)
     cancelLiveTransform()
+    duplicateDrag.current = null
     drag.current = null
+    matrixDrag.current = false
     marqueeRef.current = null
     setMarquee(null)
     elementDrag.current = null
@@ -2861,9 +2961,9 @@ export function InteractiveVenueMapEditor({
       return
     }
     if (nextPlacement.kind === "grid_array") {
-      setGridArrayOrigin(point)
-      setGridArrayOpen(true)
+      // La matriz no se coloca con un clic: primero se dibuja el área.
       setPlacement(null)
+      setTool("matrix")
       return
     }
     if (nextPlacement.kind === "rings") {
@@ -2958,6 +3058,21 @@ export function InteractiveVenueMapEditor({
     }, { skipHistory })
   }
 
+  /**
+   * Alt + clic sin arrastrar: la copia nació justo encima del original y sería
+   * invisible. La corremos como hace "Duplicar", sin historial propio, para que
+   * un solo Ctrl+Z deshaga toda la duplicación.
+   */
+  function settleDuplicateDrag(dragged: boolean) {
+    const id = duplicateDrag.current
+    duplicateDrag.current = null
+    if (!id || dragged) return
+    const clone = ensureElements(mapRef.current).find((item) => item.id === id)
+    if (!clone) return
+    const point = clampWorldPoint({ x: clone.x + 15, y: clone.y + 15 })
+    patchElement(id, { x: point.x, y: point.y }, true)
+  }
+
   function duplicateSelection(offset = 15) {
     if (workModeRef.current === "pricing") return
     const current = mapRef.current
@@ -2968,9 +3083,8 @@ export function InteractiveVenueMapEditor({
           ? selection.ids
           : []
     if (ids.length === 0) return
-    const clones = ensureElements(current)
-      .filter((item) => ids.includes(item.id))
-      .map((item) => cloneVenueElement(item, offset))
+    const clones = cloneVenueElements(ensureElements(current), ids, offset)
+    if (clones.length === 0) return
     commit({ ...current, elements: [...ensureElements(current), ...clones] })
     setSelection(
       clones.length === 1
@@ -3001,17 +3115,22 @@ export function InteractiveVenueMapEditor({
     if (!target) return
     const current = mapRef.current
     if (target.kind === "element") {
-      const item = ensureElements(current).find((entry) => entry.id === target.id)
-      if (!item) return
-      const clone = cloneVenueElement(item, 15)
+      const clone = cloneVenueElements(
+        ensureElements(current),
+        [target.id],
+        15,
+      )[0]
+      if (!clone) return
       commit({ ...current, elements: [...ensureElements(current), clone] })
       setSelection({ kind: "element", id: clone.id })
       return
     }
     if (target.kind === "elements") {
-      const clones = ensureElements(current)
-        .filter((item) => target.ids.includes(item.id))
-        .map((item) => cloneVenueElement(item, 15))
+      const clones = cloneVenueElements(
+        ensureElements(current),
+        target.ids,
+        15,
+      )
       if (clones.length === 0) return
       commit({ ...current, elements: [...ensureElements(current), ...clones] })
       setSelection(
@@ -3278,38 +3397,46 @@ export function InteractiveVenueMapEditor({
     )
   }
 
-  function applyGridBlock(values: {
-    type: "vip_chair" | "round_table" | "long_table"
-    rows: number
-    columns: number
-    gap: number
-    groupName: string
-  }) {
+  function applyGridBlock(values: GridArrayDialogValues) {
+    const area = gridArrayArea
+    if (!area) return
     const current = mapRef.current
-    const created = generateGridArray({
-      ...values,
-      origin: gridArrayOrigin ?? undefined,
-    })
+    // El nombre interno arranca después de las piezas del mismo tipo que ya hay,
+    // así dos matrices sin prefijo no terminan con dos "Mesa 1" en la puerta.
+    const labelOffset = ensureElements(current).filter(
+      (item) => item.type === values.type,
+    ).length
+    const created = generateGridArray({ ...values, area, labelOffset })
+    // Cada pieza es un elemento suelto con su id y su x/y: la matriz es solo la
+    // forma de estamparlas, no un objeto que las agrupe. Se pueden mover o
+    // borrar de a una para recortar un borde en diagonal.
     const numbered = withActiveZoneIds(
-      applyMatrixNumbering(
-        created,
-        created.map((item) => item.id),
-        { rowAxis: "letters", aisleMode: "sequential" },
+      nameGridArray(created, { prefix: values.prefix, start: values.start }),
+    )
+    const ids = numbered.map((item) => item.id)
+    commit(
+      adoptDroppedElements(
+        { ...current, elements: [...ensureElements(current), ...numbered] },
+        ids,
+        activeZoneIdRef.current,
       ),
     )
-    commit({
-      ...current,
-      elements: [...ensureElements(current), ...numbered],
-    })
-    setSelection({
-      kind: "elements",
-      ids: numbered.map((item) => item.id),
-    })
+    setSelection({ kind: "elements", ids })
     setGridArrayOpen(false)
-    setGridArrayOrigin(null)
+    setGridArrayArea(null)
     setPlacement(null)
     setTool("select")
     toast.success(`${numbered.length} elementos generados`)
+  }
+
+  function cancelMatrixDraft() {
+    matrixDrag.current = false
+    drag.current = null
+    marqueeRef.current = null
+    setMarquee(null)
+    setGridArrayOpen(false)
+    setGridArrayArea(null)
+    setTool("select")
   }
 
   function saveLabelOverride() {
@@ -3448,6 +3575,11 @@ export function InteractiveVenueMapEditor({
       removeSeatsByKeys(new Set(currentSelection.ids))
       return
     } else if (currentSelection.kind === "zone") {
+      // Borrar la zona en la que se está trabajando dejaría la vista micro sin
+      // nada que mostrar y sin forma de entender dónde está uno.
+      if (activeZoneIdRef.current === currentSelection.id) {
+        exitZoneIsolation()
+      }
       commit({
         ...current,
         zones: ensureZones(current).filter(
@@ -3944,12 +4076,8 @@ export function InteractiveVenueMapEditor({
     const point = pointerToSvg(event)
     if (toolRef.current === "polygon") {
       event.preventDefault()
-      const raw = {
-        x: Math.round(point.x * 10) / 10,
-        y: Math.round(point.y * 10) / 10,
-      }
       const draft = polygonDraftRef.current
-      if (isCloseToFirstVertex(draft, raw)) {
+      if (isCloseToFirstVertex(draft, point)) {
         closePolygonDraft({ pointerId: event.pointerId })
         return
       }
@@ -3959,10 +4087,19 @@ export function InteractiveVenueMapEditor({
         }
         return
       }
-      const next = clampWorldPoint(
-        snapPointToGrid(raw, snapActive(event.shiftKey)),
-      )
-      setPolygonDraft((current) => [...current, next])
+      // El vértice queda donde cayó el puntero. La grilla imanta mobiliario,
+      // no el contorno del recinto, que casi nunca cae en múltiplos de 20.
+      setPolygonDraft((current) => [...current, clampWorldPoint(point)])
+      return
+    }
+    if (toolRef.current === "matrix") {
+      event.preventDefault()
+      capturePointer(event)
+      matrixDrag.current = true
+      drag.current = { x: point.x, y: point.y }
+      const seed = { x: point.x, y: point.y, w: 0, h: 0 }
+      marqueeRef.current = seed
+      setMarquee(seed)
       return
     }
     if (placement && workModeRef.current === "architecture" && !event.altKey && !spaceHeld.current) {
@@ -3998,11 +4135,28 @@ export function InteractiveVenueMapEditor({
 
   function handleInventoryPointerDown(event: React.PointerEvent<SVGSVGElement>) {
     if (previewRef.current) return
-    if (wantsCanvasPan(event) || toolRef.current === "polygon") {
+    if (toolRef.current === "polygon" || toolRef.current === "matrix") {
       onPointerDown(event)
       return
     }
     const hit = inventoryHitFromEvent(event.nativeEvent)
+    // Alt sobre la silla de una mesa duplica la mesa, no la silla.
+    const duplicateId =
+      wantsAltDuplicate(event) &&
+      (hit?.kind === "element" || hit?.kind === "element-seat")
+        ? hit.elementId
+        : null
+    if (wantsCanvasPan(event) && !duplicateId) {
+      onPointerDown(event)
+      return
+    }
+    if (duplicateId) {
+      const element = ensureElements(mapRef.current).find(
+        (item) => item.id === duplicateId,
+      )
+      if (element) onMapElementPointerDown(event, element)
+      return
+    }
     if (!hit) {
       onPointerDown(event)
       return
@@ -4064,7 +4218,13 @@ export function InteractiveVenueMapEditor({
   }
 
   function handleInventoryDoubleClick(event: React.MouseEvent<SVGSVGElement>) {
-    if (previewRef.current || toolRef.current === "polygon") return
+    if (
+      previewRef.current ||
+      toolRef.current === "polygon" ||
+      toolRef.current === "matrix"
+    ) {
+      return
+    }
     const hit = inventoryHitFromEvent(event.nativeEvent)
     if (hit && inventoryHitHasCommittedStock(hit)) {
       isolateCanvasPointer(event)
@@ -4161,6 +4321,12 @@ export function InteractiveVenueMapEditor({
       setHoveredDropZone(null)
       return
     }
+    // Dentro de una zona el resto del plano no se ve, así que cualquier pieza
+    // que se suelte acá es de esta zona y no de un polígono oculto que se solape.
+    if (activeZoneIdRef.current) {
+      setHoveredDropZone(activeZoneIdRef.current)
+      return
+    }
     setHoveredDropZone(
       zoneIdContainingCanvasPoint(
         centroid,
@@ -4173,7 +4339,7 @@ export function InteractiveVenueMapEditor({
   function applyPointerMove(sample: PointerSample) {
     if (pinchRef.current) return
     if (vertexDrag.current) {
-      applyVertexDragPoint(pointerToSvg(sample), sample.shiftKey)
+      applyVertexDragPoint(pointerToSvg(sample))
       return
     }
     const transforming = transformDrag.current
@@ -4341,11 +4507,42 @@ export function InteractiveVenueMapEditor({
       applyPointerMove(pendingPointer.current)
       pendingPointer.current = null
     }
+    if (matrixDrag.current) {
+      const drawn = marqueeRef.current
+      matrixDrag.current = false
+      drag.current = null
+      marqueeRef.current = null
+      setMarquee(null)
+      setIsPanning(false)
+      if (
+        !drawn ||
+        drawn.w < MATRIX_MIN_AREA_PX ||
+        drawn.h < MATRIX_MIN_AREA_PX
+      ) {
+        toast.error("Arrastrá para dibujar el área donde va la matriz.")
+        return
+      }
+      // El puntero puede salirse del lienzo mientras arrastra; el área no.
+      const from = clampWorldPoint({ x: drawn.x, y: drawn.y })
+      const to = clampWorldPoint({
+        x: drawn.x + drawn.w,
+        y: drawn.y + drawn.h,
+      })
+      setGridArrayArea({
+        minX: Math.min(from.x, to.x),
+        minY: Math.min(from.y, to.y),
+        maxX: Math.max(from.x, to.x),
+        maxY: Math.max(from.y, to.y),
+      })
+      setGridArrayOpen(true)
+      return
+    }
     if (transformDrag.current) {
       const live = liveTransformRef.current
       const wasTap = !live || isIdentityLive(live)
       const dragged = Boolean(live && !isIdentityLive(live))
       commitLiveTransform(snapActive(shiftKey))
+      settleDuplicateDrag(dragged)
       drag.current = null
       elementDrag.current = null
       setIsPanning(false)
@@ -4429,6 +4626,8 @@ export function InteractiveVenueMapEditor({
     setIsPanning(false)
     marqueeRef.current = null
     setMarquee(null)
+    // Si el arrastre de la copia nunca arrancó, acá se corre para que se vea.
+    settleDuplicateDrag(false)
     const dragged = Boolean(legacyDrag?.recorded)
     if (
       compactChromeRef.current &&
@@ -4645,6 +4844,7 @@ export function InteractiveVenueMapEditor({
     actionsRef.current = {
       closePolygonDraft,
       cancelPolygonDraft,
+      cancelMatrixDraft,
       applyPointerMove,
       cancelLiveTransform,
       applyElementIds,
@@ -4736,6 +4936,11 @@ export function InteractiveVenueMapEditor({
         return
       }
       if (event.key === "Escape") {
+        if (toolRef.current === "matrix") {
+          event.preventDefault()
+          actions.cancelMatrixDraft()
+          return
+        }
         if (toolRef.current === "polygon" || polygonDraftRef.current.length > 0) {
           event.preventDefault()
           actions.cancelPolygonDraft()
@@ -5003,10 +5208,12 @@ export function InteractiveVenueMapEditor({
       return
     }
     if (next.kind === "grid_array") {
-      setGridArrayOrigin(viewportCenterWorld())
-      setGridArrayOpen(true)
+      // Primero se dibuja el área y después se pide filas y columnas: así el
+      // paso sale del espacio real que hay en el plano.
+      setGridArrayArea(null)
       setPlacement(null)
-      setTool("select")
+      setSelection(null)
+      setTool("matrix")
       setToolsOpen(false)
       return
     }
@@ -5041,7 +5248,22 @@ export function InteractiveVenueMapEditor({
       return
     }
     setHandPan(false)
+    if (next === "matrix") {
+      pickPaletteItem({ kind: "grid_array" })
+      return
+    }
     pickPaletteItem({ kind: "zone_polygon" })
+  }
+
+  /** El árbol de capas ve todo el plano, incluso lo que la vista micro oculta. */
+  function layerTreeTargetIsVisible(next: LayerTreeSelection): boolean {
+    const zone = activeZone
+    if (!zone) return true
+    if (next.kind === "zone") return next.id === zone.id
+    if (next.kind === "seats") return true
+    if (next.kind !== "element") return false
+    const element = (map.elements ?? []).find((item) => item.id === next.id)
+    return element ? elementBelongsToZone(element, zone) : false
   }
 
   function selectFromLayerTree(next: LayerTreeSelection) {
@@ -5050,6 +5272,9 @@ export function InteractiveVenueMapEditor({
     setPlacement(null)
     setInspectorCollapsed(false)
     setIsolationId(null)
+    if (!layerTreeTargetIsVisible(next)) {
+      exitZoneIsolation()
+    }
     if (next.kind === "seats") {
       enterSeatEdit(next.ids)
       return
@@ -5062,8 +5287,12 @@ export function InteractiveVenueMapEditor({
     ? "pan"
     : tool === "polygon"
       ? "polygon"
-      : "select"
-  const objectHitsEnabled = tool !== "polygon"
+      : tool === "matrix"
+        ? "matrix"
+        : "select"
+  /** Trazar zona o estampar matriz: el lienzo no debe agarrar objetos. */
+  const drawingOnCanvas = tool === "polygon" || tool === "matrix"
+  const objectHitsEnabled = !drawingOnCanvas
 
   const hasPropertiesTarget =
     Boolean(liveSelection) ||
@@ -5177,19 +5406,6 @@ export function InteractiveVenueMapEditor({
         <Magnet className="size-3.5" />
         <span className="hidden xl:inline">Alinear a la grilla</span>
       </Button>
-      <Button
-        type="button"
-        variant={isAestheticMode ? "secondary" : "ghost"}
-        size="sm"
-        title="Mostrar sillas: dibuja una silla por lugar alrededor de cada mesa para calcular el espacio. Es solo decoración, no cambia cuántas entradas se emiten."
-        aria-label="Mostrar sillas"
-        aria-pressed={isAestheticMode}
-        onClick={toggleAestheticChairs}
-        className="h-8 px-2"
-      >
-        <Armchair className="size-3.5" />
-        <span className="hidden xl:inline">Mostrar sillas</span>
-      </Button>
     </div>
   ) : null
 
@@ -5295,7 +5511,7 @@ export function InteractiveVenueMapEditor({
               activePlacement={placement}
               collapsed={paletteCollapsed}
               onCollapsedChange={setPaletteCollapsed}
-              activeZoneId={activeZoneId}
+              activeZoneId={microZoneId}
               spawnDisabled={geometryLocked}
               className={isWorkspace ? "h-full" : undefined}
             />
@@ -5304,7 +5520,7 @@ export function InteractiveVenueMapEditor({
               map={map}
               selection={selection}
               onSelect={selectFromLayerTree}
-              activeZoneId={activeZoneId}
+              activeZoneId={microZoneId}
               className="w-full"
             />
           )
@@ -5354,8 +5570,10 @@ export function InteractiveVenueMapEditor({
             className={cn(
               "w-full touch-none select-none",
               "absolute inset-0 z-0 h-full min-h-0",
-              tool === "polygon" && "cursor-crosshair",
-              (spacePan || handPan || isPanning) && tool !== "polygon" && "cursor-grab",
+              drawingOnCanvas && "cursor-crosshair",
+              (spacePan || handPan || isPanning) &&
+                !drawingOnCanvas &&
+                "cursor-grab",
               isPanning && "cursor-grabbing",
               transformingKind === "move" && "cursor-grabbing",
               transformingKind === "rotate" && "cursor-grabbing",
@@ -5387,10 +5605,8 @@ export function InteractiveVenueMapEditor({
                 height={svgViewBox.height}
                 className="fill-slate-100 dark:fill-zinc-950"
               />
-              <g className={isolationId && !activeZoneId ? "opacity-50" : undefined}>
-              <g className={activeZoneId ? "opacity-30 grayscale" : undefined}>
-              <VenueMapBackgroundLayer map={renderMap} />
-              </g>
+              <g className={isolationId && !microZoneId ? "opacity-50" : undefined}>
+              {microZoneId ? null : <VenueMapBackgroundLayer map={renderMap} />}
               <VenueMapGridLayer
                 x={-80}
                 y={-80}
@@ -5402,7 +5618,8 @@ export function InteractiveVenueMapEditor({
                 zones={unselectedZones}
                 selectedId={null}
                 emphasizeSelected={false}
-                focusedZoneId={activeZoneId}
+                focusedZoneId={microZoneId}
+                lodMode={microZoneLodMode}
                 draft={polygonDraft}
                 cursor={null}
                 zoom={zoom}
@@ -5410,7 +5627,7 @@ export function InteractiveVenueMapEditor({
                 passThroughFills={zoneFillsPermeable}
                 hoveredId={hoveredZoneId}
                 onSelect={
-                  tool === "polygon"
+                  drawingOnCanvas
                     ? undefined
                     : (zone) => {
                         setIsolationId(null)
@@ -5421,10 +5638,10 @@ export function InteractiveVenueMapEditor({
                       }
                 }
                 onPointerDown={
-                  tool === "polygon" ? undefined : onZonePointerDown
+                  drawingOnCanvas ? undefined : onZonePointerDown
                 }
                 onDoubleClick={
-                  tool === "polygon"
+                  drawingOnCanvas
                     ? undefined
                     : (event, zone) => {
                         isolateCanvasPointer(event)
@@ -5435,20 +5652,18 @@ export function InteractiveVenueMapEditor({
                   openObjectMenu(event, { kind: "zone", id: zone.id })
                 }
               />
-              {map.aisles
+              {(microZoneId ? [] : map.aisles)
                 .filter((aisle) => aisle.id !== selectedAisle?.id)
                 .map((aisle) => (
                   <VenueAisleNode
                     key={aisle.id}
                     aisle={aisle}
                     selected={false}
-                    dimmed={Boolean(activeZoneId)}
                     hitDisabled={!objectHitsEnabled}
                     onContextMenu={(event) => openObjectMenu(event, { kind: "aisle", id: aisle.id })}
                     onPointerDown={
                       objectHitsEnabled
                         ? (event) => {
-                            if (activeZoneId) return
                             if (wantsCanvasPan(event)) return
                             event.stopPropagation()
                             if (event.button !== 0) return
@@ -5463,17 +5678,15 @@ export function InteractiveVenueMapEditor({
                     }
                   />
                 ))}
-              {map.stage && selection?.kind !== "stage" ? (
+              {map.stage && selection?.kind !== "stage" && !microZoneId ? (
                 <VenueStageNode
                   stage={map.stage}
                   selected={false}
-                  dimmed={Boolean(activeZoneId)}
                   hitDisabled={!objectHitsEnabled}
                   onContextMenu={(event) => openObjectMenu(event, { kind: "stage" })}
                   onPointerDown={
                     objectHitsEnabled
                       ? (event) => {
-                          if (activeZoneId) return
                           if (wantsCanvasPan(event)) return
                           event.stopPropagation()
                           if (event.button !== 0) return
@@ -5511,7 +5724,6 @@ export function InteractiveVenueMapEditor({
                 showAestheticChairs={isAestheticMode}
                 zoom={zoom}
                 popSelected={false}
-                isolationDimIds={isolationDimElementIds}
                 selectedSeatIds={selectedRawSeatIds}
                 occupancyBySeatId={occupancyBySeatId}
                 testOccupancyBySeatId={testOccupancyBySeatId}
@@ -5519,11 +5731,10 @@ export function InteractiveVenueMapEditor({
               />
               </g>
               <g transform={liveTransformToSvg(liveTransform)}>
-                {selectedAisle ? (
+                {selectedAisle && !microZoneId ? (
                   <VenueAisleNode
                     aisle={selectedAisle}
                     selected
-                    dimmed={Boolean(activeZoneId)}
                     onContextMenu={(event) =>
                       openObjectMenu(event, { kind: "aisle", id: selectedAisle.id })
                     }
@@ -5531,7 +5742,6 @@ export function InteractiveVenueMapEditor({
                     onPointerDown={
                       objectHitsEnabled
                         ? (event) => {
-                            if (activeZoneId) return
                             if (wantsCanvasPan(event)) return
                             event.stopPropagation()
                             if (event.button !== 0) return
@@ -5541,17 +5751,15 @@ export function InteractiveVenueMapEditor({
                     }
                   />
                 ) : null}
-                {selectedStage ? (
+                {selectedStage && !microZoneId ? (
                   <VenueStageNode
                     stage={selectedStage}
                     selected
-                    dimmed={Boolean(activeZoneId)}
                     hitDisabled={!objectHitsEnabled}
                     onContextMenu={(event) => openObjectMenu(event, { kind: "stage" })}
                     onPointerDown={
                       objectHitsEnabled
                         ? (event) => {
-                            if (activeZoneId) return
                             if (wantsCanvasPan(event)) return
                             event.stopPropagation()
                             if (event.button !== 0) return
@@ -5582,12 +5790,13 @@ export function InteractiveVenueMapEditor({
                     ]}
                     selectedId={selectedZone.id}
                     emphasizeSelected={false}
-                    focusedZoneId={activeZoneId}
+                    focusedZoneId={microZoneId}
+                    lodMode={microZoneLodMode}
                     fillHits={false}
                     passThroughFills={zoneFillsPermeable}
                     hoveredId={hoveredZoneId}
                     onSelect={
-                      tool === "polygon"
+                      drawingOnCanvas
                         ? undefined
                         : (zone) => {
                             setIsolationId(null)
@@ -5595,7 +5804,7 @@ export function InteractiveVenueMapEditor({
                           }
                     }
                     onPointerDown={
-                      tool === "polygon"
+                      drawingOnCanvas
                         ? undefined
                         : (event, zone) => {
                             setIsolationId(null)
@@ -5606,7 +5815,7 @@ export function InteractiveVenueMapEditor({
                     editVertices={vertexEditActiveId === selectedZone.id}
                     onVertexPointerDown={beginVertexDrag}
                     onDoubleClick={
-                      tool === "polygon"
+                      drawingOnCanvas
                         ? undefined
                         : (event, zone) => {
                             isolateCanvasPointer(event)
@@ -5628,7 +5837,6 @@ export function InteractiveVenueMapEditor({
                     showAestheticChairs={isAestheticMode}
                     zoom={zoom}
                     popSelected={false}
-                    isolationDimIds={isolationDimElementIds}
                     selectedSeatIds={selectedRawSeatIds}
                     occupancyBySeatId={occupancyBySeatId}
                     testOccupancyBySeatId={testOccupancyBySeatId}
@@ -5684,21 +5892,17 @@ export function InteractiveVenueMapEditor({
                   pointerEvents="none"
                 />
               ) : null}
-              <g className={isolationId && !activeZoneId ? "opacity-50" : undefined}>
-              {(map.labels ?? []).map((label) => (
+              <g className={isolationId && !microZoneId ? "opacity-50" : undefined}>
+              {(microZoneId ? [] : map.labels ?? []).map((label) => (
                 <text
                   key={label.id}
                   x={label.x}
                   y={label.y}
                   textAnchor="middle"
                   fill={canvasLabelFill(label.color)}
-                  className={cn(
-                    "cursor-pointer text-[15px] font-black tracking-[0.22em]",
-                    activeZoneId && "pointer-events-none opacity-30 grayscale",
-                  )}
+                  className="cursor-pointer text-[15px] font-black tracking-[0.22em]"
                   onContextMenu={(event) => openObjectMenu(event, { kind: "label", id: label.id })}
                   onPointerDown={(event) => {
-                    if (activeZoneId) return
                     if (wantsCanvasPan(event)) return
                     event.stopPropagation()
                     if (event.button !== 0) return
@@ -5717,7 +5921,11 @@ export function InteractiveVenueMapEditor({
                   y={marquee.y}
                   width={marquee.w}
                   height={marquee.h}
-                  className="fill-sky-400/15 stroke-sky-500"
+                  className={
+                    tool === "matrix"
+                      ? "fill-emerald-400/15 stroke-emerald-500"
+                      : "fill-sky-400/15 stroke-sky-500"
+                  }
                   strokeDasharray="6 4"
                   strokeWidth={1.25 / Math.max(0.25, zoom)}
                   pointerEvents="none"
@@ -5731,14 +5939,22 @@ export function InteractiveVenueMapEditor({
             </g>
           </svg>
           </VenueCanvasErrorBoundary>
-          {activeZoneId && !preview ? (
-            <button
-              type="button"
-              onClick={exitZoneIsolation}
-              className="absolute top-4 left-4 z-40 rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-zinc-800"
-            >
-              Volver al mapa general
-            </button>
+          {microZoneId && !preview ? (
+            <div className="absolute top-4 left-4 z-40 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={exitZoneIsolation}
+                className="inline-flex min-h-10 items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-zinc-800"
+              >
+                <ArrowLeft className="size-4" aria-hidden="true" />
+                Volver al mapa general
+              </button>
+              {activeZone ? (
+                <span className="rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-zinc-900 shadow-lg dark:bg-zinc-800/90 dark:text-zinc-100">
+                  {activeZone.name}
+                </span>
+              ) : null}
+            </div>
           ) : null}
           {!preview && !libraryOpen ? (
             <VenueFloatingToolbar
@@ -5825,6 +6041,16 @@ export function InteractiveVenueMapEditor({
               )}
             >
               Clic: vértice. Clic en el primero, Enter o doble clic: cerrar. Escape: cancelar.
+            </div>
+          ) : null}
+          {tool === "matrix" ? (
+            <div
+              className={cn(
+                "pointer-events-none absolute left-1/2 z-20 w-[min(100%-1.5rem,28rem)] -translate-x-1/2 rounded-full border border-emerald-400/30 bg-zinc-950/90 px-4 py-2 text-center text-xs text-emerald-100",
+                compactChrome ? "bottom-24" : "bottom-3",
+              )}
+            >
+              Arrastrá para dibujar el área de la matriz. Escape: cancelar.
             </div>
           ) : null}
           {compactChrome &&
@@ -6073,8 +6299,8 @@ export function InteractiveVenueMapEditor({
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                 Clic para cada vértice sobre la foto. Clic cerca del primero,
                 Enter o doble clic cierra el polígono (mínimo 3 puntos). Escape
-                cancela. Después configurás filas y mesas a la derecha, sin
-                dibujar cada una.
+                cancela. Después entrás al sector desde la derecha para
+                distribuir mesas y sillas adentro.
               </p>
               {polygonDraft.length >= 3 ? (
                 <Button
@@ -6115,10 +6341,13 @@ export function InteractiveVenueMapEditor({
                   zona no se transforma.
                 </p>
               ) : null}
-              <VenueParametricRulesPanel
+              <VenueZoneBasicsPanel
                 zone={selectedZone}
                 autoFocusName={rulesFocusId === selectedZone.id}
+                inside={microZoneId === selectedZone.id}
                 onChange={(patch) => patchZone(selectedZone.id, patch)}
+                onEnterZone={() => enterZoneDistribution(selectedZone)}
+                onExitZone={exitZoneIsolation}
               />
             </div>
           ) : selectedSector ? (
@@ -6336,12 +6565,52 @@ export function InteractiveVenueMapEditor({
                 element={selectedElement}
                 onChange={(patch) => patchElement(selectedElement.id, patch)}
               />
+              <Field label={selectedGroupId ? "Nombre de la mesa" : "Nombre"}>
+                <Input
+                  value={selectedElement.label}
+                  onChange={(event) =>
+                    patchElement(selectedElement.id, {
+                      label: event.target.value,
+                      customLabel: event.target.value.trim() || undefined,
+                      labelLocked: true,
+                      // Ponerle nombre a una pieza escondida es pedir verlo.
+                      ...(event.target.value.trim()
+                        ? { hideLabel: undefined }
+                        : {}),
+                    })
+                  }
+                  placeholder="Mesa 1"
+                />
+              </Field>
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-2">
+                <Label
+                  htmlFor="element-show-label"
+                  className="text-xs leading-snug text-foreground"
+                >
+                  Mostrar nombre en el plano
+                  <span className="mt-1 block text-[11px] font-normal leading-snug text-muted-foreground">
+                    Solo afecta al dibujo. El boleto y la lista de la puerta
+                    siguen usando el nombre.
+                  </span>
+                </Label>
+                <Switch
+                  id="element-show-label"
+                  size="sm"
+                  checked={!selectedElement.hideLabel}
+                  onCheckedChange={(checked) =>
+                    patchElement(selectedElement.id, {
+                      hideLabel: checked ? undefined : true,
+                    })
+                  }
+                  aria-label="Mostrar nombre en el plano"
+                />
+              </div>
               {selectedElement.type === "vip_chair" ? null : (
                 <Field
                   label={
                     selectedElement.type === "standing_zone"
                       ? "Cupo máximo"
-                      : "Capacidad (personas)"
+                      : "Capacidad (accesos)"
                   }
                 >
                   <Input
@@ -6366,6 +6635,28 @@ export function InteractiveVenueMapEditor({
                   )}
                 </Field>
               )}
+              {isClosedBlockElement(selectedElement) ? (
+                <div className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-2">
+                  <Label
+                    htmlFor="aesthetic-chairs"
+                    className="text-xs leading-snug text-foreground"
+                  >
+                    Mostrar sillas
+                    <span className="mt-1 block text-[11px] font-normal leading-snug text-muted-foreground">
+                      Dibuja una silla por lugar para calcular el espacio. Es
+                      decoración de todo el plano: no cambia cuántas entradas se
+                      emiten.
+                    </span>
+                  </Label>
+                  <Switch
+                    id="aesthetic-chairs"
+                    size="sm"
+                    checked={isAestheticMode}
+                    onCheckedChange={setAestheticChairs}
+                    aria-label="Mostrar sillas"
+                  />
+                </div>
+              ) : null}
               {selectedGroupId ? (
                 <Field label="Nombre del sector">
                   <Input
@@ -6374,18 +6665,6 @@ export function InteractiveVenueMapEditor({
                   />
                 </Field>
               ) : null}
-              <Field label={selectedGroupId ? "Nombre de la mesa" : "Nombre"}>
-                <Input
-                  value={selectedElement.label}
-                  onChange={(event) =>
-                    patchElement(selectedElement.id, {
-                      label: event.target.value,
-                      customLabel: event.target.value.trim() || undefined,
-                      labelLocked: true,
-                    })
-                  }
-                />
-              </Field>
               <Field label="Color del Sector">
                 <div className="space-y-2">
                   <VenueSectorColorPicker
@@ -6999,9 +7278,14 @@ export function InteractiveVenueMapEditor({
 
       <GridArrayDialog
         open={gridArrayOpen}
+        area={gridArrayArea}
+        takenLabels={takenElementLabels}
         onOpenChange={(open) => {
           setGridArrayOpen(open)
-          if (!open) setGridArrayOrigin(null)
+          if (!open) {
+            setGridArrayArea(null)
+            if (toolRef.current === "matrix") setTool("select")
+          }
         }}
         onGenerate={applyGridBlock}
       />
@@ -7212,14 +7496,12 @@ function StudioInspectorFrame({
 function VenueStageNode({
   stage,
   selected,
-  dimmed,
   hitDisabled,
   onContextMenu,
   onPointerDown,
 }: {
   stage: VenueMapStage
   selected: boolean
-  dimmed?: boolean
   hitDisabled?: boolean
   onContextMenu: (event: React.MouseEvent) => void
   onPointerDown?: (event: React.PointerEvent) => void
@@ -7229,14 +7511,7 @@ function VenueStageNode({
   const rotation = stage.rotation ?? 0
   return (
     <g
-      className={
-        dimmed || hitDisabled
-          ? cn(
-              "pointer-events-none",
-              dimmed && "opacity-30 grayscale",
-            )
-          : undefined
-      }
+      className={hitDisabled ? "pointer-events-none" : undefined}
       transform={rotation ? `rotate(${rotation} ${cx} ${cy})` : undefined}
       onContextMenu={onContextMenu}
       onPointerDown={onPointerDown}
@@ -7268,14 +7543,12 @@ function VenueStageNode({
 function VenueAisleNode({
   aisle,
   selected,
-  dimmed,
   hitDisabled,
   onContextMenu,
   onPointerDown,
 }: {
   aisle: VenueMapAisle
   selected: boolean
-  dimmed?: boolean
   hitDisabled?: boolean
   onContextMenu: (event: React.MouseEvent) => void
   onPointerDown?: (event: React.PointerEvent) => void
@@ -7290,7 +7563,6 @@ function VenueAisleNode({
       className={cn(
         "fill-zinc-800/80 stroke-zinc-600",
         selected && "stroke-emerald-400",
-        dimmed && "pointer-events-none opacity-30 grayscale",
         hitDisabled && "pointer-events-none",
       )}
       strokeWidth={1.5}

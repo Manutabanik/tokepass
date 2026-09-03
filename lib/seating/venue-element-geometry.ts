@@ -421,8 +421,63 @@ export function cloneVenueElement(
     y: element.y + offset,
     seats: [],
   }
+  // `isLocked` lo inyecta `applyLocalStockLocks()` cuando la pieza tiene ventas,
+  // y `occupancyFromMapSeatStatuses()` lo lee como "ocupado". La copia no vendió
+  // nada: heredarlo la mostraría agotada antes de existir.
+  delete copy.isLocked
   copy.seats = rebuildElementSeats({ ...copy, seats: element.seats })
   return copy
+}
+
+/**
+ * Primer nombre libre para una copia: "Mesa 4" → "Mesa 5", y si el nombre no
+ * termina en número, "Mesa VIP" → "Mesa VIP 2". Respeta el relleno con ceros
+ * ("Mesa 08" → "Mesa 09") para no romper un orden ya elegido.
+ */
+export function nextFreeElementLabel(
+  label: string,
+  taken: Set<string>,
+): string {
+  const base = label.trim() || "Elemento"
+  const match = /^(.*?)(\d+)$/.exec(base)
+  const prefix = match ? match[1]! : `${base} `
+  const start = match ? Number(match[2]) + 1 : 2
+  const width = match ? match[2]!.length : 0
+
+  for (let n = start; n < start + 999; n += 1) {
+    const candidate = `${prefix}${String(n).padStart(width, "0")}`
+    if (!taken.has(candidate.trim().toLowerCase())) return candidate
+  }
+  return `${base} copia`
+}
+
+/**
+ * Copias con id propio y nombre libre.
+ *
+ * El nombre viaja al boleto (`elementSeatLabel`), así que dos piezas no pueden
+ * compartirlo: en la puerta nadie sabría a qué mesa mandar a la gente. Todo lo
+ * demás se copia tal cual, incluida la capacidad, el precio y la zona.
+ */
+export function cloneVenueElements(
+  elements: VenueMapElement[],
+  ids: readonly string[],
+  offset = 15,
+): VenueMapElement[] {
+  const wanted = new Set(ids)
+  const taken = new Set(
+    elements.map((item) => item.label.trim().toLowerCase()),
+  )
+  const clones: VenueMapElement[] = []
+  for (const element of elements) {
+    if (!wanted.has(element.id)) continue
+    const clone = cloneVenueElement(element, offset)
+    const label = nextFreeElementLabel(element.label, taken)
+    taken.add(label.trim().toLowerCase())
+    clone.label = label
+    if (clone.customLabel?.trim()) clone.customLabel = label
+    clones.push(clone)
+  }
+  return clones
 }
 
 export function elementSeatLabel(
