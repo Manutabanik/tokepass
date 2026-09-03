@@ -431,7 +431,7 @@ un sector para el comprador:
 
 | Estado | Relleno | Opacidad | Contorno | Resplandor | Click |
 | --- | --- | --- | --- | --- | --- |
-| Agotado | `BUYER_SEAT_FILL.sold` | 0,3 | gris | no | no |
+| Agotado | `BUYER_SEAT_FILL.sold` | 0,55 | gris | no | avisa, no vende |
 | En el carrito | color del sector | 0,9 | anillo de contraste, 3 px | sí, en su color | sí |
 | Disponible | color del sector | 0,4 | su color, 2 px | el neón del mapa | sí |
 
@@ -439,6 +439,22 @@ El color del sector se mantiene en los tres: lo que cambia es la solidez, el ani
 el resplandor. El agotado gana sobre el carrito, así que nunca brilla algo que no se
 vende. El anillo es blanco salvo que el relleno sea casi blanco (`buyerZoneRing()`
 mide luminancia), donde el blanco sobre blanco no se vería.
+
+El agotado **se dibuja siempre y sigue recibiendo el tap**. (Que la jornada tenga mapa es
+otro asunto: ver [6.7](#67-un-mapa-por-jornada-o-el-comprador-se-queda-sin-mapa).) Ninguna zona se oculta por
+falta de stock, precio o tier: `resolveLodZones()` descarta solo polígonos de menos de
+tres puntos, que no se pueden dibujar. El gris va a 0,55 y el grupo ya no lo atenúa
+otra vez (antes 0,5 × 0,3 lo dejaba casi invisible sobre la foto del predio, y parecía
+que el sector no estaba). Y `soldNotice` en `VenueMapZoneLayer` le deja el
+`pointer-events` vivo para que el canvas conteste con `SECTOR_SOLD_OUT_MESSAGE`: un
+polígono gris que no reacciona se lee como un bug del mapa, no como un sector vendido.
+El cursor es `not-allowed`, el hover no lo aclara y `handleZoneClick()` corta antes de
+tocar carrito o cámara, así que un sector agotado nunca hace zoom ni suma nada.
+
+Una zona sin tier ni resumen de stock ya cae en `soldOutZoneIds` por
+`isMapSectorUnconfigured()` (`lib/checkout/category-stock.ts`), así que se ve gris sin
+necesitar una regla aparte por precio. Precio nulo o 0 **no** alcanza como señal: el
+producto vende entradas gratis y grisar por precio taparía sectores vendibles.
 
 Se aplica por dos caminos que coinciden a propósito. En el render, `VenueMapZoneLayer`
 usa la función cuando `buyerOccupancy` está prendido — el editor conserva su paleta,
@@ -740,6 +756,30 @@ mostrarse libres. Es preferible no vender una butaca que venderla dos veces.
 4. Valida inmutabilidad de layout con `assertDraftMapLayoutImmutable()` antes de escribir.
 5. Reconcilia unidades y devuelve el nuevo `updatedAt`, que el editor guarda en
    `loadedUpdatedAtRef` para el próximo CAS.
+
+### 6.7 Un mapa por jornada, o el comprador se queda sin mapa
+
+`resolveLiveVenueMapForDay()` no le presta a una jornada el mapa de otra: si hay mapas por
+día, el que no tiene fila propia en `seating_maps` recibe `null`, nunca el plano del primer
+día. Es deliberado — vender el sábado con el plano del viernes duplicaría lugares — pero
+deja el filo del otro lado: **una jornada sin fila es una jornada donde no se puede elegir
+ubicación**.
+
+Dos piezas cubren ese filo al publicar (`lib/events/publish-event-v2.ts`):
+
+- `spreadSingleMapAcrossDays()`: si el evento tiene **un solo** plano, se copia a cada
+  jornada. Hace falta porque el draft normaliza un `seatingMap` heredado como una única
+  instancia atada al primer día, y así el segundo día quedaba sin mapa aunque tuviera
+  entradas de butaca. Es lo mismo que hace "Clonar diseño" en el editor, y el inventario ya
+  es por jornada (`event_seating_units`), así que copiar el plano no mezcla stock.
+- `assertPublishedSeatedDaysHaveMap()`: con **dos o más** planos distintos no se adivina.
+  Si una jornada vende entradas de mapa y no tiene fila, la publicación se corta y nombra el
+  día, porque "Mapas por jornada" ya muestra el hueco y ofrece clonar o dibujar.
+
+`saveVenueMapOnly()` sigue rechazando los eventos de varias jornadas
+(`seatingMapsFromSavedVenueMap` → `multi_day`) y manda al editor: esa acción hace
+`hardReplacePublishedSeatingMaps` (reemplazo total), así que copiar un plano desde ahí
+borraría los planos por día que ya existan.
 
 ---
 

@@ -459,6 +459,47 @@ export function assertPublishedSeatedTicketsBoundToDays(
   }
 }
 
+/**
+ * Una jornada con entradas de mapa tiene que tener su mapa publicado.
+ *
+ * `resolveLiveVenueMapForDay()` se niega a prestarle a un día el mapa de otro,
+ * para no vender el sábado con el plano del viernes. La contracara es que una
+ * jornada sin fila en `seating_maps` deja al comprador sin mapa: o no puede
+ * elegir ubicación, o el flujo alternativo le ofrece sectores que no son de su
+ * día. El editor ya expone el hueco ("Mapas por jornada" muestra cada día y
+ * ofrece clonar o dibujar), así que acá se corta antes de publicar en vez de
+ * adivinar qué plano corresponde.
+ */
+export function assertPublishedSeatedDaysHaveMap(
+  tickets: Array<{
+    seating_sector_id?: string | null
+    layout_type?: string | null
+    day_id?: string | null
+  }>,
+  scheduleDays: Array<{ id: string | null; title?: string | null }>,
+  seatingMaps: Array<{ event_date_id?: string | null }>,
+) {
+  const days = scheduleDays.filter((day) => Boolean(day.id?.trim()))
+  if (days.length < 2) return
+  const mapped = new Set(
+    seatingMaps
+      .map((map) => map.event_date_id?.trim())
+      .filter((id): id is string => Boolean(id)),
+  )
+  for (const ticket of tickets) {
+    const sector = ticket.seating_sector_id?.trim() ?? ""
+    if (!sector || ticket.layout_type === "general") continue
+    const day = ticket.day_id?.trim() ?? ""
+    // Sin día lo corta `assertPublishedSeatedTicketsBoundToDays`.
+    if (!day || mapped.has(day)) continue
+    const title =
+      days.find((item) => item.id?.trim() === day)?.title?.trim() || "esa jornada"
+    throw new Error(
+      `La jornada "${title}" tiene entradas de mapa pero no tiene mapa publicado. Abrí "Mapas por jornada", cloná o dibujá el plano de ese día y volvé a publicar.`,
+    )
+  }
+}
+
 export function composePublishDescription(input: {
   title: string
   checkoutMessage?: string
@@ -704,6 +745,11 @@ export function buildPublishEventV2Payload(
     ),
   }
   assertPublishedSeatedTicketsBoundToDays(payload.tickets, payload.schedule_days)
+  assertPublishedSeatedDaysHaveMap(
+    payload.tickets,
+    payload.schedule_days,
+    payload.seating_maps ?? [],
+  )
   return payload
 }
 
@@ -810,11 +856,43 @@ function publishSeatingMapsFromDraft(
       has_seating_plan: true,
     }
   }
+  const spread = spreadSingleMapAcrossDays(uniqueMaps, occurrences)
   return {
-    seating_maps: uniqueMaps,
-    venue_map: uniqueMaps[0]?.map_config,
+    seating_maps: spread,
+    venue_map: spread[0]?.map_config,
     has_seating_plan: true,
   }
+}
+
+/**
+ * Un solo plano en un evento de varias jornadas vale para todas.
+ *
+ * El draft normaliza un `seatingMap` heredado como una única instancia atada al
+ * primer día, y `resolveLiveVenueMapForDay()` no le presta a un día el mapa de
+ * otro: sin esta copia el comprador del segundo día se quedaba sin mapa y no
+ * podía elegir ubicación. Es lo mismo que hace el botón "Clonar diseño" del
+ * editor, y el inventario ya es por jornada (`event_seating_units`), así que
+ * copiar el plano no mezcla stock.
+ *
+ * Con dos o más planos distintos no se adivina: el organizador está trabajando
+ * por jornada y ahí manda `assertPublishedSeatedDaysHaveMap()`.
+ */
+function spreadSingleMapAcrossDays(
+  maps: PublishEventV2SeatingMap[],
+  occurrences: DraftScheduleOccurrence[],
+): PublishEventV2SeatingMap[] {
+  const base = maps.length === 1 ? maps[0] : null
+  if (!base || occurrences.length < 2) return maps
+  const baseDay = base.event_date_id?.trim() ?? ""
+  const rows = baseDay ? [base] : []
+  const covered = new Set(baseDay ? [baseDay] : [])
+  for (const occurrence of occurrences) {
+    const dayId = asPublishScheduleId(occurrence.id)
+    if (!dayId || covered.has(dayId)) continue
+    covered.add(dayId)
+    rows.push(seatingMapPayload(dayId, base.map_config, base.pricing))
+  }
+  return rows.length > 0 ? rows : maps
 }
 
 /** Draft `dateId` is the jornada. Slots become extra `event_schedules` rows. */

@@ -11,6 +11,11 @@ export const SEAT_HELD_BY_OTHER_MESSAGE =
 
 export const SEAT_OCCUPIED_MESSAGE = "Lugar ocupado"
 
+/** Un sector entero sin lugares no es "un lugar ocupado". */
+export const SECTOR_SOLD_OUT_MESSAGE = "Sector agotado"
+export const SECTOR_SOLD_OUT_HINT =
+  "No quedan lugares disponibles en este sector."
+
 export function resolveInventorySeatState(input: {
   unitStatus?: string | null
   reservedUntil?: string | null

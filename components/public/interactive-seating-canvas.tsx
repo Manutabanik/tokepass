@@ -43,6 +43,8 @@ import {
   mergeInventoryOccupancy,
   SEAT_HELD_BY_OTHER_MESSAGE,
   SEAT_OCCUPIED_MESSAGE,
+  SECTOR_SOLD_OUT_HINT,
+  SECTOR_SOLD_OUT_MESSAGE,
 } from "@/lib/seating/inventory-seat-state"
 import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
 import { cartPlaceLabel } from "@/lib/checkout/cart-lines"
@@ -1172,7 +1174,9 @@ export function InteractiveSeatingCanvas({
   function handleZoneClick(zoneId: string, event?: React.SyntheticEvent) {
     event?.stopPropagation()
     if (unavailableZoneIds.includes(zoneId)) {
-      toast.info(SEAT_OCCUPIED_MESSAGE)
+      toast.info(SECTOR_SOLD_OUT_MESSAGE, {
+        description: SECTOR_SOLD_OUT_HINT,
+      })
       return
     }
     const zone = lodZones.find((item) => item.id === zoneId)

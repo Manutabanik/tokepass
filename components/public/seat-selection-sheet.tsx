@@ -27,6 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll"
 import {
+  generalZoneQuantityMax,
   mapPlaceSelectionCap,
   resolvePurchaseLimit,
   storefrontLimitMessage,
@@ -363,11 +364,11 @@ function SeatSelectionModalInner({
           row.sectorName.trim().toLowerCase() === sector.name.trim().toLowerCase(),
       )
       const zone = (context.map?.zones ?? []).find((item) => item.id === sector.id)
-      const available =
-        typeof summary?.available === "number"
-          ? Math.max(0, summary.available)
-          : Math.max(0, Math.floor(Number(zone?.capacity) || 0) || purchaseLimit)
-      next[sector.id] = Math.max(0, Math.min(purchaseLimit, available))
+      next[sector.id] = generalZoneQuantityMax({
+        available: summary?.available,
+        zoneCapacity: zone?.capacity,
+        purchaseCap: purchaseLimit,
+      })
     }
     return next
   }, [catalog, context.map?.zones, context.sectorSummaries, purchaseLimit])
@@ -587,7 +588,9 @@ function SeatSelectionModalInner({
               unavailableZoneIds={context.unavailableZoneIds}
               heldSeatIds={context.heldSeatIds}
               maxSelectable={placeSelectionCap}
+              zoneQuantityMaxById={gaMaxBySector}
               onSelectZone={context.onSelectZone}
+              onZoneQuantity={context.onAssignZoneQuantity}
               hideZoomDock={view !== "mapa"}
               className="relative h-full min-h-0 w-full"
             />

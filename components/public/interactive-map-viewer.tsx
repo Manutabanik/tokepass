@@ -21,7 +21,9 @@ export function InteractiveMapViewer({
   unavailableZoneIds = [],
   heldSeatIds = [],
   maxSelectable,
+  zoneQuantityMaxById,
   onSelectZone,
+  onZoneQuantity,
   onContinue,
   immersive = false,
   inventoryPending = false,
@@ -42,7 +44,9 @@ export function InteractiveMapViewer({
   unavailableZoneIds?: string[]
   heldSeatIds?: string[]
   maxSelectable?: number
+  zoneQuantityMaxById?: Record<string, number>
   onSelectZone?: (zone: VenueMapZone) => void
+  onZoneQuantity?: (zoneId: string, quantity: number) => void
   onContinue?: (seats: InteractiveSelectedSeat[]) => void
   immersive?: boolean
   inventoryPending?: boolean
@@ -85,7 +89,9 @@ export function InteractiveMapViewer({
           unavailableZoneIds={unavailableZoneIds}
           heldSeatIds={heldSeatIds}
           maxSelectable={maxSelectable}
+          zoneQuantityMaxById={zoneQuantityMaxById}
           onSelectZone={onSelectZone}
+          onZoneQuantity={onZoneQuantity}
           onContinue={onContinue ?? (() => {})}
           fillParent
           disableIdlePrompt

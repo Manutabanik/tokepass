@@ -113,7 +113,14 @@ describe("buyerZonePaint", () => {
     assert.equal(paint.fill, BUYER_SEAT_FILL.sold)
     assert.equal(paint.interactive, false)
     assert.equal(paint.glow, undefined)
-    assert.ok(paint.fillOpacity < 0.4)
+    assert.notEqual(paint.fill, base)
+  })
+
+  it("el agotado se ve: el gris no puede quedar mas tenue que un sector libre", () => {
+    const sold = buyerZonePaint({ selected: false, soldOut: true, baseColor: base })
+    const free = buyerZonePaint({ selected: false, soldOut: false, baseColor: base })
+    assert.ok(sold.fillOpacity >= free.fillOpacity)
+    assert.ok(sold.fillOpacity >= 0.5)
   })
 
   it("el agotado gana sobre el carrito: nada de brillar lo que no se vende", () => {

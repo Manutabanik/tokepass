@@ -4,12 +4,74 @@ import { describe, it } from "node:test"
 import {
   assertCartRemainingStock,
   assertCartTierPurchaseLimits,
+  clampGeneralZoneQuantity,
   evaluateStorefrontSelectionLimit,
+  generalZoneQuantityMax,
   mapPlaceSelectionCap,
   purchaseCapForTier,
   resolveTierPurchaseMax,
   resolveTierPurchaseMin,
 } from "./checkout-limits"
+
+describe("generalZoneQuantityMax", () => {
+  it("deja que el stock real recorte el tope por comprador", () => {
+    assert.equal(
+      generalZoneQuantityMax({ available: 3, purchaseCap: 6 }),
+      3,
+    )
+    assert.equal(
+      generalZoneQuantityMax({ available: 40, purchaseCap: 6 }),
+      6,
+    )
+    assert.equal(generalZoneQuantityMax({ available: 0, purchaseCap: 6 }), 0)
+  })
+
+  it("cae al aforo de la zona mientras no llegó el inventario", () => {
+    assert.equal(
+      generalZoneQuantityMax({ zoneCapacity: 2, purchaseCap: 6 }),
+      2,
+    )
+    assert.equal(
+      generalZoneQuantityMax({ zoneCapacity: 500, purchaseCap: 6 }),
+      6,
+    )
+    // Aforo sin declarar no es "cero lugares": manda el tope de compra.
+    assert.equal(
+      generalZoneQuantityMax({ zoneCapacity: 0, purchaseCap: 6 }),
+      6,
+    )
+    assert.equal(generalZoneQuantityMax({ purchaseCap: 6 }), 6)
+  })
+
+  it("prefiere el stock aunque haya aforo declarado", () => {
+    assert.equal(
+      generalZoneQuantityMax({
+        available: 1,
+        zoneCapacity: 300,
+        purchaseCap: 6,
+      }),
+      1,
+    )
+  })
+})
+
+describe("clampGeneralZoneQuantity", () => {
+  it("no deja pasar el tope ni bajar de una entrada", () => {
+    assert.equal(clampGeneralZoneQuantity(9, { max: 6 }), 6)
+    assert.equal(clampGeneralZoneQuantity(0, { max: 6 }), 1)
+    assert.equal(clampGeneralZoneQuantity(-3, { max: 6 }), 1)
+    assert.equal(clampGeneralZoneQuantity(2.7, { max: 6 }), 2)
+  })
+
+  it("permite el cero cuando se está quitando del carrito", () => {
+    assert.equal(clampGeneralZoneQuantity(0, { max: 6, allowZero: true }), 0)
+    assert.equal(clampGeneralZoneQuantity(-1, { max: 6, allowZero: true }), 0)
+  })
+
+  it("sin stock la única cantidad posible es cero", () => {
+    assert.equal(clampGeneralZoneQuantity(3, { max: 0 }), 0)
+  })
+})
 
 describe("tier purchase limits", () => {
   it("uses the SKU max before the event fallback", () => {

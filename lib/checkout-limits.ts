@@ -105,6 +105,50 @@ export function mapPlaceSelectionCap(input: {
   return MAX_TICKETS_PER_PURCHASE
 }
 
+/**
+ * Cuántas entradas de acceso general puede pedir el comprador de una zona.
+ *
+ * El stock real manda sobre el tope por comprador: si quedan 3 lugares, el
+ * selector no puede ofrecer 6. Cuando el resumen de inventario todavía no
+ * llegó se usa el aforo declarado de la zona, y si no hay ninguno de los dos
+ * queda solo el tope de compra — el checkout vuelve a clampear contra
+ * `tier.available` antes de cobrar, así que de acá nunca sale una venta de más.
+ */
+export function generalZoneQuantityMax(input: {
+  available?: number | null
+  zoneCapacity?: number | null
+  purchaseCap: number
+}): number {
+  const cap = Math.max(0, Math.floor(Number(input.purchaseCap)) || 0)
+  const available = countOrNull(input.available)
+  if (available != null) return Math.min(cap, available)
+  const capacity = countOrNull(input.zoneCapacity)
+  if (capacity != null && capacity > 0) return Math.min(cap, capacity)
+  return cap
+}
+
+/**
+ * Cantidad válida para un sector general. El cero solo se permite cuando el
+ * comprador está sacando del carrito algo que ya había agregado.
+ */
+export function clampGeneralZoneQuantity(
+  quantity: number,
+  input: { max: number; allowZero?: boolean },
+): number {
+  const max = Math.max(0, Math.floor(Number(input.max)) || 0)
+  const min = input.allowZero || max <= 0 ? 0 : Math.min(1, max)
+  const value = Math.floor(Number(quantity))
+  if (!Number.isFinite(value)) return min
+  return Math.min(max, Math.max(min, value))
+}
+
+function countOrNull(value: number | null | undefined): number | null {
+  if (value == null) return null
+  const n = Math.floor(Number(value))
+  if (!Number.isFinite(n)) return null
+  return Math.max(0, n)
+}
+
 /** @deprecated Prefer purchaseCapForTier. Mantiene el fallback de layout. */
 export function purchaseCapForLayout(
   layoutType?: string | null,

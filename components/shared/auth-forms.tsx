@@ -268,7 +268,7 @@ export function AuthForms({
                 htmlFor="login-otp"
                 className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
               >
-                Código de 6 dígitos
+                Código de 8 dígitos
               </label>
               <Input
                 id="login-otp"
@@ -276,9 +276,9 @@ export function AuthForms({
                 name="token"
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                maxLength={6}
-                pattern="[0-9]{6}"
-                placeholder="000000"
+                maxLength={8}
+                pattern="[0-9]{8}"
+                placeholder="00000000"
                 value={otpCode}
                 onChange={(event) =>
                   setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))

@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import {
   asPublishScheduleId,
   asPublishUuid,
+  assertPublishedSeatedDaysHaveMap,
   assertPublishedSeatedTicketsBoundToDays,
   buildPublishEventV2Payload,
   composePublishDescription,
@@ -753,6 +754,19 @@ describe("buildPublishEventV2Payload", () => {
       mapTickets.map((ticket) => ticket.day_id).sort(),
       [dayA, dayB],
     )
+    // Un plano y dos jornadas: cada día necesita su fila. El draft normaliza el
+    // mapa heredado sobre el primer día y `resolveLiveVenueMapForDay()` no se lo
+    // presta al segundo, así que sin copia el sábado quedaba sin mapa.
+    assert.deepEqual(
+      payload.seating_maps.map((item) => item.event_date_id).sort(),
+      [dayA, dayB],
+    )
+    assert.ok(
+      payload.seating_maps.every(
+        (item) =>
+          JSON.stringify(item.map_config) === JSON.stringify(payload.venue_map),
+      ),
+    )
   })
 
   it("recovers the jornada from map:{date}:{sector} when validDayIds is missing", () => {
@@ -1007,6 +1021,80 @@ describe("buildPublishEventV2Payload", () => {
           },
         ],
         [{ id: dayA }, { id: dayB }],
+      ),
+    )
+  })
+
+  it("refuses to publish a jornada that sells map tickets without its own map", () => {
+    const dayA = "550e8400-e29b-41d4-a716-446655440001"
+    const dayB = "550e8400-e29b-41d4-a716-446655440002"
+    const days = [
+      { id: dayA, title: "Viernes 13" },
+      { id: dayB, title: "Sábado 14" },
+    ]
+    const seated = (day: string) => ({
+      seating_sector_id: "grada-naranja",
+      layout_type: "table_combo",
+      day_id: day,
+    })
+
+    assert.throws(
+      () =>
+        assertPublishedSeatedDaysHaveMap(
+          [seated(dayA), seated(dayB)],
+          days,
+          [{ event_date_id: dayA }],
+        ),
+      /Sábado 14/,
+    )
+    assert.doesNotThrow(() =>
+      assertPublishedSeatedDaysHaveMap([seated(dayA), seated(dayB)], days, [
+        { event_date_id: dayA },
+        { event_date_id: dayB },
+      ]),
+    )
+  })
+
+  it("only demands a map for the days that actually sell places", () => {
+    const dayA = "550e8400-e29b-41d4-a716-446655440001"
+    const dayB = "550e8400-e29b-41d4-a716-446655440002"
+    const days = [
+      { id: dayA, title: "Viernes 13" },
+      { id: dayB, title: "Sábado 14" },
+    ]
+
+    // El día sin mapa vende acceso general: no necesita plano.
+    assert.doesNotThrow(() =>
+      assertPublishedSeatedDaysHaveMap(
+        [
+          { seating_sector_id: "grada-naranja", layout_type: "table_combo", day_id: dayA },
+          { seating_sector_id: null, layout_type: "general", day_id: dayB },
+          { seating_sector_id: "grada-naranja", layout_type: "general", day_id: dayB },
+        ],
+        days,
+        [{ event_date_id: dayA }],
+      ),
+    )
+    // Un solo día no usa seating_maps por jornada.
+    assert.doesNotThrow(() =>
+      assertPublishedSeatedDaysHaveMap(
+        [{ seating_sector_id: "grada-naranja", layout_type: "table_combo", day_id: dayA }],
+        [{ id: dayA, title: "Viernes 13" }],
+        [],
+      ),
+    )
+    // Sin día lo reporta el otro guard, no este.
+    assert.doesNotThrow(() =>
+      assertPublishedSeatedDaysHaveMap(
+        [
+          {
+            seating_sector_id: "grada-naranja",
+            layout_type: "table_combo",
+            day_id: null,
+          },
+        ],
+        days,
+        [{ event_date_id: dayA }],
       ),
     )
   })

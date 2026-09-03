@@ -55,9 +55,11 @@ export function buyerZonePaint(input: {
 }): BuyerZonePaint {
   const base = input.baseColor?.trim() || ZONE_BASE_FALLBACK
   if (input.soldOut) {
+    // El gris tiene que leerse sobre la foto del predio: con un relleno muy
+    // tenue el sector agotado parecía no estar dibujado.
     return {
       fill: BUYER_SEAT_FILL.sold,
-      fillOpacity: 0.3,
+      fillOpacity: 0.55,
       stroke: "#374151",
       strokeWidth: 2,
       interactive: false,

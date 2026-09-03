@@ -180,6 +180,14 @@ export function VenueMapZoneLayer({
           : null
         const clickable = buyerPaint ? buyerPaint.interactive : !soldOut
         const zoneInteractive = interactive && clickable && !revealFocused
+        /**
+         * El sector agotado sigue recibiendo el tap. Antes quedaba con
+         * `pointer-events: none` y el comprador tocaba un polígono muerto sin
+         * enterarse de por qué: el aviso lo da el canvas, que sabe el motivo.
+         */
+        const soldNotice =
+          Boolean(buyerPaint) && soldOut && !revealFocused && Boolean(onSelect)
+        const zoneTappable = zoneInteractive || soldNotice
         const lit = selected || highlighted
         const pop =
           emphasizeSelected &&
@@ -202,8 +210,8 @@ export function VenueMapZoneLayer({
                 : undefined
             }
             className={cn(
-              zoneInteractive && !soldOut ? "cursor-pointer" : undefined,
-              zoneInteractive && soldOut ? "cursor-not-allowed" : undefined,
+              zoneInteractive ? "cursor-pointer" : undefined,
+              soldNotice ? "cursor-not-allowed" : undefined,
               pop && "animate-pulse-subtle",
             )}
             style={{
@@ -211,12 +219,14 @@ export function VenueMapZoneLayer({
                 ? 0.3
                 : dimmed && !lodSolid && !revealFocused
                   ? 0.7
-                  : soldOut
+                  : // Para el comprador el gris del agotado ya viene con su
+                    // propia opacidad; atenuar el grupo encima lo borraba.
+                    soldOut && !buyerPaint
                     ? 0.5
                     : 1,
               pointerEvents: passThroughFills
                 ? "none"
-                : zoneInteractive
+                : zoneTappable
                   ? "auto"
                   : "none",
               transition: "opacity 0.3s ease, filter 0.3s ease",
@@ -234,12 +244,12 @@ export function VenueMapZoneLayer({
               onDoubleClick?.(event, zone)
             }}
             onPointerDown={(event) => {
-              if (!zoneInteractive) return
+              if (!zoneTappable) return
               press.current = press.current
                 ? noteBuyerTapPointer(press.current, event.pointerId)
                 : beginBuyerTap(event.clientX, event.clientY, event.pointerId)
               if (selectOnPointerUp) return
-              if (onPointerDown) {
+              if (onPointerDown && zoneInteractive) {
                 onPointerDown(event, zone)
                 return
               }
@@ -255,7 +265,7 @@ export function VenueMapZoneLayer({
               )
             }}
             onPointerUp={(event) => {
-              if (!zoneInteractive || !selectOnPointerUp) return
+              if (!zoneTappable || !selectOnPointerUp) return
               if (event.button !== 0) return
               const allowed = shouldCommitTap
                 ? shouldCommitTap(event)
@@ -272,11 +282,11 @@ export function VenueMapZoneLayer({
               press.current = null
             }}
             onClick={(event) => {
-              if (!zoneInteractive || selectOnPointerUp) return
+              if (!zoneTappable || selectOnPointerUp) return
               handleZoneClick(event)
             }}
             onTouchEnd={(event) => {
-              if (!zoneInteractive || selectOnPointerUp) return
+              if (!zoneTappable || selectOnPointerUp) return
               handleZoneClick(event, true)
               press.current = null
             }}
@@ -334,7 +344,7 @@ export function VenueMapZoneLayer({
               }
               strokeLinejoin="round"
               pointerEvents={
-                passThroughFills || revealFocused || !clickable
+                passThroughFills || revealFocused || !zoneTappable
                   ? "none"
                   : fillHits
                     ? "auto"
